@@ -19,6 +19,7 @@ export const SLACK_REQUIRED_BOT_SCOPES = [
   "channels:read",
   "chat:write",
   "files:read",
+  "files:write",
   "groups:history",
   "groups:read",
   "im:history",

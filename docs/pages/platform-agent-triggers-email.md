@@ -3,7 +3,7 @@ title: Incoming Email
 category: Agents
 order: 9
 description: Invoke agents by sending emails to auto-generated addresses
-lastUpdated: 2026-08-29
+lastUpdated: 2026-08-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -95,7 +95,7 @@ will invoke that specific agent. You can copy the exact alias from the enabled a
 
 ## Security Modes
 
-Incoming email is disabled by default for all agents. Open an agent, then select **Edit** → **Configuration** to enable it. Choose a security mode to control who can invoke the agent by email.
+Incoming email is disabled by default for all agents. Open an agent, select the **Messaging Channels** tab, then select **Turn on** in the **Email** section. Choose a security mode to control who can invoke the agent by email.
 
 | Mode | Description |
 |------|-------------|

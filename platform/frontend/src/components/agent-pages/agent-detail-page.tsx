@@ -1,31 +1,36 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { DocsPage, E2eTestId, getDocsUrl } from "@archestra/shared";
 import {
   Copy,
   Download,
   History,
+  Info,
+  Loader2,
   MessageSquare,
   MoreHorizontal,
   PackageX,
-  Pencil,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConvertToSkillDialog } from "@/app/agents/convert-to-skill-dialog";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentForm } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
+import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { OverviewSummary } from "@/components/overview-summary";
+import { DetailFacts } from "@/components/detail-facts";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,8 +47,14 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { PermissionButton } from "@/components/ui/permission-button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import {
   useDeleteProfile,
   useExportAgent,
@@ -58,31 +69,28 @@ import {
 } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
-import {
-  agentAction,
-  agentActionHref,
-  getAgentActionModel,
-} from "./agent-actions-model";
-import { AgentBackgroundExecutionCard } from "./agent-background-execution-card";
+import { agentAction, getAgentActionModel } from "./agent-actions-model";
 import { AgentConnectContent } from "./agent-connect-content";
 import { AgentExecutions } from "./agent-executions";
-import { useAgentOverviewFacts } from "./agent-overview";
 import {
   AGENT_PAGE_CONFIGS,
+  AGENT_SECTION_FORM_GROUP,
+  type AgentDetailSection,
   type AgentPageKind,
+  agentConfigureHref,
   agentDetailHref,
-  agentEditHref,
   agentListHref,
   agentPageKindForType,
+  getAgentSetupSteps,
   isAgentTypeAllowedOnPage,
+  resolveAgentDetailSection,
 } from "./agent-page-config";
-import { AgentSystemPromptCard } from "./agent-system-prompt-card";
 import { useAgentAccess } from "./use-agent-access";
 
 /**
- * `/<family>/[id]` — one agent-shaped resource's page: header with the
- * actions the list row used to offer, the essential record facts, and the
- * connection instructions on the same page.
+ * `/<family>/[id]` — one agent-shaped resource's page. Its configuration is
+ * edited here, in tabs, rather than behind an Edit button that opened a
+ * wizard on a second route: the record's settings are the page.
  *
  * Trashed records are not routable: `GET /api/agents/:id` filters them out, so
  * they only ever reach the not-found state. Restore and permanent delete stay
@@ -98,6 +106,18 @@ export function AgentDetailPage({
   const config = AGENT_PAGE_CONFIGS[kind];
   const router = useRouter();
   const { data: agent, isPending, isError, refetch } = useProfile(id);
+
+  // Hold the last record this mount saw. Deleting the agent in another tab (or
+  // any background refetch that answers 404) turns `data` into null, and
+  // dropping the page on that would throw away whatever the user has typed
+  // into the configuration since. The page stays up on the held copy and says
+  // the record is gone.
+  const heldAgentRef = useRef<Agent | null>(null);
+  if (agent) heldAgentRef.current = agent;
+  const heldAgent = agent ?? heldAgentRef.current;
+  // A successful null after we had a record — not a failed request, which
+  // leaves the previous data in place.
+  const isGone = !agent && !!heldAgentRef.current;
 
   // Deleting this record invalidates the query, and the refetch answers with
   // "not found" long before the navigation back to the list resolves. Keep the
@@ -119,76 +139,64 @@ export function AgentDetailPage({
     </PageBackLink>
   );
 
-  if (isPending || (isLeavingAfterDelete && !agent)) {
+  if (heldAgent && !isLeavingAfterDelete) {
     return (
-      <PageLayout
-        title={config.singular}
-        description=""
-        backLink={backLink}
-        maxWidth="wizard"
-        minWidth="phone"
-      >
-        <DetailPageSkeleton />
-      </PageLayout>
+      <AgentDetails
+        kind={kind}
+        agent={heldAgent}
+        isGone={isGone}
+        backHref={agentListHref(kind)}
+        backLabel={backToListLabel(kind)}
+        onDeleted={() => {
+          setIsLeavingAfterDelete(true);
+          router.push(agentListHref(kind));
+        }}
+      />
     );
   }
 
-  if (isError && !agent) {
+  const shell = (children: React.ReactNode) => (
+    <PageLayout
+      title={config.singular}
+      description=""
+      backLink={backLink}
+      maxWidth="wizard"
+      minWidth="phone"
+    >
+      {children}
+    </PageLayout>
+  );
+
+  if (isPending || isLeavingAfterDelete) {
+    return shell(<DetailPageSkeleton />);
+  }
+
+  if (isError) {
     // The request failed rather than answering "no such record" — a 404 comes
     // back as a successful null. Offer a retry instead of claiming the record
     // is gone.
-    return (
-      <PageLayout
-        title={config.singular}
-        description=""
-        backLink={backLink}
-        maxWidth="wizard"
-        minWidth="phone"
-      >
-        <QueryLoadError
-          className="border"
-          title={`Couldn't load this ${config.singularInSentence}`}
-          onRetry={() => refetch()}
-        />
-      </PageLayout>
+    return shell(
+      <QueryLoadError
+        className="border"
+        title={`Couldn't load this ${config.singularInSentence}`}
+        onRetry={() => refetch()}
+      />,
     );
   }
 
-  if (!agent) {
-    return (
-      <PageLayout
-        title={config.singular}
-        description=""
-        backLink={backLink}
-        maxWidth="wizard"
-        minWidth="phone"
-      >
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <PackageX />
-            </EmptyMedia>
-            <EmptyTitle>{config.singular} not found</EmptyTitle>
-            <EmptyDescription>
-              This {config.singularInSentence} does not exist or is not visible
-              to you. It may have been removed.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </PageLayout>
-    );
-  }
-
-  return (
-    <AgentDetails
-      kind={kind}
-      agent={agent}
-      backLink={backLink}
-      onDeleted={() => {
-        setIsLeavingAfterDelete(true);
-        router.push(agentListHref(kind));
-      }}
-    />
+  return shell(
+    <Empty className="border">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <PackageX />
+        </EmptyMedia>
+        <EmptyTitle>{config.singular} not found</EmptyTitle>
+        <EmptyDescription>
+          This {config.singularInSentence} does not exist or is not visible to
+          you. It may have been removed.
+        </EmptyDescription>
+      </EmptyHeader>
+    </Empty>,
   );
 }
 
@@ -197,24 +205,34 @@ type Agent = NonNullable<ReturnType<typeof useProfile>["data"]>;
 function AgentDetails({
   kind,
   agent,
-  backLink,
+  isGone,
+  backHref,
+  backLabel,
   onDeleted,
 }: {
   kind: AgentPageKind;
   agent: Agent;
-  backLink: React.ReactNode;
+  /** The record has since been deleted; this is the last copy we hold. */
+  isGone: boolean;
+  /**
+   * Where "back" goes. Rendered here rather than passed in, so the link can be
+   * routed through this page's unsaved-changes guard — leaving for the list
+   * with edits in the form must ask first, exactly as a tab change does.
+   */
+  backHref: string;
+  backLabel: string;
   /** Owned by the page so it can suppress its not-found state on the way out. */
   onDeleted: () => void;
 }) {
   const config = AGENT_PAGE_CONFIGS[kind];
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { data: environmentsData } = useEnvironments();
   const defaultEnvironment = useDefaultEnvironment();
   const {
     resource,
     canModify,
-    canUpdate,
     canEdit,
     canCreate,
     canDelete,
@@ -224,7 +242,6 @@ function AgentDetails({
   const actionModel = getAgentActionModel({ kind, agent });
   const connectAction = agentAction(actionModel, "connect");
   const chatAction = agentAction(actionModel, "chat");
-  const editAction = agentAction(actionModel, "edit");
   const cloneAction = agentAction(actionModel, "clone");
   const exportAction = agentAction(actionModel, "export");
   const historyAction = agentAction(actionModel, "history");
@@ -242,28 +259,102 @@ function AgentDetails({
     [resource]: ["read"],
   });
   const { data: canCreateSkill } = useHasPermissions({ skill: ["create"] });
+  // The messaging-channel editor reads the org's channel bindings, so the
+  // section only exists for a reader who may see them — the same check the
+  // editor's own host used to make inline.
+  const { data: canReadAgentTriggers } = useHasPermissions({
+    agentTrigger: ["read"],
+  });
 
   const showConnect = connectAction.visible;
-  const legacyConnectRequested = searchParams.get("tab") === "connect";
   const backgroundExecutionEnabled =
     useFeature("agentBackgroundExecution") === true;
   const hasBackgroundExecution =
     backgroundExecutionEnabled &&
     kind === "agent" &&
     agent.backgroundExecution != null;
-  const showingExecutions =
-    hasBackgroundExecution && searchParams.get("tab") === "executions";
-  const detailHref = agentDetailHref(kind, agent.id);
 
+  // The record's own sections, listed down the side of its page. The setup
+  // wizard's steps supply the editable ones, in the order it walks them, with
+  // the messaging channels between Tools and Advanced; Connect and Executions
+  // are the two views onto a configured record and follow them.
+  const steps = getAgentSetupSteps({
+    agentType: agent.agentType,
+    builtIn: isBuiltIn,
+  });
+  // A built-in subagent is reached by the agents that delegate to it, never by
+  // a person in a channel, so it has no assignments to make.
+  const hasMessagingChannels =
+    kind === "agent" && !isBuiltIn && !!canReadAgentTriggers;
+  const sections: AgentDetailSection[] = [
+    "general",
+    ...(steps.some((step) => step.id === "tools") ? (["tools"] as const) : []),
+    ...(hasMessagingChannels ? (["messaging"] as const) : []),
+    ...(steps.some((step) => step.id === "advanced")
+      ? (["advanced"] as const)
+      : []),
+    ...(showConnect ? (["connect"] as const) : []),
+    ...(hasBackgroundExecution ? (["executions"] as const) : []),
+  ];
+  const sectionParam = searchParams.get("section");
+  const section = resolveAgentDetailSection(sections, sectionParam);
+  // Which form group is on screen, if any. Connect and Executions are not the
+  // form's, so they answer undefined and it is not mounted at all.
+  const activeFormGroup =
+    section in AGENT_SECTION_FORM_GROUP
+      ? AGENT_SECTION_FORM_GROUP[
+          section as keyof typeof AGENT_SECTION_FORM_GROUP
+        ]
+      : undefined;
+
+  // A `?section=` this record has none of (a gateway sent to
+  // `?section=executions`, or a typo) silently resolves to the first one.
+  // Correct the URL to match, so a reload, a copied link or the back button
+  // does not keep asking for a section that is not on this page.
   useEffect(() => {
-    if (!legacyConnectRequested || !showConnect) return;
-    document
-      .getElementById(AGENT_CONNECT_SECTION_ID)
-      ?.scrollIntoView({ block: "start" });
-  }, [legacyConnectRequested, showConnect]);
+    if (!sectionParam || sectionParam === section) return;
+    router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
+  }, [sectionParam, section, kind, agent.id, router]);
 
-  // The record's key configuration, as one always-visible row.
-  const overviewFacts = useAgentOverviewFacts({ kind, agent });
+  // Unsaved edits guard every way off the current tab that is not a save:
+  // another tab, the back link, the header's own links. The pending
+  // destination is parked here and taken once the guard lets go.
+  const [isDirty, setIsDirty] = useState(false);
+  useBeforeUnloadWhileDirty(isDirty);
+  const pendingHrefRef = useRef<string | null>(null);
+  const guard = useUnsavedChangesGuard({
+    isDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      // A tab change is the same page with another query, so it replaces
+      // rather than stacking a history entry per tab.
+      if (href) {
+        if (href.startsWith(pathname)) router.replace(href, { scroll: false });
+        else router.push(href);
+      }
+    },
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      pendingHrefRef.current = href;
+      guard.requestClose();
+    },
+    [guard],
+  );
+  // Every in-app link, not only the ones this page renders: the configuration
+  // is the page now, so the sidebar and anything else on screen would
+  // otherwise discard unsaved edits without asking.
+  useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
+
+  // `?openTools=true` (from "add tools to this gateway" links) pops the tools
+  // picker open on the tools tab. "All" gateways hide the tool editor (there
+  // is nothing to pick), so only Custom ones get the auto-open.
+  const openToolsCombobox =
+    section === "tools" &&
+    searchParams.get("openTools") === "true" &&
+    !agent.accessAllTools;
 
   const [cloning, setCloning] = useState(false);
   const [converting, setConverting] = useState(false);
@@ -331,9 +422,12 @@ function AgentDetails({
     });
   };
 
+  const formAgentType = agent.agentType === "profile" ? "profile" : kind;
+
   return (
     <PageLayout
-      // The wizard's column, so Edit opens in the same one this page reads in.
+      // The wizard's column, so a record reads and edits in the same one it
+      // was created in.
       maxWidth="wizard"
       minWidth="phone"
       title={
@@ -358,27 +452,42 @@ function AgentDetails({
         </div>
       }
       documentTitle={agent.name}
-      backLink={backLink}
-      description={agent.description ?? ""}
+      backLink={<PageBackLink href={backHref}>{backLabel}</PageBackLink>}
+      description={
+        isBuiltIn && agent.description ? (
+          <>
+            {agent.description.replace(/\.?$/, ".")}{" "}
+            <ExternalDocsLink
+              href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
+              className="underline"
+              showIcon={false}
+            >
+              Learn more
+            </ExternalDocsLink>
+          </>
+        ) : (
+          (agent.description ?? "")
+        )
+      }
       tabs={
-        hasBackgroundExecution
-          ? [
-              {
-                label: "Overview",
-                href: detailHref,
-                selected: !showingExecutions,
-              },
-              {
-                label: "Executions",
-                href: `${detailHref}?tab=executions`,
-                selected: showingExecutions,
-              },
-            ]
+        // A single-section page is not a tabbed one: a built-in record has
+        // only its General, so it renders no bar naming it.
+        sections.length > 1
+          ? sections.map((entry) => ({
+              label: sectionLabel(entry, kind),
+              href: agentDetailHref(kind, agent.id, entry),
+              testId: `${E2eTestId.AgentSetupStep}-${entry}`,
+              selected: entry === section,
+            }))
           : []
       }
+      // Every section is a tab, so the mobile row keeps them all rather than
+      // folding the last two into an overflow popover.
+      mobileVisibleCount={sections.length}
       actionButton={
-        // One primary (Edit), one secondary (Chat), the rest in the kebab with
-        // the destructive item under a divider.
+        // Configuration is the page itself now, so the header carries only
+        // what the page cannot: chatting with the record, and the actions
+        // that act on it as a whole.
         <div className="flex shrink-0 items-center gap-2">
           {chatAction.visible && chatAction.href && (
             <Button variant="outline" asChild>
@@ -387,34 +496,6 @@ function AgentDetails({
                 {chatAction.label}
               </Link>
             </Button>
-          )}
-          {/* Refused, not removed: a reader who simply cannot see Edit has no
-              way to learn the record is not theirs to change. Undecided is not
-              refused either, so while the permission reads are in flight the
-              header holds the button's space rather than stating a reason that
-              is about to stop being true. */}
-          {isAccessPending ? (
-            <Skeleton className="h-9 w-24" />
-          ) : canEdit ? (
-            <Button asChild data-testid={E2eTestId.AgentDetailEditButton}>
-              <Link href={agentActionHref(editAction)}>
-                <Pencil className="h-4 w-4" />
-                {editAction.label}
-              </Link>
-            </Button>
-          ) : (
-            <PermissionButton
-              permissions={{ [resource]: ["update"] }}
-              // The ownership sentence is the right one only for a reader who
-              // holds the update permission; without it PermissionButton states
-              // the permission constraint, which is what actually refused them.
-              disabled={canUpdate}
-              tooltip={canUpdate ? refusalReason : undefined}
-              data-testid={E2eTestId.AgentDetailEditButton}
-            >
-              <Pencil className="h-4 w-4" />
-              {editAction.label}
-            </PermissionButton>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -470,67 +551,110 @@ function AgentDetails({
         </div>
       }
     >
-      {/*
-        One gap for the whole page. Once Connect lost its heading the body
-        became a single run of cards, so the wider band that used to separate
-        two titled sections now fell between the Overview card and Endpoint —
-        40px there against 16px between every card below it.
-      */}
-      {showingExecutions ? (
-        <AgentExecutions agentId={agent.id} />
-      ) : (
-        <div className="space-y-4">
-          <OverviewSummary
-            headingId="agent-overview-heading"
-            facts={overviewFacts}
-            configHref={canEdit ? agentActionHref(editAction) : undefined}
-            configLabel="Full configuration"
-          />
+      <div className="min-w-0">
+        {section === "executions" ? (
+          <AgentExecutions agentId={agent.id} />
+        ) : section === "connect" ? (
+          <AgentConnectContent kind={kind} agent={agent} origin="table" />
+        ) : (
+          <div className="space-y-4">
+            {isGone ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  This {config.singularInSentence} is no longer available — it
+                  was deleted while you were editing it. Your unsaved changes
+                  cannot be saved; copy anything you need before leaving.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              !canEdit &&
+              !isAccessPending && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    You can view this {config.singularInSentence}&apos;s
+                    configuration but not change it. {refusalReason}.
+                  </AlertDescription>
+                </Alert>
+              )
+            )}
 
-          {kind === "agent" && (
-            <AgentSystemPromptCard
-              key={agent.id}
-              agent={agent}
-              readOnly={!canEdit}
-              builtInAgentName={agent.builtInAgentConfig?.name}
-            />
-          )}
+            {/* Who to ask about this record, stated before its settings. A
+                built-in belongs to nobody, so the fact is absent there rather
+                than present-but-empty, which would read as missing data. */}
+            {section === "general" && !isBuiltIn && (
+              <DetailFacts facts={[createdByFact(agent.createdBy)]} />
+            )}
 
-          {hasBackgroundExecution && (
-            <AgentBackgroundExecutionCard
-              agentId={agent.id}
-              credentials={agent.backgroundExecution?.credentials ?? []}
-              readOnly
-              editHref={
-                canEdit ? agentEditHref(kind, agent.id, "advanced") : undefined
-              }
-            />
-          )}
+            {activeFormGroup && (
+              <AgentForm
+                // A fresh mount per agent and per section: the form seeds
+                // several sets from per-agent reads and would otherwise carry
+                // one section's pending state into the next.
+                key={`${agent.id}:${activeFormGroup}`}
+                agent={agent}
+                agentType={formAgentType}
+                defaultIconType={config.defaultIconType}
+                sections={[activeFormGroup]}
+                readOnly={!canEdit}
+                openToolsCombobox={openToolsCombobox}
+                onDirtyChange={setIsDirty}
+                footer={({
+                  isSaving,
+                  isDirty: formDirty,
+                  canSubmit,
+                  readOnly,
+                }) =>
+                  // Nothing to save onto once the record is gone; the PUT would
+                  // only come back 404. A reader who cannot change it has no
+                  // save row at all — the alert above already says why.
+                  // No rule above the save row either: the panel's sections
+                  // are already ruled apart, and a second line right under the
+                  // last of them read as a stray divider.
+                  readOnly ? null : (
+                    <WizardFooter className="border-t-0 sm:justify-end">
+                      <Button
+                        type="submit"
+                        disabled={
+                          !canSubmit || isGone || isSaving || !formDirty
+                        }
+                        data-testid={E2eTestId.AgentSetupSubmitButton}
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <span>Save changes</span>
+                        )}
+                      </Button>
+                    </WizardFooter>
+                  )
+                }
+              />
+            )}
+          </div>
+        )}
+      </div>
 
-          {showConnect && (
-            // No heading of its own: the cards inside are already titled
-            // "Endpoint" and "Authentication", and a "Connect" band above them
-            // named neither, while colliding with the Connect page the footer
-            // link points at.
-            <section
-              id={AGENT_CONNECT_SECTION_ID}
-              className="scroll-mt-24 space-y-4"
-            >
-              <AgentConnectContent kind={kind} agent={agent} origin="table" />
-            </section>
-          )}
-        </div>
-      )}
-
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={() => {
+          pendingHrefRef.current = null;
+          guard.keepEditing();
+        }}
+        onDiscard={guard.discardChanges}
+      />
       <CloneAgentDialog
         agent={cloning ? agent : null}
         onOpenChange={(open) => {
           if (!open) setCloning(false);
         }}
         onCloned={(cloned) => {
-          // Land on the clone's Configuration step so it can be renamed
+          // Land on the clone's Configuration tab so it can be renamed
           // straight away.
-          router.push(agentEditHref(kind, cloned.id, "configuration"));
+          router.push(agentConfigureHref(kind, cloned.id, "configuration"));
         }}
       />
       {kind === "agent" && (
@@ -638,7 +762,27 @@ function KebabItem({
   );
 }
 
-const AGENT_CONNECT_SECTION_ID = "connect";
+/**
+ * What a section is called on this record's page. Connect is the exception:
+ * an agent is reached over A2A, a gateway by an MCP client, so the tab is
+ * named for the protocol on the family that has one.
+ */
+function sectionLabel(
+  section: AgentDetailSection,
+  kind: AgentPageKind,
+): string {
+  if (section === "connect" && kind === "agent") return "A2A";
+  return AGENT_SECTION_LABELS[section];
+}
+
+const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
+  general: "General",
+  tools: "Tools & Knowledge",
+  messaging: "Messaging Channels",
+  advanced: "Advanced",
+  connect: "Connect",
+  executions: "Executions",
+};
 
 function DetailPageSkeleton() {
   return (

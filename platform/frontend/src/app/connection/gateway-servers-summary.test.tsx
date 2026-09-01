@@ -198,9 +198,10 @@ describe("GatewayServersSummary", () => {
       isLoading: false,
     });
     rerender(<GatewayServersSummary gatewayId="g1" />);
-    // just opens the edit form (no forced tool picker), in the same tab
+    // just opens the gateway's configuration (no forced tool picker), in the
+    // same tab
     const link = screen.getByRole("link", { name: /Edit on gateway/ });
-    expect(link).toHaveAttribute("href", "/mcp/gateways/g1/edit");
+    expect(link).toHaveAttribute("href", "/mcp/gateways/g1");
     expect(link).not.toHaveAttribute("target");
   });
 });

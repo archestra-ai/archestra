@@ -5,6 +5,7 @@ import {
   type AgentType,
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
@@ -33,6 +34,7 @@ import {
   InfoIcon,
   PackageSearch,
   Plus,
+  RotateCcw,
   Settings2,
   Unplug,
   User,
@@ -64,11 +66,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import {
-  agentDetailHref,
-  agentListHref,
-  agentPageKindForType,
-} from "@/components/agent-pages/agent-page-config";
+import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
 import {
   AgentSkillsEditor,
   type EditableSkill,
@@ -97,6 +95,10 @@ import {
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
 import { SettingIcon } from "@/components/setting-icon";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -145,7 +147,6 @@ import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
-import { WizardFooter } from "@/components/wizard-footer";
 
 /**
  * What the agent visibility control offers. Wider than the stored scope: an
@@ -155,11 +156,9 @@ type AgentVisibilityChoice = AgentScope | "user";
 
 import {
   useCreateProfile,
-  useDefaultAgentId,
   useDelegationTargetAgents,
   useDeleteProfile,
   useProfile,
-  useUpdateDefaultAgentId,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
@@ -199,7 +198,6 @@ import {
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn, isReportedApiError } from "@/lib/utils";
@@ -712,7 +710,7 @@ export function AccessLevelSelector({
 
   return (
     <SharedVisibilitySelector
-      label={`Who can use this ${agentTypeDisplayName[agentType] || "agent"}`}
+      label="Visibility"
       value={choice}
       options={options}
       onValueChange={selectChoice}
@@ -774,11 +772,22 @@ export function AccessLevelSelector({
  * - `advanced`: background execution, security, passthrough headers, identity
  *   provider, and labels.
  */
-export type AgentFormSection = "configuration" | "tools" | "advanced";
+/**
+ * The groups a host can mount independently. `messaging` is a section of its
+ * own rather than part of `configuration`: channel assignments save through
+ * their own endpoint, so a surface showing only them must not also re-send the
+ * configuration fields it never displayed.
+ */
+export type AgentFormSection =
+  | "configuration"
+  | "messaging"
+  | "tools"
+  | "advanced";
 
 /** The default render: the whole form. */
 const AGENT_FORM_SECTIONS: readonly AgentFormSection[] = [
   "configuration",
+  "messaging",
   "tools",
   "advanced",
 ];
@@ -797,6 +806,12 @@ export interface AgentFormFooterState {
    * flight.
    */
   canSubmit: boolean;
+  /**
+   * Every field is disabled and there is nothing to save. The host decides
+   * what a viewer sees instead of a submit row — a page that already says why
+   * shows nothing at all.
+   */
+  readOnly: boolean;
 }
 
 /** Editable values a create flow may seed from a catalog template. */
@@ -885,8 +900,14 @@ export function AgentForm({
   const appName = useAppName();
   const mountedSections = new Set<AgentFormSection>(sections);
   const showConfigurationSections = mountedSections.has("configuration");
+  const showMessagingSection = mountedSections.has("messaging");
   const showToolsSections = mountedSections.has("tools");
   const showAdvancedSections = mountedSections.has("advanced");
+  // Whether anything on screen contributes a field to the agent record's own
+  // PUT. Messaging channels alone do not — they write through their own
+  // endpoint.
+  const mountsAgentFields =
+    showConfigurationSections || showToolsSections || showAdvancedSections;
   const isActiveSection = (group: AgentFormSection) =>
     activeSection === undefined || activeSection === group;
   const supportsSubagents = agentType === "agent";
@@ -906,7 +927,6 @@ export function AgentForm({
   // Only for the create rollback: a refused follow-up write deletes the record
   // the create just made, so nothing half set up is left behind.
   const deleteAgent = useDeleteProfile();
-  const updateDefaultAgentId = useUpdateDefaultAgentId();
   const syncDelegations = useSyncAgentDelegations();
   // Every set below is seeded from its own request and saved back as a full
   // replace, so all of them gate on `isSuccess` rather than `isFetched`:
@@ -1140,14 +1160,6 @@ export function AgentForm({
   // read a tools-only edit as nothing to save.
   const [hasPendingToolChanges, setHasPendingToolChanges] = useState(false);
   const [scope, setScope] = useState<AgentScope>("personal");
-  // The caller's personal default lives on the member, not the agent, so it is
-  // read from its own query and tracked as an override on top: null until the
-  // switch is touched, so a late-arriving query result cannot be mistaken for
-  // an edit.
-  const { data: memberDefaultAgentId } = useDefaultAgentId();
-  const [personalDefaultOverride, setPersonalDefaultOverride] = useState<
-    boolean | null
-  >(null);
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
@@ -1304,6 +1316,12 @@ export function AgentForm({
   const seedDefaultExclusions =
     autoToolsMode && (agent ? !savedAccessAllTools : true);
   const builtInAgentName = agent?.builtInAgentConfig?.name;
+  // A built-in agent ships with a prompt, so its editor can offer the way
+  // back to it. Everything else has no default to reset to, and the control
+  // is absent rather than disabled.
+  const defaultSystemPrompt = builtInAgentName
+    ? (BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[builtInAgentName] ?? "")
+    : undefined;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
   const isDualLlmMainBuiltIn =
@@ -1337,11 +1355,19 @@ export function AgentForm({
   const organizationDefaultModel = useOrganizationDefaultModel({
     enabled: showsModelControl,
   });
+  // General now holds the four fields the reader came for — name, model,
+  // description and instructions — so it is shown whenever any of them
+  // applies, not only when the name and description do.
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
+    showsModelControl ||
+    isInternalAgent ||
     isPolicyConfigBuiltIn ||
     isDualLlmMainBuiltIn;
+  // Who may reach it — the scope picker, plus the caller's own default-agent
+  // toggle. A built-in belongs to the organization and offers neither, so the
+  // section would be empty.
   const showTools =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
@@ -1362,18 +1388,6 @@ export function AgentForm({
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
   const toolsPanelHasContent = showTools || showSkills || showsHooks;
-  // What the Advanced step holds for this record, named in its description.
-  const advancedSettingsSummary = formatSettingsList([
-    agentType === "agent" && agentBackgroundExecutionEnabled
-      ? "background execution"
-      : null,
-    showSecurity ? "security" : null,
-    agentType === "mcp_gateway" ? "header passthrough" : null,
-    supportsIdentityProvider && identityProviders.length > 0
-      ? "the identity provider to trust"
-      : null,
-    "labels",
-  ]);
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change
   // is what the API will judge the assignment against.
@@ -1385,27 +1399,6 @@ export function AgentForm({
   // create mode too, before any gateway exists.
   const { data: session } = useSession();
   const currentUserId = session?.user?.id ?? null;
-  const { data: organization } = useOrganization();
-  // Any chat agent this form can show is one the caller can start a chat
-  // with, so any of them can be their default — a team's or the
-  // organization's as readily as their own. Hidden only for built-ins and
-  // other agent types, which no chat starts on.
-  const isCurrentlyPersonalDefault =
-    !!agent?.id && agent.id === memberDefaultAgentId;
-  const canTogglePersonalDefault = isInternalAgent && !isBuiltIn;
-  // Pinning the agent the organization already defaults to changes nothing
-  // today — the agents list reads that row as `default (org)` and offers no
-  // pin at all. The switch stays, because it is the only place the pin can be
-  // taken back off, but it has to say what it is (and is not) doing here.
-  const isOrganizationDefault =
-    !!agent?.id && agent.id === organization?.defaultAgentId;
-  const personalDefault =
-    canTogglePersonalDefault &&
-    (personalDefaultOverride ?? isCurrentlyPersonalDefault);
-  const personalDefaultChanged =
-    canTogglePersonalDefault &&
-    personalDefaultOverride !== null &&
-    personalDefaultOverride !== isCurrentlyPersonalDefault;
   // Rows the admin has picked, kept for as long as they stay picked. Without
   // this a skill chosen from one search vanishes the moment the query changes —
   // it is in neither the catalog page nor the new search hits — while its id
@@ -1571,7 +1564,6 @@ export function AgentForm({
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
       setConnectorIds(nextValues.connectorIds);
       setScope(nextValues.scope);
-      setPersonalDefaultOverride(null);
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setBackgroundExecution(nextValues.backgroundExecution);
       setToolExposureMode(nextValues.toolExposureMode);
@@ -2040,6 +2032,14 @@ export function AgentForm({
         if (updated?.id) {
           toast.success("Built-in agent updated successfully");
         }
+      } else if (agent && !mountsAgentFields) {
+        // A surface showing only the messaging channels has no field of the
+        // agent record on it. Their assignments have already been written by
+        // `handleSave`; a PUT here would carry an empty body, and an empty
+        // body still forks a config version and writes an audit record for an
+        // edit nobody made.
+        savedAgentId = agent.id;
+        updateConfirmed = true;
       } else if (agent) {
         // Update existing agent
         const updated = await updateAgent.mutateAsync({
@@ -2054,16 +2054,12 @@ export function AgentForm({
                 description: normalizedDescription,
               }),
               ...(isInternalAgent && {
-                suggestedPrompts: validSuggestedPrompts,
+                systemPrompt: trimmedSystemPrompt || null,
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
                 }),
               }),
-              ...(supportsEnvironment &&
-                environmentChanged && {
-                  environmentId: environmentId ?? null,
-                }),
               teams: assignedTeamIds,
               users: assignedUserIds,
               scope,
@@ -2072,6 +2068,16 @@ export function AgentForm({
             // header passthrough.
             ...(showAdvancedSections && {
               labels: updatedLabels,
+              // The environment and the suggested prompts are edited on this
+              // group's surface, so they are written with it — a group only
+              // ever sends the fields it showed.
+              ...(isInternalAgent && {
+                suggestedPrompts: validSuggestedPrompts,
+              }),
+              ...(supportsEnvironment &&
+                environmentChanged && {
+                  environmentId: environmentId ?? null,
+                }),
               ...(supportsIdentityProvider && {
                 identityProviderId: identityProviderId || null,
               }),
@@ -2237,16 +2243,6 @@ export function AgentForm({
         });
       }
 
-      // The personal default is a member setting, saved through its own route
-      // once the agent exists. Only when the switch was actually moved: an
-      // untouched switch means the member did not ask for this agent to become
-      // their default, and nothing else in the product decides that for them.
-      if (savedAgentId && personalDefaultChanged) {
-        await updateDefaultAgentId.mutateAsync(
-          personalDefault ? savedAgentId : null,
-        );
-      }
-
       // Persist the Auto-mode disabled-subagents set only when it changed (same
       // no-op-audit reasoning as delegations, and edit-mode-only for the same
       // reason). Skipped for built-ins.
@@ -2350,6 +2346,7 @@ export function AgentForm({
     showConfigurationSections,
     showToolsSections,
     showAdvancedSections,
+    mountsAgentFields,
     advisorAgentId,
     deleteAgent,
     delegationTargetIdsToSave,
@@ -2358,9 +2355,6 @@ export function AgentForm({
     disabledSubagentIdsToSave,
     updateAgent,
     createAgent,
-    updateDefaultAgentId,
-    personalDefault,
-    personalDefaultChanged,
     syncDelegations,
     syncSubagentExclusions,
     currentKnowledgeSourceExclusions,
@@ -2477,7 +2471,6 @@ export function AgentForm({
     initialSnapshotRef.current !== null &&
     (hasUnsavedChanges(initialSnapshotRef.current, currentSnapshot) ||
       channelAssignmentsDirty ||
-      personalDefaultChanged ||
       hasPendingToolChanges ||
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
@@ -2539,13 +2532,8 @@ export function AgentForm({
     isSaving: isSaving || createAgent.isPending || updateAgent.isPending,
     isDirty,
     canSubmit,
+    readOnly,
   };
-  // Where a read-only form's Cancel goes: the record it is showing, which is
-  // where the editable footer's Cancel lands too. A legacy `profile` has no
-  // family of its own, so it resolves to its canonical gateway route.
-  const readOnlyExitHref = agent
-    ? agentDetailHref(agentPageKindForType(agent.agentType), agent.id)
-    : agentListHref(agentPageKindForType(agentType));
   return (
     <form
       className="flex flex-col"
@@ -2575,15 +2563,15 @@ export function AgentForm({
               that is not the active one is hidden, not unmounted: the create
               wizard walks every panel on this one form. */}
           {showConfigurationSections && (
-            <div
-              className={cn(
-                "divide-y rounded-lg border bg-card",
-                !isActiveSection("configuration") && "hidden",
-              )}
+            <SettingsSectionGroup
+              className={cn(!isActiveSection("configuration") && "hidden")}
             >
-              {/* Section 1: what it is, where it runs, who can use it. */}
+              {/* Section 1: what the record is and how it is prompted — the
+                  four fields someone opens this page to change. It carries no
+                  title of its own: the page's side nav already names this
+                  section, and saying it twice reads as a mistake. */}
               {showPrimarySettingsCard && (
-                <div className="space-y-4 p-4">
+                <SettingsSection>
                   {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
                   {!isBuiltIn && (
                     <IdentityFields
@@ -2605,6 +2593,167 @@ export function AgentForm({
                     </IdentityFields>
                   )}
 
+                  {/* Model, beside the name: which model answers is part of
+                      what an agent is, not an afterthought below its prompt.
+                      It carried its own section title until it moved here, so
+                      it needs the field label the others have. */}
+                  {showsModelControl && (
+                    <div className="space-y-2">
+                      <Label>Model</Label>
+                      {cannotReadLlmConfiguration ? (
+                        <Alert>
+                          <AlertDescription className="text-sm text-muted-foreground">
+                            You do not have permission to view LLM API keys or
+                            models. This agent will use the organization&apos;s
+                            default model configuration.
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <>
+                          {requiredSubscription &&
+                            !requiredSubscriptionSatisfied && (
+                              <Alert>
+                                <InfoIcon className="h-4 w-4" />
+                                <AlertTitle>
+                                  {requiredSubscription.label} required
+                                </AlertTitle>
+                                <AlertDescription className="space-y-2">
+                                  <p>
+                                    This maintained runtime uses your existing
+                                    subscription and does not fall back to
+                                    usage-based API billing.
+                                  </p>
+                                  {!requiredSubscriptionKey && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      asChild
+                                    >
+                                      <Link
+                                        href={`/llm/model-providers?connect=${requiredSubscriptionKind}`}
+                                        target="_blank"
+                                      >
+                                        {
+                                          requiredSubscription.connect
+                                            .signInTitle
+                                        }
+                                      </Link>
+                                    </Button>
+                                  )}
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                          {selectedApiKeyIsSubscription ? (
+                            <Alert>
+                              <InfoIcon className="h-4 w-4" />
+                              <AlertDescription>
+                                Each person using this agent must connect their
+                                own subscription account. No credential is
+                                shared.
+                              </AlertDescription>
+                            </Alert>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              {selectedApiKey &&
+                              selectedApiKey.scope !== "org" ? (
+                                <span>
+                                  Selected key will be available to everyone who
+                                  has access to this agent.
+                                </span>
+                              ) : null}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <LlmProviderApiKeyDropdown
+                              availableKeys={availableApiKeys}
+                              selectedApiKeyId={llmApiKeyId}
+                              open={apiKeySelectorOpen}
+                              onOpenChange={setApiKeySelectorOpen}
+                              onSelectKey={(keyId) => {
+                                handleLlmApiKeyChange(keyId);
+                                setApiKeySelectorOpen(false);
+                              }}
+                              currentProvider={currentLlmProvider ?? undefined}
+                              triggerVariant="button"
+                              triggerClassName="h-8 max-w-[250px] text-xs"
+                              popoverClassName="w-96"
+                              popoverPortal={false}
+                              searchPlaceholder="Search API keys..."
+                              allowOrganizationDefault
+                              organizationDefaultSelected={!llmApiKeyId}
+                              onSelectOrganizationDefault={() => {
+                                setLlmApiKeyId(null);
+                                setLlmModel(null);
+                                lastAutoSelectedProviderRef.current = null;
+                                setApiKeySelectorOpen(false);
+                              }}
+                            />
+                            {!llmApiKeyId ? (
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div>
+                                      <ModelSelector
+                                        selectedModel=""
+                                        onModelChange={() => {}}
+                                        disabled
+                                        variant="outline"
+                                        enabled={false}
+                                        // The model the organization default
+                                        // resolves to today; the runtime's own
+                                        // fallback when no default is set.
+                                        placeholder={
+                                          organizationDefaultModel.label ??
+                                          undefined
+                                        }
+                                      />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="bottom"
+                                    className="text-xs"
+                                  >
+                                    Select a provider API key first
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <ModelSelector
+                                selectedModel={llmModel || ""}
+                                onModelChange={(modelId) =>
+                                  handleLlmModelChange(modelId)
+                                }
+                                onClear={() => {
+                                  setLlmModel(null);
+                                  setLlmApiKeyId(null);
+                                  lastAutoSelectedProviderRef.current = null;
+                                }}
+                                variant="outline"
+                                apiKeyId={llmApiKeyId}
+                                enabled={!!canReadLlmModels}
+                              />
+                            )}
+                          </div>
+                          {showNoToolsModelNotice && (
+                            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                              <InfoIcon
+                                className="mt-0.5 size-3 shrink-0"
+                                aria-hidden="true"
+                              />
+                              <span>
+                                This model doesn&apos;t support tools, so this{" "}
+                                {agentTypeDisplayName[agentType] || "agent"}
+                                &apos;s tools won&apos;t be used in its chats.
+                                Pick a different model to use tools.
+                              </span>
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {/* Description (hidden for built-in agents) */}
                   {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                     <div className="space-y-2">
@@ -2619,24 +2768,65 @@ export function AgentForm({
                     </div>
                   )}
 
-                  {/* Environment assignment (below the description).
-                      - Agent: binds the agent's code sandbox to a per-environment
-                        Dagger engine + egress policy.
-                      - LLM proxy / MCP gateway: assigns the deployment environment
-                        so its usage falls under environment-scoped cost limits.
-                      The advisor renders no selector: it is configured once for
-                      the organization and reachable from every environment.
-                      Shown on create as well as on edit — where a new record
-                      runs is part of what is being created, and an org with
-                      only the Default environment gets the same disabled
-                      control the edit form shows rather than a silent field. */}
-                  {showsEnvironmentSelector && (
-                    <EnvironmentSelector
-                      value={environmentId ?? null}
-                      onChange={setEnvironmentId}
-                      resource={getResourceForAgentType(agentType)}
-                      helpText={environmentHelpText}
-                    />
+                  {/* Instructions: what the agent is told to do. Saved with the
+                      rest of this panel, so one Save covers the whole tab. */}
+                  {isInternalAgent && (
+                    <div className="space-y-2">
+                      <SystemPromptEditor
+                        title="Instructions"
+                        value={systemPrompt}
+                        onChange={setSystemPrompt}
+                        readOnly={readOnly}
+                        variant="default"
+                        builtInAgentId={builtInAgentName}
+                        headerExtra={
+                          defaultSystemPrompt !== undefined && !readOnly ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0"
+                              disabled={systemPrompt === defaultSystemPrompt}
+                              onClick={() =>
+                                setSystemPrompt(defaultSystemPrompt)
+                              }
+                            >
+                              <RotateCcw className="size-4" />
+                              <span>Reset to default</span>
+                            </Button>
+                          ) : undefined
+                        }
+                      />
+                    </div>
+                  )}
+
+                  {/* Visibility: an ordinary field of the record, not a
+                      section of its own — who may use it is as much a part of
+                      what it is as its name. */}
+                  {!isBuiltIn && (
+                    <div>
+                      <AccessLevelSelector
+                        scope={scope}
+                        onScopeChange={(newScope) => {
+                          setScope(newScope);
+                          if (newScope === "org") {
+                            setAssignedTeamIds([]);
+                          }
+                        }}
+                        isAdmin={!!isAdmin}
+                        isTeamAdmin={!!isTeamAdmin}
+                        initialScope={agent?.scope}
+                        agentType={agentType}
+                        teams={teams}
+                        canReadTeams={!!canReadTeams}
+                        assignedTeamIds={assignedTeamIds}
+                        onTeamIdsChange={setAssignedTeamIds}
+                        assignedUserIds={assignedUserIds}
+                        onUserIdsChange={setAssignedUserIds}
+                        hasNoAvailableTeams={hasNoAvailableTeams}
+                        showTeamRequired={true}
+                      />
+                    </div>
                   )}
 
                   {/* Built-in agent config */}
@@ -2677,452 +2867,58 @@ export function AgentForm({
                       />
                     </div>
                   )}
-
-                  {/* Visibility / Scope: who can use it, once it has a name and a
-                    place to run. */}
-                  {!isBuiltIn && (
-                    <div>
-                      <AccessLevelSelector
-                        scope={scope}
-                        onScopeChange={(newScope) => {
-                          setScope(newScope);
-                          if (newScope === "org") {
-                            setAssignedTeamIds([]);
-                          }
-                        }}
-                        isAdmin={!!isAdmin}
-                        isTeamAdmin={!!isTeamAdmin}
-                        initialScope={agent?.scope}
-                        agentType={agentType}
-                        teams={teams}
-                        canReadTeams={!!canReadTeams}
-                        assignedTeamIds={assignedTeamIds}
-                        onTeamIdsChange={setAssignedTeamIds}
-                        assignedUserIds={assignedUserIds}
-                        onUserIdsChange={setAssignedUserIds}
-                        hasNoAvailableTeams={hasNoAvailableTeams}
-                        showTeamRequired={true}
-                      />
-                    </div>
-                  )}
-
-                  {/* Personal default (the caller's own personal chat agent) */}
-                  {canTogglePersonalDefault && (
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="space-y-0.5">
-                        <Label
-                          htmlFor="personal-default-agent"
-                          className="text-sm font-medium cursor-pointer"
-                        >
-                          My default agent
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          {isOrganizationDefault
-                            ? "Your organization already starts everyone's chats on this agent, so pinning it changes nothing today — it keeps this agent yours if the organization default moves."
-                            : "Your new chats start on this agent — from the composer, from an app you open in chat, anywhere a chat begins without naming one. Yours alone, one at a time, and ahead of the organization default."}
-                        </p>
-                      </div>
-                      <Switch
-                        id="personal-default-agent"
-                        checked={personalDefault}
-                        onCheckedChange={setPersonalDefaultOverride}
-                        disabled={readOnly}
-                        data-testid={E2eTestId.PersonalDefaultAgentSwitch}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {agentType === "agent" && agent && canReadAgentTriggers && (
-                <div className="p-4">
-                  <AgentChatAppsEditor
-                    agent={agent}
-                    readOnly={readOnly}
-                    onDirtyChange={setChannelAssignmentsDirty}
-                    standaloneSave={false}
-                    onSaveHandlerChange={registerChannelAssignmentsSave}
-                  />
-                </div>
-              )}
-
-              {/* Instructions are configured while creating an Agent, then
-                  intentionally saved in isolation from its detail page. */}
-              {isInternalAgent && !agent && (
-                <div className="p-4">
-                  <SystemPromptEditor
-                    value={systemPrompt}
-                    onChange={setSystemPrompt}
-                    variant="section"
-                    builtInAgentId={builtInAgentName}
-                  />
-                </div>
-              )}
-
-              {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
-              {isInternalAgent && !isBuiltIn && (
-                <Collapsible
-                  open={suggestedPromptsOpen}
-                  onOpenChange={setSuggestedPromptsOpen}
-                  className="group"
-                >
-                  <div>
-                    {suggestedPrompts.length > 0 ? (
-                      <CollapsibleTrigger className="flex w-full items-center justify-between p-4 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
-                        <div className="text-left">
-                          <h3 className="text-base font-semibold">
-                            Suggested Prompts
-                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                              ({suggestedPrompts.length})
-                            </span>
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            Shown to users when starting a new chat. Max{" "}
-                            {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
-                            {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt
-                            max {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {suggestedPromptsOpen && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      disabled={
-                                        suggestedPrompts.length >=
-                                        MAX_SUGGESTED_PROMPTS
-                                      }
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSuggestedPrompts((prev) => [
-                                          ...prev,
-                                          { summaryTitle: "", prompt: "" },
-                                        ]);
-                                      }}
-                                    >
-                                      <Plus className="h-4 w-4 mr-1" />
-                                      Add
-                                    </Button>
-                                  </span>
-                                </TooltipTrigger>
-                                {suggestedPrompts.length >=
-                                  MAX_SUGGESTED_PROMPTS && (
-                                  <TooltipContent>
-                                    Maximum of {MAX_SUGGESTED_PROMPTS} suggested
-                                    prompts reached
-                                  </TooltipContent>
-                                )}
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
-                        </div>
-                      </CollapsibleTrigger>
-                    ) : (
-                      <div className="flex flex-col items-stretch gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                          <h3 className="text-base font-semibold">
-                            Suggested Prompts
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            Shown to users when starting a new chat. Max{" "}
-                            {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
-                            {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt
-                            max {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="self-start"
-                          size="sm"
-                          onClick={() => {
-                            setSuggestedPrompts([
-                              { summaryTitle: "", prompt: "" },
-                            ]);
-                            setSuggestedPromptsOpen(true);
-                          }}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add
-                        </Button>
-                      </div>
-                    )}
-                    <CollapsibleContent>
-                      <div className="border-t p-4 space-y-4">
-                        {suggestedPrompts.map((sp, index) => (
-                          <div
-                            // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
-                            key={`sp-${index}`}
-                            className="space-y-2 rounded-md border p-3 relative"
-                          >
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute top-2 right-2 h-6 w-6"
-                              aria-label="Remove suggested prompt"
-                              onClick={() => {
-                                setSuggestedPrompts((prev) => {
-                                  const next = prev.filter(
-                                    (_, i) => i !== index,
-                                  );
-                                  if (next.length === 0)
-                                    setSuggestedPromptsOpen(false);
-                                  return next;
-                                });
-                              }}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                            <div className="space-y-1 pr-8">
-                              <Label className="text-xs">Button Label</Label>
-                              <Input
-                                value={sp.summaryTitle}
-                                onChange={(e) =>
-                                  setSuggestedPrompts((prev) =>
-                                    prev.map((p, i) =>
-                                      i === index
-                                        ? {
-                                            ...p,
-                                            summaryTitle: e.target.value,
-                                          }
-                                        : p,
-                                    ),
-                                  )
-                                }
-                                placeholder="e.g. Summarize recent changes"
-                                maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
-                                aria-label="Button Label"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Prompt</Label>
-                              <Textarea
-                                value={sp.prompt}
-                                onChange={(e) =>
-                                  setSuggestedPrompts((prev) =>
-                                    prev.map((p, i) =>
-                                      i === index
-                                        ? { ...p, prompt: e.target.value }
-                                        : p,
-                                    ),
-                                  )
-                                }
-                                placeholder="The full prompt sent when clicked"
-                                className="min-h-[60px]"
-                                maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
-                                aria-label="Suggested prompt"
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              )}
-
-              {/* Model (Agent and Built-in) — the provider key and the
-                model that answers, once the agent has been told what to do. */}
-              {showsModelControl && (
-                <div className="space-y-4 p-4">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-semibold">Model</h3>
-                    <p className="text-sm text-muted-foreground">
-                      The provider key and model this{" "}
-                      {agentTypeDisplayName[agentType] || "agent"} answers with.
-                    </p>
-                  </div>
-                  {cannotReadLlmConfiguration ? (
-                    <Alert>
-                      <AlertDescription className="text-sm text-muted-foreground">
-                        You do not have permission to view LLM API keys or
-                        models. This agent will use the organization&apos;s
-                        default model configuration.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    <>
-                      {requiredSubscription &&
-                        !requiredSubscriptionSatisfied && (
-                          <Alert>
-                            <InfoIcon className="h-4 w-4" />
-                            <AlertTitle>
-                              {requiredSubscription.label} required
-                            </AlertTitle>
-                            <AlertDescription className="space-y-2">
-                              <p>
-                                This maintained runtime uses your existing
-                                subscription and does not fall back to
-                                usage-based API billing.
-                              </p>
-                              {!requiredSubscriptionKey && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                >
-                                  <Link
-                                    href={`/llm/model-providers?connect=${requiredSubscriptionKind}`}
-                                    target="_blank"
-                                  >
-                                    {requiredSubscription.connect.signInTitle}
-                                  </Link>
-                                </Button>
-                              )}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                      {selectedApiKeyIsSubscription ? (
-                        <Alert>
-                          <InfoIcon className="h-4 w-4" />
-                          <AlertDescription>
-                            Each person using this agent must connect their own
-                            subscription account. No credential is shared.
-                          </AlertDescription>
-                        </Alert>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          {selectedApiKey && selectedApiKey.scope !== "org" ? (
-                            <span>
-                              Selected key will be available to everyone who has
-                              access to this agent.
-                            </span>
-                          ) : null}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <LlmProviderApiKeyDropdown
-                          availableKeys={availableApiKeys}
-                          selectedApiKeyId={llmApiKeyId}
-                          open={apiKeySelectorOpen}
-                          onOpenChange={setApiKeySelectorOpen}
-                          onSelectKey={(keyId) => {
-                            handleLlmApiKeyChange(keyId);
-                            setApiKeySelectorOpen(false);
-                          }}
-                          currentProvider={currentLlmProvider ?? undefined}
-                          triggerVariant="button"
-                          triggerClassName="h-8 max-w-[250px] text-xs"
-                          popoverClassName="w-96"
-                          popoverPortal={false}
-                          searchPlaceholder="Search API keys..."
-                          allowOrganizationDefault
-                          organizationDefaultSelected={!llmApiKeyId}
-                          onSelectOrganizationDefault={() => {
-                            setLlmApiKeyId(null);
-                            setLlmModel(null);
-                            lastAutoSelectedProviderRef.current = null;
-                            setApiKeySelectorOpen(false);
-                          }}
-                        />
-                        {!llmApiKeyId ? (
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div>
-                                  <ModelSelector
-                                    selectedModel=""
-                                    onModelChange={() => {}}
-                                    disabled
-                                    variant="outline"
-                                    enabled={false}
-                                    // The model the organization default
-                                    // resolves to today; the runtime's own
-                                    // fallback when no default is set.
-                                    placeholder={
-                                      organizationDefaultModel.label ??
-                                      undefined
-                                    }
-                                  />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="text-xs">
-                                Select a provider API key first
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <ModelSelector
-                            selectedModel={llmModel || ""}
-                            onModelChange={(modelId) =>
-                              handleLlmModelChange(modelId)
-                            }
-                            onClear={() => {
-                              setLlmModel(null);
-                              setLlmApiKeyId(null);
-                              lastAutoSelectedProviderRef.current = null;
-                            }}
-                            variant="outline"
-                            apiKeyId={llmApiKeyId}
-                            enabled={!!canReadLlmModels}
-                          />
-                        )}
-                      </div>
-                      {showNoToolsModelNotice && (
-                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                          <InfoIcon
-                            className="mt-0.5 size-3 shrink-0"
-                            aria-hidden="true"
-                          />
-                          <span>
-                            This model doesn&apos;t support tools, so this{" "}
-                            {agentTypeDisplayName[agentType] || "agent"}
-                            &apos;s tools won&apos;t be used in its chats. Pick
-                            a different model to use tools.
-                          </span>
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
+                </SettingsSection>
               )}
 
               {/* Labels for built-in agents (the Advanced step that holds
                 them for everyone else does not exist for a built-in). */}
               {isBuiltIn && (
-                <div className="space-y-4 p-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Label>Labels</Label>
-                      </div>
-                    </div>
-                    <ProfileLabels
-                      ref={agentLabelsRef}
-                      labels={labels}
-                      onLabelsChange={setLabels}
-                      showLabel={false}
-                    />
-                  </div>
-                </div>
+                <SettingsSection
+                  title="Labels"
+                  description="Key/value pairs for grouping and filtering this agent."
+                >
+                  <ProfileLabels
+                    ref={agentLabelsRef}
+                    labels={labels}
+                    onLabelsChange={setLabels}
+                    showLabel={false}
+                  />
+                </SettingsSection>
               )}
-            </div>
+            </SettingsSectionGroup>
           )}
 
+          {/* Messaging channels: a surface of its own, because the
+              assignments save through their own endpoint rather than with the
+              agent record's fields. */}
+          {showMessagingSection &&
+            agentType === "agent" &&
+            !isBuiltIn &&
+            agent &&
+            canReadAgentTriggers && (
+              <SettingsSectionGroup
+                className={cn(!isActiveSection("messaging") && "hidden")}
+              >
+                {/* The editor renders its own Channels and Email sections:
+                    the two are different kinds of thing, and neither belongs
+                    inside the other's list. */}
+                <AgentChatAppsEditor
+                  agent={agent}
+                  readOnly={readOnly}
+                  onDirtyChange={setChannelAssignmentsDirty}
+                  standaloneSave={false}
+                  onSaveHandlerChange={registerChannelAssignmentsSave}
+                />
+              </SettingsSectionGroup>
+            )}
+
           {showToolsSections && toolsPanelHasContent && (
-            <div
-              className={cn(
-                "divide-y rounded-lg border bg-card",
-                !isActiveSection("tools") && "hidden",
-              )}
+            <SettingsSectionGroup
+              className={cn(!isActiveSection("tools") && "hidden")}
             >
               {/* Section 3: Tools & Knowledge Sources */}
               {showTools && (
-                <div
-                  className="space-y-4 p-4"
-                  data-testid={E2eTestId.AgentToolsSection}
-                >
-                  <h3 className="text-base font-semibold">
-                    Tools &amp; Knowledge Sources
-                  </h3>
+                <SettingsSection data-testid={E2eTestId.AgentToolsSection}>
                   <div className="space-y-2">
                     <Tabs
                       value={autoToolsMode ? "auto" : "custom"}
@@ -3418,13 +3214,15 @@ export function AgentForm({
                       </Select>
                     </div>
                   )}
-                </div>
+                </SettingsSection>
               )}
 
               {/* Section 4: Subagents */}
               {showSubagents && (
-                <div className="space-y-4 p-4">
-                  <h3 className="text-base font-semibold">Subagents</h3>
+                <SettingsSection
+                  title="Subagents"
+                  description="Other agents this one may hand a task to."
+                >
                   {!subagentSetsLoaded ? (
                     <p className="text-sm text-muted-foreground">
                       <span>Loading subagents…</span>
@@ -3557,19 +3355,22 @@ export function AgentForm({
                       )}
                     </div>
                   )}
-                </div>
+                </SettingsSection>
               )}
 
               {/* Section 5: Skills published over MCP (SEP-2640). Gateways
                   only, behind the draft-extension feature flag. */}
               {showSkills && (
-                <div className="space-y-4 p-4">
-                  <h3 className="text-base font-semibold">Published skills</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
-                    serves to MCP clients as <code>skill://</code> resources,
-                    alongside the client's own.
-                  </p>
+                <SettingsSection
+                  title="Published skills"
+                  description={
+                    <>
+                      Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
+                      serves to MCP clients as <code>skill://</code> resources,
+                      alongside the client&apos;s own.
+                    </>
+                  }
+                >
                   {/* Nothing editable until the reads behind it succeed. The
                       controls below are seeded from those reads and saved back
                       as a full replace, so rendering their defaults early would
@@ -3658,7 +3459,7 @@ export function AgentForm({
                       )}
                     </div>
                   )}
-                </div>
+                </SettingsSection>
               )}
 
               {/* Hooks (internal agents only; shown when the agent runtime is
@@ -3666,52 +3467,223 @@ export function AgentForm({
                   a record that does not exist yet are written right after the
                   create. */}
               {showsHooks && (
-                <div className="p-4">
+                <SettingsSection
+                  title="Hooks"
+                  description="Commands this agent runs around its own tool calls, inside its sandbox."
+                >
                   <AgentHooksEditor
                     ref={agentHooksEditorRef}
                     agentId={agent?.id}
                   />
-                </div>
+                </SettingsSection>
               )}
-            </div>
+            </SettingsSectionGroup>
           )}
 
           {/* The Advanced step: background execution, security, passthrough
               headers, the identity provider, and labels. A built-in agent has
               none. */}
           {showAdvancedSections && !isBuiltIn && (
-            <div
-              className={cn(
-                "divide-y rounded-lg border bg-card",
-                !isActiveSection("advanced") && "hidden",
-              )}
+            <SettingsSectionGroup
+              className={cn(!isActiveSection("advanced") && "hidden")}
             >
-              <div className="space-y-4 p-4">
-                <div className="space-y-1">
-                  <h3 className="text-base font-semibold">Advanced</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Optional settings for {advancedSettingsSummary}.
-                  </p>
-                </div>
-                {agentType === "agent" && agentBackgroundExecutionEnabled && (
-                  <>
-                    <AgentBackgroundExecutionFields
-                      value={backgroundExecution}
-                      onChange={setBackgroundExecution}
-                    />
-                    {agent?.backgroundExecution?.credentials && (
-                      <AgentBackgroundExecutionCard
-                        agentId={agent.id}
-                        credentials={agent.backgroundExecution.credentials}
-                      />
-                    )}
-                  </>
-                )}
+              {showsEnvironmentSelector && (
+                <SettingsSection
+                  title="Environment"
+                  description={environmentHelpText}
+                >
+                  <EnvironmentSelector
+                    value={environmentId ?? null}
+                    onChange={setEnvironmentId}
+                    resource={getResourceForAgentType(agentType)}
+                    showLabel={false}
+                  />
+                </SettingsSection>
+              )}
 
-                {/* Security (LLM Proxy and Agent only) */}
-                {showSecurity && (
+              {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
+              {isInternalAgent && !isBuiltIn && (
+                <SettingsSection
+                  title="Suggested prompts"
+                  description={`Shown to users when starting a new chat. Max ${MAX_SUGGESTED_PROMPTS} prompts, title max ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.`}
+                >
+                  <Collapsible
+                    open={suggestedPromptsOpen}
+                    onOpenChange={setSuggestedPromptsOpen}
+                    className="group"
+                  >
+                    <div className="overflow-hidden rounded-md border">
+                      {suggestedPrompts.length > 0 ? (
+                        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-3 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
+                          <span className="text-sm font-medium">
+                            {suggestedPrompts.length} prompt
+                            {suggestedPrompts.length === 1 ? null : (
+                              <span>s</span>
+                            )}
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {suggestedPromptsOpen && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={
+                                          suggestedPrompts.length >=
+                                          MAX_SUGGESTED_PROMPTS
+                                        }
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSuggestedPrompts((prev) => [
+                                            ...prev,
+                                            { summaryTitle: "", prompt: "" },
+                                          ]);
+                                        }}
+                                      >
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        Add
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  {suggestedPrompts.length >=
+                                    MAX_SUGGESTED_PROMPTS && (
+                                    <TooltipContent>
+                                      Maximum of {MAX_SUGGESTED_PROMPTS}{" "}
+                                      suggested prompts reached
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
+                          </div>
+                        </CollapsibleTrigger>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3 p-3">
+                          <span className="text-sm text-muted-foreground">
+                            None yet
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="self-start"
+                            size="sm"
+                            onClick={() => {
+                              setSuggestedPrompts([
+                                { summaryTitle: "", prompt: "" },
+                              ]);
+                              setSuggestedPromptsOpen(true);
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add
+                          </Button>
+                        </div>
+                      )}
+                      <CollapsibleContent>
+                        <div className="border-t p-3 space-y-4">
+                          {suggestedPrompts.map((sp, index) => (
+                            <div
+                              // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
+                              key={`sp-${index}`}
+                              className="space-y-2 rounded-md border p-3 relative"
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-2 right-2 h-6 w-6"
+                                aria-label="Remove suggested prompt"
+                                onClick={() => {
+                                  setSuggestedPrompts((prev) => {
+                                    const next = prev.filter(
+                                      (_, i) => i !== index,
+                                    );
+                                    if (next.length === 0)
+                                      setSuggestedPromptsOpen(false);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                              <div className="space-y-1 pr-8">
+                                <Label className="text-xs">Button Label</Label>
+                                <Input
+                                  value={sp.summaryTitle}
+                                  onChange={(e) =>
+                                    setSuggestedPrompts((prev) =>
+                                      prev.map((p, i) =>
+                                        i === index
+                                          ? {
+                                              ...p,
+                                              summaryTitle: e.target.value,
+                                            }
+                                          : p,
+                                      ),
+                                    )
+                                  }
+                                  placeholder="e.g. Summarize recent changes"
+                                  maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+                                  aria-label="Button Label"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Prompt</Label>
+                                <Textarea
+                                  value={sp.prompt}
+                                  onChange={(e) =>
+                                    setSuggestedPrompts((prev) =>
+                                      prev.map((p, i) =>
+                                        i === index
+                                          ? { ...p, prompt: e.target.value }
+                                          : p,
+                                      ),
+                                    )
+                                  }
+                                  placeholder="The full prompt sent when clicked"
+                                  className="min-h-[60px]"
+                                  maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+                                  aria-label="Suggested prompt"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </SettingsSection>
+              )}
+
+              {agentType === "agent" && agentBackgroundExecutionEnabled && (
+                <SettingsSection
+                  title="Background execution"
+                  description="Whether this agent may run on its own, and the credentials it runs with."
+                >
+                  <AgentBackgroundExecutionFields
+                    value={backgroundExecution}
+                    onChange={setBackgroundExecution}
+                  />
+                  {agent?.backgroundExecution?.credentials && (
+                    <AgentBackgroundExecutionCard
+                      agentId={agent.id}
+                      credentials={agent.backgroundExecution.credentials}
+                    />
+                  )}
+                </SettingsSection>
+              )}
+
+              {/* Security (LLM Proxy and Agent only) */}
+              {showSecurity && (
+                <SettingsSection
+                  title="Security"
+                  description="How this agent treats the content its tools hand back."
+                >
                   <div className="space-y-2">
-                    <Label>Security</Label>
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label
@@ -3733,10 +3705,15 @@ export function AgentForm({
                       />
                     </div>
                   </div>
-                )}
+                </SettingsSection>
+              )}
 
-                {/* Custom Header Passthrough (MCP Gateway only) */}
-                {agentType === "mcp_gateway" && (
+              {/* Custom Header Passthrough (MCP Gateway only) */}
+              {agentType === "mcp_gateway" && (
+                <SettingsSection
+                  title="Header passthrough"
+                  description="Request headers forwarded verbatim to the MCP servers behind this gateway."
+                >
                   <div className="space-y-2">
                     <Label>Custom Header Passthrough</Label>
                     <p className="text-sm text-muted-foreground">
@@ -3799,10 +3776,15 @@ export function AgentForm({
                       />
                     )}
                   </div>
-                )}
+                </SettingsSection>
+              )}
 
-                {/* Identity Provider for JWKS auth */}
-                {supportsIdentityProvider && identityProviders.length > 0 && (
+              {/* Identity Provider for JWKS auth */}
+              {supportsIdentityProvider && identityProviders.length > 0 && (
+                <SettingsSection
+                  title="Identity provider"
+                  description="The issuer whose JWTs incoming requests may authenticate with."
+                >
                   <div className="space-y-2">
                     <Label>
                       {agentType === "agent"
@@ -3847,25 +3829,23 @@ export function AgentForm({
                       </SelectContent>
                     </Select>
                   </div>
-                )}
+                </SettingsSection>
+              )}
 
-                {/* Labels classify the finished configuration, so they stay at
-                    the bottom of the Advanced step. */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <Label>Labels</Label>
-                    </div>
-                  </div>
-                  <ProfileLabels
-                    ref={agentLabelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                    showLabel={false}
-                  />
-                </div>
-              </div>
-            </div>
+              {/* Labels classify the finished configuration, so they stay at
+                    the end of the panel. */}
+              <SettingsSection
+                title="Labels"
+                description={`Key/value pairs for grouping and filtering this ${agentTypeDisplayName[agentType] || "agent"}.`}
+              >
+                <ProfileLabels
+                  ref={agentLabelsRef}
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                  showLabel={false}
+                />
+              </SettingsSection>
+            </SettingsSectionGroup>
           )}
         </div>
       </fieldset>
@@ -3943,27 +3923,9 @@ export function AgentForm({
           </AlertDescription>
         </Alert>
       )}
-      {readOnly ? (
-        // A read-only form disables every field and has nothing to save, but
-        // it still needs an exit: with no footer at all, a viewer who reached
-        // this page by URL could only leave it with the browser's back button.
-        <WizardFooter>
-          <Button type="button" variant="outline" asChild>
-            <Link href={readOnlyExitHref}>Cancel</Link>
-          </Button>
-        </WizardFooter>
-      ) : (
-        footer(footerState)
-      )}
+      {footer(footerState)}
     </form>
   );
-}
-
-function formatSettingsList(parts: Array<string | null>) {
-  const values = parts.filter((part): part is string => part !== null);
-  if (values.length <= 1) return values[0] ?? "";
-  if (values.length === 2) return values.join(" and ");
-  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
 }
 
 type AgentFormFields = {

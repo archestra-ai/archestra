@@ -118,29 +118,30 @@ export function McpOauthManagement({
   return (
     <div className="space-y-3">
       {sectionHeading}
-      {clients.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          No OAuth clients for this {resourceKind} yet.
-        </p>
-      ) : (
-        <div className="max-h-56 overflow-auto rounded-md border">
+      {/* No empty state: the Create button above is the whole story when there
+          are none, and a line saying so only repeats it. */}
+      {clients.length > 0 && (
+        <div className="max-h-56 overflow-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b bg-muted/40 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="px-3 py-1.5">Name</th>
-                <th className="px-3 py-1.5">Client ID</th>
-                <th className="px-3 py-1.5">Accessible to</th>
-                <th className="w-24 px-2 py-1.5" />
+              <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                <th className="py-1.5 pr-3 font-medium">Name</th>
+                <th className="py-1.5 pr-3 font-medium">Client ID</th>
+                <th className="py-1.5 pr-3 font-medium">Accessible to</th>
+                <th className="w-24 py-1.5" />
               </tr>
             </thead>
-            <tbody>
+            {/* Rows separated by a rule, not boxed by one: an outer border, a
+                header fill and a line under every row made four clients read
+                as a spreadsheet. */}
+            <tbody className="divide-y divide-border">
               {clients.map((client) => (
-                <tr key={client.id} className="border-b last:border-0">
-                  <td className="px-3 py-1.5 font-medium">
+                <tr key={client.id}>
+                  <td className="py-1.5 pr-3 font-medium">
                     {client.name}
                     {client.disabled ? <span>{" (disabled)"}</span> : null}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="py-1.5 pr-3">
                     <span className="flex items-center gap-1 font-mono">
                       <code className="max-w-52 truncate">
                         {client.clientId}
@@ -158,7 +159,7 @@ export function McpOauthManagement({
                       </Button>
                     </span>
                   </td>
-                  <td className="max-w-[180px] px-3 py-1.5">
+                  <td className="max-w-[180px] py-1.5 pr-3">
                     <ResourceVisibilityBadge
                       scope={client.scope}
                       teams={client.teams}
@@ -168,7 +169,7 @@ export function McpOauthManagement({
                       showSelfAsMe
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="py-1.5">
                     <div className="flex">
                       {canUpdate && (
                         <>

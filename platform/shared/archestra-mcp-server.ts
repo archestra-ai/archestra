@@ -161,6 +161,7 @@ export const TOOL_GET_TASK_SHORT_NAME = "get_task";
 export const TOOL_LIST_TASKS_SHORT_NAME = "list_tasks";
 export const TOOL_STEER_TASK_SHORT_NAME = "steer_task";
 export const TOOL_CANCEL_TASK_SHORT_NAME = "cancel_task";
+export const TOOL_POST_TASK_FILE_SHORT_NAME = "post_task_file";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 // persistent files: produced by agents, scoped to a conversation (or a project)
@@ -295,6 +296,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_TASKS_SHORT_NAME,
   TOOL_STEER_TASK_SHORT_NAME,
   TOOL_CANCEL_TASK_SHORT_NAME,
+  TOOL_POST_TASK_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
@@ -485,6 +487,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   list_tasks: "tasks",
   steer_task: "tasks",
   cancel_task: "tasks",
+  post_task_file: "tasks",
   download_file: "skill_sandbox",
   upload_file: "skill_sandbox",
 
@@ -688,6 +691,8 @@ export const TOOL_STEER_TASK_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_STEER_TASK_SHORT_NAME}` as const;
 export const TOOL_CANCEL_TASK_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CANCEL_TASK_SHORT_NAME}` as const;
+export const TOOL_POST_TASK_FILE_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_POST_TASK_FILE_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DOWNLOAD_FILE_SHORT_NAME}` as const;
 export const TOOL_UPLOAD_FILE_FULL_NAME =

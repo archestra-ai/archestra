@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-08-27
+lastUpdated: 2026-08-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,7 +16,9 @@ Use separate gateways when different clients, teams, or environments need differ
 
 A gateway is a named MCP surface. It has its own visibility, authentication settings, and assigned tools. The same installed MCP server can appear behind multiple gateways, but each gateway decides which clients can reach it and which tools are exposed.
 
-Create gateways from **MCP Gateways** with the setup wizard. **Configuration** asks for the name and visibility, **Tools & Knowledge** picks what the gateway exposes, and **Advanced** holds labels, passthrough headers, and the identity provider. Nothing is saved until **Create** on the last step — the gateway then opens on its **Connect** tab, which shows how clients reach it. Every gateway has its own page with an **Overview** and a **Connect** tab; **Edit** reopens the wizard, where **Save** on any step returns to the Overview. A usable gateway needs:
+Create gateways from **MCP Gateways** with the setup wizard. **Configuration** asks for the name and visibility, **Tools & Knowledge** picks what the gateway exposes, and **Advanced** holds labels, passthrough headers, and the identity provider. Nothing is saved until **Create** on the last step — the gateway then opens on its **Connect** tab, which shows how clients reach it.
+
+Every gateway has its own page, and that page is where you change it. The three configuration groups are its tabs, edited in place, alongside **Connect**. **Save changes** writes the tab you are on and leaves you there. A usable gateway needs:
 
 - at least one assigned tool
 - a supported client authentication path

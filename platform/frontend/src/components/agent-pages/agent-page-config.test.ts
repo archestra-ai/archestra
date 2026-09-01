@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentConfigureHref,
   agentDetailHref,
-  agentEditHref,
   agentPageKindForType,
   getAgentSetupSteps,
   isAgentTypeAllowedOnPage,
-  resolveAgentSetupStep,
+  resolveAgentDetailSection,
   resolveLegacyAgentDialogRedirect,
 } from "./agent-page-config";
 
@@ -35,27 +35,6 @@ describe("getAgentSetupSteps", () => {
   });
 });
 
-describe("resolveAgentSetupStep", () => {
-  const steps = getAgentSetupSteps({ agentType: "agent", builtIn: false });
-
-  it("takes the step the URL names", () => {
-    expect(resolveAgentSetupStep(steps, "tools")).toBe("tools");
-  });
-
-  it("falls back to the first step for a missing or unknown value", () => {
-    expect(resolveAgentSetupStep(steps, null)).toBe("configuration");
-    expect(resolveAgentSetupStep(steps, "guardrails")).toBe("configuration");
-  });
-
-  it("does not resolve a step the record does not have", () => {
-    const builtInSteps = getAgentSetupSteps({
-      agentType: "agent",
-      builtIn: true,
-    });
-    expect(resolveAgentSetupStep(builtInSteps, "tools")).toBe("configuration");
-  });
-});
-
 describe("route families", () => {
   it("sends each stored type to its own family, legacy profiles to gateways", () => {
     expect(agentPageKindForType("agent")).toBe("agent");
@@ -74,15 +53,36 @@ describe("route families", () => {
     expect(isAgentTypeAllowedOnPage("agent", "agent")).toBe(true);
   });
 
-  it("builds the detail and edit hrefs off the family's list route", () => {
+  it("builds every detail section off the family's list route", () => {
     expect(agentDetailHref("mcp_gateway", "g1")).toBe("/mcp/gateways/g1");
     expect(agentDetailHref("mcp_gateway", "g1", "connect")).toBe(
-      "/mcp/gateways/g1#connect",
+      "/mcp/gateways/g1?section=connect",
     );
-    expect(agentEditHref("mcp_gateway", "g1")).toBe("/mcp/gateways/g1/edit");
-    expect(agentEditHref("agent", "a 1", "tools")).toBe(
-      "/agents/a%201/edit?step=tools",
+    // The first section is the bare route: a record's own URL is not
+    // `?section=general`.
+    expect(agentDetailHref("agent", "a1", "general")).toBe("/agents/a1");
+  });
+
+  it("points every edit deep link at the detail page's own sections", () => {
+    expect(agentConfigureHref("mcp_gateway", "g1")).toBe("/mcp/gateways/g1");
+    expect(agentConfigureHref("agent", "a 1", "tools")).toBe(
+      "/agents/a%201?section=tools",
     );
+  });
+});
+
+describe("resolveAgentDetailSection", () => {
+  const sections = ["general", "tools", "connect"] as const;
+
+  it("takes the section the param names", () => {
+    expect(resolveAgentDetailSection(sections, "connect")).toBe("connect");
+  });
+
+  it("falls back to the first section for one this record does not have", () => {
+    // A gateway sent to `?section=executions`, or a typo: the page corrects
+    // the URL to what it actually rendered rather than showing a blank pane.
+    expect(resolveAgentDetailSection(sections, "executions")).toBe("general");
+    expect(resolveAgentDetailSection(sections, null)).toBe("general");
   });
 });
 
@@ -96,19 +96,19 @@ describe("resolveLegacyAgentDialogRedirect", () => {
     ).toBe("/agents/new");
   });
 
-  it("forwards ?edit=<id> to the edit page, keeping the tools-picker request", () => {
+  it("forwards ?edit=<id> to the configuration tab, keeping the tools-picker request", () => {
     expect(
       resolveLegacyAgentDialogRedirect(
         "mcp_gateway",
         new URLSearchParams("edit=g1"),
       ),
-    ).toBe("/mcp/gateways/g1/edit");
+    ).toBe("/mcp/gateways/g1");
     expect(
       resolveLegacyAgentDialogRedirect(
         "mcp_gateway",
         new URLSearchParams("edit=g1&openTools=true"),
       ),
-    ).toBe("/mcp/gateways/g1/edit?step=tools&openTools=true");
+    ).toBe("/mcp/gateways/g1?section=tools&openTools=true");
   });
 
   it("forwards ?view=<id> to the detail page", () => {
@@ -123,13 +123,13 @@ describe("resolveLegacyAgentDialogRedirect", () => {
         "agent",
         new URLSearchParams("edit=x&name=foo&page=2"),
       ),
-    ).toBe("/agents/x/edit?name=foo&page=2");
+    ).toBe("/agents/x?name=foo&page=2");
     expect(
       resolveLegacyAgentDialogRedirect(
         "agent",
         new URLSearchParams("edit=x&openTools=true&name=foo"),
       ),
-    ).toBe("/agents/x/edit?step=tools&openTools=true&name=foo");
+    ).toBe("/agents/x?section=tools&openTools=true&name=foo");
     expect(
       resolveLegacyAgentDialogRedirect(
         "mcp_gateway",

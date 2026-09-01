@@ -208,6 +208,48 @@ export class ChatOpsManager {
    * "I'll follow up once it completes" only means something if something can
    * actually follow up.
    */
+  /**
+   * Upload a file into a bound channel thread (a task's demo recording, for
+   * example) so it renders natively. Throws with a caller-visible reason when
+   * the binding is gone, the provider is down, or it has no file API — an
+   * agent-facing tool needs the failure, not a log line.
+   */
+  async uploadFileToBindingThread(params: {
+    bindingId: string;
+    threadId: string;
+    filename: string;
+    data: Buffer;
+    comment?: string;
+  }): Promise<void> {
+    const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
+    if (!binding) {
+      throw new Error("The task's messaging-channel binding no longer exists");
+    }
+    const provider: ChatOpsProvider | null =
+      binding.provider === "slack"
+        ? this.slackProvider
+        : binding.provider === "ms-teams"
+          ? this.msTeamsProvider
+          : binding.provider === "telegram"
+            ? this.telegramProvider
+            : null;
+    if (!provider?.isConfigured()) {
+      throw new Error(`The ${binding.provider} provider is not configured`);
+    }
+    if (!provider.uploadFileToThread) {
+      throw new Error(
+        `The ${binding.provider} provider does not support file uploads`,
+      );
+    }
+    await provider.uploadFileToThread({
+      channelId: binding.channelId,
+      threadId: params.threadId,
+      filename: params.filename,
+      data: params.data,
+      comment: params.comment,
+    });
+  }
+
   async notifyBindingThread(params: {
     bindingId: string;
     threadId: string;

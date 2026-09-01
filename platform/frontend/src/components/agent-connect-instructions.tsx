@@ -9,7 +9,7 @@ import {
 } from "@/app/connection/connection-flow.utils";
 import { GenericAuthRow } from "@/app/connection/mcp-client-instructions";
 import { TerminalBlock } from "@/app/connection/terminal-block";
-import { agentEditHref } from "@/components/agent-pages/agent-page-config";
+import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
 import { AuthMethodRow } from "@/components/auth-method-row";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import {
@@ -182,7 +182,7 @@ function IdentityProviderStatus({ target }: { target: ConnectTarget }) {
   // providers configured — without any, "Edit …" would be a dead end, so
   // point at IdP setup instead.
   const orgHasIdps = (identityProviders?.length ?? 0) > 0;
-  const editHref = agentEditHref("mcp_gateway", target.id);
+  const editHref = agentConfigureHref("mcp_gateway", target.id);
 
   return (
     <AuthMethodRow

@@ -2348,6 +2348,17 @@ const config = {
       {},
       "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR",
     ),
+    /**
+     * How long a launched run may stay Pending before it is declared failed.
+     * Covers node scale-up of a dedicated (scale-to-zero) runner pool plus a
+     * cold multi-GB image pull, which together overran the old fixed 5-minute
+     * limit; a genuinely unavailable image just takes this long to surface.
+     */
+    podStartTimeoutSeconds: parsePositiveInt(
+      process.env
+        .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_POD_START_TIMEOUT_SECONDS,
+      600,
+    ),
     /** How often the reconciler syncs runner state and applies TTL/idle stops. */
     reconcileIntervalSeconds: parsePositiveInt(
       process.env

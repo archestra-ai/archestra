@@ -6,8 +6,8 @@ import {
 import { ACTION_LABEL } from "@/lib/design/resource-lexicon";
 import {
   type AgentPageKind,
+  agentConfigureHref,
   agentDetailHref,
-  agentEditHref,
 } from "./agent-page-config";
 
 export type AgentActionId =
@@ -69,7 +69,7 @@ export function getAgentActionModel({
         resource,
         builtIn ? ["update", "admin"] : "update",
       ),
-      href: agentEditHref(kind, agent.id),
+      href: agentConfigureHref(kind, agent.id),
     },
     {
       id: "clone",

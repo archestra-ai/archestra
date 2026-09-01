@@ -1,4 +1,5 @@
 import type { AgentType } from "@archestra/shared";
+import type { AgentFormSection } from "@/components/agent-form";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import type { WizardStepDefinition } from "@/components/wizard-stepper";
 
@@ -10,7 +11,7 @@ export type AgentPageKind = "agent" | "mcp_gateway";
 
 export interface AgentPageConfig {
   kind: AgentPageKind;
-  /** The list route; detail/new/edit routes hang off it. */
+  /** The list route; the detail and create routes hang off it. */
   basePath: "/agents" | "/mcp/gateways";
   singular: string;
   /** `singular` mid-sentence — acronyms keep their case ("this MCP gateway"). */
@@ -21,8 +22,6 @@ export interface AgentPageConfig {
   defaultIconType: AgentIconVariant;
   /** Sub-headline under "Create <singular>". */
   createDescription: string;
-  /** Sub-headline under "Edit <name>". */
-  editDescription: string;
   /** Body of the permanent-delete confirmation; names what history survives. */
   permanentDeleteDescription: (name: string) => string;
 }
@@ -38,8 +37,6 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     defaultIconType: "agent",
     createDescription:
       "Give the agent a name and instructions, then pick the tools and knowledge it can use.",
-    editDescription:
-      "Configure the agent, choose its tools and knowledge, and set its advanced options.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`,
   },
@@ -53,8 +50,6 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     defaultIconType: "mcp_gateway",
     createDescription:
       "Name the gateway and choose who can use it, then pick the tools it exposes and connect a client.",
-    editDescription:
-      "Configure the gateway, choose the tools it exposes, and set its advanced options.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its MCP tool-call history is kept, no longer pointing at the gateway. Nothing recovers the gateway itself.`,
   },
@@ -98,27 +93,73 @@ export function agentNewHref(kind: AgentPageKind): string {
   return `${AGENT_PAGE_CONFIGS[kind].basePath}/new`;
 }
 
-export function agentDetailHref(
-  kind: AgentPageKind,
-  id: string,
-  section?: "connect",
-): string {
-  const base = `${AGENT_PAGE_CONFIGS[kind].basePath}/${encodeURIComponent(id)}`;
-  return section === "connect" ? `${base}#connect` : base;
-}
-
 export type AgentSetupStepId = "configuration" | "tools" | "advanced";
 
 export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
 
-export function agentEditHref(
+/**
+ * The sections of a record's own page, listed down its side the way the
+ * settings surface lists its own. The first four are edited in place;
+ * `connect` and `executions` are the two views onto a configured record.
+ * `general` is the page's default and carries no `?section=`.
+ */
+export type AgentDetailSection =
+  | "general"
+  | "tools"
+  | "messaging"
+  | "advanced"
+  | "connect"
+  | "executions";
+
+/**
+ * The form group a page section mounts, for the four that edit the record.
+ * `general` is the form's `configuration` group under the name the sidebar
+ * gives it.
+ */
+export const AGENT_SECTION_FORM_GROUP = {
+  general: "configuration",
+  tools: "tools",
+  messaging: "messaging",
+  advanced: "advanced",
+} as const satisfies Partial<Record<AgentDetailSection, AgentFormSection>>;
+
+export function agentDetailHref(
+  kind: AgentPageKind,
+  id: string,
+  section?: AgentDetailSection,
+): string {
+  const base = `${AGENT_PAGE_CONFIGS[kind].basePath}/${encodeURIComponent(id)}`;
+  return section && section !== "general" ? `${base}?section=${section}` : base;
+}
+
+/**
+ * Where "edit this record" lands. Configuration is not a page of its own any
+ * more: it is the detail page's own sections, so every edit deep link in the
+ * app resolves to one of them. The wizard's step ids are what those links
+ * carry, so they are translated here.
+ */
+export function agentConfigureHref(
   kind: AgentPageKind,
   id: string,
   step?: AgentSetupStepId,
 ): string {
-  const base = `${AGENT_PAGE_CONFIGS[kind].basePath}/${encodeURIComponent(id)}/edit`;
-  return step ? `${base}?step=${step}` : base;
+  return agentDetailHref(kind, id, step && SECTION_FOR_SETUP_STEP[step]);
 }
+
+/** The section a `?section=` value names, or the first when it names none. */
+export function resolveAgentDetailSection(
+  sections: readonly AgentDetailSection[],
+  sectionParam: string | null | undefined,
+): AgentDetailSection {
+  const match = sections.find((section) => section === sectionParam);
+  return match ?? sections[0] ?? "general";
+}
+
+const SECTION_FOR_SETUP_STEP = {
+  configuration: "general",
+  tools: "tools",
+  advanced: "advanced",
+} as const satisfies Record<AgentSetupStepId, AgentDetailSection>;
 
 const CONFIGURATION_STEP: AgentSetupStep = {
   id: "configuration",
@@ -143,15 +184,6 @@ export function getAgentSetupSteps({
 }): AgentSetupStep[] {
   if (builtIn) return [CONFIGURATION_STEP];
   return [CONFIGURATION_STEP, TOOLS_STEP, ADVANCED_STEP];
-}
-
-/** The step a `?step=` value names, or the first step when it names none. */
-export function resolveAgentSetupStep(
-  steps: readonly AgentSetupStep[],
-  stepParam: string | null | undefined,
-): AgentSetupStepId {
-  const match = steps.find((step) => step.id === stepParam);
-  return (match ?? steps[0]).id;
 }
 
 /**
@@ -184,9 +216,13 @@ export function resolveLegacyAgentDialogRedirect(
   const editId = searchParams.get("edit");
   if (editId) {
     // `?openTools=true` used to pop the tools picker open inside the edit
-    // dialog; it now lands on the tools step with the same request.
+    // dialog; it now lands on the tools tab with the same request.
     const openTools = searchParams.get("openTools") === "true";
-    const href = agentEditHref(kind, editId, openTools ? "tools" : undefined);
+    const href = agentConfigureHref(
+      kind,
+      editId,
+      openTools ? "tools" : undefined,
+    );
     return withCarried(openTools ? `${href}&openTools=true` : href);
   }
   const viewId = searchParams.get("view");

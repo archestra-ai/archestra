@@ -36,6 +36,12 @@ interface EnvironmentSelectorProps {
    * case; the MCP form shows the disabled state).
    */
   hideWhenOnlyDefault?: boolean;
+  /**
+   * Off where the host already names the field — a settings surface puts the
+   * title in its own label column, and a second one here would say it twice.
+   * The select keeps its `aria-label` either way.
+   */
+  showLabel?: boolean;
   /** Applied to the field's root element, e.g. a card wrapper for the agent dialog. */
   className?: string;
   /**
@@ -53,6 +59,7 @@ export function EnvironmentSelector({
   onChange,
   resource,
   hideWhenOnlyDefault,
+  showLabel = true,
   className,
   helpText,
   disabled,
@@ -98,7 +105,7 @@ export function EnvironmentSelector({
 
   return (
     <div className={cn("space-y-2", className)}>
-      <Label>Environment</Label>
+      {showLabel && <Label>Environment</Label>}
       {helpText ? (
         <p className="text-xs text-muted-foreground">{helpText}</p>
       ) : null}

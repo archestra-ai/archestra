@@ -5,7 +5,7 @@ import {
   DocsPage,
   getDocsUrl,
 } from "@archestra/shared";
-import { ChevronDown, KeyRound, MessageCircle } from "lucide-react";
+import { ChevronDown, Copy, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -14,13 +14,17 @@ import {
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
 import { ConnectionUrlStep } from "@/app/connection/connection-url-step";
-import { AgentChatApps } from "@/components/agent-chat-apps";
 import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { CurlExampleSection } from "@/components/curl-example-section";
 import { McpOauthManagement } from "@/components/mcp-oauth-management";
+import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { getManageTokenLink } from "@/components/tokens/manage-token-link";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
 import { useOrganization } from "@/lib/organization.query";
 import {
@@ -68,10 +73,6 @@ export function A2AConnectionInstructions({
   const { data: hasAdminPermission } = useHasPermissions({
     agent: ["admin"],
   });
-  // The Messaging Channels pages are gated on agentTrigger:read.
-  const { data: canReadAgentTriggers } = useHasPermissions({
-    agentTrigger: ["read"],
-  });
 
   const tokens = tokensData?.tokens;
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
@@ -83,8 +84,6 @@ export function A2AConnectionInstructions({
   const [replyExampleMessageId] = useState(() => generateUuid());
   const [approvalExampleMessageId] = useState(() => generateUuid());
   const [backgroundExampleMessageId] = useState(() => generateUuid());
-  const endpointHeadingId = useId();
-  const examplesHeadingId = useId();
   const exampleTokenSelectId = useId();
 
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
@@ -161,6 +160,11 @@ export function A2AConnectionInstructions({
   };
 
   // Determine display token based on selection (masked)
+  // The caller's own token, masked, for the Authentication field. Independent
+  // of whichever token the examples are written with.
+  const personalTokenMasked = userToken
+    ? `${userToken.tokenStart}***`
+    : SECRET_PLACEHOLDER_TOKEN;
   const tokenForDisplay = isPersonalTokenSelected
     ? userToken
       ? `${userToken.tokenStart}***`
@@ -398,15 +402,6 @@ curl -X POST "${a2aEndpoint}" \\
     </div>
   );
 
-  // Email and the chat-app channels are tabs on the Messaging Channels page,
-  // so the standalone A2A page doesn't repeat them here.
-  const secondaryChannels = (
-    <div className="space-y-6">
-      {/* Chat app assignments live with the agent; provider credentials live in Settings. */}
-      {canReadAgentTriggers && <AgentChatApps agent={agent} />}
-    </div>
-  );
-
   const curlExampleProps = {
     tokenForDisplay,
     isPersonalTokenSelected,
@@ -418,119 +413,108 @@ curl -X POST "${a2aEndpoint}" \\
 
   if (layout === "detail") {
     return (
-      <div className="space-y-4">
-        <section
-          aria-labelledby={examplesHeadingId}
-          className="rounded-lg border bg-card"
+      <SettingsSectionGroup>
+        <SettingsSection
+          title="Endpoint"
+          description="The URL a client calls to reach this agent."
         >
-          <div className="space-y-1 p-4">
-            <h3 id={examplesHeadingId} className="text-sm font-semibold">
-              Call via API
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              Connect a custom integration through the Agent-to-Agent (A2A) API.
-            </p>
-          </div>
-
-          <section
-            aria-labelledby={endpointHeadingId}
-            className="space-y-4 border-t p-4"
+          <ConnectionUrlStep
+            bare
+            candidateUrls={candidateBaseUrls}
+            metadata={connectionBaseUrls}
+            value={connectionUrl}
+            onChange={setUserBaseUrl}
+          />
+          <CodeBlock
+            code={a2aEndpoint}
+            language="text"
+            wrapLongLines
+            contentClassName="overflow-x-hidden"
+            contentStyle={{
+              fontSize: "0.75rem",
+              paddingRight: "3.5rem",
+            }}
           >
-            <h4 id={endpointHeadingId} className="text-sm font-semibold">
-              Agent Endpoint
-            </h4>
-            <ConnectionUrlStep
-              bare
-              candidateUrls={candidateBaseUrls}
-              metadata={connectionBaseUrls}
-              value={connectionUrl}
-              onChange={setUserBaseUrl}
-            />
-            <CodeBlock
-              code={a2aEndpoint}
-              language="text"
-              wrapLongLines
-              contentClassName="overflow-x-hidden"
-              contentStyle={{
-                fontSize: "0.75rem",
-                paddingRight: "3.5rem",
-              }}
-            >
-              <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <CodeBlockCopyButton
-                  title="Copy A2A endpoint URL"
-                  className="rounded-none"
-                  onCopy={() => toast.success("A2A endpoint URL copied")}
-                  onError={() => toast.error("Failed to copy A2A endpoint URL")}
-                />
-              </div>
-            </CodeBlock>
-          </section>
-
-          <section
-            aria-labelledby="a2a-authentication-heading"
-            className="space-y-4 border-t p-4"
-          >
-            <div className="space-y-1">
-              <h4
-                id="a2a-authentication-heading"
-                className="text-sm font-semibold"
-              >
-                Authentication
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                A2A accepts platform tokens, OAuth access tokens, and configured
-                identity-provider JWTs. LLM API keys are not accepted.{" "}
-                <a
-                  href={`${getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}#authentication`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="whitespace-nowrap underline hover:text-foreground"
-                >
-                  Learn more
-                </a>
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="space-y-1">
-                <h5 className="text-xs font-medium">Platform tokens</h5>
-                <p className="text-xs text-muted-foreground">
-                  Use a personal token for your own integration, or a team or
-                  organization token for shared access.
-                </p>
-              </div>
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="shrink-0 self-start"
-              >
-                <Link href={manageTokenLink.href}>
-                  <KeyRound className="size-4" />
-                  {manageTokenLink.label}
-                </Link>
-              </Button>
-            </div>
-            <div className="border-t pt-4">
-              <McpOauthManagement
-                resourceId={agent.id}
-                resourceKind="agent"
-                heading={{
-                  title: "OAuth clients",
-                  description:
-                    "Register applications that call this agent as themselves or on behalf of signed-in users.",
-                }}
+            <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+              <CodeBlockCopyButton
+                title="Copy A2A endpoint URL"
+                className="rounded-none"
+                onCopy={() => toast.success("A2A endpoint URL copied")}
+                onError={() => toast.error("Failed to copy A2A endpoint URL")}
               />
             </div>
-          </section>
+          </CodeBlock>
+        </SettingsSection>
 
-          <Collapsible className="border-t">
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 pb-1 pt-4 text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-              <span className="text-sm font-semibold">Request examples</span>
-              <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <p className="px-4 pb-4 text-xs text-muted-foreground">
-              Copy A2A requests for common integration workflows. The{" "}
+        <SettingsSection
+          title="Authentication"
+          description={
+            <>
+              A2A accepts platform tokens, OAuth access tokens, and configured
+              identity-provider JWTs. LLM API keys are not accepted.{" "}
+              <a
+                href={`${getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}#authentication`}
+                target="_blank"
+                rel="noreferrer"
+                className="whitespace-nowrap underline hover:text-foreground"
+              >
+                Learn more
+              </a>
+            </>
+          }
+        >
+          {/* The caller's own token, masked, in the same field the endpoint
+              above uses. No label or blurb: the section already says what
+              authentication is, and which token the examples are written with
+              is chosen with the examples. */}
+          <CodeBlock
+            code={personalTokenMasked}
+            language="text"
+            wrapLongLines
+            contentClassName="overflow-x-hidden"
+            contentStyle={{
+              fontSize: "0.75rem",
+              paddingRight: "3.5rem",
+            }}
+          >
+            <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+              {/* Not the block's own copy button: what is on screen is masked,
+                  and what belongs on the clipboard is the real value. */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-none"
+                aria-label="Copy your platform token"
+                disabled={!userToken}
+                onClick={async () => {
+                  const value = (await fetchUserTokenMutation.mutateAsync())
+                    ?.value;
+                  if (!value) {
+                    toast.error("Failed to fetch token");
+                    return;
+                  }
+                  await copyToClipboard(value);
+                  toast.success("Token copied");
+                }}
+              >
+                <Copy className="size-4" />
+              </Button>
+            </div>
+          </CodeBlock>
+        </SettingsSection>
+
+        <SettingsSection
+          title="OAuth clients"
+          description="Applications that call this agent as themselves, or on behalf of a signed-in user."
+        >
+          <McpOauthManagement resourceId={agent.id} resourceKind="agent" />
+        </SettingsSection>
+
+        <SettingsSection
+          title="Examples"
+          description={
+            <>
+              Requests for common workflows, and the link that opens a chat. The{" "}
               <a
                 href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
                 target="_blank"
@@ -540,16 +524,24 @@ curl -X POST "${a2aEndpoint}" \\
                 A2A docs
               </a>{" "}
               cover every method.
-            </p>
-            <CollapsibleContent className="space-y-4 border-t px-4 pb-4 pt-4">
+            </>
+          }
+        >
+          {/* Collapsed by default: this is reference material, and open it
+              pushed everything else off the screen. */}
+          <Collapsible className="overflow-hidden rounded-md border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+              Show examples
+              <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 border-t p-4">
               <div className="space-y-2">
                 <div className="space-y-1">
                   <Label htmlFor={exampleTokenSelectId}>
                     Token for examples
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Select the platform token used when revealing or copying a
-                    request.
+                    Which token the requests below are written with.
                   </p>
                 </div>
                 <Select
@@ -626,7 +618,6 @@ curl -X POST "${a2aEndpoint}" \\
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-3 border-t pt-4">
                 <CurlExampleSection
                   key={`card-${effectiveTokenId}`}
@@ -709,18 +700,11 @@ curl -X POST "${a2aEndpoint}" \\
                   </CollapsibleContent>
                 </Collapsible>
               </div>
+              {chatDeepLinkBlock}
             </CollapsibleContent>
           </Collapsible>
-        </section>
-
-        <section className="space-y-4 rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-semibold">
-            Other ways to reach this agent
-          </h3>
-          {chatDeepLinkBlock}
-          <div className="border-t pt-4">{secondaryChannels}</div>
-        </section>
-      </div>
+        </SettingsSection>
+      </SettingsSectionGroup>
     );
   }
 

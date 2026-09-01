@@ -5,19 +5,11 @@ import {
   getSystemPromptTemplateExpressions,
 } from "@archestra/shared";
 import type { EditorProps } from "@monaco-editor/react";
-import { Maximize2, Minimize2, TriangleAlert } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { TriangleAlert } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { Editor } from "@/components/editor";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   computeHandlebarsReplaceOffsets,
@@ -30,8 +22,10 @@ export function SystemPromptEditor({
   value,
   onChange,
   readOnly,
-  height = "200px",
+  minHeight = 200,
+  maxHeight = 560,
   variant = "default",
+  showTitle = true,
   headerExtra,
   builtInAgentId,
 }: {
@@ -39,10 +33,23 @@ export function SystemPromptEditor({
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
-  height?: string;
+  /** Floor for the auto-grown box, in px, and where a drag bottoms out. */
+  minHeight?: number;
+  /**
+   * Ceiling for the auto growth, in px — past it the editor scrolls rather
+   * than pushing the rest of the form off the screen. A drag is the reader
+   * saying they want more than this, so it is not clamped by it.
+   */
+  maxHeight?: number;
   /** Heading treatment for standalone fields, form sections, and detail cards. */
   variant?: "default" | "section" | "detail-card";
-  /** Extra element rendered in the header next to the full-screen button */
+  /**
+   * Off where the host already names the editor. `title` still labels the
+   * editor for assistive technology — it is only the visible duplicate that
+   * goes.
+   */
+  showTitle?: boolean;
+  /** Extra element rendered in the header, beside the title. */
   headerExtra?: React.ReactNode;
   /** Optional built-in agent id to expose built-in-agent-specific template variables */
   builtInAgentId?: string | null;
@@ -51,23 +58,29 @@ export function SystemPromptEditor({
     DocsPage.PlatformAgents,
     "system-prompt-templating",
   );
-  const [isFullScreen, setIsFullScreen] = useState(false);
+  // What the text wants, and what the reader has asked for by dragging. A
+  // drag raises the floor rather than freezing the box, so the editor still
+  // grows under the next line typed into it; dragging it past the ceiling
+  // raises that too, since asking for a bigger box is the one case where the
+  // ceiling is not what the reader wants.
+  const [contentHeight, setContentHeight] = useState(minHeight);
+  const [draggedHeight, setDraggedHeight] = useState<number | null>(null);
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const floor = draggedHeight ?? minHeight;
+  const editorHeight = Math.min(
+    Math.max(contentHeight, floor),
+    Math.max(maxHeight, floor),
+  );
   const unparseableExpressions = useUnparseableExpressions(value);
   const templateExpressions = getSystemPromptTemplateExpressions({
     builtInAgentId,
   });
+  // One line, and one link — ours. What the field is for is already said by
+  // the label above it, and sending a reader to handlebarsjs.com answered a
+  // question the variables list answers better.
   const description = (
     <>
-      <span>Defines the agent&apos;s behavior. Supports </span>
-      <a
-        href="https://handlebarsjs.com/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline hover:text-foreground"
-      >
-        Handlebars
-      </a>
-      <span> templating.</span>
+      <span>Supports Handlebars templating.</span>
       {docsUrl && (
         <>
           <span> See </span>
@@ -78,7 +91,7 @@ export function SystemPromptEditor({
           >
             docs
           </ExternalDocsLink>
-          <span> for available variables.</span>
+          <span> for variables.</span>
         </>
       )}
     </>
@@ -88,19 +101,20 @@ export function SystemPromptEditor({
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div>
-          {variant !== "default" ? (
-            <h3
-              className={
-                variant === "detail-card"
-                  ? "text-sm font-semibold"
-                  : "text-base font-semibold"
-              }
-            >
-              {title}
-            </h3>
-          ) : (
-            <p className="text-sm font-medium">{title}</p>
-          )}
+          {showTitle &&
+            (variant !== "default" ? (
+              <h3
+                className={
+                  variant === "detail-card"
+                    ? "text-sm font-semibold"
+                    : "text-base font-semibold"
+                }
+              >
+                {title}
+              </h3>
+            ) : (
+              <p className="text-sm font-medium">{title}</p>
+            ))}
           <p
             className={
               variant === "detail-card"
@@ -111,44 +125,91 @@ export function SystemPromptEditor({
             {description}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {headerExtra}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setIsFullScreen(true)}
+        {headerExtra && (
+          <div className="flex shrink-0 items-center gap-2">{headerExtra}</div>
+        )}
+      </div>
+      <div className="relative overflow-hidden rounded-md border">
+        <div style={{ height: editorHeight }}>
+          <Editor
+            height="100%"
+            defaultLanguage="handlebars"
+            value={value}
+            onChange={(v) => onChange(v || "")}
+            beforeMount={(monaco) => {
+              registerSystemPromptCompletions(monaco, templateExpressions);
+            }}
+            onMount={(editor) => {
+              // Monaco reports the height its content wants; the box follows
+              // it until the ceiling, after which the editor scrolls.
+              const sync = () => setContentHeight(editor.getContentHeight());
+              sync();
+              editor.onDidContentSizeChange(sync);
+            }}
+            options={{ ...SHARED_EDITOR_OPTIONS, readOnly, ariaLabel: title }}
+          />
+        </div>
+        {/* The corner grip a textarea has, in the same place, so the two
+            fields of this form resize the same way. The arrow keys move it
+            too, so it is not a mouse-only control. */}
+        {/* biome-ignore lint/a11y/useSemanticElements: a resize grip between
+            two regions is what `separator` names; <hr> is not focusable and
+            carries no orientation. */}
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={`Resize ${title.toLowerCase()}`}
+          // A focusable separator is a window splitter, and states where it
+          // currently sits.
+          aria-valuenow={editorHeight}
+          aria-valuemin={minHeight}
+          tabIndex={0}
+          className="absolute bottom-0 right-0 flex size-4 cursor-ns-resize items-end justify-end p-0.5 text-muted-foreground/60 outline-none hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dragRef.current = {
+              startY: event.clientY,
+              startHeight: editorHeight,
+            };
+          }}
+          onPointerMove={(event) => {
+            const drag = dragRef.current;
+            if (!drag) return;
+            setDraggedHeight(
+              Math.max(
+                minHeight,
+                drag.startHeight + (event.clientY - drag.startY),
+              ),
+            );
+          }}
+          onPointerUp={(event) => {
+            dragRef.current = null;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            const step = event.key === "ArrowDown" ? RESIZE_STEP : -RESIZE_STEP;
+            setDraggedHeight(Math.max(minHeight, editorHeight + step));
+          }}
+        >
+          {/* The same two diagonal ticks the native textarea grip draws. */}
+          <svg
+            viewBox="0 0 10 10"
+            className="size-2.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+            strokeLinecap="round"
+            aria-hidden="true"
           >
-            <Maximize2 className="size-4" />
-            <span>Full screen</span>
-          </Button>
+            <title>Resize</title>
+            <path d="M9 1 1 9M9 5.5 5.5 9" />
+          </svg>
         </div>
       </div>
-      <div className="border rounded-md overflow-hidden">
-        <Editor
-          height={height}
-          defaultLanguage="handlebars"
-          value={value}
-          onChange={(v) => onChange(v || "")}
-          beforeMount={(monaco) => {
-            registerSystemPromptCompletions(monaco, templateExpressions);
-          }}
-          options={{ ...SHARED_EDITOR_OPTIONS, readOnly, ariaLabel: title }}
-        />
-      </div>
       <UnparseableExpressionsWarning expressions={unparseableExpressions} />
-      <SystemPromptFullScreenDialog
-        title={title}
-        open={isFullScreen}
-        onOpenChange={setIsFullScreen}
-        value={value}
-        onChange={onChange}
-        readOnly={readOnly}
-        description={description}
-        headerExtra={headerExtra}
-        templateExpressions={templateExpressions}
-        unparseableExpressions={unparseableExpressions}
-      />
     </div>
   );
 }
@@ -193,103 +254,8 @@ function UnparseableExpressionsWarning({
 /** Enough to act on without turning the warning into a second prompt. */
 const UNPARSEABLE_SHOWN_MAX = 5;
 
-/**
- * The same instruction, the whole viewport wide and tall: a second editor on
- * the same value, so what is typed here is in the form the moment the dialog
- * closes (or the form is saved behind it). Escape and "Exit full screen"
- * both return to the form — unless Escape is for an editor widget (the
- * suggestion list, the find box), which keeps it.
- */
-function SystemPromptFullScreenDialog({
-  title,
-  open,
-  onOpenChange,
-  value,
-  onChange,
-  readOnly,
-  description,
-  headerExtra,
-  templateExpressions,
-  unparseableExpressions,
-}: {
-  title: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  value: string;
-  onChange: (value: string) => void;
-  readOnly?: boolean;
-  description: ReactNode;
-  headerExtra?: ReactNode;
-  templateExpressions: TemplateExpressions;
-  unparseableExpressions: string[];
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="h-dvh max-h-dvh w-screen max-w-none gap-0 rounded-none border-0 p-0 sm:max-w-none"
-        // Focus goes to the editor once it has mounted (below), not to the
-        // first button in the header.
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => {
-          if (document.querySelector(EDITOR_WIDGET_OPEN_SELECTOR)) {
-            event.preventDefault();
-          }
-        }}
-      >
-        <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
-          <div className="space-y-1">
-            <DialogTitle className="text-base">{title}</DialogTitle>
-            <DialogDescription className="text-xs">
-              {description}
-            </DialogDescription>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {headerExtra}
-            <DialogClose asChild>
-              <Button type="button" variant="outline" size="sm">
-                <Minimize2 className="size-4" />
-                <span>Exit full screen</span>
-              </Button>
-            </DialogClose>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1">
-          <Editor
-            height="100%"
-            defaultLanguage="handlebars"
-            value={value}
-            onChange={(v) => onChange(v || "")}
-            beforeMount={(monaco) => {
-              registerSystemPromptCompletions(monaco, templateExpressions);
-            }}
-            onMount={(editor) => editor.focus()}
-            options={{
-              ...SHARED_EDITOR_OPTIONS,
-              readOnly,
-              ariaLabel: title,
-              // Room to read it like a document: a minimap to move around a
-              // long prompt, folding for its sections, a slightly larger face.
-              minimap: { enabled: true },
-              folding: true,
-              fontSize: 14,
-              padding: { top: 12, bottom: 12 },
-              renderLineHighlight: "line",
-              bracketPairColorization: { enabled: true },
-            }}
-          />
-        </div>
-        {unparseableExpressions.length > 0 && (
-          <div className="border-t px-4 py-3">
-            <UnparseableExpressionsWarning
-              expressions={unparseableExpressions}
-            />
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
+/** How far one arrow-key press moves the resize grip. */
+const RESIZE_STEP = 24;
 
 const SHARED_EDITOR_OPTIONS = {
   minimap: { enabled: false },
@@ -305,10 +271,6 @@ const SHARED_EDITOR_OPTIONS = {
   // Disable EditContext API — it doesn't work inside Radix Dialog portals
   editContext: false,
 } as const satisfies NonNullable<EditorProps["options"]>;
-
-/** An editor widget that takes Escape for itself when open. */
-const EDITOR_WIDGET_OPEN_SELECTOR =
-  ".monaco-editor .suggest-widget.visible, .monaco-editor .find-widget.visible";
 
 type TemplateExpressions = ReadonlyArray<{
   expression: string;

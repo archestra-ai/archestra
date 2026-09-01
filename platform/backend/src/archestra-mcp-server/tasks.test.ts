@@ -1,11 +1,18 @@
 import {
   TOOL_GET_TASK_FULL_NAME,
+  TOOL_POST_TASK_FILE_FULL_NAME,
   TOOL_START_TASK_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
-import { AgentTeamModel } from "@/models";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentTeamModel,
+} from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -151,5 +158,126 @@ describe("task tools", () => {
         taskRun: { createTask: true, detached: true },
       }),
     );
+  });
+
+  async function seedChatopsTask(params: {
+    actorUserId: string;
+    withTarget: boolean;
+  }) {
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: params.actorUserId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: callingAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId: params.actorUserId,
+      actorUserId: params.actorUserId,
+      deploymentName: `test-${task.id.slice(0, 8)}`,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      completionTarget: params.withTarget
+        ? {
+            type: "chatops",
+            bindingId: "9c2b1f60-0000-4000-8000-000000000001",
+            threadId: "1788208728.803109",
+          }
+        : null,
+    });
+    return task;
+  }
+
+  test("post_task_file uploads into the task's chatops thread", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+    });
+    const upload = vi
+      .spyOn(chatOpsManager, "uploadFileToBindingThread")
+      .mockResolvedValue();
+
+    const result = await executeArchestraTool(
+      TOOL_POST_TASK_FILE_FULL_NAME,
+      {
+        task_id: task.id,
+        filename: "demo.mp4",
+        content_base64: Buffer.from("not-really-a-video").toString("base64"),
+        comment: "demo recording",
+      },
+      context,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(upload).toHaveBeenCalledWith({
+      bindingId: "9c2b1f60-0000-4000-8000-000000000001",
+      threadId: "1788208728.803109",
+      filename: "demo.mp4",
+      data: Buffer.from("not-really-a-video"),
+      comment: "demo recording",
+    });
+    upload.mockRestore();
+  });
+
+  test("post_task_file refuses a task with no messaging-channel thread", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const upload = vi
+      .spyOn(chatOpsManager, "uploadFileToBindingThread")
+      .mockResolvedValue();
+
+    const result = await executeArchestraTool(
+      TOOL_POST_TASK_FILE_FULL_NAME,
+      {
+        task_id: task.id,
+        filename: "demo.mp4",
+        content_base64: Buffer.from("x").toString("base64"),
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "does not report to a messaging-channel thread",
+    );
+    expect(upload).not.toHaveBeenCalled();
+    upload.mockRestore();
+  });
+
+  test("post_task_file only serves the person the execution acts as", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const task = await seedChatopsTask({
+      actorUserId: otherUser.id,
+      withTarget: true,
+    });
+    const upload = vi
+      .spyOn(chatOpsManager, "uploadFileToBindingThread")
+      .mockResolvedValue();
+
+    const result = await executeArchestraTool(
+      TOOL_POST_TASK_FILE_FULL_NAME,
+      {
+        task_id: task.id,
+        filename: "demo.mp4",
+        content_base64: Buffer.from("x").toString("base64"),
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(upload).not.toHaveBeenCalled();
+    upload.mockRestore();
   });
 });

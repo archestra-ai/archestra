@@ -543,6 +543,27 @@ class SlackProvider implements ChatOpsProvider {
     return firstTs;
   }
 
+  async uploadFileToThread(options: {
+    channelId: string;
+    threadId: string;
+    filename: string;
+    data: Buffer;
+    comment?: string;
+  }): Promise<void> {
+    if (!this.client) {
+      throw new Error("SlackProvider not initialized");
+    }
+    // files.uploadV2 shares the file into the thread; Slack renders video and
+    // image uploads natively, which a plain link cannot.
+    await this.client.files.uploadV2({
+      channel_id: options.channelId,
+      thread_ts: options.threadId,
+      filename: options.filename,
+      file: options.data,
+      ...(options.comment ? { initial_comment: options.comment } : {}),
+    });
+  }
+
   async addApprovalRequestForm(
     options: AddApprovalRequestFormOptions,
   ): Promise<void> {

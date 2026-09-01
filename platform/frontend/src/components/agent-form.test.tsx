@@ -736,12 +736,20 @@ const advisorAgent = {
   builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
 };
 
+/**
+ * The step panel a control belongs to. Each panel is one run of settings
+ * sections, and the one that is not the active step is hidden rather than
+ * unmounted.
+ */
+const panelOf = (node: HTMLElement) =>
+  node.closest("section")?.parentElement ?? null;
+
 // The Tools section carries its own Auto/Custom tabs, so the subagent ones have
 // to be reached through their section.
 const subagentModeTab = (name: "Auto" | "Custom") => {
   const section = screen
     .getByRole("heading", { name: "Subagents" })
-    .closest("div") as HTMLElement;
+    .closest("section") as HTMLElement;
   return within(section).getByRole("tab", { name });
 };
 
@@ -1252,100 +1260,9 @@ const orgSkill = (name: string, id: string) => ({
 const skillsModeTab = (name: "Auto" | "Custom") => {
   const section = screen
     .getByRole("heading", { name: "Published skills" })
-    .closest("div") as HTMLElement;
+    .closest("section") as HTMLElement;
   return within(section).getByRole("tab", { name });
 };
-
-describe("AgentForm personal default", () => {
-  const owner = { id: baseAgent.authorId };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    pendingSaveChanges.mockResolvedValue(undefined);
-    vi.mocked(useHasPermissions).mockImplementation(
-      () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
-    );
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: owner },
-    } as unknown as ReturnType<typeof useSession>);
-    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
-    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
-    useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
-  });
-
-  it("offers the switch on a chat agent, on when it is the viewer's default", async () => {
-    useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
-
-    render(<AgentForm agentType="agent" agent={baseAgent} />);
-
-    expect(
-      await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch),
-    ).toBeChecked();
-  });
-
-  it("offers the switch on an agent the viewer does not own", async () => {
-    // Pinning a default is about whose chats it starts, not about ownership:
-    // any chat agent this viewer can open is one they can pin.
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "someone-else" } },
-    } as unknown as ReturnType<typeof useSession>);
-    useDefaultAgentIdMock.mockReturnValue({ data: null });
-
-    render(<AgentForm agentType="agent" agent={baseAgent} />);
-
-    expect(
-      await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch),
-    ).not.toBeChecked();
-  });
-
-  it("saves the member default only when the switch was moved", async () => {
-    const user = userEvent.setup();
-    const setDefault = vi.fn().mockResolvedValue({ defaultAgentId: null });
-    useUpdateDefaultAgentIdMock.mockReturnValue({
-      mutateAsync: setDefault,
-      isPending: false,
-    });
-    useUpdateProfileMock.mockReturnValue({
-      mutateAsync: vi.fn().mockResolvedValue(baseAgent),
-      isPending: false,
-    });
-    useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
-    const onSaved = vi.fn();
-
-    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
-
-    // Untouched → the save leaves the member setting alone.
-    await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch);
-    await user.click(screen.getByRole("button", { name: /update/i }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
-    expect(setDefault).not.toHaveBeenCalled();
-  });
-
-  it("clears the member default when the switch is turned off and saved", async () => {
-    const user = userEvent.setup();
-    const setDefault = vi.fn().mockResolvedValue({ defaultAgentId: null });
-    useUpdateDefaultAgentIdMock.mockReturnValue({
-      mutateAsync: setDefault,
-      isPending: false,
-    });
-    useUpdateProfileMock.mockReturnValue({
-      mutateAsync: vi.fn().mockResolvedValue(baseAgent),
-      isPending: false,
-    });
-    useDefaultAgentIdMock.mockReturnValue({ data: baseAgent.id });
-    const onSaved = vi.fn();
-
-    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
-
-    await user.click(
-      await screen.findByTestId(E2eTestId.PersonalDefaultAgentSwitch),
-    );
-    await user.click(screen.getByRole("button", { name: /update/i }));
-
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
-    expect(setDefault).toHaveBeenCalledWith(null);
-  });
-});
 
 describe("AgentForm knowledge in Auto mode", () => {
   beforeEach(() => {
@@ -2002,6 +1919,25 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
+  // The environment and the suggested prompts live on the Advanced step, so
+  // the tests that drive them mount that one.
+  const renderAdvanced = () =>
+    render(
+      <AgentForm agentType="agent" agent={baseAgent} sections={["advanced"]} />,
+    );
+
+  // Messaging channels are a section of their own, so a surface that saves
+  // both — the create wizard, and anything mounting every group — has to
+  // mount both.
+  const renderConfigurationWithChannels = () =>
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["configuration", "messaging"]}
+      />,
+    );
+
   const renderTools = () =>
     render(
       <AgentForm agentType="agent" agent={baseAgent} sections={["tools"]} />,
@@ -2105,7 +2041,7 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("saves messaging channel changes before the agent update", async () => {
     const user = userEvent.setup();
-    renderConfiguration();
+    renderConfigurationWithChannels();
 
     await user.click(
       screen.getByRole("button", { name: "Mark channel changes dirty" }),
@@ -2122,7 +2058,7 @@ describe("AgentForm save payload and failure handling", () => {
   it("stops the agent update when messaging channel changes fail", async () => {
     const user = userEvent.setup();
     saveChannelChangesMock.mockResolvedValueOnce(false);
-    renderConfiguration();
+    renderConfigurationWithChannels();
 
     await user.click(
       screen.getByRole("button", { name: "Mark channel changes dirty" }),
@@ -2157,10 +2093,34 @@ describe("AgentForm save payload and failure handling", () => {
       "icon",
       "name",
       "scope",
-      "suggestedPrompts",
+      // The instructions are part of this panel now, so one save covers them.
+      "systemPrompt",
       "teams",
       "users",
     ]);
+  });
+
+  it("writes only the channel assignments from a messaging-only surface", async () => {
+    // Channel assignments save through their own endpoint. A surface showing
+    // just them displays no field of the agent record, so the record's PUT
+    // would carry an empty body — which still forks a config version and
+    // writes an audit record for an edit nobody made.
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["messaging"]}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Mark channel changes dirty" }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(saveChannelChangesMock).toHaveBeenCalled());
+    expect(updateAgent).not.toHaveBeenCalled();
   });
 
   it("sends the advanced step's own fields, and nothing the step does not show", async () => {
@@ -2185,6 +2145,9 @@ describe("AgentForm save payload and failure handling", () => {
       "considerContextUntrusted",
       "identityProviderId",
       "labels",
+      // The environment and the suggested prompts are edited on this step, so
+      // they are written with it. `environmentId` only travels when it moved.
+      "suggestedPrompts",
     ]);
   });
 
@@ -2210,7 +2173,7 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("sends the environment once it actually changes", async () => {
     const user = userEvent.setup();
-    renderConfiguration();
+    renderAdvanced();
 
     await user.click(
       await screen.findByRole("button", { name: /move to other environment/i }),
@@ -2388,7 +2351,7 @@ describe("AgentForm save payload and failure handling", () => {
       isError: false,
       refetch: refetchAgentTools,
     });
-    renderConfiguration();
+    renderAdvanced();
 
     await user.click(
       await screen.findByRole("button", { name: /move to other environment/i }),
@@ -2436,7 +2399,7 @@ describe("AgentForm save payload and failure handling", () => {
       isError: false,
       refetch: refetchAgentTools,
     });
-    renderConfiguration();
+    renderAdvanced();
 
     await user.click(
       await screen.findByRole("button", { name: /move to other environment/i }),
@@ -2477,7 +2440,7 @@ describe("AgentForm save payload and failure handling", () => {
       isError: false,
       refetch: refetchAgentTools,
     });
-    renderConfiguration();
+    renderAdvanced();
 
     await user.click(
       await screen.findByRole("button", { name: /move to other environment/i }),
@@ -2505,9 +2468,9 @@ describe("AgentForm save payload and failure handling", () => {
     );
 
     const toolsEditor = await screen.findByText("Mock Tools Editor");
-    expect(toolsEditor.closest(".divide-y")).toHaveClass("hidden");
+    expect(panelOf(toolsEditor)).toHaveClass("hidden");
     expect(
-      screen.getByPlaceholderText("Enter agent name").closest(".divide-y"),
+      panelOf(screen.getByPlaceholderText("Enter agent name")),
     ).not.toHaveClass("hidden");
 
     await user.type(
@@ -2523,9 +2486,9 @@ describe("AgentForm save payload and failure handling", () => {
         submitEnabled={false}
       />,
     );
-    expect(
-      screen.getByText("Mock Tools Editor").closest(".divide-y"),
-    ).not.toHaveClass("hidden");
+    expect(panelOf(screen.getByText("Mock Tools Editor"))).not.toHaveClass(
+      "hidden",
+    );
     // Same mount: the name typed on the first step is still there.
     expect(screen.getByPlaceholderText("Enter agent name")).toHaveValue(
       "New Agent",
@@ -2534,9 +2497,9 @@ describe("AgentForm save payload and failure handling", () => {
     rerender(
       <AgentForm agentType="agent" activeSection="advanced" submitEnabled />,
     );
-    expect(screen.getByText("Advanced").closest(".divide-y")).not.toHaveClass(
-      "hidden",
-    );
+    expect(
+      panelOf(screen.getByRole("heading", { name: "Security" })),
+    ).not.toHaveClass("hidden");
     await user.click(screen.getByRole("button", { name: /create/i }));
 
     await waitFor(() => expect(createAgent).toHaveBeenCalled());
@@ -2598,15 +2561,24 @@ describe("AgentForm read-only footer", () => {
     useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
   });
 
-  it("gives a read-only form an exit instead of no footer at all", async () => {
-    // Reached by URL on a record the viewer may not change: every field is
-    // disabled and there is nothing to save, so without this the only way off
-    // the page was the browser's back button.
-    render(<AgentForm agentType="agent" agent={baseAgent} readOnly />);
+  it("tells the caller's footer that the form is read-only", async () => {
+    // The form no longer decides what a viewer sees instead of a submit row:
+    // it is embedded in a page that already says why the record cannot be
+    // changed, and that page renders no footer at all.
+    const footer = vi.fn(() => <span>footer rendered</span>);
+    render(
+      <AgentFormWithoutFooter
+        agentType="agent"
+        agent={baseAgent}
+        readOnly
+        footer={footer}
+      />,
+    );
 
-    const cancel = await screen.findByRole("link", { name: "Cancel" });
-    expect(cancel).toHaveAttribute("href", `/agents/${baseAgent.id}`);
-    // Nothing that implies a save: the caller's submit row is not rendered.
+    expect(await screen.findByText("footer rendered")).toBeInTheDocument();
+    expect(footer).toHaveBeenCalledWith(
+      expect.objectContaining({ readOnly: true }),
+    );
     expect(screen.queryByRole("button", { name: /update/i })).toBeNull();
   });
 
@@ -2616,6 +2588,5 @@ describe("AgentForm read-only footer", () => {
     expect(
       await screen.findByRole("button", { name: /update/i }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Cancel" })).toBeNull();
   });
 });

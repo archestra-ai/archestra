@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 7
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-08-29
+lastUpdated: 2026-08-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -58,13 +58,13 @@ To stop the bot replying in a thread, send `mute` (you can address it by name wi
 
 ### Answering Every Message
 
-By default the bot answers only when @mentioned in a channel. You can make one channel answer every message. Open the assigned agent, then select **Edit** → **Configuration** → **Messaging channels**. Turn on **Answer all messages** for that channel. Other channels stay mentions-only.
+By default the bot answers only when @mentioned in a channel. You can make one channel answer every message. Open the assigned agent, select the **Messaging Channels** tab, then select **Settings** on that channel. Turn on **Answer all messages**. Other channels stay mentions-only.
 
 Mute still works per thread: send `mute` in a thread to silence it until you @mention the bot there again. Direct messages already answer every message, so the toggle does not apply to them.
 
 ### Channel Instructions
 
-Each channel can carry its own instructions for the agent. Open the agent, then select **Edit** → **Configuration** → **Messaging channels**. Archestra sends these instructions with every message in that channel. Channel instructions take priority over the agent's system prompt.
+Each channel can carry its own instructions for the agent. Set them from **Settings → Messaging Channels**, or open the agent and select **Settings** on that channel in its **Messaging Channels** tab. Archestra sends these instructions with every message in that channel. Channel instructions take priority over the agent's system prompt.
 
 Channel instructions add to what the agent does. They never take an ability away. Anything they don't mention, the agent handles as usual.
 
@@ -87,7 +87,7 @@ The command prefix is generated from the Slack app name in the setup wizard. The
 
 Each Slack channel requires a **default agent** to be assigned to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
 
-To change default assignments, open an agent and select **Edit** → **Configuration** → **Messaging channels**. The channel list shows its current agent before you move it.
+To change default assignments, open an agent, select the **Messaging Channels** tab, then select **Add channel**. The picker names the agent that answers a channel before you claim it.
 
 ![Slack Agent Selection](/docs/select-agent-slack.webp)
 

@@ -153,7 +153,7 @@ export function ChannelDetailsDialog({
                 value={instructions}
                 onChange={setInstructions}
                 readOnly={readOnly || isSaving}
-                height="180px"
+                minHeight={180}
               />
               <p className="text-xs text-muted-foreground">
                 These instructions take priority over the agent system prompt

@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CopyableCode } from "@/components/copyable-code";
+import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -471,6 +472,7 @@ export default function ServiceAccountDetailPage({
                 label: "Created",
                 value: formatRelativeTimeFromNow(serviceAccount.createdAt),
               },
+              createdByFact(serviceAccount.createdBy),
             ]}
           />
 

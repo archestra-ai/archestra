@@ -68,6 +68,13 @@ type Row =
   | { kind: "directory"; id: string; directory: KnowledgeDirectory }
   | { kind: "file"; id: string; file: KnowledgeFile };
 
+/** Who added this row, whichever half of the mixed listing it came from. */
+function rowCreatedBy(row: Row) {
+  return row.kind === "directory"
+    ? row.directory.createdBy
+    : row.file.createdBy;
+}
+
 /**
  * The repository's three audiences map onto the app-wide scope vocabulary, so a
  * document's visibility reads exactly like an agent's or a project's instead of
@@ -375,11 +382,7 @@ export default function KnowledgeFilesPage() {
                 ? row.original.directory.teamIds
                 : row.original.file.teamIds
             }
-            authorId={
-              row.original.kind === "directory"
-                ? row.original.directory.createdBy
-                : row.original.file.uploadedBy
-            }
+            authorId={rowCreatedBy(row.original)?.id ?? null}
           />
         ),
       },

@@ -1,4 +1,7 @@
-import { ResourceVisibilityScopeSchema } from "@archestra/shared";
+import {
+  CreatedByNullableSchema,
+  ResourceVisibilityScopeSchema,
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -145,6 +148,12 @@ const AppListItemBaseSchema = z.object({
   // the mixed listing and the card renders it the same way either side.
   // Null when none is set (the card falls back to its generic glyph).
   icon: z.string().nullable(),
+  /**
+   * Who created the app, in the shape shared by every major object. Always
+   * null for an external item: it is somebody's catalog entry, not an app
+   * anyone here authored.
+   */
+  createdBy: CreatedByNullableSchema,
 });
 
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({

@@ -27,6 +27,7 @@ import environmentsTable from "./environment";
 import knowledgeBasesTable from "./knowledge-base";
 import secretTable from "./secret";
 import { softDeletablePgTable } from "./soft-deletable-table";
+import usersTable from "./user";
 
 const knowledgeBaseConnectorsTable = softDeletablePgTable(
   "knowledge_base_connectors",
@@ -103,6 +104,15 @@ const knowledgeBaseConnectorsTable = softDeletablePgTable(
     aclConfigEpoch: bigint("acl_config_epoch", { mode: "number" })
       .notNull()
       .default(0),
+    /**
+     * Who created this. Nullable: rows predating creator tracking have no
+     * answer, and `ON DELETE SET NULL` gives the column back to "unknown" when
+     * the account is deleted rather than taking the connector with it — the
+     * organization owns connectors, not the person who happened to make it.
+     */
+    createdBy: text("created_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

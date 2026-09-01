@@ -86,6 +86,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         icon: project.icon,
         viewerRole: "owner" as const,
         ownerName: user.name ?? null,
+        // The acting user, straight from the session: they just created it.
+        createdBy: {
+          id: user.id,
+          name: user.name || null,
+          email: user.email || null,
+        },
         conversationCount: 0,
         visibility: null,
         shareTeamNames: null,
@@ -137,6 +143,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         icon: project.icon,
         viewerRole: "owner" as const,
         ownerName: user.name ?? null,
+        // The acting user, straight from the session: they just created it.
+        createdBy: {
+          id: user.id,
+          name: user.name || null,
+          email: user.email || null,
+        },
         conversationCount: 1,
         visibility: null,
         shareTeamNames: null,

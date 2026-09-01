@@ -71,6 +71,7 @@ describe("getSkillPermissionChecker", () => {
       organizationId: org.id,
       name: "ci-bot",
       role: ADMIN_ROLE_NAME,
+      createdBy: null,
     });
 
     const checker = await getSkillPermissionChecker({

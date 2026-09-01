@@ -368,6 +368,16 @@ class AgentModel {
       const author = agent.authorId ? authorMap.get(agent.authorId) : null;
       agent.authorName = author?.name ?? null;
       agent.authorEmail = author?.email ?? null;
+      // The same three fields in the shape every "Created by" column reads.
+      // Assembled here rather than resolved again: this batch already holds
+      // them, so uniformity costs no extra query.
+      agent.createdBy = author
+        ? {
+            id: author.id,
+            name: author.name || null,
+            email: author.email || null,
+          }
+        : null;
     }
   }
 

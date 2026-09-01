@@ -39,6 +39,7 @@ import {
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { FileDropZone } from "@/components/files/file-drop-zone";
 import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -183,6 +184,15 @@ function ProjectDetail() {
                   Viewing as administrator
                   {project.ownerName ? ` · ${project.ownerName}` : ""}
                 </Badge>
+              )}
+              {/* The project has no facts row of its own, so its creator sits
+                  beside the scope pill in the header. Hidden in the admin view,
+                  where the badge above already names the owner. */}
+              {!isAdminView && (
+                <CreatedByCell
+                  createdBy={project.createdBy}
+                  className="text-xs text-muted-foreground"
+                />
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

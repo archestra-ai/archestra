@@ -11,6 +11,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import {
+  CreatedByModel,
   LlmProviderApiKeyModel,
   MemberModel,
   TeamModel,
@@ -409,6 +410,7 @@ async function createVirtualApiKey(params: {
       value: created.value,
       teams: created.teams,
       authorName: created.authorName,
+      createdBy: await CreatedByModel.resolveOne(created.virtualKey.authorId),
       providerApiKeys: created.providerApiKeys,
     };
   }
@@ -445,6 +447,7 @@ async function createVirtualApiKey(params: {
     value,
     teams,
     authorName,
+    createdBy: await CreatedByModel.resolveOne(virtualKey.authorId),
     providerApiKeys,
   };
 }
@@ -535,6 +538,7 @@ async function updateVirtualApiKey(params: {
     ...updatedVirtualKey,
     teams: visibilityMetadata.teams.get(id) ?? [],
     authorName: visibilityMetadata.authorName.get(id) ?? null,
+    createdBy: await CreatedByModel.resolveOne(updatedVirtualKey.authorId),
     providerApiKeys,
   };
 }

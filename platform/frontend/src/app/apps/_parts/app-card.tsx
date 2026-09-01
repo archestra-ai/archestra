@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -364,6 +365,17 @@ function OwnedAppCard({
           <CardDescription className="line-clamp-3 break-words">
             {app.description}
           </CardDescription>
+        ) : null}
+
+        {/* The card's answer to the "Created by" column the tables carry.
+            Hidden for an external app, whose creator is somebody outside this
+            organization — an em dash would read as missing data rather than as
+            "not applicable". */}
+        {app.source === "owned" ? (
+          <CreatedByCell
+            createdBy={app.createdBy}
+            className="text-xs text-muted-foreground"
+          />
         ) : null}
       </Card>
 

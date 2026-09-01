@@ -13,6 +13,7 @@ export * from "./chat-error";
 export * from "./chatops-channels";
 export * from "./citation-quotes";
 export * from "./consts";
+export * from "./created-by";
 export * from "./docs";
 export * from "./e2e-test-ids";
 export * from "./environment-defaults";

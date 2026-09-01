@@ -107,15 +107,10 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
-    # Staging's `interactions` table had grown past 160 GB — effectively all of
-    # it the stored request/response bodies, which arrive at a few GB a day now
-    # that coding agents proxy through it — against a disk that was 86% full.
-    # Blank bodies older than 30 days; the rows, and so every cost statistic
-    # and usage-limit number, stay complete. Deliberately NOT setting
-    # ARCHESTRA_LLM_LOGS_RETENTION_DAYS: deleting rows would take the cost
-    # history with them, and a window short enough to matter here would sit
-    # inside the monthly cost-limit period.
-    ARCHESTRA_LLM_LOGS_PAYLOAD_RETENTION_DAYS: "30"
+    # Retention stays OFF here on purpose. This deployment is where the
+    # platform gets stress-tested, and a large `interactions` table is the
+    # point — the volume is the test data, not a problem to sweep up. Storage
+    # autoresizes, so it grows with the table.
     # Apps Hackathon session recording. The documented flag deliberately cannot
     # open this on a licensed deployment (see parseHackathonRecorderEnabled),
     # and staging activates the enterprise license above — so it takes the
@@ -274,24 +269,10 @@ archestra:
       ingress.gcp.cloud.google.com/ssl-redirect: "true"
 
     hosts:
+      # The chart adds /v1 and /v2 -> 9000 for any host that serves the UI, so
+      # LLM proxy traffic skips the frontend process. Nothing to declare here.
       - host: frontend.archestra.dev
         paths:
-          # The LLM proxy (/v1) and the A2A surface (/v2) are backend APIs that
-          # Next.js only ever forwarded (next.config.ts rewrites them; there is
-          # no app route under either prefix). Forwarding them meant every
-          # proxied LLM call — multi-megabyte request bodies held open for the
-          # length of a completion — was pumped through the single-threaded
-          # Next.js process that also serves the UI's own API calls, so a busy
-          # agent session made the dashboard slow. Longest-prefix wins in the
-          # GCE URL map, so these take precedence over "/" below.
-          - path: /v1
-            port: 9000
-            pathType: Prefix
-          - path: /v2
-            port: 9000
-            pathType: Prefix
-          # Everything else, including /api/auth, which IS a real Next.js app
-          # route (app/api/auth/[...path]) and must keep going to :3000.
           - path: /
             port: 3000
             pathType: Prefix

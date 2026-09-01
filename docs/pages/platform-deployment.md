@@ -315,25 +315,13 @@ Practical starting point for worker autoscaling:
 - `archestra.ingress.enabled` - Enable or disable ingress creation (default: false)
 - `archestra.ingress.annotations` - Annotations for ingress controller and load balancer behavior
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
+- `archestra.ingress.routeBackendApisDirectly` - Route `/v1` and `/v2` to the backend port on hosts that serve the UI (default: true)
 
-Route `/v1` and `/v2` on the frontend host straight to port 9000. Both are backend APIs, and the frontend only forwards them:
+`/v1` (the LLM proxy) and `/v2` (A2A) have no frontend route — the frontend only forwards them to the backend. `/v1` requests carry large bodies and stay open for the length of a completion, so forwarding them runs that traffic on the same process that answers the dashboard's API calls, and the UI slows down while an agent is working. The chart routes both prefixes to the backend port for you.
 
-```yaml
-hosts:
-  - host: archestra.example.com
-    paths:
-      - path: /v1
-        port: 9000
-        pathType: Prefix
-      - path: /v2
-        port: 9000
-        pathType: Prefix
-      - path: /
-        port: 3000
-        pathType: Prefix
-```
+A host that declares its own `/v1` or `/v2` path keeps it. So does a host that never routes to the frontend port. Set `routeBackendApisDirectly: false` to turn the behavior off. It does not apply when you supply a complete `spec`, which replaces the generated rules.
 
-`/v1` carries LLM proxy traffic — large request bodies, held open for the length of a completion. Sending it through port 3000 puts that traffic on the same process that serves the dashboard, which makes the UI slow while an agent is working. Keep `/` on port 3000: `/api/auth` is served by the frontend itself.
+Everything else stays on the frontend, including `/api/auth` — that one is a real frontend route.
 
 **GKE BackendConfig Settings** (Google Cloud only):
 
@@ -1863,13 +1851,6 @@ Automatic deletion of content-bearing records after a configurable number of day
   - Default: `0` (disabled).
   - Rows that newer records still depend on for request reconstruction are retained until those newer records expire too.
   - A window shorter than 32 days logs a startup warning: monthly cost-limit periods aggregate these records, so deleting inside that horizon can under-count usage against limits. All-time cost statistics reflect retained records only.
-- **`ARCHESTRA_LLM_LOGS_PAYLOAD_RETENTION_DAYS`** - Days to keep the request and response bodies of LLM proxy logs. Past this window each body is replaced with a placeholder and the record is kept.
-  - Default: `0` (disabled).
-  - These bodies are most of the table's size — one coding-agent request runs to megabytes. This window is what bounds database growth.
-  - Token counts, costs, and billing mode stay intact. Cost statistics, usage limits, and session summaries are unaffected.
-  - Only the request and response text on the LLM Logs page is lost. So this window can be much shorter than `ARCHESTRA_LLM_LOGS_RETENTION_DAYS`.
-  - Records that newer records rebuild their requests from keep their bodies. They are cleared once the whole branch is past the window.
-  - Clearing a body frees that space for new records. It does not shrink the database file on disk.
 - **`ARCHESTRA_MCP_LOGS_RETENTION_DAYS`** - Days to retain MCP gateway tool-call logs before automatic deletion.
   - Default: `0` (disabled).
 - **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days after a conversation's last message activity before the conversation is automatically deleted, together with its messages, attachments, and conversation files.

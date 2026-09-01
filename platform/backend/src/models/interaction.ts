@@ -74,15 +74,6 @@ import VirtualApiKeyModel from "./virtual-api-key";
 const SESSION_TOTAL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 
 /**
- * What a pruned interaction's request/response read back as. A marker object
- * rather than an empty one, so an operator looking at an old row in the LLM
- * logs sees that the payload was aged out rather than that the call was empty.
- */
-const PRUNED_PAYLOAD_PLACEHOLDER = JSON.stringify({
-  archestraPayloadPruned: true,
-});
-
-/**
  * Rows read per step of the session-key walk (see findSessionKeysForPage).
  * Sized so a default page of sessions is normally covered by the first step:
  * interactions-per-session averages a small single digit, and over-reading a
@@ -1548,66 +1539,6 @@ class InteractionModel {
     });
 
     return createPaginatedResult(sessions, Number(total), pagination);
-  }
-
-  /**
-   * Replace the stored request/response payloads of interactions older than
-   * `olderThan` with a placeholder, in one bounded batch. Returns how many
-   * rows were pruned; the caller loops until it returns 0.
-   *
-   * Only the payloads go. The row, and every numeric column behind cost
-   * statistics, usage limits and session summaries, is left untouched — this
-   * reclaims the space those payloads occupy without changing any number the
-   * product reports.
-   *
-   * Delta-encoded rows make this less simple than a date filter. A Claude row
-   * stores only the suffix of `messages` that is new versus its parent and is
-   * rebuilt by walking `parent_id`, so pruning an old ancestor would corrupt
-   * every newer row that still folds through it. Parents are only ever
-   * resolved within one `(session_id, thread_id)` branch, so a branch is safe
-   * to prune exactly when its newest row is itself past the cutoff — which is
-   * what the NOT EXISTS below tests. Rows with no `thread_id` are whole
-   * requests that nothing folds through, so they are pruned on age alone.
-   */
-  static async prunePayloads(params: {
-    olderThan: Date;
-    batchSize: number;
-  }): Promise<number> {
-    const { olderThan, batchSize } = params;
-
-    const result = await db.execute(sql`
-      UPDATE ${schema.interactionsTable} AS target
-      SET
-        request = ${PRUNED_PAYLOAD_PLACEHOLDER}::jsonb,
-        response = ${PRUNED_PAYLOAD_PLACEHOLDER}::jsonb,
-        processed_request = NULL,
-        dual_llm_analyses = NULL,
-        unsafe_context_boundary = NULL,
-        parent_id = NULL,
-        request_shared_prefix = NULL,
-        processed_request_shared_prefix = NULL,
-        payload_pruned_at = now()
-      WHERE target.id IN (
-        SELECT candidate.id
-        FROM ${schema.interactionsTable} AS candidate
-        WHERE candidate.created_at < ${olderThan}
-          AND candidate.payload_pruned_at IS NULL
-          AND (
-            candidate.thread_id IS NULL
-            OR NOT EXISTS (
-              SELECT 1
-              FROM ${schema.interactionsTable} AS newer
-              WHERE newer.session_id IS NOT DISTINCT FROM candidate.session_id
-                AND newer.thread_id = candidate.thread_id
-                AND newer.created_at >= ${olderThan}
-            )
-          )
-        ORDER BY candidate.created_at
-        LIMIT ${batchSize}
-      )
-    `);
-
-    return result.rowCount ?? 0;
   }
 
   /**

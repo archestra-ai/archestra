@@ -32,7 +32,6 @@ async function seedInteraction(overrides: {
   parentId?: string;
   sessionId?: string;
   threadId?: string;
-  inputTokens?: number;
 }): Promise<string> {
   const [row] = await db
     .insert(schema.interactionsTable)
@@ -44,7 +43,6 @@ async function seedInteraction(overrides: {
       parentId: overrides.parentId ?? null,
       sessionId: overrides.sessionId ?? null,
       threadId: overrides.threadId ?? null,
-      inputTokens: overrides.inputTokens ?? null,
     })
     .returning({ id: schema.interactionsTable.id });
   return row.id;
@@ -74,7 +72,6 @@ describe("handleContentRetentionCleanup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     config.retention.llmLogsDays = 0;
-    config.retention.llmPayloadDays = 0;
     config.retention.mcpLogsDays = 0;
     config.retention.chatConversationsDays = 0;
   });
@@ -97,116 +94,6 @@ describe("handleContentRetentionCleanup", () => {
     await handleContentRetentionCleanup();
 
     expect(await countRows(schema.interactionsTable)).toBe(1);
-  });
-
-  describe("payload retention", () => {
-    async function readPayloadState(id: string) {
-      const [row] = await db
-        .select({
-          request: schema.interactionsTable.request,
-          response: schema.interactionsTable.response,
-          prunedAt: schema.interactionsTable.payloadPrunedAt,
-          inputTokens: schema.interactionsTable.inputTokens,
-          parentId: schema.interactionsTable.parentId,
-        })
-        .from(schema.interactionsTable)
-        .where(eq(schema.interactionsTable.id, id));
-      return row;
-    }
-
-    test("blanks payloads past the window while keeping the row and its numbers", async () => {
-      config.retention.llmPayloadDays = 30;
-      const old = await seedInteraction({
-        createdAt: daysAgo(45),
-        inputTokens: 11,
-      });
-      const recent = await seedInteraction({ createdAt: daysAgo(5) });
-
-      await handleContentRetentionCleanup();
-
-      // The row survives — payload retention is not deletion.
-      expect(await countRows(schema.interactionsTable)).toBe(2);
-
-      const pruned = await readPayloadState(old);
-      expect(pruned.prunedAt).not.toBeNull();
-      expect(pruned.request).toEqual({ archestraPayloadPruned: true });
-      expect(pruned.response).toEqual({ archestraPayloadPruned: true });
-      // Everything the cost statistics and usage limits read is untouched.
-      expect(pruned.inputTokens).toBe(11);
-
-      const kept = await readPayloadState(recent);
-      expect(kept.prunedAt).toBeNull();
-      expect(kept.request).toEqual(minimalRequest);
-    });
-
-    test("spares an old delta ancestor while a newer row still folds through it", async () => {
-      config.retention.llmPayloadDays = 30;
-      // The head is well past the window, but the tip of its branch is inside
-      // it — blanking the head would leave the tip unreconstructible.
-      const head = await seedInteraction({
-        createdAt: daysAgo(90),
-        sessionId: "live-session",
-        threadId: "live-thread",
-      });
-      const tip = await seedInteraction({
-        createdAt: daysAgo(2),
-        parentId: head,
-        sessionId: "live-session",
-        threadId: "live-thread",
-      });
-
-      await handleContentRetentionCleanup();
-
-      expect((await readPayloadState(head)).prunedAt).toBeNull();
-      expect((await readPayloadState(head)).request).toEqual(minimalRequest);
-      expect((await readPayloadState(tip)).prunedAt).toBeNull();
-    });
-
-    test("prunes a delta branch once its newest row is also past the window", async () => {
-      config.retention.llmPayloadDays = 30;
-      const head = await seedInteraction({
-        createdAt: daysAgo(90),
-        sessionId: "dead-session",
-        threadId: "dead-thread",
-      });
-      const tip = await seedInteraction({
-        createdAt: daysAgo(60),
-        parentId: head,
-        sessionId: "dead-session",
-        threadId: "dead-thread",
-      });
-
-      await handleContentRetentionCleanup();
-
-      expect((await readPayloadState(head)).prunedAt).not.toBeNull();
-      const prunedTip = await readPayloadState(tip);
-      expect(prunedTip.prunedAt).not.toBeNull();
-      // The delta metadata goes with the payload: folding a placeholder onto a
-      // parent would produce nonsense, so the row reads back as a full one.
-      expect(prunedTip.parentId).toBeNull();
-    });
-
-    test("leaves an already-pruned row alone on the next sweep", async () => {
-      config.retention.llmPayloadDays = 30;
-      const old = await seedInteraction({ createdAt: daysAgo(45) });
-
-      await handleContentRetentionCleanup();
-      const firstSweep = await readPayloadState(old);
-      expect(firstSweep.prunedAt).not.toBeNull();
-
-      await handleContentRetentionCleanup();
-      const secondSweep = await readPayloadState(old);
-      expect(secondSweep.prunedAt).toEqual(firstSweep.prunedAt);
-    });
-
-    test("does nothing while only the row-deletion window is set", async () => {
-      config.retention.llmLogsDays = 30;
-      const recent = await seedInteraction({ createdAt: daysAgo(5) });
-
-      await handleContentRetentionCleanup();
-
-      expect((await readPayloadState(recent)).prunedAt).toBeNull();
-    });
   });
 
   test("erodes an expired delta chain without violating the parent FK", async () => {

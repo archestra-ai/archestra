@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { TimeInMs } from "@archestra/shared";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -19,15 +18,9 @@ import { fileStore } from "@/skills-sandbox/file-store";
  * unlicensed deployment with retention configured never reaches this handler.
  */
 export async function handleContentRetentionCleanup(): Promise<void> {
-  const { llmLogsDays, llmPayloadDays, mcpLogsDays, chatConversationsDays } =
-    config.retention;
+  const { llmLogsDays, mcpLogsDays, chatConversationsDays } = config.retention;
 
-  if (
-    llmLogsDays === 0 &&
-    llmPayloadDays === 0 &&
-    mcpLogsDays === 0 &&
-    chatConversationsDays === 0
-  ) {
+  if (llmLogsDays === 0 && mcpLogsDays === 0 && chatConversationsDays === 0) {
     return;
   }
 
@@ -44,21 +37,6 @@ export async function handleContentRetentionCleanup(): Promise<void> {
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },
         "interaction retention sweep: failed",
-      );
-    }
-  }
-
-  if (llmPayloadDays > 0) {
-    try {
-      const pruned = await pruneInteractionPayloads(llmPayloadDays);
-      logger.info(
-        { pruned, retentionDays: llmPayloadDays },
-        "interaction payload retention sweep: complete",
-      );
-    } catch (error) {
-      logger.error(
-        { error: error instanceof Error ? error.message : String(error) },
-        "interaction payload retention sweep: failed",
       );
     }
   }
@@ -174,36 +152,3 @@ async function deleteExpiredConversation(
   }
   return deleted;
 }
-
-/**
- * Blank interaction payloads past the window, in bounded batches so no single
- * statement holds a long write lock on the platform's largest, write-hot
- * table. Loops until a batch comes back empty or the safety cap is reached;
- * whatever is left is picked up by the next scheduled sweep.
- */
-async function pruneInteractionPayloads(
-  retentionDays: number,
-): Promise<number> {
-  const olderThan = new Date(Date.now() - retentionDays * TimeInMs.Day);
-  let pruned = 0;
-
-  for (let batch = 0; batch < PAYLOAD_PRUNE_MAX_BATCHES; batch++) {
-    const rows = await InteractionModel.prunePayloads({
-      olderThan,
-      batchSize: PAYLOAD_PRUNE_BATCH_SIZE,
-    });
-    pruned += rows;
-    if (rows < PAYLOAD_PRUNE_BATCH_SIZE) break;
-  }
-
-  return pruned;
-}
-
-/** Rows blanked per statement. Small enough to keep each write lock brief. */
-const PAYLOAD_PRUNE_BATCH_SIZE = 500;
-
-/**
- * Ceiling on batches per sweep, so a first run against a long-unpruned table
- * cannot monopolise the worker. The remainder waits for the next sweep.
- */
-const PAYLOAD_PRUNE_MAX_BATCHES = 200;

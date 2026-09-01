@@ -999,8 +999,15 @@ export class A2AManager {
           },
         },
       };
-      const finalParts: { text: string }[] = [
+      // Text is coalesced into one part (the stream appended it in chunks),
+      // but a file part is a distinct result and survives the seal —
+      // flattening it into the joined text would drop the very thing the
+      // caller asked for.
+      const finalParts: A2AProtocolPart[] = [
         { text: parts.map((part) => part.text ?? "").join("") },
+        ...parts.filter(
+          (part) => part.url !== undefined || part.raw !== undefined,
+        ),
       ];
       await A2ATaskModel.completeRun({
         taskId,
@@ -1814,6 +1821,18 @@ function extractProtocolPartsFromUIMessage(
   for (const part of parts) {
     if (part.type === "text") {
       protocolParts.push({ text: part.text });
+      continue;
+    }
+    // A file the agent produced is a result, and results are delivered as
+    // artifacts (A2A v1.0 §3.7). Dropping it here leaves the caller with the
+    // filename in prose and no way to reach the bytes. Mirrors the inbound
+    // direction, which already reconstructs file parts.
+    if (part.type === "file") {
+      protocolParts.push({
+        url: part.url,
+        mediaType: part.mediaType,
+        ...(part.filename ? { filename: part.filename } : {}),
+      });
     }
   }
   return protocolParts;

@@ -376,7 +376,7 @@ function PluginDetailView({
         open={deleteRequested}
         onOpenChange={setDeleteRequested}
         title="Delete plugin?"
-        description="It will disappear from future marketplace revisions. This does not uninstall code already present on developer machines; remove that plugin locally through the client or startup guard."
+        description="Installed copies stay on developer machines until you uninstall them."
         isPending={deletePlugin.isPending}
         onConfirm={handleDelete}
       />

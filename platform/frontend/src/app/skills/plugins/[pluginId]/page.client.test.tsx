@@ -62,11 +62,9 @@ describe("PluginSkillPage", () => {
     const sourceNotice = screen.getByText(
       (_, element) =>
         element?.tagName === "P" &&
-        element.textContent?.includes("This portable skill comes from") ===
-          true,
+        element.textContent?.includes("This skill comes from") === true,
     );
-    expect(sourceNotice).toHaveTextContent(/not copied or versioned/);
-    expect(sourceNotice).toHaveTextContent(/standalone Workspace skill/);
+    expect(sourceNotice).toHaveTextContent(/plugin still owns these files/);
     expect(screen.getByTestId("content")).toHaveAttribute(
       "data-read-only",
       "true",

@@ -76,7 +76,7 @@ export function PluginContentFields({
             value={description}
             readOnly={readOnly}
             onChange={(event) => onDescriptionChange(event.target.value)}
-            placeholder="What this plugin does and when an administrator should deploy it"
+            placeholder="What this plugin does."
             maxLength={1000}
             rows={3}
           />
@@ -91,7 +91,7 @@ export function PluginContentFields({
               className="font-mono text-xs"
             />
             <span className="block text-xs text-muted-foreground">
-              Frozen so renaming the plugin cannot orphan installed plugins.
+              This name stays after you rename the plugin.
             </span>
           </div>
         ) : null}

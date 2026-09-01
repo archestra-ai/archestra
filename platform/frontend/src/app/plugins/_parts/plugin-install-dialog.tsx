@@ -139,7 +139,7 @@ export function PluginInstallDialog({
           ? `Install ${plugins[0]?.displayName}`
           : `Install ${plugins.length} plugins`
       }
-      description="Review the target, then run the generated setup command."
+      description="Review the target, then run the setup command."
       size="medium"
       className="sm:max-w-5xl"
       bodyClassName="overflow-y-auto"

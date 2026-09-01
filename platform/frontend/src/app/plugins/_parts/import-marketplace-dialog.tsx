@@ -530,10 +530,10 @@ export function ImportMarketplaceDialog({
       }
       description={
         isAutoDiscovering
-          ? "Looking for a plugin marketplace manifest in the repository."
+          ? "Looking for a marketplace manifest."
           : isSelectStep
-            ? "Choose which plugins to add to your organization."
-            : "Point at a repository containing a plugin marketplace manifest."
+            ? "Choose which plugins to import."
+            : "Paste a GitHub marketplace URL."
       }
       size="medium"
       bodyClassName={isSelectStep ? "p-0" : undefined}

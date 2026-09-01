@@ -138,7 +138,7 @@ describe("PluginEditPage", () => {
 
     expect(
       screen.getByText(
-        "Edit the tracked GitHub source, authentication, update schedule, and discoverability.",
+        "Edit the GitHub source, schedule, and who can discover this plugin.",
       ),
     ).toBeVisible();
     expect(screen.getByLabelText("Repository URL")).toHaveValue(

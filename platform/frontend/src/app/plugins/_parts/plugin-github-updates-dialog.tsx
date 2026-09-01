@@ -62,7 +62,7 @@ export function PluginGithubUpdatesDialog({
       open={open}
       onOpenChange={close}
       title="GitHub updates"
-      description="Check the tracked source and approve new plugin bytes before they are delivered."
+      description="Review GitHub changes before they install."
       size="large"
       bodyClassName="space-y-5 overflow-y-auto"
       footer={

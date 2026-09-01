@@ -51,29 +51,3 @@ export function DetailFacts({
     </dl>
   );
 }
-
-/**
- * A {@link DetailFacts} row in the card every detail page states its facts in.
- *
- * The card exists here rather than at each call site because two surfaces draw
- * it: {@link OverviewSummary}, which adds the "Overview" heading and the link
- * into the full configuration, and pages that are already the configuration
- * and so want the box without either. Stated once, a fact reads the same on
- * both and cannot drift a border or a padding apart.
- */
-export function DetailFactsCard({
-  facts,
-  className,
-}: {
-  facts: DetailFact[];
-  className?: string;
-}) {
-  // One row, wrapping rather than scrolling: a narrow window gets two short
-  // rows instead of a value cut off at the edge.
-  return (
-    <DetailFacts
-      facts={facts}
-      className={cn("rounded-lg border bg-card p-4", className)}
-    />
-  );
-}

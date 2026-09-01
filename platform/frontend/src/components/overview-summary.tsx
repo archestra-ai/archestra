@@ -2,7 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { type DetailFact, DetailFactsCard } from "@/components/detail-facts";
+import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 
 /** One key configuration value of the record, as `label` over `value`. */
 export type OverviewFact = DetailFact;
@@ -55,7 +55,9 @@ export function OverviewSummary({
           </Link>
         )}
       </div>
-      <DetailFactsCard facts={facts} />
+      {/* One row, wrapping rather than scrolling: a narrow window gets two
+          short rows instead of a value cut off at the edge. */}
+      <DetailFacts facts={facts} className="rounded-lg border bg-card p-4" />
     </section>
   );
 }

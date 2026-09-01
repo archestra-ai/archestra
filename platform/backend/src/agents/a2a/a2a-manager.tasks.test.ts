@@ -83,6 +83,28 @@ async function sendMessage(params: {
   });
 }
 
+function mockExecutorTextAndFile(
+  text: string,
+  file: { url: string; mediaType: string; filename?: string },
+) {
+  executeA2AMessage.mockImplementation(
+    async (args: { onTextDelta?: (d: string) => void }) => {
+      const messageId = crypto.randomUUID();
+      args.onTextDelta?.(text);
+      return {
+        messageId,
+        text,
+        finishReason: "stop",
+        responseUiMessage: {
+          id: messageId,
+          role: "assistant",
+          parts: [{ type: "text", text }, { type: "file", ...file }],
+        },
+      };
+    },
+  );
+}
+
 function mockExecutorText(text: string) {
   executeA2AMessage.mockImplementation(
     async (args: { onTextDelta?: (d: string) => void }) => {
@@ -341,6 +363,43 @@ describe("A2AManager full task mode", () => {
     expect(seal?.artifactUpdate?.lastChunk).toBe(true);
     expect(seal?.artifactUpdate?.artifact.parts).toEqual([
       { text: "The answer" },
+    ]);
+  });
+
+  test("a file the agent produced is delivered as an artifact part", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = fullManager();
+    mockExecutorTextAndFile("Here is the chart", {
+      url: "https://files.example.com/chart.pdf",
+      mediaType: "application/pdf",
+      filename: "chart.pdf",
+    });
+
+    const response = await sendMessage({
+      manager,
+      agentId: agent.id,
+      taskRun: { createTask: true, detached: false },
+    });
+
+    if (!response.task) throw new Error("expected a task response");
+    // The text is coalesced into one part; the file survives beside it, so a
+    // caller reading the task gets something it can actually fetch instead of
+    // a filename mentioned in prose.
+    expect(response.task.artifacts).toEqual([
+      {
+        artifactId: expect.any(String),
+        name: "agent-response",
+        parts: [
+          { text: "Here is the chart" },
+          {
+            url: "https://files.example.com/chart.pdf",
+            mediaType: "application/pdf",
+            filename: "chart.pdf",
+          },
+        ],
+      },
     ]);
   });
 

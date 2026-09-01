@@ -31,16 +31,16 @@ const ALL_MODES: McpServerHibernationMode[] = [
 
 describe("wakeResponseBudgetMs", () => {
   // Config mutations here are restored by the shared per-test setup.
-  test("unconfigured: half the tool-call timeout, capped at 30s", () => {
-    config.mcpGateway.wakeWaitTimeoutMs = 0;
-    config.mcpGateway.toolCallTimeoutMs = 40_000;
-    expect(wakeResponseBudgetMs()).toBe(20_000);
-    config.mcpGateway.toolCallTimeoutMs = 600_000;
+  test("ships a plain 30s default", () => {
+    expect(config.mcpGateway.wakeWaitTimeoutMs).toBe(30_000);
     expect(wakeResponseBudgetMs()).toBe(30_000);
   });
 
-  test("an explicit wake wait timeout is honored verbatim, even past the derived cap", () => {
-    config.mcpGateway.toolCallTimeoutMs = 60_000;
+  test("the configured value is honored verbatim and never derived from the tool-call timeout", () => {
+    // The tool-call timeout governs the dispatched call, which only starts
+    // once the woken server has accepted it — a deliberately tiny value here
+    // must not drag the wake budget down with it.
+    config.mcpGateway.toolCallTimeoutMs = 10_000;
     config.mcpGateway.wakeWaitTimeoutMs = 45_000;
     expect(wakeResponseBudgetMs()).toBe(45_000);
   });

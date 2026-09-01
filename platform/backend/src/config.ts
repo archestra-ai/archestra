@@ -2214,16 +2214,16 @@ const config = {
     /**
      * How long (ms) a tool call holds its reply open while the MCP server
      * behind it wakes from idle hibernation, before being answered with the
-     * retryable "still starting, retry shortly" result. 0 (the default)
-     * derives the budget from the tool-call timeout — half of it, at most
-     * 30 s — so the wake can never eat the whole call. An explicit value is
-     * honored verbatim; keep it under the calling client's own request
-     * timeout, or the client aborts first and sees a transport error instead
-     * of the retryable answer.
+     * retryable "still starting, retry shortly" result. Deliberately
+     * independent of `toolCallTimeoutMs`, which governs the dispatched call
+     * and only starts counting once the woken server has accepted it. Keep
+     * this under the calling clients' own request timeouts, or the client
+     * aborts first and sees a transport error instead of the retryable
+     * answer.
      */
     wakeWaitTimeoutMs: parsePositiveInt(
       process.env.ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS,
-      0,
+      30_000,
     ),
     // SPDX-SnippetEnd
     /**

@@ -78,13 +78,11 @@ export class McpServerWakeError extends Error {
  * about what happened and nothing about what to do, which is exactly the failure
  * an agent cannot act on.
  *
- * An operator who knows their clients' timeouts can pin the budget with
- * `ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS`, and that value is honored
- * verbatim. Left unset, the budget is derived from the existing tool-call
- * knob rather than a second default, the same way `taskSyncThresholdMs` is:
- * the wake is only the prologue to the call, so it may claim at most half of
- * what the whole call is allowed, and never more than 30 s. Whatever is left
- * belongs to the tool itself.
+ * `ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS` (default 30 s) is that budget,
+ * verbatim — deliberately NOT derived from the tool-call timeout, which
+ * governs the dispatched call and only starts counting once the woken server
+ * has accepted it. The number an operator must keep this under is their
+ * CLIENTS' request timeouts, which nothing here can see.
  *
  * Answering early does not abandon the wake. It keeps running under the
  * manager's single-flight entry, so the retry this reply asks for joins the
@@ -92,9 +90,7 @@ export class McpServerWakeError extends Error {
  * the server is usually up.
  */
 export function wakeResponseBudgetMs(): number {
-  const configured = config.mcpGateway.wakeWaitTimeoutMs;
-  if (configured > 0) return configured;
-  return Math.min(30_000, Math.floor(config.mcpGateway.toolCallTimeoutMs / 2));
+  return config.mcpGateway.wakeWaitTimeoutMs;
 }
 
 /**

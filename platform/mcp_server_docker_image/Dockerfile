@@ -155,7 +155,12 @@ RUN apk add --no-cache \
    # four installed openssl-origin packages both guarantee the fixed version and bust the
    # stale cache.
    apk add --no-cache --upgrade "openssl>=3.5.8-r0" "openssl-dev>=3.5.8-r0" \
-       "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0"
+       "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
+   # CVE-2026-76641, CVE-2026-66046: expat vulnerabilities (HIGH) fixed in 2.8.4-r0.
+   # expat is pulled in transitively (python), never named in an `apk add` here, so it
+   # needs its own floor for the same reason the openssl ones above do: the cached layer
+   # never re-runs against a newer index on its own.
+   apk add --no-cache --upgrade "expat>=2.8.4-r0"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

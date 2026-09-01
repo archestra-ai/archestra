@@ -2,18 +2,31 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import {
+  Info,
+  Pencil,
+  Plus,
+  Tags,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { useSelectedLabels } from "@/components/label-select";
+import { LabelTags } from "@/components/label-tags";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -45,6 +58,11 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import {
+  useEnvironmentLabelKeys,
+  useEnvironmentLabelValues,
+  useSaveEnvironmentLabels,
+} from "@/lib/entity-labels.query";
 import {
   type EnvironmentWithAssignedCount,
   useBulkDeleteEnvironments,
@@ -203,10 +221,26 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     ],
     [defaultAssignedCatalogCount, defaultEnvironment, environments],
   );
+  const selectedLabels = useSelectedLabels();
+  const [labelingEnvironment, setLabelingEnvironment] = useState<
+    (typeof environments)[number] | null
+  >(null);
+  const saveEnvironmentLabels = useSaveEnvironmentLabels();
   const normalizedSearch = search.trim().toLowerCase();
   const filteredRows = useMemo(
     () =>
       rows.filter((row) => {
+        // The default row is a synthetic sentinel with no database row behind
+        // it, so it can carry no labels and drops out whenever one is picked.
+        const matchesLabels =
+          !selectedLabels ||
+          (row.kind === "environment" &&
+            Object.entries(selectedLabels).every(([key, values]) =>
+              row.labels.some(
+                (label) => label.key === key && values.includes(label.value),
+              ),
+            ));
+        if (!matchesLabels) return false;
         const matchesSearch =
           normalizedSearch === "" ||
           row.name.toLowerCase().includes(normalizedSearch) ||
@@ -226,6 +260,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
       egressModeFilter,
       normalizedSearch,
       rows,
+      selectedLabels,
     ],
   );
   const hasActiveFilters =
@@ -274,6 +309,9 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         cell: ({ row }) => (
           <span className="flex items-center gap-2 font-medium">
             {row.original.name}
+            {row.original.kind === "environment" && (
+              <LabelTags labels={row.original.labels} />
+            )}
             {row.original.kind === "default" &&
               row.original.name !== "Default" && (
                 <Badge variant="outline" className="text-muted-foreground">
@@ -322,6 +360,16 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                   // item.id is the `"default"` sentinel for the default row.
                   onClick: () => openEditor(item.id),
                 },
+                ...(item.kind === "environment"
+                  ? [
+                      {
+                        icon: <Tags className="h-4 w-4" />,
+                        label: "Edit labels",
+                        disabled: !canEdit,
+                        onClick: () => setLabelingEnvironment(item),
+                      },
+                    ]
+                  : []),
                 ...(item.kind === "environment"
                   ? [
                       {
@@ -381,6 +429,13 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
             ]}
             inactiveValue="all"
           />
+          <EntityLabelFilter
+            useLabelKeys={useEnvironmentLabelKeys}
+            useLabelValues={useEnvironmentLabelValues}
+            className={filterControlClass({
+              active: Boolean(selectedLabels),
+            })}
+          />
         </FilterBar>
       </CollectionFilters>
 
@@ -419,6 +474,21 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
           setEgressModeFilter("all");
         }}
       />
+
+      {labelingEnvironment && (
+        <EntityLabelsDialog
+          open={!!labelingEnvironment}
+          onOpenChange={(open) => !open && setLabelingEnvironment(null)}
+          entityName={labelingEnvironment.name}
+          labels={labelingEnvironment.labels}
+          onSave={(labels) =>
+            saveEnvironmentLabels.mutateAsync({
+              id: labelingEnvironment.id,
+              labels,
+            })
+          }
+        />
+      )}
 
       {bulkDeleteOpen && (
         <DeleteConfirmDialog

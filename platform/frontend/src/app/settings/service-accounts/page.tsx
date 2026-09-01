@@ -129,8 +129,9 @@ export default function ServiceAccountsSettingsPage() {
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newLabels, setNewLabels] = useState<ProfileLabel[]>([]);
-  const [labelingAccount, setLabelingAccount] =
-    useState<ServiceAccount | null>(null);
+  const [labelingAccount, setLabelingAccount] = useState<ServiceAccount | null>(
+    null,
+  );
   const saveAccountLabels = useSaveServiceAccountLabels();
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
     null,

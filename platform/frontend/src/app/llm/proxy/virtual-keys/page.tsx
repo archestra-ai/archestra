@@ -26,11 +26,6 @@ import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
-  useSaveVirtualApiKeyLabels,
-  useVirtualApiKeyLabelKeys,
-  useVirtualApiKeyLabelValues,
-} from "@/lib/entity-labels.query";
-import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
@@ -69,6 +64,11 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { copyToClipboard } from "@/lib/clipboard";
+import {
+  useSaveVirtualApiKeyLabels,
+  useVirtualApiKeyLabelKeys,
+  useVirtualApiKeyLabelValues,
+} from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";

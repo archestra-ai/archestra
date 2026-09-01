@@ -25,6 +25,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
@@ -47,14 +49,7 @@ import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { SearchInput } from "@/components/search-input";
-import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
-import {
-  useLlmProviderApiKeyLabelKeys,
-  useLlmProviderApiKeyLabelValues,
-  useSaveLlmProviderApiKeyLabels,
-} from "@/lib/entity-labels.query";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -87,6 +82,11 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import {
+  useLlmProviderApiKeyLabelKeys,
+  useLlmProviderApiKeyLabelValues,
+  useSaveLlmProviderApiKeyLabels,
+} from "@/lib/entity-labels.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -139,9 +139,8 @@ export default function ApiKeysPage() {
   const providerFilter = searchParams.get("provider") || "all";
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
-  const [labelingCredential, setLabelingCredential] = useState<
-    LlmProviderApiKeyResponse | null
-  >(null);
+  const [labelingCredential, setLabelingCredential] =
+    useState<LlmProviderApiKeyResponse | null>(null);
   const saveProviderKeyLabels = useSaveLlmProviderApiKeyLabels();
   const { data: canReadLlmProviderApiKeys, isPending: permissionsPending } =
     useHasPermissions({ llmProviderApiKey: ["read"] });

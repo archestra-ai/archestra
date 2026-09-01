@@ -24,6 +24,8 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
@@ -31,6 +33,7 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { useSelectedLabels } from "@/components/label-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import {
@@ -61,6 +64,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import {
+  useModelLabelKeys,
+  useModelLabelValues,
+  useSaveModelLabels,
+} from "@/lib/entity-labels.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -73,14 +81,6 @@ import {
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { formatContextLength } from "@/lib/utils";
-import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
-import { useSelectedLabels } from "@/components/label-select";
-import {
-  useModelLabelKeys,
-  useModelLabelValues,
-  useSaveModelLabels,
-} from "@/lib/entity-labels.query";
 import { EditModelDialog } from "./_parts/edit-model-dialog";
 import {
   canFilterFreeModelsForApiKey,
@@ -103,7 +103,9 @@ export default function ModelsPage() {
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
-  const [labelingModel, setLabelingModel] = useState<ModelWithApiKeys | null>(null);
+  const [labelingModel, setLabelingModel] = useState<ModelWithApiKeys | null>(
+    null,
+  );
   const saveModelLabels = useSaveModelLabels();
   const selectedLabels = useSelectedLabels();
   const [isCreateApiKeyDialogOpen, setIsCreateApiKeyDialogOpen] =

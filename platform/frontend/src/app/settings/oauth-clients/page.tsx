@@ -13,6 +13,8 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
@@ -29,15 +31,7 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
-import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
-import {
-  useLlmOauthClientLabelKeys,
-  useLlmOauthClientLabelValues,
-  useSaveLlmOauthClientLabels,
-  useSaveMcpOauthClientLabels,
-} from "@/lib/entity-labels.query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -45,6 +39,12 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import {
+  useLlmOauthClientLabelKeys,
+  useLlmOauthClientLabelValues,
+  useSaveLlmOauthClientLabels,
+  useSaveMcpOauthClientLabels,
+} from "@/lib/entity-labels.query";
 import { ALL_MATCHING_PAGE_SIZE } from "@/lib/hooks/use-all-matching";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";

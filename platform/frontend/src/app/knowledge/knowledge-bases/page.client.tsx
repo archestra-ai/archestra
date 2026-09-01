@@ -63,6 +63,11 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
+  useKnowledgeBaseLabelKeys,
+  useKnowledgeBaseLabelValues,
+  useSaveKnowledgeBaseLabels,
+} from "@/lib/entity-labels.query";
+import {
   type BulkCardSelectionProps,
   useBulkCardSelection,
 } from "@/lib/hooks/use-bulk-card-selection";
@@ -94,11 +99,6 @@ import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
 import { KnowledgeBaseCard } from "./_parts/knowledge-base-card";
 import { useChatWithKnowledgeBase } from "./_parts/use-chat-with-knowledge-base";
-import {
-  useKnowledgeBaseLabelKeys,
-  useKnowledgeBaseLabelValues,
-  useSaveKnowledgeBaseLabels,
-} from "@/lib/entity-labels.query";
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];

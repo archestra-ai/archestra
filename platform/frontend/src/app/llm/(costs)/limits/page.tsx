@@ -21,6 +21,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { EnvironmentScopeSelect } from "@/components/environment-scope-select";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -30,6 +32,7 @@ import {
   filterControlClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { useSelectedLabels } from "@/components/label-select";
 import {
   CLEANUP_INTERVAL_LABELS,
   DEFAULT_LIMIT_CLEANUP_INTERVAL,
@@ -41,15 +44,7 @@ import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
-import { useSelectedLabels } from "@/components/label-select";
 import { TableRowActions } from "@/components/table-row-actions";
-import {
-  useLimitLabelKeys,
-  useLimitLabelValues,
-  useSaveLimitLabels,
-} from "@/lib/entity-labels.query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -78,6 +73,11 @@ import { useProfiles } from "@/lib/agent.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import {
+  useLimitLabelKeys,
+  useLimitLabelValues,
+  useSaveLimitLabels,
+} from "@/lib/entity-labels.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -472,9 +472,7 @@ export default function LimitsPage() {
           ),
         );
 
-      return (
-        matchesStatus && matchesAppliedTo && matchesModel && matchesLabels
-      );
+      return matchesStatus && matchesAppliedTo && matchesModel && matchesLabels;
     });
   }, [
     appliedToFilter,

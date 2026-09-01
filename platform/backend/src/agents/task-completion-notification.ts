@@ -43,7 +43,10 @@ function conciseOutput(output: string): string {
   // Native catalog clients write their complete interactive transcript to the
   // execution log. That belongs in the execution console, not in a completion
   // message. PR links are extracted above before this guard.
-  if (output.includes("[archestra] agent session exited")) {
+  if (
+    output.includes("[archestra] agent session exited") ||
+    looksLikeTerminalControlStream(output)
+  ) {
     return "";
   }
 
@@ -65,4 +68,23 @@ function conciseOutput(output: string): string {
     .trim();
 
   return cleaned.length > 1_000 ? `…${cleaned.slice(-1_000)}` : cleaned;
+}
+
+function looksLikeTerminalControlStream(output: string): boolean {
+  const escapeCharacter = String.fromCharCode(27);
+  const controlSequenceIntroducer = String.fromCharCode(155);
+  if (
+    output.includes(`${escapeCharacter}[`) ||
+    output.includes(controlSequenceIntroducer)
+  ) {
+    return true;
+  }
+
+  // Some transcript transports drop the escape byte while preserving the CSI
+  // payload. Repeated cursor/style commands are still enough to identify a TUI
+  // redraw, without rejecting ordinary prose containing square brackets.
+  const bareControlSequences = output.match(
+    /\[(?:\?[0-9;:]*|[0-9;:]+)[ -/]*[@-~]/g,
+  );
+  return (bareControlSequences?.length ?? 0) >= 3;
 }

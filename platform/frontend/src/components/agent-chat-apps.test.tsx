@@ -1072,26 +1072,15 @@ describe("AgentChatAppsEditor", () => {
     expect(channelRow("General")).toBeVisible();
   });
 
-  it("offers a personal agent only direct messages, and says why once", async () => {
+  it("folds a personal agent's refused channels behind one line per reason", async () => {
     const user = userEvent.setup();
-    const pool = [
-      ...Array.from({ length: 6 }, (_, index) => ({
-        ...bindings[0],
-        id: `shared-${index}`,
-        channelId: `CS${index}`,
-        channelName: `shared-${index}`,
-        agentId: null,
-      })),
-      {
-        ...bindings[0],
-        id: "own-dm",
-        channelId: "D1",
-        channelName: null,
-        isDm: true,
-        dmOwnerEmail: "owner@example.com",
-        agentId: null,
-      },
-    ];
+    const pool = Array.from({ length: 6 }, (_, index) => ({
+      ...bindings[0],
+      id: `shared-${index}`,
+      channelId: `CS${index}`,
+      channelName: `shared-${index}`,
+      agentId: null,
+    }));
     vi.mocked(useAllChatOpsBindings).mockReturnValue({
       data: { bindings: pool },
       isPending: false,
@@ -1114,24 +1103,32 @@ describe("AgentChatAppsEditor", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /add channel/i }));
-
-    // The rule once, for the whole panel — not once per provider tab, which is
-    // where a personal agent used to meet it three times over.
-    expect(
-      screen.getAllByText(/answers only in its owner's direct messages/),
-    ).toHaveLength(1);
-    // A pool it can never hold is not a pool: no tabs, no channel search.
-    expect(screen.queryByLabelText("Search channels")).toBeNull();
+    await openPicker(user, "Slack");
+    const reason =
+      "This personal agent can use only its owner's direct messages.";
+    // One sentence for the whole group, not one per row.
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+    const group = screen.getByRole("button", {
+      name: /6 not available to this agent/,
+    });
+    expect(group).toHaveAttribute("aria-expanded", "false");
     for (const binding of pool) {
-      if (binding.isDm) continue;
       expect(screen.queryByText(binding.channelName as string)).toBeNull();
     }
-    // What is left is the thing it can actually be given.
+
+    // Expanding shows which channels they are — the provider's pool stays
+    // visible rather than being hidden away.
+    await user.click(group);
+    expect(group).toHaveAttribute("aria-expanded", "true");
+    for (const binding of pool) {
+      expect(screen.getByText(binding.channelName as string)).toBeVisible();
+    }
+
+    // Searching finds them in the group rather than claiming nothing matched.
+    await user.type(screen.getByLabelText("Search channels"), "shared-3");
+    expect(screen.queryByText("No channels match.")).toBeNull();
     expect(
-      screen.getByRole("button", {
-        name: "Slack direct message for owner@example.com",
-      }),
+      screen.getByRole("button", { name: /1 not available to this agent/ }),
     ).toBeVisible();
   });
 

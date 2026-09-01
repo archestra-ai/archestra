@@ -351,7 +351,18 @@ function NewSkillWizard() {
                       className={SKILL_WIZARD_EDITOR_CLASS}
                     />
                   </div>
-                  <WizardFooter>
+                  {/*
+                   * No top rule. `WizardFooter` carries `sticky bottom-0
+                   * border-t`, where the rule marks the edge the footer pins
+                   * to while content scrolls underneath. It never pins on this
+                   * page: an ancestor sets `overflow-x-auto`, which makes that
+                   * box the footer's nearest scrollport in *both* axes, and it
+                   * never scrolls — the real scrolling happens further out. So
+                   * the footer just flows with the content, and its rule only
+                   * ever reads as a second line stacked 16px under the card's
+                   * own bottom border. Dropped on both steps of this wizard.
+                   */}
+                  <WizardFooter className="border-t-0">
                     {catalogDisabled ? (
                       <Button variant="outline" asChild>
                         <Link href="/skills">Cancel</Link>
@@ -381,7 +392,8 @@ function NewSkillWizard() {
                   <div className="rounded-lg border p-6">
                     <SkillAccessFields draft={draft} onChange={patchDraft} />
                   </div>
-                  <WizardFooter>
+                  {/* No top rule — see the content step's footer. */}
+                  <WizardFooter className="border-t-0">
                     <Button
                       variant="outline"
                       onClick={() => setStep("content")}

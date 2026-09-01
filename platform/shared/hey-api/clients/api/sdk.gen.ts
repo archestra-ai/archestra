@@ -6344,7 +6344,7 @@ export const bulkDeleteMembers = <ThrowOnError extends boolean = false>(options:
 export const getMfilesVafAddOnScript = <ThrowOnError extends boolean = false>(options?: Options<GetMfilesVafAddOnScriptData, ThrowOnError>) => (options?.client ?? client).get<GetMfilesVafAddOnScriptResponses, unknown, ThrowOnError>({ url: '/api/mfiles-vaf-add-on/script', ...options });
 
 /**
- * Resolve how the M-Files connector's VAF Add On is distributed to this installation: a verified direct package download URL (release asset or the dev source-ref CI build proxied by the backend), or null when the install script compiles from source instead. The connector form probes this for its download link.
+ * Resolve how the M-Files connector's VAF Add On is distributed to this installation: a verified direct package download URL (the dev source-ref CI build or the package compiled into this platform image — both served by the backend's package route — or a release asset), or null when the install script compiles from source instead. The connector form probes this for its download link.
  *
  * Authentication:
  *
@@ -6357,7 +6357,7 @@ export const getMfilesVafAddOnScript = <ThrowOnError extends boolean = false>(op
 export const getMfilesVafAddOnDistribution = <ThrowOnError extends boolean = false>(options?: Options<GetMfilesVafAddOnDistributionData, ThrowOnError>) => (options?.client ?? client).get<GetMfilesVafAddOnDistributionResponses, GetMfilesVafAddOnDistributionErrors, ThrowOnError>({ url: '/api/mfiles-vaf-add-on/distribution', ...options });
 
 /**
- * Serve the M-Files connector's VAF Add On package built by CI for the configured development source ref (ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF). 404 when the override is unset or no CI build exists for it.
+ * Serve the M-Files connector's VAF Add On package: the CI build of the development source-ref override (ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF) when one resolves, else the package compiled into this platform image. 404 when neither exists.
  *
  * Authentication:
  *

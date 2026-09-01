@@ -385,6 +385,19 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("Created by")).toBeNull();
   });
 
+  it("omits the creator when the record has none recorded", () => {
+    // The header used to keep the label and put an em dash where the name
+    // goes, which reads as a name that failed to load rather than as a record
+    // nobody is recorded as having made — one created before the platform
+    // tracked it, created by the platform itself, or whose author's account
+    // has since been deleted.
+    mockAgent({ ...baseAgent, createdBy: null });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByText("Created by")).toBeNull();
+    expect(screen.queryByText("—")).toBeNull();
+  });
+
   it("names delegated task history Executions and gives it a section", () => {
     vi.mocked(useFeature).mockReturnValue(true);
     mockAgent({ ...baseAgent, backgroundExecution: {} });

@@ -3,7 +3,7 @@ title: Background Execution
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated deployment
-lastUpdated: 2026-08-30
+lastUpdated: 2026-09-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -337,7 +337,9 @@ the system actor and can use shared credentials only. See [Incoming Email](/docs
 When a Background-enabled Agent is selected in Chat, the composer clearly
 identifies execution mode. Sending the first task creates a durable execution
 and replaces the composer with the Agent's live terminal. While Kubernetes is
-starting the pod, Chat shows the startup state instead of an empty terminal.
+starting the pod, Chat shows each startup step: scheduling, image pull, agent
+session, then the terminal. If Kubernetes reports a problem — an image that
+cannot be pulled, for example — the reason appears with the step.
 Files attached before sending are copied into the execution input directory
 before the Agent process starts.
 

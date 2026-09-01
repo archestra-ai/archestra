@@ -495,8 +495,14 @@ function AgentDetails({
               its own above the first field. One fact does not make a panel:
               the box read as a container waiting for content that never came.
               A built-in belongs to nobody, so it is absent there rather than
-              present-but-empty, which would read as missing data. */}
-          {!isBuiltIn && (
+              present-but-empty, which would read as missing data.
+
+              The same goes for a record with no creator recorded — one made
+              before the platform tracked it, made by the platform itself, or
+              whose author's account has since been deleted. The label used to
+              stay and carry an em dash, which read as a name that had failed
+              to load rather than as a question with no answer. */}
+          {!isBuiltIn && agent.createdBy && (
             // Dropped on phones, where the header has no room to spare beside
             // the title and the actions that act on the record.
             <p className="mr-1 hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">

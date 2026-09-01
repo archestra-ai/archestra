@@ -44,7 +44,7 @@ import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/con
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { type DetailFact, DetailFacts } from "@/components/detail-facts";
+import { DetailFacts, type MaybeDetailFact } from "@/components/detail-facts";
 import {
   CollectionFilters,
   FilterBar,
@@ -483,7 +483,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     );
   }
 
-  const facts: DetailFact[] = [
+  const facts: MaybeDetailFact[] = [
     {
       label: "Last documents sync",
       value: connector.lastSyncAt

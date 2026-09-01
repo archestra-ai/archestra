@@ -90,6 +90,10 @@ export function MFilesInlineFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Authentication Method</FormLabel>
+              <FormDescription>
+                Application Accounts sign in through your identity provider
+                without a stored vault password.
+              </FormDescription>
               <Select
                 value={
                   (field.value as string | undefined) ?? "mfiles_password_token"
@@ -110,10 +114,6 @@ export function MFilesInlineFields({
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <FormDescription>
-                Application Accounts sign in through your identity provider
-                without a stored vault password.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -177,6 +177,13 @@ export function MFilesInlineFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>{oauth ? "Client ID" : "Username"}</FormLabel>
+            <FormDescription>
+              {oauth ? (
+                <span>Client ID of the M-Files Application Account.</span>
+              ) : (
+                <span>Dedicated M-Files login account for the connector.</span>
+              )}
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder={
@@ -192,13 +199,6 @@ export function MFilesInlineFields({
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              {oauth ? (
-                <span>Client ID of the M-Files Application Account.</span>
-              ) : (
-                <span>Dedicated M-Files login account for the connector.</span>
-              )}
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -370,6 +370,7 @@ function TextField({
       render={({ field }) => (
         <FormItem>
           <FormLabel>{label}</FormLabel>
+          <FormDescription>{description}</FormDescription>
           <FormControl>
             <Input
               placeholder={placeholder}
@@ -377,7 +378,6 @@ function TextField({
               value={(field.value as string | undefined) ?? ""}
             />
           </FormControl>
-          <FormDescription>{description}</FormDescription>
           <FormMessage />
         </FormItem>
       )}

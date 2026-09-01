@@ -29,16 +29,16 @@ export function SalesforceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Objects (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated Salesforce object names. Leave empty to default to
+              <code> Account, Contact, Opportunity, Case</code>.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="Account, Contact, Opportunity, Case"
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated Salesforce object names. Leave empty to default to
-              <code> Account, Contact, Opportunity, Case</code>.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -50,16 +50,16 @@ export function SalesforceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Advanced Object Config JSON (optional)</FormLabel>
+            <FormDescription>
+              Optional JSON object for precise field/association indexing. When
+              provided, this overrides simple object selection.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder='{"Account":{"fields":["Id","Name"],"associations":{"Contact":["Id","Email"]}}}'
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              Optional JSON object for precise field/association indexing. When
-              provided, this overrides simple object selection.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

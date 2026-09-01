@@ -174,6 +174,13 @@ export function AgentEmailSettingsDialog({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Security mode</FormLabel>
+                        <FormDescription>
+                          {describeIncomingEmailSecurityMode(
+                            incomingEmailSecurityMode,
+                            form.watch("incomingEmailAllowedDomain"),
+                            appName,
+                          )}
+                        </FormDescription>
                         <Select
                           value={field.value}
                           onValueChange={field.onChange}
@@ -204,13 +211,6 @@ export function AgentEmailSettingsDialog({
                             </SelectItem>
                           </SelectContent>
                         </Select>
-                        <FormDescription>
-                          {describeIncomingEmailSecurityMode(
-                            incomingEmailSecurityMode,
-                            form.watch("incomingEmailAllowedDomain"),
-                            appName,
-                          )}
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -223,6 +223,10 @@ export function AgentEmailSettingsDialog({
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Allowed domain</FormLabel>
+                          <FormDescription>
+                            Only senders from this exact domain can invoke the
+                            agent.
+                          </FormDescription>
                           <FormControl>
                             <Input
                               placeholder="company.com"
@@ -230,10 +234,6 @@ export function AgentEmailSettingsDialog({
                               value={field.value ?? ""}
                             />
                           </FormControl>
-                          <FormDescription>
-                            Only senders from this exact domain can invoke the
-                            agent.
-                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

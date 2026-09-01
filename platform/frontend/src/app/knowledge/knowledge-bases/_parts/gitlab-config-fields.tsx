@@ -34,12 +34,12 @@ export function GitlabConfigFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>GitLab URL</FormLabel>
-              <FormControl>
-                <Input placeholder="https://gitlab.com" {...field} />
-              </FormControl>
               <FormDescription>
                 Use https://gitlab.com or your self-hosted GitLab URL.
               </FormDescription>
+              <FormControl>
+                <Input placeholder="https://gitlab.com" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -52,14 +52,14 @@ export function GitlabConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Group Path (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="my-org/my-subgroup" {...field} />
-            </FormControl>
             <FormDescription>
               The path of the GitLab group to sync from. Found in the group URL
               (e.g. gitlab.com/groups/my-org/my-subgroup). Leave blank to sync
               all accessible projects.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="my-org/my-subgroup" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -71,12 +71,12 @@ export function GitlabConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Project IDs (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="123, 456" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated list of specific project IDs to sync.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="123, 456" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -149,12 +149,12 @@ export function GitlabConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Labels to Skip (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="wontfix, duplicate" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated list of labels to exclude.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="wontfix, duplicate" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}

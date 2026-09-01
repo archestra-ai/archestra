@@ -91,13 +91,13 @@ export function GithubConfigFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>GitHub API URL</FormLabel>
-              <FormControl>
-                <Input placeholder="https://api.github.com" {...field} />
-              </FormControl>
               <FormDescription>
                 Use https://api.github.com for GitHub.com, or
                 https://github.example.com/api/v3 for GitHub Enterprise.
               </FormDescription>
+              <FormControl>
+                <Input placeholder="https://api.github.com" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -112,12 +112,12 @@ export function GithubConfigFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Owner</FormLabel>
-              <FormControl>
-                <Input placeholder="my-org" {...field} />
-              </FormControl>
               <FormDescription>
                 GitHub organization or username that owns the repositories.
               </FormDescription>
+              <FormControl>
+                <Input placeholder="my-org" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -149,13 +149,13 @@ export function GithubConfigFields({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Repositories (optional)</FormLabel>
-                <FormControl>
-                  <Input placeholder="repo-a, repo-b" {...field} />
-                </FormControl>
                 <FormDescription>
                   Comma-separated list of repository names. Leave blank to sync
                   all repositories.
                 </FormDescription>
+                <FormControl>
+                  <Input placeholder="repo-a, repo-b" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -230,12 +230,12 @@ export function GithubConfigFields({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Labels to Skip (optional)</FormLabel>
-                <FormControl>
-                  <Input placeholder="wontfix, duplicate" {...field} />
-                </FormControl>
                 <FormDescription>
                   Comma-separated list of labels to exclude.
                 </FormDescription>
+                <FormControl>
+                  <Input placeholder="wontfix, duplicate" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -251,13 +251,13 @@ export function GithubConfigFields({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>File Types (optional)</FormLabel>
-                <FormControl>
-                  <Input placeholder=".md, .mdx, .yaml, .yml" {...field} />
-                </FormControl>
                 <FormDescription>
                   Comma-separated extensions to index when repository files are
                   enabled. Defaults to Markdown and YAML.
                 </FormDescription>
+                <FormControl>
+                  <Input placeholder=".md, .mdx, .yaml, .yml" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -269,14 +269,14 @@ export function GithubConfigFields({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Folders (optional)</FormLabel>
-                <FormControl>
-                  <Input placeholder="docs, packages/api/src" {...field} />
-                </FormControl>
                 <FormDescription>
                   Comma-separated folders to index, relative to the repository
                   root. Applies to every selected repository. Leave blank to
                   index the whole repository.
                 </FormDescription>
+                <FormControl>
+                  <Input placeholder="docs, packages/api/src" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}

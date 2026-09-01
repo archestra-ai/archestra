@@ -14,6 +14,7 @@ import { StandardFormDialog } from "@/components/standard-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -410,10 +411,10 @@ function EditProjectDialogForm({
             }}
             className="w-full"
           />
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             Preselected for new chats and scheduled tasks in this project.
             Anyone can still pick a different agent for an individual chat.
-          </p>
+          </FieldDescription>
         </div>
       )}
     </StandardFormDialog>

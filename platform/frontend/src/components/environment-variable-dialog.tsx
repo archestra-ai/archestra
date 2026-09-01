@@ -13,6 +13,7 @@ import {
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -335,9 +336,7 @@ export function EnvironmentVariableDialog({
               staticLabel={staticLabel}
             />
             {draft.scope === "installation" && (
-              <p className="text-xs text-muted-foreground">
-                {installationCalloutTitle}.
-              </p>
+              <FieldDescription>{installationCalloutTitle}.</FieldDescription>
             )}
           </div>
         </div>
@@ -404,7 +403,7 @@ function CredentialBindingEditor({
     <div className="space-y-2">
       <div className="space-y-1">
         <Label htmlFor="env-var-credential-binding">Secret source</Label>
-        <p className="text-xs text-muted-foreground">
+        <FieldDescription>
           {reserved
             ? "Uses a saved connection. Rotating it updates every Agent that uses it."
             : "Saved for this Agent only."}{" "}
@@ -414,7 +413,7 @@ function CredentialBindingEditor({
           >
             Manage saved connections
           </Link>
-        </p>
+        </FieldDescription>
       </div>
       <Select
         value={selection}
@@ -594,6 +593,12 @@ function StaticValueEditor({
   return (
     <div className="space-y-2">
       <Label htmlFor="env-var-value">Value</Label>
+      {hasStoredSecret && (
+        <FieldDescription>
+          A value is already stored. Leave blank to keep it, or enter a new
+          value to replace.
+        </FieldDescription>
+      )}
       <SecretInput
         id="env-var-value"
         masked={draft.type === "secret"}
@@ -605,12 +610,6 @@ function StaticValueEditor({
         aria-invalid={valueError ? true : undefined}
       />
       {valueError && <p className="text-xs text-destructive">{valueError}</p>}
-      {hasStoredSecret && (
-        <p className="text-xs text-muted-foreground">
-          A value is already stored. Leave blank to keep it, or enter a new
-          value to replace.
-        </p>
-      )}
     </div>
   );
 }

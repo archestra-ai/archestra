@@ -8,6 +8,7 @@ import { CopyButton } from "@/components/copy-button";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -453,15 +454,15 @@ function StepManifestWebhook({
       <StepCard stepNumber={stepNumber} title="Create Slack App">
         <div className="space-y-2">
           <Label htmlFor="manifest-app-name">App Name</Label>
+          <FieldDescription>
+            The name will be injected into the manifest automatically.
+          </FieldDescription>
           <Input
             id="manifest-app-name"
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
             placeholder={configuredAppName}
           />
-          <p className="text-xs text-muted-foreground">
-            The name will be injected into the manifest automatically.
-          </p>
         </div>
 
         <ol className="space-y-3">
@@ -572,15 +573,15 @@ function StepManifestSocket({
       <StepCard stepNumber={stepNumber} title="Create Slack App">
         <div className="space-y-2">
           <Label htmlFor="manifest-app-name-socket">App Name</Label>
+          <FieldDescription>
+            The name will be injected into the manifest automatically.
+          </FieldDescription>
           <Input
             id="manifest-app-name-socket"
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
             placeholder={configuredAppName}
           />
-          <p className="text-xs text-muted-foreground">
-            The name will be injected into the manifest automatically.
-          </p>
         </div>
 
         <ol className="space-y-3">

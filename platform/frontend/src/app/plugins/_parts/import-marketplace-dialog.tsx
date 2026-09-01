@@ -47,6 +47,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -648,10 +649,10 @@ export function ImportMarketplaceDialog({
                             />
                           )}
                         />
-                        <p className="text-xs text-muted-foreground">
+                        <FieldDescription>
                           All detected clients are selected by default. Hiding a
                           client removes its plugins from this batch.
-                        </p>
+                        </FieldDescription>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="marketplace-platforms">Platforms</Label>
@@ -661,10 +662,10 @@ export function ImportMarketplaceDialog({
                           onValueChange={setPlatforms}
                           options={availablePlatforms}
                         />
-                        <p className="text-xs text-muted-foreground">
+                        <FieldDescription>
                           Applies to every selected plugin. Only supported setup
                           platforms are available.
-                        </p>
+                        </FieldDescription>
                       </div>
                     </div>
                   )}
@@ -772,6 +773,10 @@ export function ImportMarketplaceDialog({
         <div className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="marketplace-repo-url">Repository URL</Label>
+            <FieldDescription>
+              A marketplace manifest lists every importable plugin in the
+              repository.
+            </FieldDescription>
             <Input
               id="marketplace-repo-url"
               value={repoUrl}
@@ -782,13 +787,14 @@ export function ImportMarketplaceDialog({
               data-1p-ignore
               data-lpignore="true"
             />
-            <p className="text-sm text-muted-foreground">
-              A marketplace manifest lists every importable plugin in the
-              repository.
-            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="marketplace-sync-interval">Keep in sync</Label>
+            <FieldDescription>
+              Checked against the repository on this schedule; new commits
+              become review candidates and never replace approved plugin bytes
+              automatically.
+            </FieldDescription>
             <Select
               value={syncInterval}
               onValueChange={(value) =>
@@ -804,11 +810,6 @@ export function ImportMarketplaceDialog({
                 <SelectItem value="1d">Once a day</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-sm text-muted-foreground">
-              Checked against the repository on this schedule; new commits
-              become review candidates and never replace approved plugin bytes
-              automatically.
-            </p>
           </div>
           <PluginScopeSelector
             scope={scope}
@@ -939,6 +940,10 @@ export function ImportMarketplaceDialog({
                     (optional)
                   </span>
                 </Label>
+                <FieldDescription>
+                  Discover and track a specific ref instead of the repository’s
+                  default branch.
+                </FieldDescription>
                 <Input
                   id="marketplace-ref"
                   value={ref}
@@ -948,10 +953,6 @@ export function ImportMarketplaceDialog({
                   data-1p-ignore
                   data-lpignore="true"
                 />
-                <p className="text-sm text-muted-foreground">
-                  Discover and track a specific ref instead of the repository’s
-                  default branch.
-                </p>
               </div>
             </CollapsibleContent>
           </Collapsible>

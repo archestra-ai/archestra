@@ -9,6 +9,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -110,6 +111,15 @@ function ResourceDefaultRow({
       <Label htmlFor={selectId}>
         {ENVIRONMENT_DEFAULTABLE_RESOURCE_LABELS[resource]}
       </Label>
+      {selected?.restricted ? (
+        <FieldDescription>
+          <Badge variant="secondary" className="mr-1.5">
+            Restricted
+          </Badge>
+          Creators without permission to deploy here fall back to{" "}
+          {defaultEnvironmentName}.
+        </FieldDescription>
+      ) : null}
       <Select
         value={value ?? DEFAULT_ENVIRONMENT_VALUE}
         disabled={disabled}
@@ -131,15 +141,6 @@ function ResourceDefaultRow({
           ))}
         </SelectContent>
       </Select>
-      {selected?.restricted ? (
-        <p className="text-xs text-muted-foreground">
-          <Badge variant="secondary" className="mr-1.5">
-            Restricted
-          </Badge>
-          Creators without permission to deploy here fall back to{" "}
-          {defaultEnvironmentName}.
-        </p>
-      ) : null}
     </div>
   );
 }

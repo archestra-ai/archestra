@@ -21,6 +21,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
+import { FieldDescription } from "@/components/ui/field-description";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -995,21 +996,21 @@ export function LlmProviderApiKeyForm({
           <span className="font-normal text-muted-foreground">(optional)</span>
         )}
       </Label>
-      <p className="text-xs text-muted-foreground">
+      <FieldDescription>
         {isBedrock
           ? `Filled in from the region above. Change it only for a VPC/PrivateLink endpoint or a ${providerLabel}-compatible gateway.`
           : isVllm
             ? "The server's OpenAI-compatible API. Every model it lists is added."
             : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
-      </p>
+      </FieldDescription>
       {isVllm && (
-        <p className="text-xs text-muted-foreground">
+        <FieldDescription>
           One URL per server. If you run more than one, add each as its own key
           — every model is routed to the server that hosts it.
-        </p>
+        </FieldDescription>
       )}
       {isSelfHostedProvider(provider) && (
-        <p className="text-xs text-muted-foreground">
+        <FieldDescription>
           If this app runs in Docker, <code>localhost</code> points at the
           container, not your host machine. Use{" "}
           <code>host.docker.internal</code> instead
@@ -1020,7 +1021,7 @@ export function LlmProviderApiKeyForm({
             </>
           )}
           .
-        </p>
+        </FieldDescription>
       )}
       <Input
         id="llm-provider-api-key-base-url"
@@ -1399,9 +1400,7 @@ export function LlmProviderApiKeyForm({
                     )}
                   </Label>
                   {providerBlurb && (
-                    <p className="text-xs text-muted-foreground">
-                      {providerBlurb}
-                    </p>
+                    <FieldDescription>{providerBlurb}</FieldDescription>
                   )}
                   <div className="relative">
                     <SecretInput
@@ -1424,7 +1423,7 @@ export function LlmProviderApiKeyForm({
                     )}
                   </div>
                   {showConsoleLink && (
-                    <p className="text-xs text-muted-foreground">
+                    <FieldDescription>
                       Get your API key from{" "}
                       <Link
                         href={providerConfig.consoleUrl}
@@ -1434,7 +1433,7 @@ export function LlmProviderApiKeyForm({
                       >
                         {providerConfig.consoleName}
                       </Link>
-                    </p>
+                    </FieldDescription>
                   )}
                 </>
               ))}
@@ -1543,11 +1542,11 @@ export function LlmProviderApiKeyForm({
         {!isSubscriptionFlow && isBedrock && (
           <div className="space-y-2">
             <Label htmlFor="llm-provider-api-key-bedrock-region">Region</Label>
-            <p className="text-xs text-muted-foreground">
+            <FieldDescription>
               The AWS region to send {providerLabel} requests to. Models are
               enabled per region, so pick the one where your models are
               available.
-            </p>
+            </FieldDescription>
             <Select
               value={bedrockRegion}
               onValueChange={(region) =>
@@ -1605,7 +1604,7 @@ export function LlmProviderApiKeyForm({
                 <Label htmlFor="llm-provider-api-key-is-primary">
                   Primary key
                 </Label>
-                <p className="text-xs text-muted-foreground">
+                <FieldDescription>
                   <span>
                     {existingPrimaryKey
                       ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope.`
@@ -1619,7 +1618,7 @@ export function LlmProviderApiKeyForm({
                     Chats and agents without a key of their own fall back to it;
                     with no primary set, the oldest key is used.
                   </span>
-                </p>
+                </FieldDescription>
               </div>
               <Switch
                 id="llm-provider-api-key-is-primary"
@@ -1647,10 +1646,10 @@ export function LlmProviderApiKeyForm({
                   (optional)
                 </span>
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <FieldDescription>
                 Runtime endpoint for chat and embeddings when it differs from
                 the Base URL used for Azure deployment discovery.
-              </p>
+              </FieldDescription>
               <Input
                 id="llm-provider-api-key-inference-base-url"
                 type="url"
@@ -1688,10 +1687,10 @@ export function LlmProviderApiKeyForm({
                 (optional)
               </span>
             </Label>
-            <p className="text-xs text-muted-foreground">
+            <FieldDescription>
               Sent on every request to the provider. Useful for gateways that
               require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
-            </p>
+            </FieldDescription>
             {extraHeadersFieldArray.fields.length > 0 && (
               <div className="space-y-2">
                 {extraHeadersFieldArray.fields.map((field, index) => (

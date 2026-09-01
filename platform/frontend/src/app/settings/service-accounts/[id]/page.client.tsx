@@ -42,6 +42,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -725,14 +726,14 @@ function CreateTokenDialog({
         <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="service-account-token-name">Display name</Label>
+            <FieldDescription>
+              Name to easily identify the key.
+            </FieldDescription>
             <Input
               id="service-account-token-name"
               placeholder="Deployment key"
               {...form.register("name", { required: true })}
             />
-            <p className="text-xs text-muted-foreground">
-              Name to easily identify the key.
-            </p>
           </div>
           <ExpirationDateTimeField
             value={form.watch("expiresAt")}
@@ -782,10 +783,10 @@ function CreatedTokenDialog({
       <DialogBody className="space-y-4">
         <div className="space-y-2">
           <Label>API key</Label>
-          <p className="text-sm text-muted-foreground">
+          <FieldDescription>
             Copy this key now. It will not be shown again after you close this
             dialog.
-          </p>
+          </FieldDescription>
           <CopyableCode
             value={token ?? ""}
             variant="primary"

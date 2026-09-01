@@ -38,6 +38,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -577,14 +578,14 @@ export default function ServiceAccountsSettingsPage() {
           <DialogBody className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="service-account-name">Display name</Label>
+              <FieldDescription>
+                The display name for this service account.
+              </FieldDescription>
               <Input
                 id="service-account-name"
                 {...form.register("name", { required: true })}
                 placeholder="Automation service account"
               />
-              <p className="text-xs text-muted-foreground">
-                The display name for this service account.
-              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="service-account-role">Role</Label>
@@ -595,9 +596,9 @@ export default function ServiceAccountsSettingsPage() {
                 placeholder="Select a role"
                 className="w-full"
               />
-              <p className="text-xs text-muted-foreground">
+              <FieldDescription>
                 The role this service account will use for API requests.
-              </p>
+              </FieldDescription>
             </div>
           </DialogBody>
           <DialogStickyFooter>

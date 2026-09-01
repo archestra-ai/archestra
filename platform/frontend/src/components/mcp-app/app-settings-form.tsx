@@ -15,6 +15,7 @@ import {
 } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -512,6 +513,11 @@ export function AppSettingsForm({
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="app-settings-open-mode">Opens in</Label>
+              {selectedOpenModeDescription ? (
+                <FieldDescription>
+                  {selectedOpenModeDescription}
+                </FieldDescription>
+              ) : null}
               <Select
                 value={openMode}
                 onValueChange={(next) =>
@@ -533,11 +539,6 @@ export function AppSettingsForm({
                   ))}
                 </SelectContent>
               </Select>
-              {selectedOpenModeDescription ? (
-                <p className="text-xs text-muted-foreground">
-                  {selectedOpenModeDescription}
-                </p>
-              ) : null}
             </div>
 
             <ProfileLabels
@@ -592,6 +593,9 @@ export function AppSettingsForm({
 
           <div className="space-y-2">
             <Label>App status</Label>
+            {selectedEnabledDescription ? (
+              <FieldDescription>{selectedEnabledDescription}</FieldDescription>
+            ) : null}
             <Select
               value={enabledStatus}
               onValueChange={(next) =>
@@ -613,15 +617,13 @@ export function AppSettingsForm({
                 ))}
               </SelectContent>
             </Select>
-            {selectedEnabledDescription ? (
-              <p className="text-xs text-muted-foreground">
-                {selectedEnabledDescription}
-              </p>
-            ) : null}
           </div>
 
           <div className="space-y-2">
             <Label>Modification</Label>
+            {selectedLockedDescription ? (
+              <FieldDescription>{selectedLockedDescription}</FieldDescription>
+            ) : null}
             <Select
               value={lockedStatus}
               onValueChange={(next) =>
@@ -643,11 +645,6 @@ export function AppSettingsForm({
                 ))}
               </SelectContent>
             </Select>
-            {selectedLockedDescription ? (
-              <p className="text-xs text-muted-foreground">
-                {selectedLockedDescription}
-              </p>
-            ) : null}
           </div>
         </VisibilitySelector>
 

@@ -11,6 +11,7 @@ import {
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -507,7 +508,7 @@ function AppearanceControlRow({
     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_20rem] sm:items-start sm:gap-8">
       <div className="space-y-1">
         <Label htmlFor={id}>{label}</Label>
-        <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+        <FieldDescription className="leading-5">{description}</FieldDescription>
       </div>
       <div className="flex min-w-0 items-start">{children}</div>
     </div>

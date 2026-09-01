@@ -25,6 +25,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -377,11 +378,11 @@ export function DefaultUserLimitsSection() {
                   takenValues={takenScopes}
                 />
               )}
-              <p className="text-xs text-muted-foreground">
+              <FieldDescription>
                 Leave as “{GLOBAL_ENVIRONMENT_SCOPE_LABEL}” to set the
                 organization-wide default, or pick an environment to override it
                 there.
-              </p>
+              </FieldDescription>
             </div>
           </DialogBody>
 

@@ -4,6 +4,7 @@ import { useId } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import { DeploymentEnvironmentVariablesEditor } from "@/components/deployment-environment-variables-editor";
 import type { EnvVarDraft } from "@/components/environment-variable-dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -91,11 +92,11 @@ export function AgentBackgroundExecutionFields({
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <Label htmlFor={enabledId}>Background execution</Label>
-          <p className="text-sm text-muted-foreground">
+          <FieldDescription>
             Run durable tasks in an isolated deployment. Selecting this Agent in
             Chat opens an interactive execution instead of a foreground
             conversation.
-          </p>
+          </FieldDescription>
         </div>
         <Switch
           id={enabledId}
@@ -198,6 +199,10 @@ export function AgentBackgroundExecutionFields({
                 <Label htmlFor="background-execution-inference-protocol">
                   Inference API
                 </Label>
+                <FieldDescription>
+                  Choose the API protocol the container&apos;s Agent client
+                  expects. Every option stays behind the {appName} LLM proxy.
+                </FieldDescription>
                 <Select
                   value={config.inferenceProtocol}
                   onValueChange={(
@@ -225,13 +230,13 @@ export function AgentBackgroundExecutionFields({
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Choose the API protocol the container&apos;s Agent client
-                  expects. Every option stays behind the {appName} LLM proxy.
-                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="background-execution-steering">Steering</Label>
+                <FieldDescription>
+                  Turn boundary delivers follow-up instructions between Agent
+                  turns. Terminal input types directly into an interactive CLI.
+                </FieldDescription>
                 <Select
                   value={config.steerMode}
                   onValueChange={(steerMode: "pipe" | "tmux_keys") =>
@@ -249,10 +254,6 @@ export function AgentBackgroundExecutionFields({
                     <SelectItem value="tmux_keys">Terminal input</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Turn boundary delivers follow-up instructions between Agent
-                  turns. Terminal input types directly into an interactive CLI.
-                </p>
               </div>
               <NumberField
                 id="background-execution-idle-timeout"
@@ -331,11 +332,11 @@ export function AgentBackgroundExecutionFields({
               <Label htmlFor="background-execution-privileged">
                 Privileged mode
               </Label>
-              <p className="text-xs text-muted-foreground">
+              <FieldDescription>
                 Gives the container elevated access to its host. Enable it only
                 for workloads that require host-level capabilities. Only Agent
                 administrators can turn it on.
-              </p>
+              </FieldDescription>
             </div>
             <Switch
               id="background-execution-privileged"
@@ -456,6 +457,7 @@ function NumberField({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
+      <FieldDescription>{description}</FieldDescription>
       <Input
         id={id}
         type="number"
@@ -470,7 +472,6 @@ function NumberField({
         }}
         placeholder="Installation default"
       />
-      <p className="text-xs text-muted-foreground">{description}</p>
     </div>
   );
 }

@@ -3,7 +3,7 @@ title: Webhook (A2A)
 category: Agents
 order: 10
 description: Invoke agents over HTTP using the A2A protocol
-lastUpdated: 2026-08-29
+lastUpdated: 2026-09-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -103,7 +103,7 @@ JSON-RPC method `SendMessage` runs a message against the agent.
 
 Field notes:
 
-- `messageId` — required, must be unique per message (UUIDs recommended).
+- `messageId` — optional UUID, unique per message. Omit it and the server generates one for you.
 - `role` — `ROLE_USER` for caller, `ROLE_AGENT` for the agent's reply.
 - `parts[].text` — message body.
 - `contextId` — omit on the first message; copy from the response for follow-up turns.

@@ -681,6 +681,40 @@ describe("McpServerRuntimeManager ↔ K8sDeployment hibernation seam", () => {
     expect(deployment.statusSummary.state).toBe("running");
   });
 
+  /**
+   * Race-freedom coverage matrix — every entry path that can move a
+   * deployment through the hibernation states, raced against the others.
+   * "Entry path" means what actually reaches the state machine; callers that
+   * merely wrap one of these inherit its coverage.
+   *
+   * Raced HERE (real manager + real K8sDeployment + real transition-lease
+   * rows + a CAS-enforcing fake API server):
+   *   - sweep × sweep (two replicas) — one scale-to-zero lands
+   *   - sweep × operator write — hibernate aborts cleanly
+   *   - demand (trackActiveUse + ensureAwake, the gateway funnel's shape,
+   *     also reinstall's and the restart route's) × armed sweep
+   *   - demand × the hibernate's still-held transition gate
+   *   - demand × demand (two replicas) — one scale-up + one annotation drop
+   *   - sweep × a mid-wake deployment — never claimed
+   *   - passive refresh (refreshAllStates, the state watch's worker) ×
+   *     demand wake — hibernated and finish-wake shapes
+   *
+   * Pinned elsewhere, cited rather than duplicated:
+   *   - hard reset × demand wake, × queued wake, × concurrent resets —
+   *     routes/mcp-server.hard-reset.test.ts
+   *   - external/foreign replica controllers × sweep —
+   *     hibernation-foreign-scaler.ee.test.ts
+   *   - cross-replica cache divergence and wake-vs-re-zero —
+   *     hibernation-multi-replica.ee.test.ts
+   *   - passive discovery paths that must never wake —
+   *     manager.dormancy.test.ts
+   *   - the action-transition table itself —
+   *     hibernation-state-machine{,.ee}.test.ts
+   *   - the caller-facing funnel's retry-within-budget contract —
+   *     clients/mcp-client.test.ts
+   *   - real-cluster transitions end to end, including "no illegal
+   *     transition was ever refused" — e2e mcp-hibernation*.spec.ts
+   */
   describe("cross-replica concurrency (resourceVersion compare-and-swap)", () => {
     /** One idle, running install ready for a sweep, in its own manager. */
     async function makeIdleCandidate(
@@ -975,6 +1009,90 @@ describe("McpServerRuntimeManager ↔ K8sDeployment hibernation seam", () => {
       ]);
       expect(cluster.annotations).toEqual({});
       expect(cluster.replicas).toBe(2);
+    });
+
+    test("the passive refresh contributes no writes while a wake runs beside it", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      // The status refresh may FINISH a wake it observes, but it must never
+      // start one: on a hibernated deployment it is read-only, whatever else
+      // is happening. Raced against a demand wake on another replica, the API
+      // server must see exactly the wake's own two writes.
+      const cluster = new FakeK8sCluster({
+        replicas: 0,
+        annotations: {
+          [MCP_HIBERNATED_ANNOTATION]: "true",
+          [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: "1",
+        },
+      });
+      const fixtures = {
+        makeOrganization,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      };
+      const refresher = await makeIdleCandidate(cluster, fixtures);
+      const waker = await makeIdleCandidate(
+        cluster,
+        fixtures,
+        refresher.mcpServer.id,
+      );
+
+      await expect(
+        Promise.all([
+          refresher.manager.refreshAllStates(),
+          waker.manager.ensureAwake(refresher.mcpServer.id),
+        ]),
+      ).resolves.toBeDefined();
+
+      expect(cluster.patchedIntents).toEqual([
+        { spec: { replicas: 1 } },
+        COMPLETE_WAKE_PATCH_BODY,
+      ]);
+      expect(cluster.annotations).toEqual({});
+      expect(cluster.replicas).toBe(1);
+    });
+
+    test("finish-wake claimed by the refresh and a demand wake at once lands exactly one annotation drop", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      // Ready pod, annotations still on: both the self-heal refresh and a
+      // demand wake want to write the same completeWake. The cluster CAS
+      // must let exactly one land; the loser converges without erroring and
+      // without a second write.
+      const cluster = new FakeK8sCluster({
+        replicas: 1,
+        annotations: {
+          [MCP_HIBERNATED_ANNOTATION]: "true",
+          [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: "1",
+        },
+      });
+      const fixtures = {
+        makeOrganization,
+        makeInternalMcpCatalog,
+        makeMcpServer,
+      };
+      const refresher = await makeIdleCandidate(cluster, fixtures);
+      const waker = await makeIdleCandidate(
+        cluster,
+        fixtures,
+        refresher.mcpServer.id,
+      );
+
+      await expect(
+        Promise.all([
+          refresher.manager.refreshAllStates(),
+          waker.manager.ensureAwake(refresher.mcpServer.id),
+        ]),
+      ).resolves.toBeDefined();
+
+      expect(cluster.patchedIntents).toEqual([COMPLETE_WAKE_PATCH_BODY]);
+      expect(cluster.annotations).toEqual({});
+      expect(cluster.replicas).toBe(1);
+      expect(waker.deployment.statusSummary.state).toBe("running");
     });
 
     test("the sweeper never claims a deployment that is mid-wake", async ({

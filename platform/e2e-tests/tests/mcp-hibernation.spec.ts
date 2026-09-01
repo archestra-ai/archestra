@@ -71,6 +71,18 @@ const HIBERNATION_WORDING_PATTERN = /hibernat|waking/i;
 const WAKE_RACE_WORDING_PATTERN =
   /superseded|concurrent transition|did not finish the deployment's lifecycle transition/i;
 
+/**
+ * The state machine refuses (and logs) any lifecycle move its transition
+ * table forbids rather than throwing, so a path acting from a state it
+ * should not be in fails silently and leaves only this record behind. The
+ * closing test sweeps the platform's logs for it — same pattern as the
+ * recovery spec.
+ */
+const ILLEGAL_TRANSITION_LOG_MESSAGE =
+  "Refused an illegal MCP hibernation state transition";
+const PLATFORM_POD_LABEL_SELECTOR = "app.kubernetes.io/name=archestra-platform";
+const PLATFORM_CONTAINER_NAME = "archestra-platform";
+
 /** Callers fired simultaneously at one sleeping deployment. */
 const CONCURRENT_WAKE_CALLERS = 4;
 
@@ -172,8 +184,9 @@ type InstallRow = {
  * knocking throughout it). Until then the veto is what keeps the armed
  * sweeper out of the other tests' way, which makes it load-bearing rather
  * than decorative. Paying for an idle window in wall-clock time is also why
- * those tests carry `@slow-window`, and why they are last: nothing here may
- * depend on them.
+ * those tests carry `@slow-window`, and why they are last — followed only by
+ * the closing platform-log sweep, which asserts that nothing in this file
+ * ever forced an illegal transition through the state machine.
  *
  * What runs end to end against a real API server and kubelet:
  *   sweepIdleDeployments -> hibernate (replicas 0 + both annotations)
@@ -220,6 +233,8 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
    * value is changed, so `afterAll` can put it back on every path.
    */
   let organizationHibernationWasEnabled: boolean | undefined;
+  /** When this spec began, for the closing platform-log sweep's window. */
+  const specStartedAtMs = Date.now();
 
   const listDeploymentPods = async (): Promise<k8s.V1Pod[]> => {
     const pods = await coreApi.listNamespacedPod({
@@ -1013,6 +1028,18 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
     expect(halfWoken.replicas).toBe(preHibernationReplicas);
     expect(halfWoken.generation).toBe((asleep.generation ?? 0) + 1);
 
+    // The first knock lands squarely in the WAKING state. Its answer must be
+    // actionable — the real output, or the still-starting retry — never a
+    // disowning "not running" and never an internal race.
+    const firstOutcome = await callToolOutcome(request);
+    expect(firstOutcome.text).not.toMatch(NOT_RUNNING_ERROR_PATTERN);
+    expect(firstOutcome.text).not.toMatch(WAKE_RACE_WORDING_PATTERN);
+    if (firstOutcome.isError) {
+      expect(firstOutcome.text).toMatch(HIBERNATION_WORDING_PATTERN);
+    } else {
+      expect(firstOutcome.text).toBe(baselineToolText);
+    }
+
     await callUntilServing(request);
 
     await expect
@@ -1032,6 +1059,62 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
     // replace the pod.
     expect((await readDeploymentFacts()).generation).toBe(
       (halfWoken.generation ?? 0) + 1,
+    );
+    expect(await newPodCreationsSince(podCreationsBefore)).toBe(1);
+  });
+
+  test("a call landing between readiness and the annotation drop completes the wake without a second scale", async ({
+    request,
+  }) => {
+    // The FINISH-WAKE state: replicas restored and the pod serving again,
+    // with both annotations still on the object — a wake frozen between its
+    // readiness and its annotation drop (also exactly what a completeWake
+    // whose process died leaves behind). A call landing here must be
+    // answered actionably and drive the deployment to running with at most
+    // the annotation-drop write — never a second scale, never a new pod.
+    test.setTimeout(360_000);
+    requireRecordedBaseline();
+
+    await putToSleepOutOfBand(preHibernationReplicas);
+    const podCreationsBefore = await podCreationEventUids();
+
+    await scaleOutOfBand(preHibernationReplicas);
+    await waitForDeploymentAvailable();
+    // The platform's own periodic refresh self-heals this exact shape, so by
+    // the time the pod is available it may have dropped the annotations
+    // already. Both are legal positions inside the same transition; record
+    // which one the call actually landed on.
+    const atCall = await readDeploymentFacts();
+    const caughtAnnotated = atCall.hibernated === "true";
+    expect(atCall.replicas).toBe(preHibernationReplicas);
+
+    const firstOutcome = await callToolOutcome(request);
+    expect(firstOutcome.text).not.toMatch(NOT_RUNNING_ERROR_PATTERN);
+    expect(firstOutcome.text).not.toMatch(WAKE_RACE_WORDING_PATTERN);
+    if (firstOutcome.isError) {
+      expect(firstOutcome.text).toMatch(HIBERNATION_WORDING_PATTERN);
+    } else {
+      expect(firstOutcome.text).toBe(baselineToolText);
+    }
+
+    await callUntilServing(request);
+    await expect
+      .poll(readHibernationShape, {
+        timeout: 60_000,
+        intervals: CLUSTER_POLL_INTERVALS,
+      })
+      .toEqual({
+        replicas: preHibernationReplicas,
+        hibernated: undefined,
+        preHibernationReplicas: undefined,
+      });
+    // Finishing costs exactly the annotation drop — one write when the call
+    // caught the annotated shape, none when the refresh had already healed
+    // it — and the pod the scale-up created is the only pod that ever
+    // existed. A second wake would show up as extra generations or a
+    // replacement pod.
+    expect((await readDeploymentFacts()).generation).toBe(
+      (atCall.generation ?? 0) + (caughtAnnotated ? 1 : 0),
     );
     expect(await newPodCreationsSince(podCreationsBefore)).toBe(1);
   });
@@ -1489,4 +1572,82 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
       }).catch(() => {});
     }
   });
+
+  test("no illegal lifecycle transition was refused for this deployment", async () => {
+    // Everything above drove this deployment through every in-transition
+    // state — injected sleeps, half-woken resumes, finish-wake completions,
+    // real-sweeper transitions with demand landing mid-flight. None of it
+    // may have had to punch through the state machine: a refusal means some
+    // path reasoned from a state it should not have been in.
+    const logs = await readPlatformLogs();
+    test.skip(
+      logs === null,
+      "platform logs are not observable from a test here: no readable pod matches " +
+        PLATFORM_POD_LABEL_SELECTOR,
+    );
+
+    // deploymentName appears in every refusal record and is unique to this
+    // spec's install, so specs running in parallel cannot poison the result.
+    const attributable = (logs ?? "")
+      .split("\n")
+      .filter((line) => line.includes(deploymentName));
+
+    // Positive control: the wakes and hibernates above log this deployment
+    // by name, so a window that never mentions it is not evidence about it —
+    // a truncated window or a hidden log level would otherwise read as
+    // health.
+    expect(
+      attributable.length,
+      `no platform log record in this window names ${deploymentName}, so the window is not evidence about it`,
+    ).toBeGreaterThan(0);
+
+    expect(
+      attributable.filter((line) =>
+        line.includes(ILLEGAL_TRANSITION_LOG_MESSAGE),
+      ),
+      `the platform refused an illegal hibernation transition for ${deploymentName}`,
+    ).toEqual([]);
+  });
+
+  /**
+   * The platform's own log stream for the window this spec has been running,
+   * or `null` when it cannot be observed from here (the platform does not
+   * run as a labelled pod in this cluster, or its log endpoint refused).
+   * `null` is deliberately distinct from `""`, so an unreadable stream can
+   * never be mistaken for evidence that no warning was produced.
+   */
+  async function readPlatformLogs(): Promise<string | null> {
+    const pods = await coreApi
+      .listPodForAllNamespaces({ labelSelector: PLATFORM_POD_LABEL_SELECTOR })
+      .catch(() => null);
+    if (!pods || pods.items.length === 0) return null;
+
+    const sinceSeconds = Math.ceil((Date.now() - specStartedAtMs) / 1_000) + 60;
+    const chunks: string[] = [];
+    for (const pod of pods.items) {
+      const name = pod.metadata?.name;
+      const namespace = pod.metadata?.namespace;
+      if (!name || !namespace) continue;
+      const log = await coreApi
+        .readNamespacedPodLog({
+          name,
+          namespace,
+          container: PLATFORM_CONTAINER_NAME,
+          sinceSeconds,
+        })
+        // A multi-container pod rejects a read with no container named; a pod
+        // whose container is named otherwise rejects this one. Try both before
+        // concluding the stream is unreadable.
+        .catch(() =>
+          coreApi
+            .readNamespacedPodLog({ name, namespace, sinceSeconds })
+            .catch(() => null),
+        );
+      if (log != null) chunks.push(log);
+    }
+
+    if (chunks.length === 0) return null;
+    const combined = chunks.join("\n");
+    return combined.trim().length === 0 ? null : combined;
+  }
 });

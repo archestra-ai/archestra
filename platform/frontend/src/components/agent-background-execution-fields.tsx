@@ -97,6 +97,12 @@ export function AgentBackgroundExecutionFields({
             Chat opens an interactive execution instead of a foreground
             conversation.
           </FieldDescription>
+          {runtimeEnabled === false && value === null && (
+            <FieldDescription>
+              Your deployment administrator must enable Agent background
+              execution before you can configure it.
+            </FieldDescription>
+          )}
         </div>
         <Switch
           id={enabledId}
@@ -107,13 +113,6 @@ export function AgentBackgroundExecutionFields({
           }
         />
       </div>
-
-      {runtimeEnabled === false && value === null && (
-        <p className="text-xs text-muted-foreground">
-          Your deployment administrator must enable Agent background execution
-          before you can configure it.
-        </p>
-      )}
 
       {value && (
         <div className="space-y-6 rounded-md border p-4">

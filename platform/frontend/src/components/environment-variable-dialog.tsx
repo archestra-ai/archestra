@@ -283,6 +283,15 @@ export function EnvironmentVariableDialog({
 
         <div className="space-y-2">
           <Label htmlFor="env-var-description">Description</Label>
+          {(draft.scope === "installation" ||
+            (allowRequiredStaticSecret &&
+              draft.scope === "static" &&
+              draft.type === "secret")) && (
+            <FieldDescription>
+              Shown as helper text when &quot;{trimmedKey || "KEY"}&quot; is
+              requested.
+            </FieldDescription>
+          )}
           <Textarea
             id="env-var-description"
             value={draft.description}
@@ -290,15 +299,6 @@ export function EnvironmentVariableDialog({
             placeholder="What this variable is used for"
             rows={2}
           />
-          {(draft.scope === "installation" ||
-            (allowRequiredStaticSecret &&
-              draft.scope === "static" &&
-              draft.type === "secret")) && (
-            <p className="text-xs text-muted-foreground">
-              Shown as helper text when &quot;{trimmedKey || "KEY"}&quot; is
-              requested.
-            </p>
-          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

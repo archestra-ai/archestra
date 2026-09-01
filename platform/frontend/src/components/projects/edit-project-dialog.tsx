@@ -336,6 +336,21 @@ function EditProjectDialogForm({
 
       <VisibilitySelector
         heading="Sharing"
+        description={
+          <>
+            <span>
+              People you share with can read every chat, start their own, and
+              work with the project&apos;s files through chats.
+            </span>
+            {shareLocked ? (
+              <span>
+                {" "}
+                This project is shared with the entire organization; changing
+                its sharing requires the org-wide sharing permission.
+              </span>
+            ) : null}
+          </>
+        }
         value={visibility}
         options={visibilityOptions}
         onValueChange={setVisibility}
@@ -377,17 +392,6 @@ function EditProjectDialogForm({
           </div>
         )}
       </VisibilitySelector>
-
-      {shareLocked && (
-        <p className="text-xs text-muted-foreground">
-          This project is shared with the entire organization. Changing its
-          sharing requires the org-wide sharing permission.
-        </p>
-      )}
-      <p className="text-xs text-muted-foreground">
-        People you share with can read every chat, start their own, and work
-        with the project's files through chats.
-      </p>
 
       {canReadAgents === true && (
         <div className="space-y-1.5">

@@ -2,7 +2,7 @@ import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
-import { ProjectModel, ProjectShareModel } from "@/models";
+import { ProjectLabelModel, ProjectModel, ProjectShareModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
@@ -134,6 +134,45 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
     });
     expect(res.statusCode).toBe(409);
     expect((await ProjectModel.findById(project.id))?.name).toBe("free");
+  });
+
+  test("replaces, preserves, and clears labels", async () => {
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "labelled",
+      description: null,
+      labels: [{ key: "stage", value: "draft" }],
+    });
+
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/projects/${project.id}`,
+          payload: { labels: [{ key: "stage", value: "ready" }] },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await ProjectLabelModel.getLabelsFor(project.id)).toMatchObject([
+      { key: "stage", value: "ready" },
+    ]);
+
+    await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { description: "labels stay" },
+    });
+    expect(await ProjectLabelModel.getLabelsFor(project.id)).toMatchObject([
+      { key: "stage", value: "ready" },
+    ]);
+
+    await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { labels: [] },
+    });
+    expect(await ProjectLabelModel.getLabelsFor(project.id)).toEqual([]);
   });
 
   test("non-owners get 404 on every mutation, even with project read access", async ({

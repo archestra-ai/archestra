@@ -10,7 +10,7 @@ import logger from "@/logging";
 import { ConversationModel, ProjectModel, TeamModel } from "@/models";
 import { projectService } from "@/services/project";
 import type { ProjectListItem } from "@/types";
-import { ApiError } from "@/types";
+import { ApiError, LabelWithDetailsSchema } from "@/types";
 import {
   catchError,
   defineArchestraTool,
@@ -63,6 +63,9 @@ const ProjectSummarySchema = z.object({
     .enum(["owner", "shared", "admin"])
     .describe("The caller's relationship to the project."),
   owner_name: z.string().nullable().describe("Display name of the owner."),
+  labels: z
+    .array(LabelWithDetailsSchema)
+    .describe("Key/value labels assigned to the project."),
   conversation_count: z
     .number()
     .int()
@@ -123,6 +126,10 @@ const registry = defineArchestraTools([
           .string()
           .optional()
           .describe("Optional project description."),
+        labels: z
+          .array(LabelWithDetailsSchema)
+          .optional()
+          .describe("Optional key/value labels for the project."),
       })
       .strict(),
     outputSchema: CreateProjectFromConversationOutputSchema,
@@ -153,6 +160,7 @@ const registry = defineArchestraTools([
             conversationId: context.conversationId,
             name: args.name ?? null,
             description: args.description ?? null,
+            labels: args.labels,
           });
         return structuredSuccessResult(
           {
@@ -469,6 +477,7 @@ function toProjectSummary(project: ProjectListItem) {
     visibility: project.visibility,
     viewer_role: project.viewerRole,
     owner_name: project.ownerName,
+    labels: project.labels,
     conversation_count: project.conversationCount,
     created_at: project.createdAt.toISOString(),
   };

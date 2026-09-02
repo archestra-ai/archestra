@@ -170,6 +170,21 @@ describe("project routes — audit trail", () => {
     expect(rows[0].after).toMatchObject({ defaultAgentId: agent.id });
   });
 
+  test("a label-only edit produces a project.updated diff", async () => {
+    const project = await makeProject("audited-labels");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { labels: [{ key: "stage", value: "ready" }] },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const rows = await auditRowsFor(project.id, "project.updated");
+    expect(rows[0].before).toMatchObject({ labels: [] });
+    expect(rows[0].after).toMatchObject({ labels: ["stage:ready"] });
+  });
+
   test("pinning is NOT audited — it is per-user state, not a project change", async () => {
     const project = await makeProject("audited-pin");
 

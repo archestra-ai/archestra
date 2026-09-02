@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-08-23
+lastUpdated: 2026-09-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,6 +19,10 @@ Start a project from the Projects page, or turn an existing chat into one with *
 Use **Change project** to move a chat into an existing project. Use **Remove from project** to make it a regular chat again.
 
 ![Chat sidebar menu with the Create project action](/docs/automated_screenshots/platform-projects_create-from-chat.webp)
+
+## Labels
+
+Labels are key-value tags that organize projects — `stage: review`, for example. Add them under **Advanced** when you create or edit a project. The Projects page shows labels beside each name and lets you filter by them.
 
 ## Files
 

@@ -30,11 +30,15 @@ describe("POST /api/projects", () => {
     await app.close();
   });
 
-  test("creates the project", async () => {
+  test("creates the project with labels", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/projects",
-      payload: { name: "research", description: "things" },
+      payload: {
+        name: "research",
+        description: "things",
+        labels: [{ key: "stage", value: "draft" }],
+      },
     });
     expect(response.statusCode).toBe(200);
     const body = response.json<{
@@ -47,6 +51,7 @@ describe("POST /api/projects", () => {
       viewerRole: "owner",
       conversationCount: 0,
       visibility: null,
+      labels: [{ key: "stage", value: "draft" }],
     });
   });
 

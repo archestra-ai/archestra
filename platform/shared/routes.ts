@@ -822,6 +822,8 @@ export const RouteId = {
   CreateProject: "createProject",
   CreateProjectFromConversation: "createProjectFromConversation",
   GetProjects: "getProjects",
+  GetProjectLabelValues: "projectLabelValues",
+  GetProjectLabelKeys: "projectLabelKeys",
   GetProject: "getProject",
   UpdateProject: "updateProject",
   SetProjectShare: "setProjectShare",

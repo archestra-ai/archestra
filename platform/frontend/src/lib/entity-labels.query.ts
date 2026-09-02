@@ -66,6 +66,15 @@ export function createEntityLabelQueries(config: {
 // =============================================================================
 
 export const {
+  useLabelKeys: useProjectLabelKeys,
+  useLabelValues: useProjectLabelValues,
+} = createEntityLabelQueries({
+  queryKey: "projects",
+  keysFn: archestraApiSdk.projectLabelKeys,
+  valuesFn: archestraApiSdk.projectLabelValues,
+});
+
+export const {
   useLabelKeys: useSkillLabelKeys,
   useLabelValues: useSkillLabelValues,
 } = createEntityLabelQueries({

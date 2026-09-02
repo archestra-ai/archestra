@@ -175,6 +175,25 @@ export const PluginLabelModel = createEntityLabelModel({
   },
 });
 
+export const ProjectLabelModel = createEntityLabelModel({
+  junction: {
+    table: schema.projectLabelsTable,
+    keyId: schema.projectLabelsTable.keyId,
+    valueId: schema.projectLabelsTable.valueId,
+  },
+  ownerIdColumn: schema.projectLabelsTable.projectId,
+  ownerIdKey: "projectId",
+  owner: {
+    table: schema.projectsTable,
+    idColumn: schema.projectsTable.id,
+    organizationScope: (organizationId) =>
+      and(
+        eq(schema.projectsTable.organizationId, organizationId),
+        isNull(schema.projectsTable.deletedAt),
+      ),
+  },
+});
+
 export const ServiceAccountLabelModel = createEntityLabelModel({
   junction: {
     table: schema.serviceAccountLabelsTable,

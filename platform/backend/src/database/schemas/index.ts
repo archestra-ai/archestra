@@ -190,6 +190,7 @@ export {
   projectShareTeamsTable,
   projectShareUsersTable,
 } from "./project";
+export { default as projectLabelsTable } from "./project-label";
 export { default as projectPinsTable } from "./project-pin";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";

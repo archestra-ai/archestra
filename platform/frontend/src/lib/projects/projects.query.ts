@@ -65,6 +65,7 @@ export function useProjects(
   const authorIds = options?.authorIds;
   const excludeAuthorIds = options?.excludeAuthorIds;
   const status = options?.status;
+  const labels = options?.labels;
   const toastOnError = options?.toastOnError;
   // The endpoint requires project:read; skip the request for users whose role
   // lacks it (e.g. the sidebar mounts this for everyone) instead of 403ing.
@@ -80,12 +81,21 @@ export function useProjects(
         authorIds: authorIds ?? null,
         excludeAuthorIds: excludeAuthorIds ?? null,
         status: status ?? null,
+        labels: labels ?? null,
       },
     ],
     enabled: (options?.enabled ?? true) && !!canReadProjects,
     queryFn: async () => {
       const { data, error } = await getProjects({
-        query: { scope, search, teamIds, authorIds, excludeAuthorIds, status },
+        query: {
+          scope,
+          search,
+          teamIds,
+          authorIds,
+          excludeAuthorIds,
+          status,
+          labels,
+        },
       });
       throwOnApiError(error, { toastOnError });
       return data;

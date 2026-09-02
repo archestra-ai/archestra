@@ -7,6 +7,7 @@ import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 const mockRouterPush = vi.fn();
+const mockCreateMutateAsync = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
 const mockSetShareMutateAsync = vi.fn();
@@ -41,6 +42,7 @@ type ProjectFixture = {
   pinnedAt: string | null;
   createdAt: string;
   deletedAt: string | null;
+  labels: Array<{ key: string; value: string }>;
 };
 
 vi.mock("next/navigation");
@@ -74,6 +76,10 @@ vi.mock("@/components/resource-scope-filter", () => ({
     excludeOtherPersonal: true,
     hasActiveScopeFilters: false,
   }),
+}));
+
+vi.mock("@/components/entity-label-filter", () => ({
+  EntityLabelFilter: () => <div>labels filter</div>,
 }));
 
 vi.mock("next/link", () => ({
@@ -282,7 +288,10 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mockUseProjects(filters);
     return { data: mockProjects, isPending: false };
   },
-  useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateProject: () => ({
+    mutateAsync: mockCreateMutateAsync,
+    isPending: false,
+  }),
   useDeleteProject: () => ({
     mutateAsync: mockDeleteMutateAsync,
     isPending: false,
@@ -370,7 +379,9 @@ describe("ProjectsPageClient", () => {
       shareUserIds: null,
       viewerRole: "owner",
       defaultAgent: null,
+      labels: [],
     };
+    mockCreateMutateAsync.mockResolvedValue({ id: "created-project" });
     window.localStorage.clear();
   });
 
@@ -430,6 +441,54 @@ describe("ProjectsPageClient", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
+  });
+
+  it("creates a project with a label from Advanced", async () => {
+    render(<ProjectsPageClient />);
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+    fireEvent.change(screen.getByLabelText("Name *"), {
+      target: { value: "Labelled project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.change(screen.getByLabelText("Label key"), {
+      target: { value: "stage" },
+    });
+    fireEvent.change(screen.getByLabelText("Label value"), {
+      target: { value: "draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockCreateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Labelled project",
+          labels: [{ key: "stage", value: "draft" }],
+        }),
+      ),
+    );
+  });
+
+  it("edits project labels from Advanced", async () => {
+    mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
+    render(<ProjectsPageClient />);
+    fireEvent.click(screen.getByText("Edit details"));
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.change(screen.getByLabelText("Label key"), {
+      target: { value: "stage" },
+    });
+    fireEvent.change(screen.getByLabelText("Label value"), {
+      target: { value: "ready" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "owner",
+          labels: [{ key: "stage", value: "ready" }],
+        }),
+      ),
+    );
   });
 
   it("hides the default-agent field from an editor without agent:read", () => {
@@ -783,6 +842,7 @@ function makeProject(overrides: Partial<ProjectFixture>): ProjectFixture {
     pinnedAt: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     deletedAt: null,
+    labels: [],
     ...overrides,
   };
 }

@@ -43,10 +43,15 @@ vi.mock("@/components/agent-execution-logs", () => ({
   AgentExecutionLogs: () => <div>Retained execution output</div>,
 }));
 
-// The share dialog is always mounted (closed) in the header; it owns its own
-// data hooks and tests, so stub it out to keep this test on the page shell.
+const shareDialogState = vi.hoisted(() => ({ open: false }));
+
+// The share dialog owns its own data hooks and tests, so stub it to a marker
+// that just reflects its open state — enough to prove the menu item opens it.
 vi.mock("@/components/chat/share-agent-execution-dialog", () => ({
-  ShareAgentExecutionDialog: () => null,
+  ShareAgentExecutionDialog: ({ open }: { open: boolean }) => {
+    shareDialogState.open = open;
+    return open ? <div>Share execution dialog</div> : null;
+  },
 }));
 
 import { BackgroundExecutionChatSession } from "./page.client";
@@ -56,6 +61,7 @@ describe("BackgroundExecutionChatSession", () => {
     cancelState.isPending = false;
     cancelState.mutate.mockReset();
     terminalState.props = null;
+    shareDialogState.open = false;
     queryState.value = {
       data: undefined,
       isPending: false,
@@ -94,17 +100,16 @@ describe("BackgroundExecutionChatSession", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows a compact in-terminal notice when the execution cannot be opened", () => {
+  it("centers only the access notice, in the loader's placement, when the execution cannot be opened", () => {
     queryState.value.isError = true;
     queryState.value.error = new Error("Execution not found");
 
     render(<BackgroundExecutionChatSession taskId="task-1" />);
 
-    expect(
-      screen.getByText(
-        "Only the person who started this run can attach to it.",
-      ),
-    ).toBeInTheDocument();
+    // Rendered as a status line (like the attach loader), not a red error card.
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Only the person who started this run can attach to it.",
+    );
     // The old full-page error card is gone.
     expect(
       screen.queryByText("Couldn't load this execution"),
@@ -157,6 +162,29 @@ describe("BackgroundExecutionChatSession", () => {
       screen.getByRole("heading", { name: "Terminal connection details" }),
     ).toBeInTheDocument();
     expect(screen.getByText("kubectl exec example")).toBeInTheDocument();
+  });
+
+  it("exposes Share from the actions menu instead of a separate button", async () => {
+    const user = userEvent.setup();
+    queryState.value.data = execution({
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+    });
+
+    render(<BackgroundExecutionChatSession taskId="task-1" />);
+
+    // No standalone Share button in the header anymore.
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "More execution actions" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+
+    // Selecting it opens the share dialog.
+    expect(screen.getByText("Share execution dialog")).toBeInTheDocument();
   });
 
   it("restores retained output after the execution has ended", () => {

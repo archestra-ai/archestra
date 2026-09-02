@@ -53,14 +53,17 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
   const isOwner = execution?.viewerRole === "owner";
 
   if (!query.isPending && !execution) {
+    // Sit in the same centered terminal-box placement the attach loader
+    // ("Waiting for a node…") uses, but with only this access notice in place
+    // of the loader's progress steps.
     return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="w-full max-w-lg">
-          <TerminalNotice>
+      <main className="flex h-full min-h-0 flex-col bg-background p-4 md:p-6">
+        <div className="flex flex-1 items-center justify-center rounded-md border bg-slate-950 p-6">
+          <output className="max-w-sm text-center text-sm font-medium text-slate-100">
             Only the person who started this run can attach to it.
-          </TerminalNotice>
+          </output>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -114,16 +117,6 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
                 </Button>
               )}
               {isOwner && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShareDialogOpen(true)}
-                >
-                  <Share2 className="size-3.5" />
-                  <span>Share</span>
-                </Button>
-              )}
-              {isOwner && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -136,6 +129,10 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
+                      <Share2 className="size-4" />
+                      <span>Share</span>
+                    </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link
                         href={`/agents/${execution.agent.id}?section=executions`}

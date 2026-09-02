@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BrainIcon,
   FileText,
   ImageIcon,
   Layers,
@@ -38,13 +39,24 @@ export function ModelCapabilityBadges({
   const hasPdf = capabilities?.inputModalities?.includes("pdf");
   const hasToolCalling = capabilities?.supportsToolCalling;
   const lacksToolCalling = capabilities?.supportsToolCalling === false;
+  // Only `true` shows the glyph. The column is tri-state, and a null means no
+  // source claimed the model reasons rather than that it does not — the same
+  // reason the composer's depth control stays hidden on one.
+  const hasReasoning = capabilities?.supportsReasoningEffort === true;
   const notRecommended = capabilities?.recommendedForAgents === false;
   const hasAnyCapability =
-    hasText || hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
+    hasText ||
+    hasVision ||
+    hasAudio ||
+    hasVideo ||
+    hasPdf ||
+    hasToolCalling ||
+    hasReasoning;
   const hasCapabilityData =
     capabilities != null &&
     (capabilities.inputModalities != null ||
-      capabilities.supportsToolCalling != null);
+      capabilities.supportsToolCalling != null ||
+      capabilities.supportsReasoningEffort != null);
 
   if (!hasCapabilityData) return <UnknownCapabilitiesBadge />;
   if (!hasAnyCapability && !lacksToolCalling && !notRecommended) return null;
@@ -67,6 +79,11 @@ export function ModelCapabilityBadges({
         {lacksToolCalling && <NoToolsBadge />}
         {hasToolCalling && (
           <CapabilityIcon icon={Settings2} label="Supports tool calling" />
+        )}
+        {/* Same glyph reasoning carries in the composer's depth control and in
+            the message stream, so the row and the control read as one thing. */}
+        {hasReasoning && (
+          <CapabilityIcon icon={BrainIcon} label="Supports reasoning" />
         )}
       </div>
     </TooltipProvider>

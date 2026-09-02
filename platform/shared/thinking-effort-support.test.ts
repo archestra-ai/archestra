@@ -86,6 +86,41 @@ describe("modelSupportsThinkingEffort", () => {
     ).toBe(false);
   });
 
+  test("an OpenRouter model is decided by its row, not its id", () => {
+    // Its ids carry a vendor prefix the id rules would otherwise recognize, but
+    // what OpenRouter serves under that name is its own catalog's business —
+    // the row carries what its `/models` response reported.
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "openrouter",
+        modelId: "deepseek/deepseek-r1",
+        supportsReasoningEffort: true,
+      }),
+    ).toBe(true);
+    // A reasoning-capable vendor id is not enough on its own.
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "openrouter",
+        modelId: "openai/gpt-5.2",
+        supportsReasoningEffort: false,
+      }),
+    ).toBe(false);
+  });
+
+  test.each([
+    false,
+    null,
+    undefined,
+  ])("an OpenRouter row of %s keeps the control hidden", (supportsReasoningEffort) => {
+    expect(
+      modelSupportsThinkingEffort({
+        provider: "openrouter",
+        modelId: "openai/gpt-4o",
+        supportsReasoningEffort,
+      }),
+    ).toBe(false);
+  });
+
   test("a vendor model ignores the column and keeps its id rule", () => {
     // A wrong row must not be able to switch the control on for a model whose
     // vendor would reject the field, nor off for one that takes it.

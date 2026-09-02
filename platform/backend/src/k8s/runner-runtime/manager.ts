@@ -1,5 +1,6 @@
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
+import { finished } from "node:stream/promises";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
@@ -383,6 +384,67 @@ class RunnerRuntimeManager {
       },
       { once: true },
     );
+  }
+
+  /**
+   * Copy the pod's retained stdout once, after the workload has settled.
+   *
+   * Kubernetes follow connections can close before the pod does. The live
+   * stream remains useful for progress, but this non-following read is the
+   * authoritative transcript captured immediately before teardown.
+   */
+  async snapshotLogs(params: {
+    session: AgentRun;
+    destination: Writable;
+    lines: number;
+    abortSignal?: AbortSignal;
+  }): Promise<void> {
+    if (params.abortSignal?.aborted) {
+      throw new Error("Runner output snapshot was aborted");
+    }
+
+    const clients = this.requireClients();
+    const pod = await this.findPodPhase(params.session);
+    if (!pod) {
+      throw new Error("This session has no pod to read logs from");
+    }
+
+    const snapshotFinished = finished(params.destination);
+    let request: AbortController;
+    try {
+      request = await clients.log.log(
+        params.session.runtimeScope,
+        pod.name,
+        RUNNER_CONTAINER_NAME,
+        params.destination,
+        {
+          follow: false,
+          tailLines: params.lines,
+          pretty: false,
+          timestamps: false,
+        },
+      );
+    } catch (error) {
+      params.destination.destroy();
+      await snapshotFinished.catch(() => undefined);
+      throw error;
+    }
+
+    const abortSnapshot = () => {
+      request.abort();
+      params.destination.destroy(
+        new Error("Runner output snapshot was aborted"),
+      );
+    };
+    params.abortSignal?.addEventListener("abort", abortSnapshot, {
+      once: true,
+    });
+    if (params.abortSignal?.aborted) abortSnapshot();
+    try {
+      await snapshotFinished;
+    } finally {
+      params.abortSignal?.removeEventListener("abort", abortSnapshot);
+    }
   }
 
   /** Pod carrying a session, or null when nothing is scheduled. */

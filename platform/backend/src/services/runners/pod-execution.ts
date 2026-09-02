@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { Writable } from "node:stream";
 import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
@@ -24,8 +23,9 @@ import type {
   AgentRunCompletionTarget,
 } from "@/types";
 import { ApiError } from "@/types";
-import { type RunnerBackend, resolveRunnerBackend } from "./backends";
+import { resolveRunnerBackend } from "./backends";
 import { buildRunnerLaunchSpec } from "./launch-spec";
+import { RunnerOutputCapture } from "./output-capture";
 import { generateAgentExecutionTitle } from "./title";
 
 /**
@@ -231,20 +231,14 @@ export async function resumeBackgroundTask(params: {
 /** Clean up a session whose task settled while no backend owned its run. */
 export async function cleanupBackgroundTask(session: AgentRun): Promise<void> {
   const backend = resolveRunnerBackend(session.backend);
-  let retainedLogs = "";
+  const output = new RunnerOutputCapture({ backend, session });
   const stopCapture = new AbortController();
-  const capture = followOutput({
-    backend,
-    session,
-    abortSignal: stopCapture.signal,
-    onChunk: (chunk) => {
-      retainedLogs = retainLogTail(retainedLogs, chunk);
-    },
-  });
+  const capture = output.follow(stopCapture.signal);
   await Promise.race([capture, delayMs(LOG_DRAIN_GRACE_MS)]);
   stopCapture.abort();
+  await output.recoverSnapshot(AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS));
   await backend.teardown(session);
-  await AgentRunModel.close({ id: session.id, logs: retainedLogs });
+  await AgentRunModel.close({ id: session.id, logs: output.retainedLogs });
 }
 
 async function followBackgroundTask(params: {
@@ -255,8 +249,11 @@ async function followBackgroundTask(params: {
 }): Promise<A2AExecuteResult> {
   const backend = resolveRunnerBackend(params.session.backend);
   const { session } = params;
-  const transcript: string[] = [];
-  let retainedLogs = "";
+  const output = new RunnerOutputCapture({
+    backend,
+    session,
+    onTextDelta: params.onTextDelta,
+  });
   let outcome: "succeeded" | "failed" | "aborted" = "failed";
 
   try {
@@ -275,16 +272,12 @@ async function followBackgroundTask(params: {
     // Logs are followed on their own promise: the backend outcome ends the
     // run, and a stream that dies early (runtime replaced, connection dropped)
     // must not be mistaken for the task finishing.
-    const streaming = followOutput({
-      backend,
-      session,
-      abortSignal: params.abortSignal,
-      onChunk: (chunk) => {
-        transcript.push(chunk);
-        retainedLogs = retainLogTail(retainedLogs, chunk);
-        params.onTextDelta?.(chunk);
-      },
-    });
+    const stopStreaming = new AbortController();
+    const streaming = output.follow(
+      params.abortSignal
+        ? AbortSignal.any([params.abortSignal, stopStreaming.signal])
+        : stopStreaming.signal,
+    );
 
     const completion = await backend.waitForCompletion({
       session,
@@ -296,8 +289,13 @@ async function followBackgroundTask(params: {
     // write and the backend's outcome race, and dropping it would truncate
     // the answer at exactly the point the reader cares about.
     await Promise.race([streaming, delayMs(LOG_DRAIN_GRACE_MS)]);
+    stopStreaming.abort();
 
-    const text = extractFinalAnswer(transcript.join(""));
+    await output.recoverSnapshot(
+      AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS),
+    );
+
+    const text = extractFinalAnswer(output.transcript);
 
     if (completion.outcome === "failed") {
       throw new ApiError(
@@ -335,52 +333,16 @@ async function followBackgroundTask(params: {
         "Runner session teardown did not complete",
       );
     });
-    await AgentRunModel.close({ id: session.id, logs: retainedLogs }).catch(
-      (error) => {
-        logger.warn(
-          { error, sessionId: session.id, taskId: session.taskId },
-          "Could not mark the Agent run as ended",
-        );
-      },
-    );
+    await AgentRunModel.close({
+      id: session.id,
+      logs: output.retainedLogs,
+    }).catch((error) => {
+      logger.warn(
+        { error, sessionId: session.id, taskId: session.taskId },
+        "Could not mark the Agent run as ended",
+      );
+    });
   }
-}
-
-/** Forward the session's output to `onChunk`, resolving when the stream ends. */
-function followOutput(params: {
-  backend: RunnerBackend;
-  session: AgentRun;
-  abortSignal?: AbortSignal;
-  onChunk: (chunk: string) => void;
-}): Promise<void> {
-  const destination = new Writable({
-    write(chunk, _encoding, callback) {
-      params.onChunk(chunk.toString("utf8"));
-      callback();
-    },
-  });
-
-  return new Promise<void>((resolve) => {
-    destination.on("finish", resolve);
-    destination.on("close", resolve);
-    destination.on("error", resolve);
-    params.backend
-      .streamOutput({
-        session: params.session,
-        destination,
-        abortSignal: params.abortSignal,
-      })
-      .catch((error) => {
-        // A run whose logs cannot be followed still runs; the transcript is
-        // poorer, but ending the task over it would be worse.
-        logger.warn(
-          { error, sessionId: params.session.id },
-          "Could not follow runner logs; the task continues without streamed output",
-        );
-        destination.destroy();
-        resolve();
-      });
-  });
 }
 
 function delayMs(ms: number, signal?: AbortSignal): Promise<void> {
@@ -424,15 +386,4 @@ export function extractFinalAnswer(transcript: string): string {
 }
 
 const LOG_DRAIN_GRACE_MS = 2_000;
-const RETAINED_LOG_BYTES = 1024 * 1024;
-
-function retainLogTail(current: string, chunk: string): string {
-  const combined = current + chunk;
-  if (Buffer.byteLength(combined, "utf8") <= RETAINED_LOG_BYTES) {
-    return combined;
-  }
-  return Buffer.from(combined, "utf8")
-    .subarray(-RETAINED_LOG_BYTES)
-    .toString("utf8")
-    .replace(/^\uFFFD/, "");
-}
+const OUTPUT_SNAPSHOT_TIMEOUT_MS = 10_000;

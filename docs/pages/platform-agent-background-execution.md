@@ -349,9 +349,10 @@ starting, running, finished, or failed. Navigating elsewhere does not stop the
 execution; reopening the sidebar item restores the live terminal or the
 retained transcript. Archestra generates a concise title from the opening task.
 You can pin or rename any execution from its sidebar menu. Pinned executions
-stay in the shared **Pinned** section with chats, projects, and apps. The same
-menu stops an active execution or deletes a finished one. Stopping removes the
-deployment and keeps the output produced before cancellation.
+stay in the shared **Pinned** section with chats, projects, and apps. They also
+appear under **Pinned** in the conversation search palette. The same menu stops
+an active execution or deletes a finished one. Stopping removes the deployment
+and keeps the output produced before cancellation.
 
 ## View Executions from an Agent
 

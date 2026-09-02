@@ -50,6 +50,7 @@ import {
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
 import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
+import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
@@ -239,7 +240,13 @@ export function ConversationSearchPalette({
       return null;
     }
     return {
-      pinned: conversations.filter((c) => c.pinnedAt),
+      // Keep the palette's Pinned group aligned with the sidebar: chats and
+      // background executions share one newest-pin-first list.
+      pinned: buildPinnedSidebarItems({
+        chats: conversations,
+        projects: [],
+        executions: executionSessions,
+      }),
       // Executions sort into the same timeline as chats, mirroring the
       // sidebar's merged recents list.
       recent: [
@@ -250,11 +257,13 @@ export function ConversationSearchPalette({
             item,
             timestamp: item.lastMessageAt,
           })),
-        ...executionSessions.map((item) => ({
-          kind: "execution" as const,
-          item,
-          timestamp: item.stateChangedAt ?? item.startedAt,
-        })),
+        ...executionSessions
+          .filter((execution) => !execution.pinnedAt)
+          .map((item) => ({
+            kind: "execution" as const,
+            item,
+            timestamp: item.stateChangedAt ?? item.startedAt,
+          })),
       ].sort(
         (left, right) =>
           new Date(right.timestamp).getTime() -
@@ -702,11 +711,19 @@ export function ConversationSearchPalette({
               <>
                 {browseItems.pinned.length > 0 && (
                   <CommandGroup heading="Pinned">
-                    {browseItems.pinned.map((conv) =>
-                      renderConversationItem(conv, {
-                        showPinIcon: true,
-                        dateLabel: getDateBucketLabel(conv.lastMessageAt),
-                      }),
+                    {browseItems.pinned.map((entry) =>
+                      entry.type === "chat"
+                        ? renderConversationItem(entry.item, {
+                            showPinIcon: true,
+                            dateLabel: getDateBucketLabel(
+                              entry.item.lastMessageAt,
+                            ),
+                          })
+                        : renderExecutionItem(entry.item, {
+                            dateLabel: getDateBucketLabel(
+                              entry.item.stateChangedAt ?? entry.item.startedAt,
+                            ),
+                          }),
                     )}
                   </CommandGroup>
                 )}

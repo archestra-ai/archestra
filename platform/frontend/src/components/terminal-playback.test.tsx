@@ -12,6 +12,7 @@ const { terminal, fit, dimensions, proposeDimensions } = vi.hoisted(() => {
       reset: vi.fn(),
       write: vi.fn(),
       options: [] as unknown[],
+      registerCsiHandler: vi.fn(),
     },
     fit: vi.fn(),
     dimensions,
@@ -31,6 +32,7 @@ vi.mock("@xterm/xterm", () => ({
     open = terminal.open;
     reset = terminal.reset;
     write = terminal.write;
+    parser = { registerCsiHandler: terminal.registerCsiHandler };
   },
 }));
 
@@ -132,12 +134,25 @@ describe("TerminalPlayback", () => {
     await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());
 
     expect(terminal.options.at(-1)).toMatchObject({
+      convertEol: true,
       disableStdin: true,
+      scrollback: 50_000,
       scrollSensitivity: 3,
     });
     expect(terminal.write).toHaveBeenCalledWith(
       expect.stringContaining("\u001b[?1003l"),
     );
+
+    const setModeHandler = terminal.registerCsiHandler.mock.calls.find(
+      ([identifier]) => identifier.final === "h",
+    )?.[1];
+    const resetModeHandler = terminal.registerCsiHandler.mock.calls.find(
+      ([identifier]) => identifier.final === "l",
+    )?.[1];
+
+    expect(setModeHandler?.([1049])).toBe(true);
+    expect(resetModeHandler?.([47])).toBe(true);
+    expect(setModeHandler?.([25])).toBe(false);
   });
 });
 

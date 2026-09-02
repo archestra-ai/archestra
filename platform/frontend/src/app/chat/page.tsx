@@ -36,7 +36,7 @@ import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-ch
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentExecutionCredentialPrompt } from "@/components/agent-execution-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { Suggestion } from "@/components/ai-elements/suggestion";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
 import {
@@ -3710,7 +3710,7 @@ export function ChatPageContent({
                         const prompts = currentAgent?.suggestedPrompts;
                         if (!prompts || prompts.length === 0) return null;
                         return (
-                          <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                          <Suggestions aria-label="Suggested prompts">
                             {prompts.map((sp) => (
                               <Suggestion
                                 key={`${sp.summaryTitle}-${sp.prompt}`}
@@ -3732,7 +3732,7 @@ export function ChatPageContent({
                                 }}
                               />
                             ))}
-                          </div>
+                          </Suggestions>
                         );
                       })()}
                       <div className="w-full max-w-4xl space-y-3">

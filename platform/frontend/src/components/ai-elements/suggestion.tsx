@@ -1,24 +1,27 @@
 "use client";
 
+import { ArrowRight } from "lucide-react";
 import type { ComponentProps } from "react";
 import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
-export type SuggestionsProps = ComponentProps<typeof ScrollArea>;
+export type SuggestionsProps = ComponentProps<"fieldset">;
 
 export const Suggestions = ({
   className,
   children,
   ...props
 }: SuggestionsProps) => (
-  <ScrollArea className={cn("w-full overflow-x-auto", className)} {...props}>
-    <div className="flex flex-wrap items-center justify-center gap-2">
-      {children}
-    </div>
-    <ScrollBar className="hidden" orientation="horizontal" />
-  </ScrollArea>
+  <fieldset
+    className={cn(
+      "m-0 grid min-w-0 w-full max-w-xl grid-cols-2 gap-x-4 border-0 p-0 sm:gap-x-8",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+  </fieldset>
 );
 
 export type SuggestionProps = Omit<ComponentProps<typeof Button>, "onClick"> & {
@@ -30,7 +33,7 @@ export const Suggestion = ({
   suggestion,
   onClick,
   className,
-  variant = "outline",
+  variant = "ghost",
   size = "sm",
   children,
   ...props
@@ -41,14 +44,21 @@ export const Suggestion = ({
 
   return (
     <Button
-      className={cn("cursor-pointer rounded-full px-4", className)}
+      className={cn(
+        "group h-auto min-h-11 w-full cursor-pointer justify-between rounded-none border-b border-border/60 px-1 py-2.5 text-left font-normal text-muted-foreground hover:bg-transparent hover:text-foreground active:translate-y-px dark:hover:bg-transparent",
+        className,
+      )}
       onClick={handleClick}
       size={size}
       type="button"
       variant={variant}
       {...props}
     >
-      {children || suggestion}
+      <span className="min-w-0 text-pretty">{children || suggestion}</span>
+      <ArrowRight
+        aria-hidden="true"
+        className="size-3.5 shrink-0 opacity-40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:opacity-80 group-focus-visible:translate-x-0.5 group-focus-visible:opacity-80 motion-reduce:transition-none"
+      />
     </Button>
   );
 };

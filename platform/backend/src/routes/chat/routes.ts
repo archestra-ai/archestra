@@ -205,6 +205,7 @@ import {
 } from "./normalization/normalize-chat-messages";
 import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 import { buildOpenAiThinkingProviderOptions } from "./openai-provider-options";
+import { buildOpenRouterProviderOptions } from "./openrouter-provider-options";
 import { buildModelMessages } from "./prepare-model-messages";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
@@ -1482,6 +1483,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   streamTextConfig.providerOptions = {
                     ...streamTextConfig.providerOptions,
                     anthropic: anthropicProviderOptions,
+                  };
+                }
+
+                // Nothing else writes the `openrouter` key, so this may assign
+                // it outright.
+                const openRouterProviderOptions =
+                  buildOpenRouterProviderOptions({
+                    provider,
+                    thinkingEffort,
+                  });
+                if (openRouterProviderOptions) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    openrouter: openRouterProviderOptions,
                   };
                 }
 

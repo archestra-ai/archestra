@@ -119,6 +119,8 @@ describe("POST /api/chat OpenRouter `reasoning` delta", () => {
   let conversationId: string;
   let upstreamRequests: Array<{
     stream_options?: { include_usage?: boolean };
+    reasoning?: { effort?: string };
+    reasoning_effort?: string;
   }>;
 
   beforeEach(
@@ -226,5 +228,60 @@ describe("POST /api/chat OpenRouter `reasoning` delta", () => {
     // The compatible client only sends stream_options.include_usage when
     // asked; the openrouter config must keep it on or usage/cost is lost.
     expect(upstreamRequests[0]?.stream_options?.include_usage).toBe(true);
+  });
+
+  test.for([
+    "low",
+    "medium",
+    "high",
+  ] as const)("sends a chosen %s depth as OpenRouter's unified `reasoning` object", async (effort) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        trigger: "submit-message",
+        thinkingEffort: effort,
+        messages: [
+          {
+            id: crypto.randomUUID(),
+            role: "user",
+            parts: [{ type: "text", text: "35 heads, 94 legs — how many?" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(upstreamRequests[0]?.reasoning).toEqual({ effort });
+    // Not the OpenAI spelling: only about half of OpenRouter's reasoning
+    // models accept `reasoning_effort`, so sending it instead would reach
+    // nothing on the rest.
+    expect(upstreamRequests[0]?.reasoning_effort).toBeUndefined();
+  });
+
+  test("sends no reasoning field when no depth was chosen", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        trigger: "submit-message",
+        thinkingEffort: null,
+        messages: [
+          {
+            id: crypto.randomUUID(),
+            role: "user",
+            parts: [{ type: "text", text: "35 heads, 94 legs — how many?" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The model must reason exactly as it would untouched, which means no
+    // field at all rather than a level of ours standing in for its default.
+    expect(upstreamRequests[0]).not.toHaveProperty("reasoning");
+    expect(upstreamRequests[0]).not.toHaveProperty("reasoning_effort");
   });
 });

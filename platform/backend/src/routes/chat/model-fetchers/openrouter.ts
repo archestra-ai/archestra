@@ -159,6 +159,15 @@ function toFetchedCapabilities(
           (param) => param === "tools" || param === "tool_choice",
         )
       : null,
+    // `reasoning` and not `reasoning_effort`: the former is the parameter the
+    // chat route actually sends, and it is the wider of the two — every model
+    // listing `reasoning_effort` also lists `reasoning`, while a large share of
+    // reasoning models list only `reasoning` because their upstream takes a
+    // token budget that OpenRouter derives from the effort. Gating on the
+    // narrower field would hide the control on models that honor it.
+    supportsReasoningEffort: model.supported_parameters
+      ? model.supported_parameters.includes("reasoning")
+      : null,
     promptPricePerToken: normalizePrice(model.pricing?.prompt),
     completionPricePerToken: normalizePrice(model.pricing?.completion),
     cacheReadPricePerToken: normalizePrice(model.pricing?.input_cache_read),

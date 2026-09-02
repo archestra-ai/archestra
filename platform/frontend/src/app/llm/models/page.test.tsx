@@ -4,7 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   afterAll,
   afterEach,
@@ -101,6 +101,7 @@ const model = {
 
 let keyCreated = false;
 let modelRequests = 0;
+const routerPush = vi.fn();
 
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/llm-models`, () => {
@@ -143,6 +144,9 @@ beforeEach(() => {
   keyCreated = false;
   modelRequests = 0;
   vi.mocked(usePathname).mockReturnValue("/llm/models");
+  vi.mocked(useRouter).mockReturnValue({
+    push: routerPush,
+  } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
   );
@@ -188,6 +192,21 @@ describe("ModelsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Add API Key" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("clears an active label filter from the model collection", async () => {
+    keyCreated = true;
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=stage%3Aproduction") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Clear" }));
+
+    expect(routerPush).toHaveBeenCalledWith("/llm/models", { scroll: false });
   });
 });
 

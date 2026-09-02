@@ -18,8 +18,11 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AgentIcon } from "@/components/agent-icon";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { EnvironmentScopeSelect } from "@/components/environment-scope-select";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -29,6 +32,8 @@ import {
   filterControlClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { useSelectedLabels } from "@/components/label-select";
+import { LabelTags } from "@/components/label-tags";
 import {
   CLEANUP_INTERVAL_LABELS,
   DEFAULT_LIMIT_CLEANUP_INTERVAL,
@@ -69,6 +74,10 @@ import { useProfiles } from "@/lib/agent.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import {
+  useLimitLabelKeys,
+  useLimitLabelValues,
+} from "@/lib/entity-labels.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -106,6 +115,7 @@ type LimitFormState = {
   cleanupInterval: LimitCleanupInterval;
   models: string[];
   isAllModels: boolean;
+  labels: ProfileLabel[];
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
@@ -115,6 +125,7 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   cleanupInterval: DEFAULT_LIMIT_CLEANUP_INTERVAL,
   models: [],
   isAllModels: true,
+  labels: [],
 };
 
 const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
@@ -226,11 +237,14 @@ export default function LimitsPage() {
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
   const modelFilter = searchParams.get("model") || "all";
+  const labelsFilter = searchParams.get("labels") || "";
+  const selectedLabels = useSelectedLabels();
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
     useState<LimitFormState>(DEFAULT_FORM_STATE);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   const editId = searchParams.get("edit");
   // The list is unfiltered and unpaginated, so every limit the `edit` param can
@@ -264,7 +278,7 @@ export default function LimitsPage() {
 
   const handleCreateOpen = useCallback(() => {
     closeEditDialog();
-    setFormState(DEFAULT_FORM_STATE);
+    setFormState({ ...DEFAULT_FORM_STATE, labels: [] });
     setIsCreateDialogOpen(true);
   }, [closeEditDialog]);
 
@@ -301,6 +315,7 @@ export default function LimitsPage() {
           limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
         models: isAllModels ? [] : models,
         isAllModels,
+        labels: limit.labels,
       };
     },
     [llmProxyId],
@@ -450,7 +465,17 @@ export default function LimitsPage() {
         (Array.isArray(limit.model) && limit.model.includes(modelFilter)) ||
         isAllModelsLimit;
 
-      return matchesStatus && matchesAppliedTo && matchesModel;
+      // Applied here rather than on the query: this page reads every visible
+      // limit once and narrows it in the browser, as its other filters do.
+      const matchesLabels =
+        !selectedLabels ||
+        Object.entries(selectedLabels).every(([key, values]) =>
+          limit.labels.some(
+            (label) => label.key === key && values.includes(label.value),
+          ),
+        );
+
+      return matchesStatus && matchesAppliedTo && matchesModel && matchesLabels;
     });
   }, [
     appliedToFilter,
@@ -459,6 +484,7 @@ export default function LimitsPage() {
     statusFilter,
     getUsageStatus,
     llmProxyId,
+    selectedLabels,
   ]);
 
   const {
@@ -476,6 +502,7 @@ export default function LimitsPage() {
       statusFilter,
       appliedToFilter,
       modelFilter,
+      labelsFilter,
     }),
     matchDescription: "match the current filters",
   });
@@ -524,6 +551,7 @@ export default function LimitsPage() {
           <div className="flex min-w-0 items-center gap-2">
             {getEntityIcon(row.original)}
             <span className="truncate">{getEntityLabel(row.original)}</span>
+            <LabelTags labels={row.original.labels} />
           </div>
         ),
       },
@@ -662,7 +690,18 @@ export default function LimitsPage() {
   const hasActiveFilters =
     statusFilter !== "all" ||
     appliedToFilter !== "all" ||
-    modelFilter !== "all";
+    modelFilter !== "all" ||
+    Boolean(labelsFilter);
+  const clearFilters = useCallback(
+    () =>
+      updateQueryParams({
+        status: null,
+        appliedTo: null,
+        model: null,
+        labels: null,
+      }),
+    [updateQueryParams],
+  );
   const shouldShowDefaultUserLimitNotice =
     formState.entityType === "user" && defaultUserLimits.length > 0;
   const limitsDocsUrl = getFrontendDocsUrl(
@@ -679,6 +718,8 @@ export default function LimitsPage() {
   }
 
   async function handleSubmit() {
+    const finalLabels =
+      labelsRef.current?.saveUnsavedLabel() ?? formState.labels;
     const entityType =
       formState.entityType === "llm_proxy" ? "agent" : formState.entityType;
     const body = {
@@ -693,6 +734,7 @@ export default function LimitsPage() {
       limitValue: Number(formState.limitValue),
       cleanupInterval: formState.cleanupInterval,
       model: formState.isAllModels ? null : formState.models,
+      labels: finalLabels,
     };
 
     if (editingLimit) {
@@ -765,16 +807,7 @@ export default function LimitsPage() {
       <BulkActionsScope>
         <CollectionFilters>
           <FilterBar
-            onClearFilters={
-              hasActiveFilters
-                ? () =>
-                    updateQueryParams({
-                      status: null,
-                      appliedTo: null,
-                      model: null,
-                    })
-                : undefined
-            }
+            onClearFilters={hasActiveFilters ? clearFilters : undefined}
           >
             <FilterSelect
               value={statusFilter}
@@ -822,6 +855,13 @@ export default function LimitsPage() {
               includeAllOption
               allLabel="All models"
             />
+            <EntityLabelFilter
+              useLabelKeys={useLimitLabelKeys}
+              useLabelValues={useLimitLabelValues}
+              className={filterControlClass({
+                active: Boolean(selectedLabels),
+              })}
+            />
           </FilterBar>
         </CollectionFilters>
 
@@ -858,9 +898,7 @@ export default function LimitsPage() {
             emptyMessage="No limits configured"
             hasActiveFilters={hasActiveFilters}
             filteredEmptyMessage="No limits match your filters"
-            onClearFilters={() => {
-              updateQueryParams({ status: null, appliedTo: null, model: null });
-            }}
+            onClearFilters={clearFilters}
           />
         </LoadingWrapper>
       </BulkActionsScope>
@@ -1106,6 +1144,14 @@ export default function LimitsPage() {
                 }
               />
             </div>
+
+            <AdvancedLabelsSection
+              ref={labelsRef}
+              labels={formState.labels}
+              onLabelsChange={(labels) =>
+                setFormState((current) => ({ ...current, labels }))
+              }
+            />
           </DialogBody>
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={closeDialog}>

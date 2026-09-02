@@ -51,6 +51,7 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
   }),
   useDeletePlugin: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
+vi.mock("@/lib/entity-labels.query");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import PluginsPage from "./page.client";
@@ -155,5 +156,22 @@ describe("PluginsPage", () => {
     expect(
       screen.getByRole("combobox", { name: "Filter by repository" }),
     ).toBeVisible();
+  });
+
+  it("clears the active label filter", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=region%3Anorth") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<PluginsPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(push).toHaveBeenCalledWith("/plugins?", { scroll: false });
   });
 });

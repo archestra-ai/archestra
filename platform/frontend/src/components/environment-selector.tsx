@@ -105,28 +105,32 @@ export function EnvironmentSelector({
   )?.description;
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("grid gap-2", className)}>
       {showLabel && <Label>Environment</Label>}
-      {helpText ? <FieldDescription>{helpText}</FieldDescription> : null}
-      {selectedDescription ? (
-        <FieldDescription>{selectedDescription}</FieldDescription>
-      ) : null}
-      {!hasCustomEnvironmentOptions ? (
-        <FieldDescription>
-          Only the default environment is available.
-          {canManageEnvironments ? (
-            <>
-              {" "}
-              <Link
-                href="/settings/environments"
-                className="underline underline-offset-2"
-              >
-                Manage environments
-              </Link>
-            </>
+      {(helpText || selectedDescription || !hasCustomEnvironmentOptions) && (
+        <div className="space-y-1">
+          {helpText ? <FieldDescription>{helpText}</FieldDescription> : null}
+          {selectedDescription ? (
+            <FieldDescription>{selectedDescription}</FieldDescription>
           ) : null}
-        </FieldDescription>
-      ) : null}
+          {!hasCustomEnvironmentOptions ? (
+            <FieldDescription>
+              Only the default environment is available.
+              {canManageEnvironments ? (
+                <>
+                  {" "}
+                  <Link
+                    href="/settings/environments"
+                    className="underline underline-offset-2"
+                  >
+                    Manage environments
+                  </Link>
+                </>
+              ) : null}
+            </FieldDescription>
+          ) : null}
+        </div>
+      )}
       <Select
         value={selectedValue}
         disabled={disabled || !hasCustomEnvironmentOptions}

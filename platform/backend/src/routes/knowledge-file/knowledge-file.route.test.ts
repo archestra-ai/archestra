@@ -70,6 +70,25 @@ describe("knowledge file routes", () => {
       expect(response.json()).not.toHaveProperty("data");
     });
 
+    test("stores labels supplied during upload", async () => {
+      const response = await upload({
+        labels: [{ key: "region", value: "eu" }],
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().labels).toEqual([
+        expect.objectContaining({ key: "region", value: "eu" }),
+      ]);
+
+      const listed = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-files",
+      });
+      expect(listed.json().data[0].labels).toEqual([
+        expect.objectContaining({ key: "region", value: "eu" }),
+      ]);
+    });
+
     /**
      * The whole point of parsing before storing: an unreadable file that lands
      * in the repository looks uploaded but retrieves nothing, and the user only

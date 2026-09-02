@@ -4,16 +4,25 @@ import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { useSelectedLabels } from "@/components/label-select";
+import { LabelTags } from "@/components/label-tags";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -46,6 +55,10 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import {
+  useEnvironmentLabelKeys,
+  useEnvironmentLabelValues,
+} from "@/lib/entity-labels.query";
 import {
   type EnvironmentWithAssignedCount,
   useBulkDeleteEnvironments,
@@ -204,10 +217,23 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     ],
     [defaultAssignedCatalogCount, defaultEnvironment, environments],
   );
+  const selectedLabels = useSelectedLabels();
+  const labelsFilter = searchParams.get("labels") ?? "";
   const normalizedSearch = search.trim().toLowerCase();
   const filteredRows = useMemo(
     () =>
       rows.filter((row) => {
+        // The default row is a synthetic sentinel with no database row behind
+        // it, so it can carry no labels and drops out whenever one is picked.
+        const matchesLabels =
+          !selectedLabels ||
+          (row.kind === "environment" &&
+            Object.entries(selectedLabels).every(([key, values]) =>
+              row.labels.some(
+                (label) => label.key === key && values.includes(label.value),
+              ),
+            ));
+        if (!matchesLabels) return false;
         const matchesSearch =
           normalizedSearch === "" ||
           row.name.toLowerCase().includes(normalizedSearch) ||
@@ -227,10 +253,20 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
       egressModeFilter,
       normalizedSearch,
       rows,
+      selectedLabels,
     ],
   );
   const hasActiveFilters =
-    normalizedSearch !== "" || egressModeFilter !== "all";
+    normalizedSearch !== "" ||
+    egressModeFilter !== "all" ||
+    Boolean(labelsFilter);
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setEgressModeFilter("all");
+    const params = new URLSearchParams(searchString);
+    params.delete("labels");
+    writeSearch(params.toString());
+  }, [searchString, writeSearch]);
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteEnvironments();
@@ -249,7 +285,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     // delete route refuses one that still has catalog items assigned.
     canSelect: (row) =>
       row.kind === "environment" && row.assignedCatalogCount === 0,
-    filterSignature: `environments:${normalizedSearch}:${egressModeFilter}`,
+    filterSignature: `environments:${normalizedSearch}:${egressModeFilter}:${labelsFilter}`,
     matchDescription: "can be deleted",
   });
 
@@ -275,6 +311,9 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         cell: ({ row }) => (
           <span className="flex items-center gap-2 font-medium">
             {row.original.name}
+            {row.original.kind === "environment" && (
+              <LabelTags labels={row.original.labels} />
+            )}
             {row.original.kind === "default" &&
               row.original.name !== "Default" && (
                 <Badge variant="outline" className="text-muted-foreground">
@@ -352,14 +391,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
       <CollectionFilters>
         <FilterBar
           leading
-          onClearFilters={
-            hasActiveFilters
-              ? () => {
-                  setSearch("");
-                  setEgressModeFilter("all");
-                }
-              : undefined
-          }
+          onClearFilters={hasActiveFilters ? clearFilters : undefined}
         >
           <SearchInput
             placeholder="Search by name or namespace"
@@ -381,6 +413,13 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
               { value: "off", label: "Block all" },
             ]}
             inactiveValue="all"
+          />
+          <EntityLabelFilter
+            useLabelKeys={useEnvironmentLabelKeys}
+            useLabelValues={useEnvironmentLabelValues}
+            className={filterControlClass({
+              active: Boolean(selectedLabels),
+            })}
           />
         </FilterBar>
       </CollectionFilters>
@@ -415,10 +454,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         emptyMessage="No environments"
         hasActiveFilters={hasActiveFilters}
         filteredEmptyMessage="No environments match your filters"
-        onClearFilters={() => {
-          setSearch("");
-          setEgressModeFilter("all");
-        }}
+        onClearFilters={clearFilters}
       />
 
       {bulkDeleteOpen && (
@@ -596,6 +632,8 @@ function EnvironmentEditorDialog({
   >([]);
   const [registryDraft, setRegistryDraft] = useState("");
   const [registryError, setRegistryError] = useState<string | null>(null);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy) => {
     setEgressMode(policy.egressMode);
@@ -619,6 +657,7 @@ function EnvironmentEditorDialog({
       // the org query has resolved (orgLoaded), so the seed gates on it.
       const orgDefaultPolicy = defaultEnvironment?.networkPolicy ?? null;
       if (mode === "default") {
+        setLabels([]);
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
         setDescription(defaultEnvironment?.description ?? "");
@@ -636,6 +675,7 @@ function EnvironmentEditorDialog({
           defaultEnvironment?.trustedImageRegistries ?? [],
         );
       } else {
+        setLabels(environment?.labels ?? []);
         setName(environment?.name ?? "");
         setNamespace(environment?.namespace ?? "");
         setDescription(environment?.description ?? "");
@@ -743,6 +783,7 @@ function EnvironmentEditorDialog({
     trimmedNamespace !== (environment.namespace ?? "");
 
   const doSave = () => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const namespaceValue = trimmedNamespace === "" ? null : trimmedNamespace;
     const descriptionValue =
       trimmedDescription === "" ? null : trimmedDescription;
@@ -763,6 +804,7 @@ function EnvironmentEditorDialog({
           restricted,
           validationRegex: validationRegexValue,
           trustedImageRegistries: trustedImageRegistriesValue,
+          labels: finalLabels,
         },
         { onSuccess: (created) => created && onOpenChange(false) },
       );
@@ -791,6 +833,7 @@ function EnvironmentEditorDialog({
             restricted,
             validationRegex: validationRegexValue,
             trustedImageRegistries: trustedImageRegistriesValue,
+            labels: finalLabels,
           },
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
@@ -1059,6 +1102,13 @@ function EnvironmentEditorDialog({
                     </div>
                   )}
                 </div>
+              )}
+              {mode !== "default" && (
+                <ProfileLabels
+                  ref={labelsRef}
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                />
               )}
             </AccordionContent>
           </AccordionItem>

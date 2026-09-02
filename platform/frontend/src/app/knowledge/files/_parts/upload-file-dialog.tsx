@@ -1,12 +1,14 @@
 "use client";
 
 import { FolderPlus, Upload } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import {
   FileVisibilitySelector,
   type KnowledgeFileVisibility,
 } from "@/app/knowledge/files/_parts/file-visibility-selector";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import {
   FileDropInput,
   fileToBase64,
@@ -54,6 +56,8 @@ export function UploadFileDialog({
   const [visibility, setVisibility] =
     useState<KnowledgeFileVisibility>("org-wide");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [failures, setFailures] = useState<string[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number }>();
   const [createDirectoryOpen, setCreateDirectoryOpen] = useState(false);
@@ -82,6 +86,7 @@ export function UploadFileDialog({
     setProgress(undefined);
     setVisibility("org-wide");
     setTeamIds([]);
+    setLabels([]);
   };
 
   // Appends rather than replaces, so dropping a second batch adds to the first
@@ -109,6 +114,7 @@ export function UploadFileDialog({
   };
 
   const handleUpload = async () => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const rejected: string[] = [];
     let done = 0;
     setProgress({ done: 0, total: files.length });
@@ -124,6 +130,7 @@ export function UploadFileDialog({
           directoryId: directoryId === ROOT_VALUE ? null : directoryId,
           visibility,
           teamIds: visibility === "team-scoped" ? teamIds : [],
+          labels: finalLabels,
         });
       } catch {
         rejected.push(file.name);
@@ -194,6 +201,12 @@ export function UploadFileDialog({
             onVisibilityChange={setVisibility}
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
+          />
+
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
           />
 
           {failures.length > 0 && (

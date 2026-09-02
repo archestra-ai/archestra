@@ -23,6 +23,7 @@ import {
 import {
   ApiError,
   constructResponseSchema,
+  LabelWithDetailsSchema,
   McpOauthClientGrantTypeSchema,
   McpOauthClientSchema,
   McpOauthClientWithSecretSchema,
@@ -52,6 +53,13 @@ const McpOauthClientBodySchema = z
     redirectUris: z.array(z.string().url()).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     teams: z.array(z.string()).optional(),
+    labels: z
+      .array(LabelWithDetailsSchema)
+      .optional()
+      .describe(
+        "Key/value labels. Omit to leave existing labels untouched; pass [] " +
+          "to clear them.",
+      ),
   })
   .superRefine((value, ctx) => {
     if (value.grantType === "authorization_code") {
@@ -176,7 +184,14 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorId: user.id,
           }),
         );
-      return reply.send({ ...oauthClient, clientSecret });
+      if (body.labels?.length) {
+        await OauthClientLabelModel.syncLabels(oauthClient.id, body.labels);
+      }
+      return reply.send({
+        ...oauthClient,
+        labels: await OauthClientLabelModel.getLabelsFor(oauthClient.id),
+        clientSecret,
+      });
     },
   );
 
@@ -241,6 +256,15 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       if (!oauthClient) {
         throw new ApiError(404, "MCP OAuth client not found");
+      }
+      // Only touch labels when the caller sent them, so an update that omits
+      // the field leaves existing labels alone.
+      if (body.labels !== undefined) {
+        await OauthClientLabelModel.syncLabels(params.id, body.labels);
+        return reply.send({
+          ...oauthClient,
+          labels: await OauthClientLabelModel.getLabelsFor(params.id),
+        });
       }
       return reply.send(oauthClient);
     },

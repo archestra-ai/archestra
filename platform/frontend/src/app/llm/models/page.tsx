@@ -20,9 +20,9 @@ import {
   Users,
 } from "lucide-react";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
@@ -30,6 +30,8 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { useSelectedLabels } from "@/components/label-select";
+import { LabelTags } from "@/components/label-tags";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import {
@@ -60,7 +62,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import {
+  useModelLabelKeys,
+  useModelLabelValues,
+} from "@/lib/entity-labels.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ModelWithApiKeys,
@@ -84,6 +91,7 @@ import {
 } from "./models-page-utils";
 
 export default function ModelsPage() {
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const {
     data: models = [],
     isFetching,
@@ -94,6 +102,7 @@ export default function ModelsPage() {
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
+  const selectedLabels = useSelectedLabels();
   const [isCreateApiKeyDialogOpen, setIsCreateApiKeyDialogOpen] =
     useState(false);
   const [search, setSearch] = useState("");
@@ -102,7 +111,8 @@ export default function ModelsPage() {
   const [modelTypeFilter, setModelTypeFilter] =
     useState<ModelsPageModelTypeFilter>("all");
   const [freeOnly, setFreeOnly] = useState(false);
-  const editId = useSearchParams().get("edit");
+  const labelsFilter = searchParams.get("labels") ?? "";
+  const editId = searchParams.get("edit");
   const modelFromUrl = useMemo(
     () => models.find((model) => model.id === editId) ?? null,
     [models, editId],
@@ -127,25 +137,34 @@ export default function ModelsPage() {
 
   const bulkVisibility = useBulkUpdateModelVisibility();
 
-  const filteredModels = useMemo(
-    () =>
-      filterModelsForPage({
-        models,
-        search,
-        apiKeyFilter,
-        modelTypeFilter,
-        freeOnly,
-        canFilterFreeModels,
-      }),
-    [
+  const filteredModels = useMemo(() => {
+    const byPageFilters = filterModelsForPage({
       models,
       search,
       apiKeyFilter,
       modelTypeFilter,
       freeOnly,
       canFilterFreeModels,
-    ],
-  );
+    });
+    // Applied here rather than on the query: this page reads the whole catalog
+    // once and narrows it in the browser, as its other filters do.
+    if (!selectedLabels) return byPageFilters;
+    return byPageFilters.filter((model) =>
+      Object.entries(selectedLabels).every(([key, values]) =>
+        model.labels.some(
+          (label) => label.key === key && values.includes(label.value),
+        ),
+      ),
+    );
+  }, [
+    models,
+    search,
+    apiKeyFilter,
+    modelTypeFilter,
+    freeOnly,
+    canFilterFreeModels,
+    selectedLabels,
+  ]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshingModels(true);
@@ -171,9 +190,26 @@ export default function ModelsPage() {
       search,
       apiKeyFilter,
       modelTypeFilter,
+      freeOnly,
+      labelsFilter,
     }),
     matchDescription: "match the current filters",
   });
+
+  const hasActiveFilters = Boolean(
+    search ||
+      apiKeyFilter !== "all" ||
+      modelTypeFilter !== "all" ||
+      (canFilterFreeModels && freeOnly) ||
+      labelsFilter,
+  );
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setApiKeyFilter("all");
+    setModelTypeFilter("all");
+    setFreeOnly(false);
+    updateQueryParams({ labels: null });
+  }, [updateQueryParams]);
 
   // Hiding keeps a model out of the pickers without deleting anything, so the
   // bar offers both directions rather than a single toggle whose meaning would
@@ -243,7 +279,10 @@ export default function ModelsPage() {
           const isLatestAlias = isOpenRouterLatestAlias(provider, modelId);
           return (
             <div className="min-w-0 space-y-2">
-              <span className="font-mono text-sm">{modelId}</span>
+              <span className="flex items-center gap-2 font-mono text-sm">
+                <span className="truncate">{modelId}</span>
+                <LabelTags labels={row.original.labels} />
+              </span>
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 {isFree && <FreeModelBadge />}
                 {isLatestAlias && <LatestModelBadge />}
@@ -525,7 +564,10 @@ export default function ModelsPage() {
       <BulkActionsScope>
         {models.length > 0 && (
           <CollectionFilters>
-            <FilterBar leading>
+            <FilterBar
+              leading
+              onClearFilters={hasActiveFilters ? clearFilters : undefined}
+            >
               <SearchInput
                 objectNamePlural="models"
                 searchFields={["model ID"]}
@@ -627,6 +669,13 @@ export default function ModelsPage() {
                   </Label>
                 </div>
               )}
+              <EntityLabelFilter
+                useLabelKeys={useModelLabelKeys}
+                useLabelValues={useModelLabelValues}
+                className={filterControlClass({
+                  active: Boolean(selectedLabels),
+                })}
+              />
             </FilterBar>
           </CollectionFilters>
         )}
@@ -669,19 +718,9 @@ export default function ModelsPage() {
           }
           hideSelectedCount
           isLoading={isFetching}
-          hasActiveFilters={Boolean(
-            search ||
-              apiKeyFilter !== "all" ||
-              modelTypeFilter !== "all" ||
-              (canFilterFreeModels && freeOnly),
-          )}
+          hasActiveFilters={hasActiveFilters}
           filteredEmptyMessage="No models match your filters"
-          onClearFilters={() => {
-            setSearch("");
-            setApiKeyFilter("all");
-            setModelTypeFilter("all");
-            setFreeOnly(false);
-          }}
+          onClearFilters={clearFilters}
           emptyIcon={Boxes}
           emptyMessage={
             apiKeys.length === 0 ? "No models available" : "No models found"

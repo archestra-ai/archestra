@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Database, FileText, Plug, Plus } from "lucide-react";
 import type { MouseEventHandler } from "react";
 import { ConnectorChip } from "@/app/knowledge/knowledge-bases/_parts/connector-chip";
+import { LabelTags } from "@/components/label-tags";
 import { COLLECTION_CARD_HOVER_CLASSNAME } from "@/components/table-card-view";
 import {
   type TableRowAction,
@@ -86,6 +87,7 @@ export function KnowledgeBaseCard({
             <h3 className="truncate font-medium" title={knowledgeBase.name}>
               {knowledgeBase.name}
             </h3>
+            <LabelTags labels={knowledgeBase.labels} />
           </div>
           {knowledgeBase.description && (
             <p

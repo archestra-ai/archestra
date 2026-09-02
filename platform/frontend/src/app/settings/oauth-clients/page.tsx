@@ -13,12 +13,15 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { EditOAuthClientDialog as EditLlmOAuthClientDialog } from "@/components/llm-oauth-client-dialogs";
 import { EditOAuthClientDialog as EditMcpOAuthClientDialog } from "@/components/mcp-oauth-client-dialogs";
 import {
@@ -36,6 +39,10 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import {
+  useLlmOauthClientLabelKeys,
+  useLlmOauthClientLabelValues,
+} from "@/lib/entity-labels.query";
 import { ALL_MATCHING_PAGE_SIZE } from "@/lib/hooks/use-all-matching";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -93,6 +100,8 @@ function OauthClientsTable() {
   const setActionButton = useSetSettingsAction();
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
+  // Label filtering is server-side, so the value rides both list queries.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const typeFilter = isClientType(searchParams.get("type"))
     ? (searchParams.get("type") as "llm" | "mcp")
     : undefined;
@@ -116,6 +125,7 @@ function OauthClientsTable() {
     limit: ALL_CLIENTS_LIMIT,
     search: search || undefined,
     providerApiKeyId,
+    labels: labelsFilter,
     toastOnError: false,
   });
   // Read permission for the two halves is separate, and only the LLM one
@@ -124,6 +134,7 @@ function OauthClientsTable() {
   const { data: canReadMcp } = useHasPermissions({ mcpOauthClient: ["read"] });
   const mcpQuery = useMcpOauthClients({
     search: search || undefined,
+    labels: labelsFilter,
     enabled: canReadMcp === true,
   });
 
@@ -162,7 +173,7 @@ function OauthClientsTable() {
     .sort((a, b) => a.client.name.localeCompare(b.client.name));
 
   const hasActiveFilters = Boolean(
-    search || typeFilter || grantTypeFilter || providerApiKeyId,
+    search || typeFilter || grantTypeFilter || providerApiKeyId || labelsFilter,
   );
   const clearFilters = useCallback(
     () =>
@@ -171,6 +182,7 @@ function OauthClientsTable() {
         type: null,
         grantType: null,
         providerApiKeyId: null,
+        labels: null,
         page: "1",
       }),
     [updateQueryParams],
@@ -214,11 +226,12 @@ function OauthClientsTable() {
       header: "Name",
       size: 140,
       cell: ({ row }) => (
-        <span className="block max-w-[140px] truncate font-medium">
-          <span>{row.original.client.name}</span>
+        <span className="flex max-w-[140px] items-center gap-2 font-medium">
+          <span className="truncate">{row.original.client.name}</span>
           {row.original.client.disabled && (
-            <span className="ml-1.5 text-muted-foreground">(disabled)</span>
+            <span className="text-muted-foreground">(disabled)</span>
           )}
+          <LabelTags labels={row.original.client.labels} />
         </span>
       ),
     },
@@ -392,6 +405,13 @@ function OauthClientsTable() {
               { value: "client_credentials", label: "Application" },
               { value: "authorization_code", label: "On behalf of users" },
             ]}
+          />
+          <EntityLabelFilter
+            useLabelKeys={useLlmOauthClientLabelKeys}
+            useLabelValues={useLlmOauthClientLabelValues}
+            className={filterControlClass({
+              active: Boolean(labelsFilter),
+            })}
           />
         </FilterBar>
       </CollectionFilters>

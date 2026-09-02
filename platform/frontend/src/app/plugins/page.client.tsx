@@ -19,12 +19,14 @@ import { OsLogos } from "@/app/connection/os-logos";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
@@ -66,6 +68,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import {
+  usePluginLabelKeys,
+  usePluginLabelValues,
+} from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
@@ -148,8 +154,16 @@ function PluginsList() {
   const source = searchParams.get("source") ?? "all";
   const sourceRepo = searchParams.get("sourceRepo") ?? "";
   const scopeFilter = useScopeFilterParams();
+  // Label filtering is server-side, so the value rides the list query rather
+  // than narrowing the already-fetched array below.
+  const labelsFilter = searchParams.get("labels") || undefined;
 
-  const { data: plugins, isFetching, isLoadingError, refetch } = usePlugins();
+  const {
+    data: plugins,
+    isFetching,
+    isLoadingError,
+    refetch,
+  } = usePlugins(true, { labels: labelsFilter });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -267,7 +281,8 @@ function PluginsList() {
       source !== "all" ||
       sourceRepo ||
       searchParams.has("state") ||
-      scopeFilter.hasActiveScopeFilters,
+      scopeFilter.hasActiveScopeFilters ||
+      Boolean(labelsFilter),
   );
 
   const clearFilters = useCallback(() => {
@@ -283,6 +298,7 @@ function PluginsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      "labels",
     ]) {
       params.delete(key);
     }
@@ -310,6 +326,7 @@ function PluginsList() {
       source,
       sourceRepo,
       scopeFilter,
+      labels: labelsFilter,
     }),
   });
   const cardSelection = useBulkCardSelection({
@@ -403,6 +420,7 @@ function PluginsList() {
                 <span className="truncate font-medium">
                   {plugin.displayName}
                 </span>
+                <LabelTags labels={plugin.labels ?? []} />
                 {isArchestraPlugin(plugin) && (
                   <Badge variant="secondary" className="shrink-0">
                     {ARCHESTRA_PLUGIN_AUTHOR_LABEL}
@@ -747,6 +765,13 @@ function PluginsList() {
                       ["cursor", "Cursor", clientFilterIcon("cursor")],
                     ]}
                   />
+                  <EntityLabelFilter
+                    useLabelKeys={usePluginLabelKeys}
+                    useLabelValues={usePluginLabelValues}
+                    className={filterControlClass({
+                      active: Boolean(labelsFilter),
+                    })}
+                  />
                 </FilterBar>
                 <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
               </CollectionFilters>
@@ -805,13 +830,21 @@ function PluginsList() {
                         key={plugin.id}
                         icon={<PluginSourceIcon plugin={plugin} />}
                         title={
-                          canViewPluginDetails ? (
-                            <Link href={pluginDetailHref(plugin.id)}>
-                              {plugin.displayName}
-                            </Link>
-                          ) : (
-                            <span>{plugin.displayName}</span>
-                          )
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            {canViewPluginDetails ? (
+                              <Link
+                                href={pluginDetailHref(plugin.id)}
+                                className="truncate"
+                              >
+                                {plugin.displayName}
+                              </Link>
+                            ) : (
+                              <span className="truncate">
+                                {plugin.displayName}
+                              </span>
+                            )}
+                            <LabelTags labels={plugin.labels ?? []} />
+                          </span>
                         }
                         description={plugin.description}
                         actions={renderPluginActions(plugin)}

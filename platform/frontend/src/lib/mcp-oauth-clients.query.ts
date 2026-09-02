@@ -13,18 +13,22 @@ const {
 
 type McpOauthClientsParams = {
   search?: string;
+  /** Serialized `?labels=` filter; resolved server-side. */
+  labels?: string;
   enabled?: boolean;
 };
 
 export function useMcpOauthClients(params?: McpOauthClientsParams) {
   const search = params?.search;
+  const labels = params?.labels;
 
   return useQuery({
-    queryKey: ["mcp-oauth-clients", search],
+    queryKey: ["mcp-oauth-clients", search, labels],
     queryFn: async () => {
       const { data, error } = await getMcpOauthClients({
         query: {
           search: search || undefined,
+          labels,
         },
       });
       throwOnApiError(error, { toastOnError: false });

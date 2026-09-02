@@ -86,6 +86,7 @@ describe("CreateVirtualKeyDialog", () => {
         keyType: "passthrough",
         expiresAt: undefined,
         ownerId: undefined,
+        labels: [],
       },
     });
   });
@@ -129,6 +130,30 @@ describe("CreateVirtualKeyDialog", () => {
           { provider: "openai", providerApiKeyId: "provider-key-1" },
         ],
         ownerId: undefined,
+        labels: [],
+      },
+    });
+  });
+
+  it("keeps labels under Advanced and saves the in-progress label", async () => {
+    const user = userEvent.setup();
+    renderDialog("passthrough");
+
+    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.type(screen.getByLabelText("Name"), "Regional key");
+    await user.type(screen.getByLabelText("Label key"), "region");
+    await user.type(screen.getByLabelText("Label value"), "eu");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      data: {
+        name: "Regional key",
+        keyType: "passthrough",
+        expiresAt: undefined,
+        ownerId: undefined,
+        labels: [{ key: "region", value: "eu" }],
       },
     });
   });

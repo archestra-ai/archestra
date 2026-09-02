@@ -20,12 +20,14 @@ import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/conn
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
@@ -55,6 +57,10 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import {
+  useConnectorLabelKeys,
+  useConnectorLabelValues,
+} from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -117,6 +123,8 @@ function ConnectorsList() {
   // The trash view; the backend serves deleted connectors to manage-deleted
   // holders only, and the status filter itself is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
@@ -132,6 +140,7 @@ function ConnectorsList() {
     limit: pageSize,
     offset,
     search: search || undefined,
+    labels: labelsFilter,
     connectorType:
       connectorTypeFilter === "all"
         ? undefined
@@ -178,7 +187,7 @@ function ConnectorsList() {
 
   // Changing a filter invalidates an escalation rather than silently
   // re-pointing "all N" at a different N.
-  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}`;
+  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}|${labelsFilter ?? ""}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
@@ -207,6 +216,7 @@ function ConnectorsList() {
                 archestraApiTypes.GetConnectorsData["query"]
               >["connectorType"]),
         status: isDeletedView ? "deleted" : undefined,
+        labels: labelsFilter,
       },
       { enabled: allMatchingActive },
     );
@@ -224,7 +234,10 @@ function ConnectorsList() {
   const selectedConnectors =
     allMatchingActive && allMatching ? allMatching : pageSelection;
   const hasActiveFilters =
-    !!search || connectorTypeFilter !== "all" || isDeletedView;
+    !!search ||
+    connectorTypeFilter !== "all" ||
+    isDeletedView ||
+    Boolean(labelsFilter);
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -252,7 +265,7 @@ function ConnectorsList() {
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const key of ["search", "connectorType", "status"]) {
+    for (const key of ["search", "connectorType", "status", "labels"]) {
       params.delete(key);
     }
     params.set("page", "1");
@@ -284,30 +297,26 @@ function ConnectorsList() {
       allLabel: "Select all connectors on this page",
     }),
     {
-      id: "icon",
-      size: 40,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <ConnectorTypeIcon
-            type={row.original.connectorType}
-            className="h-5 w-5"
-          />
-        </div>
-      ),
-    },
-    {
       id: "name",
       accessorKey: "name",
       header: "Connector",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="font-medium truncate">{row.original.name}</div>
-          {row.original.description && (
-            <div className="text-xs text-muted-foreground truncate">
-              {row.original.description}
+        <div className="flex min-w-0 items-center gap-3">
+          <ConnectorTypeIcon
+            type={row.original.connectorType}
+            className="h-4 w-4 shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-medium">{row.original.name}</span>
+              <LabelTags labels={row.original.labels} />
             </div>
-          )}
+            {row.original.description && (
+              <div className="truncate text-xs text-muted-foreground">
+                {row.original.description}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
@@ -358,30 +367,26 @@ function ConnectorsList() {
   // delete) and is re-authenticated through the normal edit flow.
   const deletedColumns: ColumnDef<ConnectorItem>[] = [
     {
-      id: "icon",
-      size: 40,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <ConnectorTypeIcon
-            type={row.original.connectorType}
-            className="h-5 w-5"
-          />
-        </div>
-      ),
-    },
-    {
       id: "name",
       accessorKey: "name",
       header: "Connector",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="font-medium truncate">{row.original.name}</div>
-          {row.original.description && (
-            <div className="text-xs text-muted-foreground truncate">
-              {row.original.description}
+        <div className="flex min-w-0 items-center gap-3">
+          <ConnectorTypeIcon
+            type={row.original.connectorType}
+            className="h-4 w-4 shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-medium">{row.original.name}</span>
+              <LabelTags labels={row.original.labels} />
             </div>
-          )}
+            {row.original.description && (
+              <div className="truncate text-xs text-muted-foreground">
+                {row.original.description}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
@@ -432,6 +437,7 @@ function ConnectorsList() {
             <FilterBar
               leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+              onClearFilters={hasActiveFilters ? clearFilters : undefined}
             >
               <SearchInput
                 paramName="search"
@@ -465,6 +471,13 @@ function ConnectorsList() {
               </Select>
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
+              />
+              <EntityLabelFilter
+                useLabelKeys={useConnectorLabelKeys}
+                useLabelValues={useConnectorLabelValues}
+                className={filterControlClass({
+                  active: Boolean(labelsFilter),
+                })}
               />
             </FilterBar>
           </CollectionFilters>
@@ -546,9 +559,14 @@ function ConnectorsList() {
                           />
                         }
                         title={
-                          <Link href={`/knowledge/connectors/${connector.id}`}>
-                            {connector.name}
-                          </Link>
+                          <span className="flex items-center gap-1.5">
+                            <Link
+                              href={`/knowledge/connectors/${connector.id}`}
+                            >
+                              {connector.name}
+                            </Link>
+                            <LabelTags labels={connector.labels} />
+                          </span>
                         }
                         onNavigate={() =>
                           router.push(`/knowledge/connectors/${connector.id}`)

@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -38,17 +38,18 @@ import VirtualKeysPage from "./page";
 
 /** Query params the page actually asked the list endpoint for. */
 let listRequests: URLSearchParams[] = [];
+let virtualKeys: Record<string, unknown>[] = [];
 
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/llm-virtual-keys`, ({ request }) => {
     listRequests.push(new URL(request.url).searchParams);
     return HttpResponse.json({
-      data: [],
+      data: virtualKeys,
       pagination: {
         currentPage: 1,
         limit: 10,
-        total: 0,
-        totalPages: 0,
+        total: virtualKeys.length,
+        totalPages: virtualKeys.length > 0 ? 1 : 0,
         hasNext: false,
         hasPrev: false,
       },
@@ -91,6 +92,7 @@ function renderPage(query: string) {
 describe("VirtualKeysPage provider-key filter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    virtualKeys = [];
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
@@ -138,5 +140,55 @@ describe("VirtualKeysPage provider-key filter", () => {
     expect(
       await screen.findByRole("button", { name: "Filter by provider key" }),
     ).toHaveTextContent("All provider keys");
+  });
+
+  it("keeps identity, access, and activity scannable without separate metadata columns", async () => {
+    window.localStorage.setItem("archestra-llm-virtual-keys-view", "table");
+    virtualKeys = [
+      {
+        id: "22222222-3333-4444-8555-666666666666",
+        name: "Regional key",
+        keyType: "standard",
+        tokenStart: "arch_abc",
+        authorId: "user-1",
+        authorName: "Current User",
+        scope: "personal",
+        teams: [],
+        providerApiKeys: [],
+        expiresAt: null,
+        lastUsedAt: null,
+        labels: [{ key: "region", value: "eu" }],
+      },
+    ];
+
+    renderPage("");
+
+    const table = await screen.findByRole("table");
+    expect(await within(table).findByText("Regional key")).toBeInTheDocument();
+    expect(
+      within(table).getByRole("button", { name: "View 1 label" }),
+    ).toBeInTheDocument();
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toEqual([
+      "",
+      "Name",
+      "Token",
+      "Providers",
+      "Accessible to",
+      "Activity",
+      "Actions",
+    ]);
+    expect(
+      within(table).queryByRole("columnheader", { name: "Type" }),
+    ).toBeNull();
+    expect(
+      within(table).queryByRole("columnheader", { name: "Expires" }),
+    ).toBeNull();
+    expect(
+      within(table).queryByRole("columnheader", { name: "Last used" }),
+    ).toBeNull();
   });
 });

@@ -43,6 +43,8 @@ export function useKnowledgeFiles(params: {
   offset: number;
   directoryId?: string;
   search?: string;
+  /** Serialized `?labels=` filter; resolved server-side. */
+  labels?: string;
 }) {
   return useQuery({
     queryKey: [FILES_KEY, params],
@@ -63,7 +65,7 @@ export function useKnowledgeFiles(params: {
  * so nothing about them is hidden behind a page.
  */
 export function useAllMatchingKnowledgeFiles(
-  params: { directoryId?: string; search?: string },
+  params: { directoryId?: string; search?: string; labels?: string },
   options?: { enabled?: boolean },
 ) {
   return useAllMatching({

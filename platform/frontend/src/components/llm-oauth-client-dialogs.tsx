@@ -4,7 +4,9 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { createdByFact } from "@/components/created-by-cell";
 import { DetailFacts } from "@/components/detail-facts";
 import { FormDialog } from "@/components/form-dialog";
@@ -54,6 +56,8 @@ export function EditOAuthClientDialog({
   const [redirectUrisText, setRedirectUrisText] = useState("");
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   useEffect(() => {
     if (!oauthClient) return;
@@ -62,6 +66,7 @@ export function EditOAuthClientDialog({
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
     setScope(oauthClient.scope);
     setTeamIds(oauthClient.teams.map((team) => team.id));
+    setLabels(oauthClient.labels);
   }, [oauthClient]);
 
   // The grant type is fixed at creation, so only its own configuration is editable.
@@ -91,6 +96,7 @@ export function EditOAuthClientDialog({
         onSubmit={async (event) => {
           event.preventDefault();
           if (!oauthClient) return;
+          const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
           await onSubmit(oauthClient.id, {
             name: name.trim(),
             grantType: oauthClient.grantType,
@@ -99,6 +105,7 @@ export function EditOAuthClientDialog({
               : { providerApiKeys: mappedProviderApiKeys }),
             scope,
             teams: scope === "team" ? teamIds : [],
+            labels: finalLabels,
           });
         }}
       >
@@ -137,6 +144,12 @@ export function EditOAuthClientDialog({
               providerApiKeys={providerApiKeys}
             />
           )}
+
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
+          />
         </DialogBody>
         <DialogStickyFooter>
           <Button

@@ -6,8 +6,13 @@ import {
 } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { FilterBar } from "@/components/filter-bar";
 import { LoadingState } from "@/components/loading";
@@ -120,11 +125,14 @@ function NewPluginWizard() {
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [userIds, setUserIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   const contentComplete = displayName.trim().length > 0 && files.length > 0;
 
   const createPlugin = useCreatePlugin();
   const handleCreate = async () => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     // A handled failure resolves to null and a rejection is reported by the
     // mutation's own `onError`; both keep the wizard where it is with the
     // draft intact, so the author can retry without retyping.
@@ -138,6 +146,7 @@ function NewPluginWizard() {
         teamIds: scope === "team" ? teamIds : [],
         userIds: scope === "personal" ? userIds : [],
         files,
+        labels: finalLabels,
       })
       .catch(() => null);
     if (created) router.push(`/plugins/${created.id}`);
@@ -312,6 +321,13 @@ function NewPluginWizard() {
                   userIds={userIds}
                   onUserIdsChange={setUserIds}
                 />
+                <div className="mt-4">
+                  <ProfileLabels
+                    ref={labelsRef}
+                    labels={labels}
+                    onLabelsChange={setLabels}
+                  />
+                </div>
               </div>
               <WizardFooter>
                 <Button variant="outline" onClick={() => setStep("content")}>

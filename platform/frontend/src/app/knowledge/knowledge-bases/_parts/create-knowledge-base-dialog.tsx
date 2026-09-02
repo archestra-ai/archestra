@@ -1,6 +1,9 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
@@ -28,6 +31,8 @@ export function CreateKnowledgeBaseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const createKnowledgeBase = useCreateKnowledgeBase();
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   const form = useForm<CreateKnowledgeBaseFormValues>({
     defaultValues: {
@@ -37,12 +42,15 @@ export function CreateKnowledgeBaseDialog({
   });
 
   const handleSubmit = async (values: CreateKnowledgeBaseFormValues) => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const result = await createKnowledgeBase.mutateAsync({
       name: values.name,
       ...(values.description && { description: values.description }),
+      labels: finalLabels,
     });
     if (result) {
       form.reset();
+      setLabels([]);
       onOpenChange(false);
     }
   };
@@ -91,6 +99,12 @@ export function CreateKnowledgeBaseDialog({
                   <FormMessage />
                 </FormItem>
               )}
+            />
+
+            <AdvancedLabelsSection
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
             />
           </div>
 

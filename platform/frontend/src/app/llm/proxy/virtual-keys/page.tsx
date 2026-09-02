@@ -22,12 +22,15 @@ import {
 } from "@/components/create-virtual-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import {
   isProviderApiKeyId,
   ProviderKeyFilterSelect,
@@ -60,6 +63,10 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { copyToClipboard } from "@/lib/clipboard";
+import {
+  useVirtualApiKeyLabelKeys,
+  useVirtualApiKeyLabelValues,
+} from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -106,6 +113,8 @@ function VirtualKeysTable() {
   const keyTypeFromUrl = searchParams.get("keyType");
   const scopeFromUrl = searchParams.get("scope");
   const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const keyTypeFilter = isKeyType(keyTypeFromUrl) ? keyTypeFromUrl : undefined;
   const scopeFilter = isScope(scopeFromUrl) ? scopeFromUrl : undefined;
   const providerApiKeyIdFilter = isProviderApiKeyId(providerApiKeyIdFromUrl)
@@ -124,6 +133,7 @@ function VirtualKeysTable() {
     keyType: keyTypeFilter,
     scope: scopeFilter,
     providerApiKeyId: providerApiKeyIdFilter,
+    labels: labelsFilter,
     toastOnError: false,
   });
 
@@ -196,7 +206,11 @@ function VirtualKeysTable() {
   });
   const selectedKeys = keys.filter((key) => rowSelection[key.id]);
   const hasActiveFilters = Boolean(
-    searchFromUrl || keyTypeFilter || scopeFilter || providerApiKeyIdFilter,
+    searchFromUrl ||
+      keyTypeFilter ||
+      scopeFilter ||
+      providerApiKeyIdFilter ||
+      labelsFilter,
   );
 
   const clearFilters = useCallback(() => {
@@ -205,6 +219,7 @@ function VirtualKeysTable() {
       keyType: null,
       scope: null,
       providerApiKeyId: null,
+      labels: null,
       page: "1",
     });
   }, [updateQueryParams]);
@@ -218,21 +233,17 @@ function VirtualKeysTable() {
       id: "name",
       accessorKey: "name",
       header: "Name",
-      size: 200,
+      size: 220,
       cell: ({ row }) => (
-        <span className="block max-w-[200px] truncate font-medium">
-          {row.original.name}
-        </span>
-      ),
-    },
-    {
-      id: "keyType",
-      header: "Type",
-      size: 120,
-      cell: ({ row }) => (
-        <Badge variant="outline">
-          {row.original.keyType === "passthrough" ? "Passthrough" : "Standard"}
-        </Badge>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-medium">{row.original.name}</span>
+          <Badge variant="outline" className="shrink-0">
+            {row.original.keyType === "passthrough"
+              ? "Passthrough"
+              : "Standard"}
+          </Badge>
+          <LabelTags labels={row.original.labels} />
+        </div>
       ),
     },
     {
@@ -254,7 +265,7 @@ function VirtualKeysTable() {
       cell: ({ row }) => (
         <span className="block max-w-[160px] truncate text-muted-foreground">
           {row.original.keyType === "passthrough" ? (
-            <span>—</span>
+            <span>None</span>
           ) : (
             <span>
               {formatProviderKeySummary(
@@ -282,25 +293,24 @@ function VirtualKeysTable() {
       ),
     },
     {
-      id: "expiresAt",
-      header: "Expires",
-      size: 110,
+      id: "activity",
+      header: "Activity",
+      size: 150,
       cell: ({ row }) => (
-        <span className="text-muted-foreground">
-          {formatRelativeTime(row.original.expiresAt, {
-            pastLabel: "Expired",
-          })}
-        </span>
-      ),
-    },
-    {
-      id: "lastUsedAt",
-      header: "Last used",
-      size: 110,
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">
-          {formatRelativeTimeFromNow(row.original.lastUsedAt)}
-        </span>
+        <div className="space-y-0.5 text-xs">
+          <div>
+            <span className="text-muted-foreground">Used </span>
+            <span>{formatRelativeTimeFromNow(row.original.lastUsedAt)}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Expires </span>
+            <span>
+              {formatRelativeTime(row.original.expiresAt, {
+                pastLabel: "Expired",
+              })}
+            </span>
+          </div>
+        </div>
       ),
     },
     {
@@ -387,6 +397,13 @@ function VirtualKeysTable() {
               onValueChange={(providerApiKeyId) =>
                 updateQueryParams({ providerApiKeyId, page: "1" })
               }
+            />
+            <EntityLabelFilter
+              useLabelKeys={useVirtualApiKeyLabelKeys}
+              useLabelValues={useVirtualApiKeyLabelValues}
+              className={filterControlClass({
+                active: Boolean(labelsFilter),
+              })}
             />
           </FilterBar>
         </CollectionFilters>
@@ -475,6 +492,7 @@ function VirtualKeysTable() {
                           <span>Standard</span>
                         )}
                       </Badge>
+                      <LabelTags labels={key.labels} />
                       <ResourceVisibilityBadge
                         scope={key.scope}
                         teams={key.teams}

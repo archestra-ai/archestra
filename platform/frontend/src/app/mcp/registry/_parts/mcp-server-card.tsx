@@ -25,6 +25,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type MouseEventHandler, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { TableCard } from "@/components/table-card-view";
@@ -1096,7 +1097,12 @@ export function McpServerCard({
     <>
       <TableCard
         testId={`${E2eTestId.McpServerCard}-${item.name}`}
-        title={item.name}
+        title={
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate">{item.name}</span>
+            <LabelTags labels={item.labels} />
+          </span>
+        }
         description={item.description}
         icon={
           <span className="relative flex size-9 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">

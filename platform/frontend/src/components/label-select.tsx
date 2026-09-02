@@ -285,6 +285,15 @@ export function LabelFilterBadges({
   );
 }
 
+/**
+ * The `?labels=` filter as a key -> values map, for a list page that narrows
+ * its rows in the browser rather than re-querying.
+ */
+export function useSelectedLabels(): Record<string, string[]> | null {
+  const labelsParam = useSearchParams().get("labels");
+  return useMemo(() => parseLabelsParam(labelsParam), [labelsParam]);
+}
+
 export function parseLabelsParam(
   labels: string | null,
 ): Record<string, string[]> | null {

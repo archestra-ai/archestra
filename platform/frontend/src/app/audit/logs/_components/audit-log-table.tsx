@@ -3,7 +3,7 @@
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CollectionFilters,
   FilterBar,
@@ -30,6 +30,7 @@ import {
 } from "@/lib/audit-log/audit-log.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -110,13 +111,34 @@ export function AuditLogTable() {
   const actorTypeFromUrl = (searchParams.get("actorType") ?? ALL_VALUE) as
     | typeof ALL_VALUE
     | AuditActorType;
+  const cursorFromUrl = searchParams.get("cursor");
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
 
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: DEFAULT_TABLE_LIMIT,
+  const cursorPagination = useCursorPagination({
+    defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
+  ]);
+
+  useEffect(() => {
+    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("cursor");
+    params.delete("page");
+    params.delete("pageSize");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [
+    cursorFromUrl,
+    pageFromUrl,
+    pageSizeFromUrl,
+    pathname,
+    router,
+    searchParams,
   ]);
   const eventId = searchParams.get("event");
   const { data: eventFromUrl } = useAuditLog(eventId ?? undefined);
@@ -159,62 +181,69 @@ export function AuditLogTable() {
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+        cursorPagination.goNewest();
         updateUrlParams({ startDate, endDate });
       },
-      [updateUrlParams],
+      [cursorPagination.goNewest, updateUrlParams],
     ),
   });
 
   const handleActionChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ action: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleResourceChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ resourceType: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleActorChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ actorId: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleEntityChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ resourceId: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleOutcomeChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ outcome: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleActorTypeChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ actorType: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const sortDirection = sorting[0]?.desc === false ? "asc" : "desc";
+  const handleSortingChange = useCallback(
+    (nextSorting: SortingState) => {
+      setSorting(nextSorting);
+      cursorPagination.goNewest();
+    },
+    [cursorPagination.goNewest],
+  );
 
   const action = (ALL_ACTIONS as readonly string[]).includes(actionFromUrl)
     ? (actionFromUrl as AuditEventName)
@@ -239,8 +268,8 @@ export function AuditLogTable() {
     isLoadingError: isAuditLogsLoadError,
     refetch: refetchAuditLogs,
   } = useAuditLogs({
-    limit: pagination.pageSize,
-    offset: pagination.pageIndex * pagination.pageSize,
+    limit: cursorPagination.pageSize,
+    cursor: cursorPagination.cursor,
     sortDirection,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
@@ -537,7 +566,7 @@ export function AuditLogTable() {
     dateTimePicker.startDate !== undefined;
 
   const clearFilters = useCallback(() => {
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
       search: null,
@@ -549,9 +578,11 @@ export function AuditLogTable() {
       actorId: null,
       startDate: null,
       endDate: null,
-      page: "1",
+      cursor: null,
+      page: null,
+      pageSize: null,
     });
-  }, [dateTimePicker, updateUrlParams]);
+  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
 
   if (isAuditLogsLoadError) {
     return (
@@ -649,6 +680,8 @@ export function AuditLogTable() {
             searchFields={["actor", "path", "resource"]}
             paramName="search"
             className={filterSearchClass}
+            paginationMode="cursor"
+            onSearchChange={cursorPagination.goNewest}
           />
           <FilterSelect
             value={action ?? ALL_VALUE}
@@ -687,20 +720,24 @@ export function AuditLogTable() {
         columns={columns}
         data={rows}
         hideSelectedCount
-        pagination={
+        cursorPagination={
           paginationMeta
             ? {
-                pageIndex: pagination.pageIndex,
-                pageSize: pagination.pageSize,
-                total: paginationMeta.total,
+                pageIndex: cursorPagination.pageIndex,
+                pageSize: cursorPagination.pageSize,
+                hasNext: paginationMeta.hasNext,
+                canGoNewer: cursorPagination.canGoNewer,
+                onPageSizeChange: cursorPagination.setPageSize,
+                onNewer: cursorPagination.goNewer,
+                onOlder: () =>
+                  cursorPagination.goOlder(paginationMeta.nextCursor),
               }
             : undefined
         }
         manualPagination
-        onPaginationChange={setPagination}
         manualSorting
         sorting={sorting}
-        onSortingChange={setSorting}
+        onSortingChange={handleSortingChange}
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyMessage="No audit events recorded yet. Administrative actions will appear here as they happen."

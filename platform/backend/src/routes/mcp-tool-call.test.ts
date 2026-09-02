@@ -33,14 +33,18 @@ describe("mcp-tool-call routes", () => {
   let ownRowId: string;
   let otherRowId: string;
 
-  const seedCall = (userId: string | null, method = "tools/call") =>
+  const seedCall = (
+    userId: string | null,
+    overrides: { method?: string; createdAt?: Date } = {},
+  ) =>
     McpToolCallModel.create({
       mcpServerName: "test-server",
-      method,
+      method: overrides.method ?? "tools/call",
       userId,
       agentId,
       toolCall: { id: "call-1", name: "test_tool", arguments: {} },
       toolResult: { content: [{ type: "text", text: "ok" }] },
+      createdAt: overrides.createdAt,
     });
 
   beforeEach(
@@ -99,22 +103,22 @@ describe("mcp-tool-call routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/mcp-tool-calls?limit=10&offset=0",
+      url: "/api/mcp-tool-calls?limit=10",
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().pagination.total).toBe(1);
+    expect(response.json().data).toHaveLength(1);
     expect(response.json().data[0].id).toBe(ownRowId);
   });
 
   test("the org admin (log:admin) lists every user's tool calls", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/mcp-tool-calls?limit=10&offset=0",
+      url: "/api/mcp-tool-calls?limit=10",
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().pagination.total).toBe(3);
+    expect(response.json().data).toHaveLength(3);
   });
 
   test("the predefined platform_admin sees only their own tool calls", async ({
@@ -130,9 +134,9 @@ describe("mcp-tool-call routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/mcp-tool-calls?limit=10&offset=0",
+      url: "/api/mcp-tool-calls?limit=10",
     });
-    expect(response.json().pagination.total).toBe(1);
+    expect(response.json().data).toHaveLength(1);
     expect(response.json().data[0].id).toBe(mine.id);
   });
 
@@ -175,19 +179,82 @@ describe("mcp-tool-call routes", () => {
 
     const invisible = await app.inject({
       method: "GET",
-      url: `/api/mcp-tool-calls?limit=10&offset=0&agentId=${privateAgent.id}`,
+      url: `/api/mcp-tool-calls?limit=10&agentId=${privateAgent.id}`,
     });
     expect(invisible.statusCode).toBe(200);
-    expect(invisible.json().pagination.total).toBe(0);
+    expect(invisible.json()).toMatchObject({
+      data: [],
+      pagination: { hasNext: false, nextCursor: null },
+    });
 
     // A visible org agent still only yields the caller's own rows.
     const mine = await seedCall(caller.id);
     const visible = await app.inject({
       method: "GET",
-      url: `/api/mcp-tool-calls?limit=10&offset=0&agentId=${agentId}`,
+      url: `/api/mcp-tool-calls?limit=10&agentId=${agentId}`,
     });
     expect(visible.statusCode).toBe(200);
-    expect(visible.json().pagination.total).toBe(1);
+    expect(visible.json().data).toHaveLength(1);
     expect(visible.json().data[0].id).toBe(mine.id);
+  });
+
+  test("returns an empty cursor page when the caller can access no agents", async ({
+    makeUser,
+  }) => {
+    currentUser = await makeUser();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/mcp-tool-calls?limit=10",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: [],
+      pagination: { limit: 10, hasNext: false, nextCursor: null },
+    });
+  });
+
+  test("walks identical timestamps without repeating or skipping rows", async () => {
+    const createdAt = new Date("2026-01-02T03:04:05.000Z");
+    const seeded = await Promise.all(
+      Array.from({ length: 5 }, () => seedCall(currentUser.id, { createdAt })),
+    );
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/api/mcp-tool-calls?limit=4",
+    });
+    const firstBody = first.json();
+    const second = await app.inject({
+      method: "GET",
+      url: `/api/mcp-tool-calls?limit=4&cursor=${encodeURIComponent(firstBody.pagination.nextCursor)}`,
+    });
+    const secondBody = second.json();
+
+    const ids = [...firstBody.data, ...secondBody.data].map(
+      (row: { id: string }) => row.id,
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const row of seeded) expect(ids).toContain(row.id);
+    expect(secondBody.pagination).toMatchObject({
+      hasNext: false,
+      nextCursor: null,
+    });
+  });
+
+  test("ignores legacy offsets and malformed cursors", async () => {
+    const newest = await seedCall(currentUser.id, {
+      createdAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
+
+    for (const query of ["offset=999&page=999", "cursor=truncated"] as const) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/mcp-tool-calls?limit=1&${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data[0].id).toBe(newest.id);
+    }
   });
 });

@@ -23,18 +23,15 @@ export const AUDIT_LOG_QUERY_KEY = ["audit-logs"] as const;
 const EMPTY_RESPONSE = (limit: number): AuditLogsResponse => ({
   data: [],
   pagination: {
-    currentPage: 1,
     limit,
-    total: 0,
-    totalPages: 0,
+    nextCursor: null,
     hasNext: false,
-    hasPrev: false,
   },
 });
 
 export function useAuditLogs({
   limit = DEFAULT_TABLE_LIMIT,
-  offset = 0,
+  cursor,
   sortDirection = "desc",
   startDate,
   endDate,
@@ -47,7 +44,7 @@ export function useAuditLogs({
   search,
 }: {
   limit?: number;
-  offset?: number;
+  cursor?: string;
   sortDirection?: AuditLogsQuery["sortDirection"];
   startDate?: string;
   endDate?: string;
@@ -64,7 +61,7 @@ export function useAuditLogs({
       ...AUDIT_LOG_QUERY_KEY,
       {
         limit,
-        offset,
+        cursor,
         sortDirection,
         startDate,
         endDate,
@@ -81,7 +78,7 @@ export function useAuditLogs({
       const response = await getAuditLogs({
         query: {
           limit,
-          offset,
+          ...(cursor ? { cursor } : {}),
           ...(sortDirection ? { sortDirection } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),

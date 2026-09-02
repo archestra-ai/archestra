@@ -23614,7 +23614,7 @@ export type GetAuditLogsData = {
         search?: string;
         sortDirection?: 'asc' | 'desc';
         limit?: number;
-        offset?: number;
+        cursor?: string;
     };
     url: '/api/audit-logs';
 };
@@ -23721,12 +23721,9 @@ export type GetAuditLogsResponses = {
             impersonatedByEmail: string | null;
         }>;
         pagination: {
-            currentPage: number;
             limit: number;
-            total: number;
-            totalPages: number;
+            nextCursor: string | null;
             hasNext: boolean;
-            hasPrev: boolean;
         };
     };
 };
@@ -48321,7 +48318,7 @@ export type GetInteractionSessionsData = {
          */
         endDate?: string;
         limit?: number;
-        offset?: number;
+        cursor?: string;
     };
     url: '/api/interactions/sessions';
 };
@@ -48441,12 +48438,9 @@ export type GetInteractionSessionsResponses = {
             claudeCodeTitle: string | null;
         }>;
         pagination: {
-            currentPage: number;
             limit: number;
-            total: number;
-            totalPages: number;
+            nextCursor: string | null;
             hasNext: boolean;
-            hasPrev: boolean;
         };
     };
 };
@@ -72448,8 +72442,7 @@ export type GetMcpToolCallsData = {
          */
         search?: string;
         limit?: number;
-        offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';
+        cursor?: string;
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/mcp-tool-calls';
@@ -72552,12 +72545,9 @@ export type GetMcpToolCallsResponses = {
             appName: string | null;
         }>;
         pagination: {
-            currentPage: number;
             limit: number;
-            total: number;
-            totalPages: number;
+            nextCursor: string | null;
             hasNext: boolean;
-            hasPrev: boolean;
         };
     };
 };

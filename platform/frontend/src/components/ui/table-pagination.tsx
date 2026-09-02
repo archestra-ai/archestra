@@ -30,6 +30,19 @@ interface TablePaginationProps {
   compact?: boolean;
 }
 
+interface CursorTablePaginationProps {
+  pageIndex: number;
+  pageSize: number;
+  rowCount: number;
+  hasNext: boolean;
+  canGoNewer: boolean;
+  onPageSizeChange: (pageSize: number) => void;
+  onNewer: () => void;
+  onOlder: () => void;
+  /** Content to render on the left side (e.g., row selection count) */
+  leftContent?: React.ReactNode;
+}
+
 // --- Shared sub-components ---
 
 /** Rows-per-page selector, used by both desktop and mobile layouts */
@@ -242,5 +255,57 @@ export function TablePagination({
         </div>
       </div>
     </>
+  );
+}
+
+export function CursorTablePagination({
+  pageIndex,
+  pageSize,
+  rowCount,
+  hasNext,
+  canGoNewer,
+  onPageSizeChange,
+  onNewer,
+  onOlder,
+  leftContent,
+}: CursorTablePaginationProps) {
+  const firstRow = rowCount === 0 ? 0 : pageIndex * pageSize + 1;
+  const lastRow = rowCount === 0 ? 0 : firstRow + rowCount - 1;
+
+  return (
+    <div className="flex flex-col items-center gap-3 md:flex-row md:justify-between">
+      <div className="text-sm text-muted-foreground md:flex-1">
+        {leftContent}
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-3 md:gap-6">
+        <RowsPerPageSelect
+          pageSize={pageSize}
+          onPageSizeChange={onPageSizeChange}
+        />
+        <span className="min-w-[112px] text-center text-sm font-medium tabular-nums">
+          Showing {firstRow}&ndash;{lastRow}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onNewer}
+            disabled={!canGoNewer}
+          >
+            <ChevronLeft className="size-4" />
+            <span>Newer</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onOlder}
+            disabled={!hasNext}
+          >
+            <span>Older</span>
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -59,8 +59,7 @@ export function useMcpToolCalls({
   endDate,
   search,
   limit = DEFAULT_TABLE_LIMIT,
-  offset = 0,
-  sortBy,
+  cursor,
   sortDirection = "desc",
   initialData,
 }: {
@@ -69,10 +68,7 @@ export function useMcpToolCalls({
   endDate?: string;
   search?: string;
   limit?: number;
-  offset?: number;
-  sortBy?: NonNullable<
-    archestraApiTypes.GetMcpToolCallsData["query"]
-  >["sortBy"];
+  cursor?: string;
   sortDirection?: NonNullable<
     archestraApiTypes.GetMcpToolCallsData["query"]
   >["sortDirection"];
@@ -86,8 +82,7 @@ export function useMcpToolCalls({
       endDate,
       search,
       limit,
-      offset,
-      sortBy,
+      cursor,
       sortDirection,
     ],
     queryFn: async () => {
@@ -98,8 +93,7 @@ export function useMcpToolCalls({
           ...(endDate ? { endDate } : {}),
           ...(search ? { search } : {}),
           limit,
-          offset,
-          ...(sortBy ? { sortBy } : {}),
+          ...(cursor ? { cursor } : {}),
           sortDirection,
         },
       });
@@ -109,22 +103,18 @@ export function useMcpToolCalls({
         response.data ?? {
           data: [],
           pagination: {
-            currentPage: 1,
             limit,
-            total: 0,
-            totalPages: 0,
+            nextCursor: null,
             hasNext: false,
-            hasPrev: false,
           },
         }
       );
     },
-    // Only use initialData for the first page (offset 0) with default sorting and default limit
+    // Only use initialData for the newest page with default sorting and limit.
     initialData:
-      offset === 0 &&
+      !cursor &&
       limit === DEFAULT_TABLE_LIMIT &&
       !agentId &&
-      sortBy === "createdAt" &&
       sortDirection === "desc" &&
       !startDate &&
       !endDate &&

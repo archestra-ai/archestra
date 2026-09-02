@@ -1522,7 +1522,7 @@ class InteractionModel {
       const at = new Date(position.value);
       if (!Number.isNaN(at.getTime())) {
         conditions.push(
-          sql`(${t.createdAt}, ${t.id}) < (${at}, ${position.id}::uuid)`,
+          sql`(${t.createdAt}, ${t.id}) < (${position.value}::timestamp, ${position.id}::uuid)`,
         );
       }
     }
@@ -1572,6 +1572,9 @@ class InteractionModel {
     }>,
     whereClause: SQL | undefined,
   ): Promise<SessionSummary[]> {
+    // Sessionless interactions each form their own group; real sessions group
+    // by their shared session id.
+    const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
     const pageSessionIds = sessionPage.flatMap((session) =>
       session.sessionId ? [session.sessionId] : [],
     );

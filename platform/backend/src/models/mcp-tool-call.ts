@@ -220,8 +220,8 @@ class McpToolCallModel {
         const keyset = sql`(${schema.mcpToolCallsTable.createdAt}, ${schema.mcpToolCallsTable.id})`;
         conditions.push(
           ascending
-            ? sql`${keyset} > (${at}, ${position.id}::uuid)`
-            : sql`${keyset} < (${at}, ${position.id}::uuid)`,
+            ? sql`${keyset} > (${position.value}::timestamp, ${position.id}::uuid)`
+            : sql`${keyset} < (${position.value}::timestamp, ${position.id}::uuid)`,
         );
       }
     }

@@ -185,8 +185,8 @@ class AuditLogModel {
         const keyset = sql`(${schema.auditLogsTable.createdAt}, ${schema.auditLogsTable.eventSequence})`;
         conditions.push(
           sortDirection === "asc"
-            ? sql`${keyset} > (${at}, ${seq})`
-            : sql`${keyset} < (${at}, ${seq})`,
+            ? sql`${keyset} > (${position.value}::timestamptz, ${seq})`
+            : sql`${keyset} < (${position.value}::timestamptz, ${seq})`,
         );
       }
     }

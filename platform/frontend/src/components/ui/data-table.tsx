@@ -34,7 +34,10 @@ import {
 } from "@/lib/bulk-range-selection-context";
 import { cn } from "@/lib/utils";
 import { DATA_TABLE_SELECT_COLUMN_SIZE } from "./data-table.constants";
-import { DataTablePagination } from "./data-table-pagination";
+import {
+  type CursorPaginationState,
+  DataTablePagination,
+} from "./data-table-pagination";
 
 const COMPACT_ICON_COLUMN_IDS = new Set(["icon", "avatar", "select"]);
 const ACTIONS_COLUMN_ID = "actions";
@@ -52,6 +55,8 @@ interface DataTableProps<TData, TValue> {
     pageIndex: number;
     pageSize: number;
   }) => void;
+  /** Cursor pagination is intentionally separate from offset pagination. */
+  cursorPagination?: CursorPaginationState;
   manualPagination?: boolean;
   onSortingChange?: (sorting: SortingState) => void;
   manualSorting?: boolean;
@@ -124,6 +129,7 @@ export function DataTable<TData, TValue>({
   data,
   pagination,
   onPaginationChange,
+  cursorPagination,
   manualPagination = false,
   onSortingChange,
   manualSorting = false,
@@ -220,7 +226,12 @@ export function DataTable<TData, TValue>({
             pageIndex: pagination.pageIndex,
             pageSize: pagination.pageSize,
           }
-        : internalPagination,
+        : cursorPagination
+          ? {
+              pageIndex: cursorPagination.pageIndex,
+              pageSize: cursorPagination.pageSize,
+            }
+          : internalPagination,
     },
     onPaginationChange: (updater) => {
       const currentPagination = table.getState().pagination;
@@ -472,15 +483,20 @@ export function DataTable<TData, TValue>({
           </Table>
         </div>
       </div>
-      {(pagination || !manualPagination) &&
+      {(pagination || cursorPagination || !manualPagination) &&
         (!hidePaginationWhenSinglePage ||
-          (pagination?.total ?? data.length) >
-            (pagination?.pageSize ?? table.getState().pagination.pageSize)) && (
+          (cursorPagination
+            ? cursorPagination.pageIndex > 0 || cursorPagination.hasNext
+            : (pagination?.total ?? data.length) >
+              (pagination?.pageSize ??
+                table.getState().pagination.pageSize))) && (
           <DataTablePagination
             table={table}
             totalRows={pagination?.total}
             hideSelectedCount={hideSelectedCount ?? !rowSelection}
             compactPagination={compactPagination}
+            cursorPagination={cursorPagination}
+            rowCount={data.length}
           />
         )}
     </div>

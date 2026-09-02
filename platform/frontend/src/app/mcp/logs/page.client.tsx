@@ -35,6 +35,7 @@ import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -108,11 +109,13 @@ function McpToolCallsTable({
   const profileIdFromUrl =
     searchParams.get("profileId") || searchParams.get("profileID");
   const searchFromUrl = searchParams.get("search");
+  const cursorFromUrl = searchParams.get("cursor");
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
 
   const [profileFilter, setProfileFilter] = useState(profileIdFromUrl || "all");
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: DEFAULT_TABLE_LIMIT,
+  const cursorPagination = useCursorPagination({
+    defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
@@ -120,7 +123,27 @@ function McpToolCallsTable({
 
   useEffect(() => {
     setProfileFilter(profileIdFromUrl || "all");
-  }, [profileIdFromUrl]);
+    cursorPagination.goNewest();
+  }, [cursorPagination.goNewest, profileIdFromUrl]);
+
+  useEffect(() => {
+    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("cursor");
+    params.delete("page");
+    params.delete("pageSize");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [
+    cursorFromUrl,
+    pageFromUrl,
+    pageSizeFromUrl,
+    pathname,
+    router,
+    searchParams,
+  ]);
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -142,13 +165,13 @@ function McpToolCallsTable({
   const handleProfileFilterChange = useCallback(
     (value: string) => {
       setProfileFilter(value);
-      setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+      cursorPagination.goNewest();
       updateUrlParams({
         profileId: value === "all" ? null : value,
         profileID: null,
       });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   // Date time range picker hook
@@ -157,28 +180,24 @@ function McpToolCallsTable({
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        setPagination((prev) => ({ ...prev, pageIndex: 0 })); // Reset to first page
+        cursorPagination.goNewest();
         updateUrlParams({
           startDate,
           endDate,
         });
       },
-      [updateUrlParams],
+      [cursorPagination.goNewest, updateUrlParams],
     ),
   });
 
-  // Convert TanStack sorting to API format
-  const sortBy = sorting[0]?.id;
   const sortDirection = sorting[0]?.desc ? "desc" : "asc";
-  // Map UI column ids to API sort fields
-  const apiSortBy: NonNullable<
-    archestraApiTypes.GetMcpToolCallsData["query"]
-  >["sortBy"] =
-    sortBy === "method"
-      ? "method"
-      : sortBy === "createdAt"
-        ? "createdAt"
-        : undefined;
+  const handleSortingChange = useCallback(
+    (nextSorting: SortingState) => {
+      setSorting(nextSorting);
+      cursorPagination.goNewest();
+    },
+    [cursorPagination.goNewest],
+  );
 
   const {
     data: mcpToolCallsResponse,
@@ -187,9 +206,8 @@ function McpToolCallsTable({
     refetch: refetchMcpToolCalls,
   } = useMcpToolCalls({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
-    limit: pagination.pageSize,
-    offset: pagination.pageIndex * pagination.pageSize,
-    sortBy: apiSortBy,
+    limit: cursorPagination.pageSize,
+    cursor: cursorPagination.cursor,
     sortDirection,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
@@ -448,7 +466,7 @@ function McpToolCallsTable({
 
   const clearFilters = useCallback(() => {
     setProfileFilter("all");
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
       profileId: null,
@@ -456,9 +474,11 @@ function McpToolCallsTable({
       startDate: null,
       endDate: null,
       search: null,
-      page: "1",
+      cursor: null,
+      page: null,
+      pageSize: null,
     });
-  }, [dateTimePicker, updateUrlParams]);
+  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
 
   // Shared date picker component
   const datePickerComponent = (
@@ -488,6 +508,8 @@ function McpToolCallsTable({
       searchFields={["tool name", "server name"]}
       paramName="search"
       className={filterSearchClass}
+      paginationMode="cursor"
+      onSearchChange={cursorPagination.goNewest}
     />
   );
 
@@ -540,22 +562,24 @@ function McpToolCallsTable({
         columns={columns}
         data={mcpToolCalls}
         hideSelectedCount
-        pagination={
+        cursorPagination={
           paginationMeta
             ? {
-                pageIndex: pagination.pageIndex,
-                pageSize: pagination.pageSize,
-                total: paginationMeta.total,
+                pageIndex: cursorPagination.pageIndex,
+                pageSize: cursorPagination.pageSize,
+                hasNext: paginationMeta.hasNext,
+                canGoNewer: cursorPagination.canGoNewer,
+                onPageSizeChange: cursorPagination.setPageSize,
+                onNewer: cursorPagination.goNewer,
+                onOlder: () =>
+                  cursorPagination.goOlder(paginationMeta.nextCursor),
               }
             : undefined
         }
         manualPagination
-        onPaginationChange={(newPagination) => {
-          setPagination(newPagination);
-        }}
         manualSorting
         sorting={sorting}
-        onSortingChange={setSorting}
+        onSortingChange={handleSortingChange}
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyIcon={MessagesSquare}

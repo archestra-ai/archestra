@@ -267,7 +267,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       fastify.log.info(
         {
           resultCount: result.data.length,
-          total: result.pagination.total,
+          hasNext: result.pagination.hasNext,
         },
         "GetInteractionSessions result",
       );

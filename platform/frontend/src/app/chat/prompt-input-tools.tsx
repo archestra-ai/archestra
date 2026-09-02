@@ -660,8 +660,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             /* Same radius as the controls it clips: they are full-height and
                sit flush against the group's end caps, so a wider group radius
                rounds their outer corners while the inner ones keep the button
-               radius — a lopsided hover shape (T-1088). */
-            <div className="flex items-center h-8 rounded-md bg-muted/50 overflow-hidden">
+               radius — a lopsided hover shape (T-1088). Let keyboard focus
+               escape that clipping and stack above adjacent controls so its
+               ring stays intact. */
+            <div className="flex items-center h-8 rounded-md bg-muted/50 overflow-hidden has-[:focus-visible]:overflow-visible [&_button:focus-visible]:relative [&_button:focus-visible]:z-10">
               {(conversationId || onApiKeyChange) && (
                 <LlmProviderApiKeySelector
                   conversationId={conversationId}

@@ -70,7 +70,7 @@ describe("TerminalPlayback", () => {
     dimensions.current = { cols: 120, rows: 40 };
     act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
 
-    expect(terminal.write).toHaveBeenCalledWith("captured frame");
+    expect(terminal.write).toHaveBeenCalledWith("captured frame\u001b[?25l");
   });
 
   it("replays raw terminal controls and appends streamed bytes", async () => {
@@ -78,24 +78,24 @@ describe("TerminalPlayback", () => {
     const { rerender } = render(<TerminalPlayback content={firstFrame} />);
 
     await waitFor(() =>
-      expect(terminal.write).toHaveBeenCalledWith(firstFrame),
+      expect(terminal.write).toHaveBeenCalledWith(`${firstFrame}\u001b[?25l`),
     );
 
     await act(() =>
       rerender(<TerminalPlayback content={`${firstFrame}\r\nReady`} />),
     );
-    expect(terminal.write).toHaveBeenLastCalledWith("\r\nReady");
+    expect(terminal.write).toHaveBeenLastCalledWith("\r\nReady\u001b[?25l");
     expect(terminal.reset).not.toHaveBeenCalled();
   });
 
   it("resets the emulated screen when the transcript is replaced", async () => {
     const { rerender } = render(<TerminalPlayback content="first task" />);
     await waitFor(() =>
-      expect(terminal.write).toHaveBeenCalledWith("first task"),
+      expect(terminal.write).toHaveBeenCalledWith("first task\u001b[?25l"),
     );
 
     await act(() => rerender(<TerminalPlayback content="replacement" />));
     expect(terminal.reset).toHaveBeenCalledOnce();
-    expect(terminal.write).toHaveBeenLastCalledWith("replacement");
+    expect(terminal.write).toHaveBeenLastCalledWith("replacement\u001b[?25l");
   });
 });

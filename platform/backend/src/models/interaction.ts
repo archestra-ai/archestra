@@ -1674,96 +1674,29 @@ class InteractionModel {
     // Session IDs can be any string, but interaction IDs must be valid UUIDs
     const uuidKeys = sessionKeys.filter((k) => isUuid(k));
 
-    // Fetch the most recent N interactions per session, ordered by created_at DESC
-    // We limit to 20 per session since we only need the title and last main interaction,
-    // which are typically among the most recent. This prevents fetching thousands of
-    // interactions for long-running sessions.
-    // We filter in JS (much faster than SQL text scanning for the title/prompt checks)
-    const INTERACTIONS_PER_SESSION = 20;
+    // Two narrow windows per session instead of one deep one. The scan below
+    // needs exactly two things: the session's latest "main" interaction, which
+    // lives among its newest rows, and — for Claude Code — the one-off
+    // title-generation call, which the client issues at the *start* of a
+    // session. Reading 20 newest rows to look for both was the heaviest part of
+    // the sessions list by a wide margin: each of a session's newest turns
+    // carries the whole conversation so far, so every one of them had to be
+    // pulled out of TOAST, decrypted and stringified. Three rows from each end
+    // cover both signals for a fraction of the bytes, and they find titles in
+    // long sessions, where a newest-only window has long since scrolled past
+    // the opening turns.
+    const NEWEST_PER_SESSION = 3;
+    const OLDEST_PER_SESSION = 3;
+    // Fallback depth, used only for sessions the narrow windows leave without a
+    // main interaction (see below).
+    const DEEP_PER_SESSION = 20;
 
-    // Per-key top-N via LATERAL instead of one `session_id IN (...) OR
-    // id IN (...)` query ranked with ROW_NUMBER(): the window form had to
-    // materialize and sort EVERY interaction of every listed session —
-    // request/response payloads included — before discarding all but the
-    // first N, which pushed busy organizations into statement timeout. The
-    // LATERAL branch is one (session_id, created_at DESC) index descent per
-    // key that stops after N rows; sessionless interaction ids are a separate
-    // primary-key lookup (each such row is its own "session", so N does not
-    // apply). A uuid key that matches a row owned by a *different* session is
-    // no longer fetched — the JS below grouped such rows under a key nobody
-    // asked for and never read them.
-    const sessionKeyList = sql.join(
-      sessionKeys.map((k) => sql`${k}`),
-      sql`, `,
-    );
-    const sessionlessBranch =
-      uuidKeys.length > 0
-        ? sql`
-      UNION ALL
-      SELECT id, session_id, thread_id, request, response, type, created_at,
-             locked_chat_conversation_id
-      FROM interactions
-      WHERE id IN (${sql.join(
-        uuidKeys.map((k) => sql`${k}::uuid`),
-        sql`, `,
-      )})
-        AND session_id IS NULL`
-        : sql``;
-
-    // thread_id is selected so the chosen tip can be reconstructed from deltas.
-    const interactionsResult = await db.execute<{
-      id: string;
-      session_id: string | null;
-      thread_id: string | null;
-      request: unknown;
-      response: unknown;
-      type: string;
-      created_at: Date;
-      // Selected so readInteractionRow can tell a locked-chat row from an
-      // ordinary one; without it the guard cannot fire and a DEK envelope
-      // would be handed to the server-key decryptor.
-      locked_chat_conversation_id: string | null;
-    }>(sql`
-      -- id DESC tiebreak: turns within one session commonly land on the same
-      -- millisecond, and created_at alone leaves their order undefined — which
-      -- let an earlier turn be picked as the session's latest, showing a stale
-      -- preview. Ids are monotonic UUIDv7, so they settle the tie by true
-      -- insertion order (the same tiebreak the write path already uses to
-      -- resolve a delta parent).
-      SELECT t.id, t.session_id, t.thread_id, t.request, t.response, t.type,
-             t.created_at, t.locked_chat_conversation_id
-      FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
-      CROSS JOIN LATERAL (
-        SELECT id, session_id, thread_id, request, response, type, created_at,
-               locked_chat_conversation_id
-        FROM interactions
-        WHERE session_id = keys.key
-        ORDER BY created_at DESC, id DESC
-        LIMIT ${INTERACTIONS_PER_SESSION}
-      ) t
-      ${sessionlessBranch}
-      ORDER BY session_id, created_at DESC, id DESC
-    `);
-
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Raw-SQL rows bypass the model select paths — decrypt before the JS
-    // content scanning below.
-    for (const row of interactionsResult.rows) {
-      readInteractionRow(row);
-    }
-    // SPDX-SnippetEnd
-
-    const interactions = interactionsResult.rows.map((row) => ({
-      id: row.id,
-      sessionId: row.session_id,
-      threadId: row.thread_id,
-      request: row.request,
-      response: row.response,
-      type: row.type,
-      createdAt: row.created_at,
-    }));
+    const interactions = await InteractionModel.fetchSessionWindowRows({
+      sessionKeys,
+      uuidKeys,
+      newest: NEWEST_PER_SESSION,
+      oldest: OLDEST_PER_SESSION,
+    });
 
     // Group by session and find the "last main interaction" and "title interaction"
     const result = new Map<
@@ -1776,13 +1709,7 @@ class InteractionModel {
     >();
 
     // Group interactions by session key (sessionId or interaction id for single interactions)
-    const groupedBySession = new Map<string, Array<(typeof interactions)[0]>>();
-    for (const interaction of interactions) {
-      const key = interaction.sessionId ?? interaction.id;
-      const existing = groupedBySession.get(key) ?? [];
-      existing.push(interaction);
-      groupedBySession.set(key, existing);
-    }
+    const groupedBySession = groupRowsBySession(interactions);
 
     // For each session, find the last "main" interaction and title. Selection
     // is pure, so it runs for every session first and the chosen tips are
@@ -1796,13 +1723,18 @@ class InteractionModel {
       }
     >();
 
-    for (const [sessionKey, sessionInteractions] of groupedBySession) {
-      let lastMainInteraction: (typeof interactions)[0] | null = null;
+    // Selection is pure, so it can run a second time over a deeper window.
+    const selectTip = (
+      windowRows: SessionWindowRow[],
+    ): {
+      lastMainInteraction: SessionWindowRow | null;
+      claudeCodeTitle: string | null | undefined;
+    } => {
+      let lastMainInteraction: SessionWindowRow | null = null;
       // undefined = not yet found, null = found but no text, string = found with text
       let claudeCodeTitle: string | null | undefined;
 
-      // Interactions are already ordered by created_at DESC
-      for (const interaction of sessionInteractions) {
+      for (const interaction of windowRows) {
         const requestStr = JSON.stringify(interaction.request);
 
         // Check for title generation request (Claude Code)
@@ -1859,11 +1791,36 @@ class InteractionModel {
         }
       }
 
-      if (lastMainInteraction || claudeCodeTitle) {
-        selectedPerSession.set(sessionKey, {
-          lastMainInteraction,
-          claudeCodeTitle,
-        });
+      return { lastMainInteraction, claudeCodeTitle };
+    };
+
+    for (const [sessionKey, windowRows] of groupedBySession) {
+      const selection = selectTip(windowRows);
+      if (selection.lastMainInteraction || selection.claudeCodeTitle) {
+        selectedPerSession.set(sessionKey, selection);
+      }
+    }
+
+    // A session whose sampled rows are all scaffolding — title generation,
+    // prompt suggestions — yields no main interaction, and would lose the
+    // preview the old deep window used to find. Re-read just those sessions at
+    // the old depth so the preview cannot regress; in the common case the list
+    // is empty and this costs nothing.
+    const unresolvedKeys = [...groupedBySession.keys()].filter(
+      (key) => !selectedPerSession.get(key)?.lastMainInteraction,
+    );
+    if (unresolvedKeys.length > 0) {
+      const deepRows = await InteractionModel.fetchSessionWindowRows({
+        sessionKeys: unresolvedKeys,
+        uuidKeys: [],
+        newest: DEEP_PER_SESSION,
+        oldest: 0,
+      });
+      for (const [sessionKey, windowRows] of groupRowsBySession(deepRows)) {
+        const selection = selectTip(windowRows);
+        if (selection.lastMainInteraction || selection.claudeCodeTitle) {
+          selectedPerSession.set(sessionKey, selection);
+        }
       }
     }
 
@@ -1904,6 +1861,138 @@ class InteractionModel {
   }
 
   /**
+   * Rows from the head and/or tail of each session's interaction list,
+   * decrypted and returned newest-first across all sessions.
+   *
+   * `newest`/`oldest` are per-session row budgets. A session shorter than their
+   * sum simply yields its rows once — the two windows overlap and are
+   * de-duplicated by id. Sessionless interaction ids in `uuidKeys` are fetched
+   * whole, since each such row is its own "session".
+   */
+  private static async fetchSessionWindowRows({
+    sessionKeys,
+    uuidKeys,
+    newest,
+    oldest,
+  }: {
+    sessionKeys: string[];
+    uuidKeys: string[];
+    newest: number;
+    oldest: number;
+  }): Promise<SessionWindowRow[]> {
+    if (sessionKeys.length === 0) {
+      return [];
+    }
+
+    // Per-key top-N via LATERAL instead of one `session_id IN (...) OR
+    // id IN (...)` query ranked with ROW_NUMBER(): the window form had to
+    // materialize and sort EVERY interaction of every listed session —
+    // request/response payloads included — before discarding all but the
+    // first N, which pushed busy organizations into statement timeout. Each
+    // LATERAL branch is one (session_id, created_at) index descent per key
+    // that stops after N rows; sessionless interaction ids are a separate
+    // primary-key lookup (each such row is its own "session", so N does not
+    // apply). A uuid key that matches a row owned by a *different* session is
+    // not fetched — the JS grouping filed such rows under a key nobody asked
+    // for and never read them.
+    const sessionKeyList = sql.join(
+      sessionKeys.map((k) => sql`${k}`),
+      sql`, `,
+    );
+    const oldestBranch =
+      oldest > 0
+        ? sql`
+        UNION ALL
+        (SELECT id, session_id, thread_id, request, response, type, created_at,
+                locked_chat_conversation_id
+         FROM interactions
+         WHERE session_id = keys.key
+         ORDER BY created_at ASC, id ASC
+         LIMIT ${oldest})`
+        : sql``;
+    const sessionlessBranch =
+      uuidKeys.length > 0
+        ? sql`
+      UNION ALL
+      SELECT id, session_id, thread_id, request, response, type, created_at,
+             locked_chat_conversation_id
+      FROM interactions
+      WHERE id IN (${sql.join(
+        uuidKeys.map((k) => sql`${k}::uuid`),
+        sql`, `,
+      )})
+        AND session_id IS NULL`
+        : sql``;
+
+    // thread_id is selected so the chosen tip can be reconstructed from deltas.
+    const interactionsResult = await db.execute<{
+      id: string;
+      session_id: string | null;
+      thread_id: string | null;
+      request: unknown;
+      response: unknown;
+      type: string;
+      // Raw SQL bypasses Drizzle's column mapping, so timestamps arrive as
+      // whatever the driver hands back — a Date on one, a string on another.
+      created_at: Date | string;
+      // Selected so readInteractionRow can tell a locked-chat row from an
+      // ordinary one; without it the guard cannot fire and a DEK envelope
+      // would be handed to the server-key decryptor.
+      locked_chat_conversation_id: string | null;
+    }>(sql`
+      -- id tiebreak: turns within one session commonly land on the same
+      -- millisecond, and created_at alone leaves their order undefined — which
+      -- let an earlier turn be picked as the session's latest, showing a stale
+      -- preview. Ids are monotonic UUIDv7, so they settle the tie by true
+      -- insertion order (the same tiebreak the write path already uses to
+      -- resolve a delta parent). Final ordering is applied in JS, since the
+      -- per-key UNION below has no single ordering to inherit.
+      SELECT t.id, t.session_id, t.thread_id, t.request, t.response, t.type,
+             t.created_at, t.locked_chat_conversation_id
+      FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
+      CROSS JOIN LATERAL (
+        (SELECT id, session_id, thread_id, request, response, type, created_at,
+                locked_chat_conversation_id
+         FROM interactions
+         WHERE session_id = keys.key
+         ORDER BY created_at DESC, id DESC
+         LIMIT ${newest})
+        ${oldestBranch}
+      ) t
+      ${sessionlessBranch}
+    `);
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Raw-SQL rows bypass the model select paths — decrypt before the caller
+    // scans their content.
+    for (const row of interactionsResult.rows) {
+      readInteractionRow(row);
+    }
+    // SPDX-SnippetEnd
+
+    // De-duplicate: on a session shorter than newest + oldest the two windows
+    // overlap, and the caller's scan must not see the same row twice.
+    const byId = new Map<string, SessionWindowRow>();
+    for (const row of interactionsResult.rows) {
+      byId.set(row.id, {
+        id: row.id,
+        sessionId: row.session_id,
+        threadId: row.thread_id,
+        request: row.request,
+        response: row.response,
+        type: row.type,
+        createdAt: new Date(row.created_at).getTime(),
+      });
+    }
+
+    return [...byId.values()].sort(
+      (a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id),
+    );
+  }
+
+  /**
    * Number of distinct users with at least one attributed interaction since
    * `since`. Backs the `llm_active_users` gauge.
    *
@@ -1930,6 +2019,32 @@ class InteractionModel {
 }
 
 export default InteractionModel;
+
+/** One interaction row sampled for a session's list entry. */
+type SessionWindowRow = {
+  id: string;
+  sessionId: string | null;
+  threadId: string | null;
+  request: unknown;
+  response: unknown;
+  type: string;
+  /** Epoch milliseconds — see the driver note in fetchSessionWindowRows. */
+  createdAt: number;
+};
+
+/** Key by session id, falling back to the row's own id for sessionless rows. */
+function groupRowsBySession(
+  rows: SessionWindowRow[],
+): Map<string, SessionWindowRow[]> {
+  const grouped = new Map<string, SessionWindowRow[]>();
+  for (const row of rows) {
+    const key = row.sessionId ?? row.id;
+    const existing = grouped.get(key) ?? [];
+    existing.push(row);
+    grouped.set(key, existing);
+  }
+  return grouped;
+}
 
 /**
  * Batch-reconstruct full request/processedRequest for delta-encoded rows.

@@ -159,6 +159,7 @@ describe("fetchOpenrouterModels", () => {
     expect(model.capabilities).toEqual({
       contextLength: 128000,
       supportsToolCalling: true,
+      supportsReasoningEffort: false,
       inputModalities: null,
       outputModalities: null,
       promptPricePerToken: "0.00000015",
@@ -238,6 +239,62 @@ describe("fetchOpenrouterModels", () => {
     expect(model.capabilities?.promptPricePerToken).toBe("0");
   });
 
+  test("reads reasoning support from `reasoning`, not `reasoning_effort`", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "deepseek/deepseek-r1",
+                // A model whose upstream takes a token budget: OpenRouter
+                // accepts a depth for it and converts one, but never lists
+                // `reasoning_effort`. Gating on that spelling would hide the
+                // control on a large share of the reasoning catalog.
+                supported_parameters: ["reasoning", "include_reasoning"],
+              },
+              {
+                id: "openai/gpt-4o",
+                supported_parameters: ["tools", "max_tokens"],
+              },
+            ],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [reasoner, plain] = await fetchOpenrouterModels("test-api-key");
+
+    expect(reasoner.capabilities?.supportsReasoningEffort).toBe(true);
+    // Authoritatively false, not null: OpenRouter is the one that decides what
+    // it serves, so the registry must not open the control behind its back.
+    expect(plain.capabilities?.supportsReasoningEffort).toBe(false);
+  });
+
+  test("leaves reasoning support unknown when /models lists no parameters", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [{ id: "some/model", context_length: 64000 }],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    // Null, so a lower tier still gets to decide rather than being overruled
+    // by an absence.
+    expect(model.capabilities?.supportsReasoningEffort).toBeNull();
+  });
+
   test("returns capabilities for a model that only publishes architecture", async () => {
     mockFetch
       .mockResolvedValueOnce({
@@ -289,6 +346,7 @@ describe("fetchOpenrouterModels", () => {
     expect(model.capabilities).toEqual({
       contextLength: 64000,
       supportsToolCalling: false,
+      supportsReasoningEffort: false,
       inputModalities: null,
       outputModalities: null,
       promptPricePerToken: "0",
@@ -324,6 +382,7 @@ describe("fetchOpenrouterModels", () => {
     expect(model.capabilities).toEqual({
       contextLength: 2000000,
       supportsToolCalling: true,
+      supportsReasoningEffort: false,
       inputModalities: null,
       outputModalities: null,
       promptPricePerToken: null,

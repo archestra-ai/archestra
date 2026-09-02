@@ -204,10 +204,52 @@ describe("LlmModelSearchableSelect", () => {
       screen.getByLabelText("Supports vision (images)"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Supports tool calling")).toBeInTheDocument();
+    // Null is "nobody said", not "it reasons", so the glyph stays off.
+    expect(
+      screen.queryByLabelText("Supports reasoning"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByLabelText("128,000 token context window"),
     ).toHaveTextContent("128K");
     expect(screen.getAllByText("vision-model-v1")).toHaveLength(1);
+  });
+
+  it("marks a reasoning model in the option row", async () => {
+    const user = userEvent.setup();
+    render(
+      <LlmModelSearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        options={[
+          {
+            value: "reasoning-model",
+            model: "Reasoning Model",
+            modelId: "openai/gpt-oss-20b",
+            description: "openai/gpt-oss-20b",
+            provider: "openrouter",
+            capabilities: {
+              contextLength: 131000,
+              inputModalities: ["text"],
+              outputModalities: ["text"],
+              supportsToolCalling: true,
+              supportsReasoningEffort: true,
+              recommendedForAgents: true,
+              pricePerMillionInput: null,
+              pricePerMillionOutput: null,
+              isCustomPrice: false,
+              priceSource: "default",
+              pricePerMillionCacheRead: null,
+              pricePerMillionCacheWrite: null,
+              cachePriceSource: "default",
+            },
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(screen.getByLabelText("Supports reasoning")).toBeInTheDocument();
   });
 
   it("pins the routers to the top of the list", async () => {

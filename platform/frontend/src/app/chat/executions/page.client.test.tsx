@@ -20,6 +20,7 @@ const cancelState = vi.hoisted(() => ({
 const terminalState = vi.hoisted(() => ({
   props: null as {
     taskId: string;
+    title?: string;
     showManualCommand?: boolean;
     showDisconnectedStatus?: boolean;
     onCommandChange?: (command: string | null) => void;
@@ -164,6 +165,29 @@ describe("BackgroundExecutionChatSession", () => {
     expect(
       screen.queryByRole("button", { name: "Stop" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps an attached terminal frame mounted when the execution completes", () => {
+    queryState.value.data = execution({
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+    });
+    const { rerender } = render(
+      <BackgroundExecutionChatSession taskId="task-1" />,
+    );
+    act(() => terminalState.props?.onCommandChange?.("kubectl exec example"));
+
+    queryState.value.data = execution({
+      state: "TASK_STATE_COMPLETED",
+      endedAt: "2026-08-28T18:00:00.000Z",
+    });
+    rerender(<BackgroundExecutionChatSession taskId="task-1" />);
+
+    expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Retained execution output"),
+    ).not.toBeInTheDocument();
+    expect(terminalState.props?.title).toBe("Output");
   });
 });
 

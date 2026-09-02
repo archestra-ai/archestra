@@ -608,7 +608,7 @@ export function ChatMessages({
           feedback={contextCompactionFeedback}
         />
         <ConversationContent>
-          <div className="max-w-4xl mx-auto relative pb-8">
+          <div className="@container/chat max-w-4xl mx-auto relative pb-8">
             <SensitiveContextStickyIndicator
               visible={showStickyUnsafeIndicator}
             />

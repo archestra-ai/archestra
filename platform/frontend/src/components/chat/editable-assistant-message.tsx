@@ -106,12 +106,13 @@ export function EditableAssistantMessage({
     <Message from="assistant" className="group/message">
       {/* The actions are absolutely positioned outside the flow: mounting
           them when streaming ends must not steal width from the bubble,
-          which would make the finished text visibly rewrap. From md up they
-          hang off the bubble's right edge; that doesn't fit a phone viewport
-          (it would widen the horizontal scroll range), so below md they
-          overlay just under the bubble instead. Reveal is hover on desktop
-          and the tap-synthesized hover on touch; pointer-events gating keeps
-          the hidden panel from swallowing taps meant for the content. */}
+          which would make the finished text visibly rewrap. When the chat
+          column itself is wide enough they hang off the bubble's right edge;
+          otherwise they overlay just under the bubble. A container query is
+          important here because the right panel can narrow the chat without
+          changing the viewport breakpoint. Reveal is hover on desktop and
+          the tap-synthesized hover on touch; pointer-events gating keeps the
+          hidden panel from swallowing taps meant for the content. */}
       <div className="relative max-w-[80%]">
         <MessageContent className="max-w-none">
           <Response isStreaming={isStreaming}>{displayText}</Response>
@@ -130,7 +131,7 @@ export function EditableAssistantMessage({
             feedback={feedback}
             onFeedbackChange={onFeedbackChange}
             feedbackDisabled={feedbackDisabled}
-            className="pointer-events-none absolute top-full left-0 z-10 mt-1 opacity-0 transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 md:top-1/2 md:left-full md:mt-0 md:ml-2 md:-translate-y-1/2"
+            className="pointer-events-none absolute top-full left-0 z-10 mt-1 opacity-0 transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 @2xl/chat:top-1/2 @2xl/chat:left-full @2xl/chat:mt-0 @2xl/chat:ml-2 @2xl/chat:-translate-y-1/2"
           />
         )}
       </div>

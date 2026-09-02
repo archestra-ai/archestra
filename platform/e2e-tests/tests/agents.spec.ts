@@ -96,10 +96,14 @@ async function createViaWizard(
   // no section; every other kind opens on its configuration and so names
   // Connect explicitly. Anchored either way, so a URL carrying some other
   // section cannot satisfy the wait.
+  // Matched as a UUID, not as "any segment": the wizard itself lives at
+  // `<list>/new`, which a looser pattern satisfies the moment it loads —
+  // handing back "new" as the record id, which then 400s on cleanup.
+  const RECORD_ID = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
   const connectUrl =
     listPath === "/mcp/gateways"
-      ? new RegExp(`${listPath}/([^/?#]+)$`)
-      : new RegExp(`${listPath}/([^/?#]+)\\?section=connect$`);
+      ? new RegExp(`${listPath}/(${RECORD_ID})$`)
+      : new RegExp(`${listPath}/(${RECORD_ID})\\?section=connect$`);
   await page.waitForURL(connectUrl, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
   const id = page.url().match(connectUrl)?.[1];

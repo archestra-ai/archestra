@@ -191,6 +191,27 @@ beforeEach(() => {
 });
 
 describe("AppSettingsForm save", () => {
+  test("keeps labels under Advanced and saves an in-progress label", async () => {
+    const user = userEvent.setup();
+    const { container, onBack } = renderForm();
+
+    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.type(screen.getByLabelText("Label key"), "region");
+    await user.type(screen.getByLabelText("Label value"), "eu");
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          labels: [{ key: "region", value: "eu" }],
+        }),
+      }),
+    );
+  });
+
   test("saves trimmed identity fields and closes; unchanged tools fire no mutations", async () => {
     const { container, onBack } = renderForm();
 

@@ -760,6 +760,7 @@ function CreateProjectDialog({
       size="small"
       isDirty={form.formState.isDirty}
       onSubmit={onSubmit}
+      bodyClassName="space-y-4"
       footer={
         <>
           <DialogCancelButton>Cancel</DialogCancelButton>

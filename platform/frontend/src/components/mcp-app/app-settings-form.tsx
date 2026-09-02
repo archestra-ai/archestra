@@ -8,11 +8,8 @@ import { Globe, User, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
-import {
-  type ProfileLabel,
-  ProfileLabels,
-  type ProfileLabelsRef,
-} from "@/components/agent-labels";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -411,7 +408,7 @@ export function AppSettingsForm({
       onSubmit={onSubmit}
       className="flex min-h-0 flex-1 flex-col"
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         {canUpdate && (
           <>
             <IdentityFields
@@ -667,7 +664,7 @@ export function AppSettingsForm({
         </VisibilitySelector>
 
         {canUpdate && (
-          <ProfileLabels
+          <AdvancedLabelsSection
             ref={labelsRef}
             labels={labels}
             onLabelsChange={setLabels}

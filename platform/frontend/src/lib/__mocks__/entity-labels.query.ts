@@ -41,16 +41,3 @@ export const useServiceAccountLabelValues = noValues;
 export const useSkillLabelValues = noValues;
 export const useVirtualApiKeyLabelValues = noValues;
 
-export const useSaveConnectorLabels = noSave;
-export const useSaveEnvironmentLabels = noSave;
-export const useSaveKnowledgeBaseLabels = noSave;
-export const useSaveKnowledgeFileLabels = noSave;
-export const useSaveLimitLabels = noSave;
-export const useSaveLlmOauthClientLabels = noSave;
-export const useSaveLlmProviderApiKeyLabels = noSave;
-export const useSaveMcpOauthClientLabels = noSave;
-export const useSaveModelLabels = noSave;
-export const useSavePluginLabels = noSave;
-export const useSaveServiceAccountLabels = noSave;
-export const useSaveSkillLabels = noSave;
-export const useSaveVirtualApiKeyLabels = noSave;

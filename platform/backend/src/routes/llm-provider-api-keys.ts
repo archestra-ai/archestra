@@ -288,14 +288,6 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: LlmProviderApiKeyLabelModel,
     keysOperationId: RouteId.GetLlmProviderApiKeyLabelKeys,
     valuesOperationId: RouteId.GetLlmProviderApiKeyLabelValues,
-    setOperationId: RouteId.SetLlmProviderApiKeyLabels,
-    // Mirrors the update route's own first check.
-    assertCanModify: async ({ id, organizationId }) => {
-      const apiKey = await LlmProviderApiKeyModel.findById(id);
-      if (!apiKey || apiKey.organizationId !== organizationId) {
-        throw new ApiError(404, "LLM provider API key not found");
-      }
-    },
   });
 
   // List all visible LLM provider API keys for the user

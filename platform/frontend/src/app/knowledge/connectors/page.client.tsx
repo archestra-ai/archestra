@@ -21,7 +21,6 @@ import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/cr
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
@@ -61,7 +60,6 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   useConnectorLabelKeys,
   useConnectorLabelValues,
-  useSaveConnectorLabels,
 } from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
@@ -169,9 +167,7 @@ function ConnectorsList() {
   );
   const [permanentlyDeletingConnector, setPermanentlyDeletingConnector] =
     useState<ConnectorItem | null>(null);
-  const [labelingConnector, setLabelingConnector] =
     useState<ConnectorItem | null>(null);
-  const saveConnectorLabels = useSaveConnectorLabels();
   const restoreConnector = useRestoreConnector();
   const permanentlyDeleteConnector = usePermanentlyDeleteConnector();
   // Resolved once here rather than inside a cell renderer, as the shared
@@ -277,12 +273,6 @@ function ConnectorsList() {
     <TableRowActions
       itemName={connector.name}
       actions={[
-        {
-          icon: <Tags className="h-4 w-4" />,
-          label: "Edit labels",
-          permissions: { knowledgeSource: ["update"] },
-          onClick: () => setLabelingConnector(connector),
-        },
         {
           icon: <Pencil className="h-4 w-4" />,
           label: "Edit connector",
@@ -738,20 +728,6 @@ function ConnectorsList() {
             />
           )}
 
-          {labelingConnector && (
-            <EntityLabelsDialog
-              open={!!labelingConnector}
-              onOpenChange={(open) => !open && setLabelingConnector(null)}
-              entityName={labelingConnector.name}
-              labels={labelingConnector.labels}
-              onSave={(labels) =>
-                saveConnectorLabels.mutateAsync({
-                  id: labelingConnector.id,
-                  labels,
-                })
-              }
-            />
-          )}
 
           {deletingConnectorId && (
             <DeleteConnectorDialog

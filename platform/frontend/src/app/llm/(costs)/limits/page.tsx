@@ -11,7 +11,6 @@ import {
   Key,
   Network,
   Plus,
-  Tags,
   Trash2,
   User,
   Users,
@@ -22,7 +21,6 @@ import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { EnvironmentScopeSelect } from "@/components/environment-scope-select";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -76,7 +74,6 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   useLimitLabelKeys,
   useLimitLabelValues,
-  useSaveLimitLabels,
 } from "@/lib/entity-labels.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
@@ -237,8 +234,6 @@ export default function LimitsPage() {
   const modelFilter = searchParams.get("model") || "all";
   const selectedLabels = useSelectedLabels();
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
-  const [labelingLimit, setLabelingLimit] = useState<LimitData | null>(null);
-  const saveLimitLabels = useSaveLimitLabels();
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
@@ -667,11 +662,6 @@ export default function LimitsPage() {
                 icon: <Edit className="h-4 w-4" />,
                 label: "Edit limit",
                 onClick: () => openEditDialog(row.original),
-              },
-              {
-                icon: <Tags className="h-4 w-4" />,
-                label: "Edit labels",
-                onClick: () => setLabelingLimit(row.original),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -1158,17 +1148,6 @@ export default function LimitsPage() {
         </DialogForm>
       </FormDialog>
 
-      {labelingLimit && (
-        <EntityLabelsDialog
-          open={!!labelingLimit}
-          onOpenChange={(open) => !open && setLabelingLimit(null)}
-          entityName={getEntityLabel(labelingLimit)}
-          labels={labelingLimit.labels}
-          onSave={(labels) =>
-            saveLimitLabels.mutateAsync({ id: labelingLimit.id, labels })
-          }
-        />
-      )}
       <DeleteConfirmDialog
         open={!!limitToDelete}
         onOpenChange={(open) => !open && setLimitToDelete(null)}

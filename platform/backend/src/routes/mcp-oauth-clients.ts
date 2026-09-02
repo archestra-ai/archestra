@@ -95,9 +95,6 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: OauthClientLabelModel,
     keysOperationId: RouteId.GetMcpOauthClientLabelKeys,
     valuesOperationId: RouteId.GetMcpOauthClientLabelValues,
-    setOperationId: RouteId.SetMcpOauthClientLabels,
-    // The same scope/ownership check the update and rotate-secret routes use.
-    assertCanModify: (params) => authorizeMcpOauthClientModify(params),
   });
 
   fastify.get(

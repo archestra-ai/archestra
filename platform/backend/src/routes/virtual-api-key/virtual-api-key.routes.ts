@@ -117,21 +117,6 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: VirtualApiKeyLabelModel,
     keysOperationId: RouteId.GetVirtualApiKeyLabelKeys,
     valuesOperationId: RouteId.GetVirtualApiKeyLabelValues,
-    setOperationId: RouteId.SetVirtualApiKeyLabels,
-    // The same ownership/team check the update path runs: virtual keys are
-    // personal or team-scoped, so `llmVirtualKey:update` alone is not enough.
-    assertCanModify: async ({ id, organizationId, userId }) => {
-      const accessContext = await VirtualApiKeyModel.findAccessContextById(id);
-      if (!accessContext || accessContext.organizationId !== organizationId) {
-        throw new ApiError(404, "Virtual API key not found");
-      }
-      await requireVirtualKeyModifyPermission({
-        virtualKey: accessContext,
-        userId,
-        organizationId,
-        userTeamIds: await TeamModel.getUserTeamIds(userId),
-      });
-    },
   });
 
   fastify.get(

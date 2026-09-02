@@ -241,10 +241,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: KnowledgeBaseLabelModel,
     keysOperationId: RouteId.GetKnowledgeBaseLabelKeys,
     valuesOperationId: RouteId.GetKnowledgeBaseLabelValues,
-    setOperationId: RouteId.SetKnowledgeBaseLabels,
-    // The same visibility check the update route runs first.
-    assertCanModify: ({ id, organizationId, userId }) =>
-      findKnowledgeBaseOrThrow({ id, organizationId, userId }),
   });
 
   registerEntityLabelRoutes(fastify, {
@@ -254,10 +250,6 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: KnowledgeBaseConnectorLabelModel,
     keysOperationId: RouteId.GetConnectorLabelKeys,
     valuesOperationId: RouteId.GetConnectorLabelValues,
-    setOperationId: RouteId.SetConnectorLabels,
-    // The same visibility check the update route runs first.
-    assertCanModify: ({ id, organizationId, userId }) =>
-      findConnectorOrThrow({ id, organizationId, userId }),
   });
 
   // ===== Knowledge Base CRUD =====

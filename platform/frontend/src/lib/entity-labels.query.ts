@@ -1,7 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { throwOnApiError } from "@/lib/utils";
 
 type LabelKeysFn = () => Promise<{
   data?: string[];
@@ -11,14 +10,6 @@ type LabelKeysFn = () => Promise<{
 type LabelValuesFn = (args: {
   query: { key?: string };
 }) => Promise<{ data?: string[]; error?: unknown }>;
-
-/** One label as the write endpoints accept it. */
-type LabelInput = {
-  key: string;
-  value: string;
-  keyId?: string;
-  valueId?: string;
-};
 
 /**
  * Build the two hooks a label filter needs for one entity.
@@ -68,53 +59,6 @@ export function createEntityLabelQueries(config: {
   }
 
   return { useLabelKeys, useLabelValues };
-}
-
-/**
- * Build the mutation that saves one row's labels from a list page.
- *
- * Every entity writes through its own `PUT <basePath>/:id/labels`, not its
- * normal update route: a labels-only patch is not expressible on several of
- * them — skills require `content` (and would fork a version), the OAuth
- * clients validate across fields, connectors merge credentials — so a shared
- * editor needs a shared endpoint. Those endpoints re-run each entity's own
- * modify authorization, so this is not a way around per-row permissions.
- *
- * Invalidating the entity's key refreshes both the rows and, because the
- * vocabulary hooks cache under the same prefix, the filter's key/value lists —
- * which a newly-typed label has just extended.
- */
-export function createEntityLabelUpdate(config: {
-  /** Cache namespace, matching the entity's `createEntityLabelQueries` key. */
-  queryKey: string;
-  setFn: (args: {
-    path: { id: string };
-    body: { labels: LabelInput[] };
-  }) => Promise<{ data?: unknown; error?: unknown }>;
-}) {
-  const { queryKey, setFn } = config;
-
-  return function useSaveLabels() {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: async (vars: { id: string; labels: LabelInput[] }) => {
-        const { data, error } = await setFn({
-          path: { id: vars.id },
-          body: { labels: vars.labels },
-        });
-        if (error) {
-          handleApiError(error);
-          return null;
-        }
-        return data;
-      },
-      onSuccess: (data) => {
-        if (!data) return;
-        queryClient.invalidateQueries({ queryKey: [queryKey] });
-        toast.success("Labels saved");
-      },
-    });
-  };
 }
 
 // =============================================================================
@@ -236,73 +180,4 @@ export const {
   queryKey: "environments",
   keysFn: archestraApiSdk.environmentLabelKeys,
   valuesFn: archestraApiSdk.environmentLabelValues,
-});
-
-// =============================================================================
-// Per-entity label save mutations, for the row-level `EntityLabelsDialog`
-// =============================================================================
-
-export const useSaveSkillLabels = createEntityLabelUpdate({
-  queryKey: "skills",
-  setFn: archestraApiSdk.setSkillLabels,
-});
-
-export const useSaveKnowledgeBaseLabels = createEntityLabelUpdate({
-  queryKey: "knowledge-bases",
-  setFn: archestraApiSdk.setKnowledgeBaseLabels,
-});
-
-export const useSaveKnowledgeFileLabels = createEntityLabelUpdate({
-  queryKey: "knowledge-files",
-  setFn: archestraApiSdk.setKnowledgeFileLabels,
-});
-
-export const useSaveConnectorLabels = createEntityLabelUpdate({
-  queryKey: "knowledge-connectors",
-  setFn: archestraApiSdk.setConnectorLabels,
-});
-
-export const useSaveLimitLabels = createEntityLabelUpdate({
-  queryKey: "limits",
-  setFn: archestraApiSdk.setLimitLabels,
-});
-
-export const useSaveModelLabels = createEntityLabelUpdate({
-  queryKey: "llm-models",
-  setFn: archestraApiSdk.setLlmProviderModelLabels,
-});
-
-export const useSaveLlmProviderApiKeyLabels = createEntityLabelUpdate({
-  queryKey: "llm-provider-api-keys",
-  setFn: archestraApiSdk.setLlmProviderApiKeyLabels,
-});
-
-export const useSaveVirtualApiKeyLabels = createEntityLabelUpdate({
-  queryKey: "llm-virtual-keys",
-  setFn: archestraApiSdk.setVirtualApiKeyLabels,
-});
-
-export const useSavePluginLabels = createEntityLabelUpdate({
-  queryKey: "plugins",
-  setFn: archestraApiSdk.setPluginLabels,
-});
-
-export const useSaveServiceAccountLabels = createEntityLabelUpdate({
-  queryKey: "service-accounts",
-  setFn: archestraApiSdk.setServiceAccountLabels,
-});
-
-export const useSaveLlmOauthClientLabels = createEntityLabelUpdate({
-  queryKey: "llm-oauth-clients",
-  setFn: archestraApiSdk.setLlmOauthClientLabels,
-});
-
-export const useSaveMcpOauthClientLabels = createEntityLabelUpdate({
-  queryKey: "mcp-oauth-clients",
-  setFn: archestraApiSdk.setMcpOauthClientLabels,
-});
-
-export const useSaveEnvironmentLabels = createEntityLabelUpdate({
-  queryKey: "environments",
-  setFn: archestraApiSdk.setEnvironmentLabels,
 });

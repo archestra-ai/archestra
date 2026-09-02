@@ -10,7 +10,6 @@ import {
   KeyRound,
   Pencil,
   Plus,
-  Tags,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -24,7 +23,6 @@ import {
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
@@ -65,7 +63,6 @@ import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
-  useSaveVirtualApiKeyLabels,
   useVirtualApiKeyLabelKeys,
   useVirtualApiKeyLabelValues,
 } from "@/lib/entity-labels.query";
@@ -145,8 +142,6 @@ function VirtualKeysTable() {
   );
   const [editingKey, setEditingKey] = useState<VirtualKeyRow | null>(null);
   const [deletingKey, setDeletingKey] = useState<VirtualKeyRow | null>(null);
-  const [labelingKey, setLabelingKey] = useState<VirtualKeyRow | null>(null);
-  const saveVirtualKeyLabels = useSaveVirtualApiKeyLabels();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const deleteMutation = useDeleteVirtualApiKey();
   const bulkDelete = useBulkDeleteVirtualApiKeys();
@@ -330,12 +325,6 @@ function VirtualKeysTable() {
               label: "Edit",
               permissions: { llmVirtualKey: ["update"] },
               onClick: () => setEditingKey(row.original),
-            },
-            {
-              icon: <Tags className="h-4 w-4" />,
-              label: "Edit labels",
-              permissions: { llmVirtualKey: ["update"] },
-              onClick: () => setLabelingKey(row.original),
             },
             {
               icon: <Trash2 className="h-4 w-4" />,
@@ -570,17 +559,6 @@ function VirtualKeysTable() {
             if (!open) setEditingKey(null);
           }}
         />
-        {labelingKey && (
-          <EntityLabelsDialog
-            open={!!labelingKey}
-            onOpenChange={(open) => !open && setLabelingKey(null)}
-            entityName={labelingKey.name}
-            labels={labelingKey.labels}
-            onSave={(labels) =>
-              saveVirtualKeyLabels.mutateAsync({ id: labelingKey.id, labels })
-            }
-          />
-        )}
         <DeleteConfirmDialog
           open={!!deletingKey}
           onOpenChange={(open) => {

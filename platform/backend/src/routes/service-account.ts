@@ -36,18 +36,6 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: ServiceAccountLabelModel,
     keysOperationId: RouteId.GetServiceAccountLabelKeys,
     valuesOperationId: RouteId.GetServiceAccountLabelValues,
-    setOperationId: RouteId.SetServiceAccountLabels,
-    // Service accounts are organization-wide, so the update route's own guard
-    // is the 404 for a row in another organization.
-    assertCanModify: async ({ id, organizationId }) => {
-      const serviceAccount = await ServiceAccountModel.findById(
-        id,
-        organizationId,
-      );
-      if (!serviceAccount) {
-        throw new ApiError(404, "Service account not found");
-      }
-    },
   });
 
   fastify.get(

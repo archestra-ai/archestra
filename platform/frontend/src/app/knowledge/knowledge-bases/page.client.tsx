@@ -22,7 +22,6 @@ import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layou
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
@@ -65,7 +64,6 @@ import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
   useKnowledgeBaseLabelKeys,
   useKnowledgeBaseLabelValues,
-  useSaveKnowledgeBaseLabels,
 } from "@/lib/entity-labels.query";
 import {
   type BulkCardSelectionProps,
@@ -147,8 +145,6 @@ function KnowledgeBasesList() {
     labels: labelsFilter,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [labelingKb, setLabelingKb] = useState<KnowledgeBaseItem | null>(null);
-  const saveKbLabels = useSaveKnowledgeBaseLabels();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [permanentlyDeletingKb, setPermanentlyDeletingKb] =
     useState<KnowledgeBaseItem | null>(null);
@@ -279,12 +275,6 @@ function KnowledgeBasesList() {
     (kb: KnowledgeBaseItem): TableRowAction[] => {
       const hasDocs = kb.totalDocsIndexed > 0;
       return [
-        {
-          icon: <Tags className="h-4 w-4" />,
-          label: "Edit labels",
-          permissions: { knowledgeSource: ["update"] },
-          onClick: () => setLabelingKb(kb),
-        },
         {
           icon: <MessageSquare className="h-4 w-4" />,
           label: "Talk to Knowledge Base",
@@ -641,17 +631,6 @@ function KnowledgeBasesList() {
             onOpenChange={setIsCreateDialogOpen}
           />
 
-          {labelingKb && (
-            <EntityLabelsDialog
-              open={!!labelingKb}
-              onOpenChange={(open) => !open && setLabelingKb(null)}
-              entityName={labelingKb.name}
-              labels={labelingKb.labels}
-              onSave={(labels) =>
-                saveKbLabels.mutateAsync({ id: labelingKb.id, labels })
-              }
-            />
-          )}
 
           {editingItem && (
             <EditKnowledgeBaseDialog

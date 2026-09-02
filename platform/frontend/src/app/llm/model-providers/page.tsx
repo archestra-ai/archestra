@@ -16,7 +16,6 @@ import {
   Pencil,
   Plus,
   Server,
-  Tags,
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
@@ -26,7 +25,6 @@ import { useForm } from "react-hook-form";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
@@ -85,7 +83,6 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   useLlmProviderApiKeyLabelKeys,
   useLlmProviderApiKeyLabelValues,
-  useSaveLlmProviderApiKeyLabels,
 } from "@/lib/entity-labels.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -139,9 +136,7 @@ export default function ApiKeysPage() {
   const providerFilter = searchParams.get("provider") || "all";
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
-  const [labelingCredential, setLabelingCredential] =
     useState<LlmProviderApiKeyResponse | null>(null);
-  const saveProviderKeyLabels = useSaveLlmProviderApiKeyLabels();
   const { data: canReadLlmProviderApiKeys, isPending: permissionsPending } =
     useHasPermissions({ llmProviderApiKey: ["read"] });
   const apiKeyQueriesEnabled =
@@ -661,16 +656,6 @@ export default function ApiKeysPage() {
                   testId: `${E2eTestId.EditChatApiKeyButton}-${credential.name}`,
                 },
                 {
-                  icon: <Tags className="h-4 w-4" />,
-                  label: "Edit labels",
-                  permissions: {
-                    llmProviderApiKey: ["update"],
-                  },
-                  disabled: isSystem,
-                  disabledTooltip: "System keys cannot be edited",
-                  onClick: () => setLabelingCredential(credential),
-                },
-                {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete",
                   variant: "destructive",
@@ -903,20 +888,6 @@ export default function ApiKeysPage() {
         </FormDialog>
 
         {/* Delete Confirmation Dialog */}
-        {labelingCredential && (
-          <EntityLabelsDialog
-            open={!!labelingCredential}
-            onOpenChange={(open) => !open && setLabelingCredential(null)}
-            entityName={labelingCredential.name}
-            labels={labelingCredential.labels ?? []}
-            onSave={(labels) =>
-              saveProviderKeyLabels.mutateAsync({
-                id: labelingCredential.id,
-                labels,
-              })
-            }
-          />
-        )}
         <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}

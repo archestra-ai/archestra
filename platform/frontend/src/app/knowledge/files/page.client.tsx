@@ -8,7 +8,6 @@ import {
   Folder,
   FolderPlus,
   Pencil,
-  Tags,
   Trash2,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -21,7 +20,6 @@ import { UploadFileDialog } from "@/app/knowledge/files/_parts/upload-file-dialo
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   FilePreviewDialog,
   type PreviewableDocument,
@@ -47,7 +45,6 @@ import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
   useKnowledgeFileLabelKeys,
   useKnowledgeFileLabelValues,
-  useSaveKnowledgeFileLabels,
 } from "@/lib/entity-labels.query";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -151,8 +148,6 @@ export default function KnowledgeFilesPage() {
     directory?: KnowledgeDirectory;
   }>({ open: false });
   const [editFile, setEditFile] = useState<KnowledgeFile>();
-  const [labelingFile, setLabelingFile] = useState<KnowledgeFile>();
-  const saveFileLabels = useSaveKnowledgeFileLabels();
   const [previewFile, setPreviewFile] = useState<PreviewableDocument>();
 
   const { data: directories = [] } = useKnowledgeDirectories();
@@ -486,12 +481,6 @@ export default function KnowledgeFilesPage() {
                   onClick: () => setEditFile(item.file),
                 },
                 {
-                  icon: <Tags className="h-4 w-4" />,
-                  label: "Edit labels",
-                  permissions: { knowledgeSource: ["update"] },
-                  onClick: () => setLabelingFile(item.file),
-                },
-                {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete",
                   variant: "destructive",
@@ -701,17 +690,6 @@ export default function KnowledgeFilesPage() {
         file={editFile}
         directories={directories}
       />
-      {labelingFile && (
-        <EntityLabelsDialog
-          open={!!labelingFile}
-          onOpenChange={(open) => !open && setLabelingFile(undefined)}
-          entityName={labelingFile.filename}
-          labels={labelingFile.labels}
-          onSave={(labels) =>
-            saveFileLabels.mutateAsync({ id: labelingFile.id, labels })
-          }
-        />
-      )}
       <FilePreviewDialog
         open={!!previewFile}
         onOpenChange={(open) => !open && setPreviewFile(undefined)}

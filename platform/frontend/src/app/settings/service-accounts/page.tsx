@@ -9,7 +9,6 @@ import { useForm } from "react-hook-form";
 import { type ProfileLabel, ProfileLabels } from "@/components/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
@@ -51,7 +50,6 @@ import { RoleSelect } from "@/components/ui/role-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
-  useSaveServiceAccountLabels,
   useServiceAccountLabelKeys,
   useServiceAccountLabelValues,
 } from "@/lib/entity-labels.query";
@@ -130,10 +128,6 @@ export default function ServiceAccountsSettingsPage() {
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newLabels, setNewLabels] = useState<ProfileLabel[]>([]);
-  const [labelingAccount, setLabelingAccount] = useState<ServiceAccount | null>(
-    null,
-  );
-  const saveAccountLabels = useSaveServiceAccountLabels();
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
     null,
   );
@@ -219,11 +213,6 @@ export default function ServiceAccountsSettingsPage() {
         actions={[
           ...(canUpdateServiceAccounts
             ? [
-                {
-                  icon: <Tags className="h-4 w-4" />,
-                  label: "Edit labels",
-                  onClick: () => setLabelingAccount(account),
-                },
               ]
             : []),
           ...(canUpdateServiceAccounts
@@ -655,17 +644,6 @@ export default function ServiceAccountsSettingsPage() {
         </DialogForm>
       </FormDialog>
 
-      {labelingAccount && (
-        <EntityLabelsDialog
-          open={!!labelingAccount}
-          onOpenChange={(open) => !open && setLabelingAccount(null)}
-          entityName={labelingAccount.name}
-          labels={labelingAccount.labels}
-          onSave={(labels) =>
-            saveAccountLabels.mutateAsync({ id: labelingAccount.id, labels })
-          }
-        />
-      )}
 
       <DeleteConfirmDialog
         open={!!accountToDelete}

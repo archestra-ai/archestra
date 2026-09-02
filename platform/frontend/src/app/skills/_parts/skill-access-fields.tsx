@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfileLabels } from "@/components/agent-labels";
 import { EnvironmentMultiSelector } from "@/components/environment-multi-selector";
 import type { SkillDraft } from "./skill-draft";
 import { SkillScopeSelector } from "./skill-scope-selector";
@@ -31,6 +32,10 @@ export function SkillAccessFields({
         resource="skill"
         hideWhenNoEnvironments
         helpText="Restrict this skill to specific environments. Leave empty to make it available to agents in every environment."
+      />
+      <ProfileLabels
+        labels={draft.labels}
+        onLabelsChange={(labels) => onChange({ labels })}
       />
     </div>
   );

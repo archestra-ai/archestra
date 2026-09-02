@@ -353,14 +353,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: SkillLabelModel,
     keysOperationId: RouteId.GetSkillLabelKeys,
     valuesOperationId: RouteId.GetSkillLabelValues,
-    setOperationId: RouteId.SetSkillLabels,
-    // The same pair the update route runs before touching anything: the row
-    // must be visible, and this user must be allowed to modify it (skills are
-    // team-scoped or personally owned).
-    assertCanModify: async ({ id, organizationId, userId }) => {
-      const skill = await findSkillOrThrow(id, organizationId);
-      await authorizeSkillModify({ skill, userId, organizationId });
-    },
   });
 
   fastify.get(

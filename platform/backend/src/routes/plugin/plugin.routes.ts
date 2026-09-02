@@ -178,13 +178,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: PluginLabelModel,
     keysOperationId: RouteId.GetPluginLabelKeys,
     valuesOperationId: RouteId.GetPluginLabelValues,
-    setOperationId: RouteId.SetPluginLabels,
-    // The same pair the update route runs first.
-    assertCanModify: async ({ id, organizationId, userId }) => {
-      await requirePluginAdmin({ organizationId, userId });
-      const existing = await PluginModel.findById({ id, organizationId });
-      if (!existing) throw new ApiError(404, "Plugin not found");
-    },
   });
 
   fastify.addHook("onRequest", async () => {

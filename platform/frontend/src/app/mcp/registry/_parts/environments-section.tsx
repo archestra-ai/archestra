@@ -15,7 +15,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
@@ -62,7 +61,6 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   useEnvironmentLabelKeys,
   useEnvironmentLabelValues,
-  useSaveEnvironmentLabels,
 } from "@/lib/entity-labels.query";
 import {
   type EnvironmentWithAssignedCount,
@@ -223,10 +221,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     [defaultAssignedCatalogCount, defaultEnvironment, environments],
   );
   const selectedLabels = useSelectedLabels();
-  const [labelingEnvironment, setLabelingEnvironment] = useState<
-    (typeof environments)[number] | null
-  >(null);
-  const saveEnvironmentLabels = useSaveEnvironmentLabels();
   const normalizedSearch = search.trim().toLowerCase();
   const filteredRows = useMemo(
     () =>
@@ -363,12 +357,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                 },
                 ...(item.kind === "environment"
                   ? [
-                      {
-                        icon: <Tags className="h-4 w-4" />,
-                        label: "Edit labels",
-                        disabled: !canEdit,
-                        onClick: () => setLabelingEnvironment(item),
-                      },
                     ]
                   : []),
                 ...(item.kind === "environment"
@@ -476,20 +464,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         }}
       />
 
-      {labelingEnvironment && (
-        <EntityLabelsDialog
-          open={!!labelingEnvironment}
-          onOpenChange={(open) => !open && setLabelingEnvironment(null)}
-          entityName={labelingEnvironment.name}
-          labels={labelingEnvironment.labels}
-          onSave={(labels) =>
-            saveEnvironmentLabels.mutateAsync({
-              id: labelingEnvironment.id,
-              labels,
-            })
-          }
-        />
-      )}
 
       {bulkDeleteOpen && (
         <DeleteConfirmDialog

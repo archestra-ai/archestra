@@ -33,16 +33,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: LimitLabelModel,
     keysOperationId: RouteId.GetLimitLabelKeys,
     valuesOperationId: RouteId.GetLimitLabelValues,
-    setOperationId: RouteId.SetLimitLabels,
-    // Mirrors the update route: a limit belongs to the organization of the
-    // entity it targets, which this lookup resolves.
-    assertCanModify: async ({ id, organizationId }) => {
-      const existing = await LimitModel.findByIdInOrganization(
-        id,
-        organizationId,
-      );
-      if (!existing) throw new ApiError(404, "Limit not found");
-    },
   });
 
   fastify.get(

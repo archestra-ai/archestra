@@ -14,7 +14,6 @@ import { useSetSettingsAction } from "@/app/settings/layout";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
-import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
@@ -42,8 +41,6 @@ import { copyToClipboard } from "@/lib/clipboard";
 import {
   useLlmOauthClientLabelKeys,
   useLlmOauthClientLabelValues,
-  useSaveLlmOauthClientLabels,
-  useSaveMcpOauthClientLabels,
 } from "@/lib/entity-labels.query";
 import { ALL_MATCHING_PAGE_SIZE } from "@/lib/hooks/use-all-matching";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -152,15 +149,6 @@ function OauthClientsTable() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingLlm, setEditingLlm] = useState<LlmClient | null>(null);
   const [editingMcp, setEditingMcp] = useState<McpClient | null>(null);
-  // One row type covers both halves, so the editor keeps the kind alongside
-  // the row and dispatches to that half's save on submit.
-  const [labelingClient, setLabelingClient] = useState<
-    | { kind: "llm"; client: LlmClient }
-    | { kind: "mcp"; client: McpClient }
-    | null
-  >(null);
-  const saveLlmOauthClientLabels = useSaveLlmOauthClientLabels();
-  const saveMcpOauthClientLabels = useSaveMcpOauthClientLabels();
   const [rotating, setRotating] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
   const [revealed, setRevealed] = useState<{
@@ -341,12 +329,6 @@ function OauthClientsTable() {
                     : setEditingMcp(row.original.client),
               },
               {
-                icon: <Tags className="h-4 w-4" />,
-                label: "Edit labels",
-                permissions: { [resource]: ["update"] },
-                onClick: () => setLabelingClient(row.original),
-              },
-              {
                 icon: <RefreshCw className="h-4 w-4" />,
                 label: "Rotate secret",
                 permissions: { [resource]: ["update"] },
@@ -503,25 +485,6 @@ function OauthClientsTable() {
         isSubmitting={mcpUpdate.isPending}
       />
 
-      {labelingClient && (
-        <EntityLabelsDialog
-          open={!!labelingClient}
-          onOpenChange={(open) => !open && setLabelingClient(null)}
-          entityName={labelingClient.client.name}
-          labels={labelingClient.client.labels}
-          onSave={(labels) =>
-            labelingClient.kind === "llm"
-              ? saveLlmOauthClientLabels.mutateAsync({
-                  id: labelingClient.client.id,
-                  labels,
-                })
-              : saveMcpOauthClientLabels.mutateAsync({
-                  id: labelingClient.client.id,
-                  labels,
-                })
-          }
-        />
-      )}
       <DeleteConfirmDialog
         open={!!rotating}
         onOpenChange={(open) => {

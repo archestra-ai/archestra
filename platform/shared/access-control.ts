@@ -1191,7 +1191,6 @@ export const requiredEndpointPermissionsMap: Partial<
     llmModel: ["read"],
   },
   [RouteId.GetLlmProviderModelLabelKeys]: { llmModel: ["read"] },
-  [RouteId.SetLlmProviderModelLabels]: { llmModel: ["update"] },
   [RouteId.GetLlmProviderModelLabelValues]: { llmModel: ["read"] },
   [RouteId.SyncLlmModels]: {
     llmModel: ["update"],
@@ -1230,7 +1229,6 @@ export const requiredEndpointPermissionsMap: Partial<
     llmProviderApiKey: ["read"],
   },
   [RouteId.GetLlmProviderApiKeyLabelKeys]: { llmProviderApiKey: ["read"] },
-  [RouteId.SetLlmProviderApiKeyLabels]: { llmProviderApiKey: ["update"] },
   [RouteId.GetLlmProviderApiKeyLabelValues]: { llmProviderApiKey: ["read"] },
   [RouteId.GetAvailableLlmProviderApiKeys]: {
     llmProviderApiKey: ["read"],
@@ -1293,7 +1291,6 @@ export const requiredEndpointPermissionsMap: Partial<
     serviceAccount: ["read"],
   },
   [RouteId.GetServiceAccountLabelKeys]: { serviceAccount: ["read"] },
-  [RouteId.SetServiceAccountLabels]: { serviceAccount: ["update"] },
   [RouteId.GetServiceAccountLabelValues]: { serviceAccount: ["read"] },
   [RouteId.GetServiceAccount]: {
     serviceAccount: ["read"],
@@ -1322,7 +1319,6 @@ export const requiredEndpointPermissionsMap: Partial<
     llmVirtualKey: ["read"],
   },
   [RouteId.GetVirtualApiKeyLabelKeys]: { llmVirtualKey: ["read"] },
-  [RouteId.SetVirtualApiKeyLabels]: { llmVirtualKey: ["update"] },
   [RouteId.GetVirtualApiKeyLabelValues]: { llmVirtualKey: ["read"] },
   [RouteId.GetVirtualApiKey]: {
     llmVirtualKey: ["read"],
@@ -1347,7 +1343,6 @@ export const requiredEndpointPermissionsMap: Partial<
     llmOauthClient: ["read"],
   },
   [RouteId.GetLlmOauthClientLabelKeys]: { llmOauthClient: ["read"] },
-  [RouteId.SetLlmOauthClientLabels]: { llmOauthClient: ["update"] },
   [RouteId.GetLlmOauthClientLabelValues]: { llmOauthClient: ["read"] },
   [RouteId.CreateLlmOauthClient]: {
     llmOauthClient: ["create"],
@@ -1368,7 +1363,6 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpOauthClient: ["read"],
   },
   [RouteId.GetMcpOauthClientLabelKeys]: { mcpOauthClient: ["read"] },
-  [RouteId.SetMcpOauthClientLabels]: { mcpOauthClient: ["update"] },
   [RouteId.GetMcpOauthClientLabelValues]: { mcpOauthClient: ["read"] },
   [RouteId.CreateMcpOauthClient]: {
     mcpOauthClient: ["create"],
@@ -1398,7 +1392,6 @@ export const requiredEndpointPermissionsMap: Partial<
     llmLimit: ["read"],
   },
   [RouteId.GetLimitLabelKeys]: { llmLimit: ["read"] },
-  [RouteId.SetLimitLabels]: { llmLimit: ["update"] },
   [RouteId.GetLimitLabelValues]: { llmLimit: ["read"] },
   [RouteId.CreateLimit]: {
     llmLimit: ["create"],
@@ -1459,7 +1452,6 @@ export const requiredEndpointPermissionsMap: Partial<
     environment: ["read"],
   },
   [RouteId.GetEnvironmentLabelKeys]: { environment: ["read"] },
-  [RouteId.SetEnvironmentLabels]: { environment: ["update"] },
   [RouteId.GetEnvironmentLabelValues]: { environment: ["read"] },
   [RouteId.CreateEnvironment]: {
     environment: ["create"],
@@ -1776,7 +1768,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // Knowledge Base Routes
   [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },
   [RouteId.GetKnowledgeBaseLabelKeys]: { knowledgeSource: ["read"] },
-  [RouteId.SetKnowledgeBaseLabels]: { knowledgeSource: ["update"] },
   [RouteId.GetKnowledgeBaseLabelValues]: { knowledgeSource: ["read"] },
   [RouteId.CreateKnowledgeBase]: { knowledgeSource: ["create"] },
   [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
@@ -1794,7 +1785,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // Knowledge Base Connector Routes
   [RouteId.GetConnectors]: { knowledgeSource: ["read"] },
   [RouteId.GetConnectorLabelKeys]: { knowledgeSource: ["read"] },
-  [RouteId.SetConnectorLabels]: { knowledgeSource: ["update"] },
   [RouteId.GetConnectorLabelValues]: { knowledgeSource: ["read"] },
   [RouteId.CreateConnector]: { knowledgeSource: ["create"] },
   [RouteId.GetConnector]: { knowledgeSource: ["read"] },
@@ -1846,7 +1836,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
   [RouteId.GetSkillLabelKeys]: { skill: ["read"] },
-  [RouteId.SetSkillLabels]: { skill: ["update"] },
   [RouteId.GetSkillLabelValues]: { skill: ["read"] },
   [RouteId.GetExternalMcpSkills]: {
     skill: ["read"],
@@ -1883,7 +1872,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
-  [RouteId.SetPluginLabels]: { plugin: ["update", "admin"] },
   [RouteId.GetPluginLabelValues]: { plugin: ["read"] },
   [RouteId.CreatePlugin]: { plugin: ["create", "admin"] },
   [RouteId.GetPlugin]: { plugin: ["read", "admin"] },
@@ -2082,7 +2070,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // retrieve, so it is an `update` rather than a read.
   [RouteId.GetKnowledgeFiles]: { knowledgeSource: ["read"] },
   [RouteId.GetKnowledgeFileLabelKeys]: { knowledgeSource: ["read"] },
-  [RouteId.SetKnowledgeFileLabels]: { knowledgeSource: ["update"] },
   [RouteId.GetKnowledgeFileLabelValues]: { knowledgeSource: ["read"] },
   [RouteId.GetKnowledgeFileContent]: { knowledgeSource: ["read"] },
   [RouteId.GetKnowledgeDirectories]: { knowledgeSource: ["read"] },

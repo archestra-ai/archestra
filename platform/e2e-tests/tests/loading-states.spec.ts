@@ -107,7 +107,10 @@ test.describe("loading states", () => {
     });
 
     await page.goto("/auth/sign-in");
-    await expect(page.getByRole("main")).toBeVisible();
+    // Deliberately not a role query: the auth surface nests the shell's <main>
+    // inside the auth page's own, so getByRole("main") is a strict-mode
+    // violation here rather than a wait.
+    await page.waitForLoadState("networkidle");
 
     const centres = await page.evaluate(
       () => (window as unknown as { __centres: number[] }).__centres,

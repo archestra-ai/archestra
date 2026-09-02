@@ -8495,7 +8495,7 @@ export const deleteAgentExecution = <ThrowOnError extends boolean = false>(optio
 export const getMyAgentExecution = <ThrowOnError extends boolean = false>(options: Options<GetMyAgentExecutionData, ThrowOnError>) => (options.client ?? client).get<GetMyAgentExecutionResponses, GetMyAgentExecutionErrors, ThrowOnError>({ url: '/api/agent-executions/{taskId}', ...options });
 
 /**
- * Rename one Background execution started by this user
+ * Update one Background execution started by this user
  *
  * Authentication:
  *

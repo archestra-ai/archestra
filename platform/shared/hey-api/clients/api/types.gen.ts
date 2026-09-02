@@ -88091,6 +88091,7 @@ export type GetAgentExecutionsResponses = {
         actorId: string;
         actorUserId: string | null;
         title: string;
+        pinnedAt: string | null;
         deploymentName: string;
         backend: 'kubernetes';
         runtimeScope: string;
@@ -88287,6 +88288,7 @@ export type GetMyAgentExecutionsResponses = {
         actorId: string;
         actorUserId: string | null;
         title: string;
+        pinnedAt: string | null;
         deploymentName: string;
         backend: 'kubernetes';
         runtimeScope: string;
@@ -88479,6 +88481,7 @@ export type GetMyAgentExecutionResponses = {
         actorId: string;
         actorUserId: string | null;
         title: string;
+        pinnedAt: string | null;
         deploymentName: string;
         backend: 'kubernetes';
         runtimeScope: string;
@@ -88501,7 +88504,8 @@ export type GetMyAgentExecutionResponse = GetMyAgentExecutionResponses[keyof Get
 
 export type UpdateAgentExecutionData = {
     body: {
-        title: string;
+        title?: string;
+        pinnedAt?: string | null;
     };
     path: {
         taskId: string;
@@ -88588,6 +88592,7 @@ export type UpdateAgentExecutionResponses = {
         actorId: string;
         actorUserId: string | null;
         title: string;
+        pinnedAt: string | null;
         deploymentName: string;
         backend: 'kubernetes';
         runtimeScope: string;

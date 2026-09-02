@@ -14,6 +14,9 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 const mockRouterPush = vi.fn();
+const { mockUpdateExecutionMutate } = vi.hoisted(() => ({
+  mockUpdateExecutionMutate: vi.fn(),
+}));
 
 // Mutable holder so the status-indicator matrix can vary the viewed route, the
 // per-conversation session status, and the unread set per test (object props
@@ -88,7 +91,10 @@ vi.mock("@/lib/agent-background-execution.query", () => ({
     data: mockExecutions,
     isLoading: false,
   }),
-  useUpdateAgentExecution: () => ({ mutateAsync: vi.fn() }),
+  useUpdateAgentExecution: () => ({
+    mutate: mockUpdateExecutionMutate,
+    mutateAsync: vi.fn(),
+  }),
   useCancelAgentExecution: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -139,6 +145,10 @@ vi.mock("@/components/agent-icon", () => ({
   AgentIcon: ({ icon }: { icon?: string | null }) => (
     <span data-testid="project-emoji">{icon}</span>
   ),
+}));
+
+vi.mock("@/app/_parts/conversation-project-actions", () => ({
+  ConversationProjectActions: () => null,
 }));
 
 // Pinned apps render their icon through this component: an owned app's own
@@ -234,8 +244,20 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
-  DropdownMenuContent: () => null,
-  DropdownMenuItem: () => null,
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DropdownMenuItem: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+  }) => (
+    <button type="button" onClick={onClick}>
+      {children}
+    </button>
+  ),
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
@@ -368,6 +390,7 @@ describe("ChatSidebarSection", () => {
         organizationId: "org-1",
         actorUserId: "user-1",
         title: "Add export command",
+        pinnedAt: null,
         deploymentName: "agent-agent-1-task-1",
         backend: "kubernetes",
         runtimeScope: "archestra-dev",
@@ -389,6 +412,55 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByLabelText("Execution actions")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Add export command"));
     expect(mockRouterPush).toHaveBeenCalledWith("/chat/executions/task-1");
+  });
+
+  it("requests a durable pin from an execution's sidebar menu", () => {
+    mockExecutions = [
+      {
+        id: "run-1",
+        taskId: "task-1",
+        title: "Keep this execution handy",
+        pinnedAt: null,
+        startedAt: "2026-07-16T10:00:00Z",
+        endedAt: null,
+        state: "TASK_STATE_WORKING",
+        stateChangedAt: "2026-07-16T10:00:00Z",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin" }));
+    expect(mockUpdateExecutionMutate).toHaveBeenCalledWith({
+      taskId: "task-1",
+      pinnedAt: new Date().toISOString(),
+    });
+  });
+
+  it("renders a pinned execution outside the recent timeline and can unpin it", () => {
+    mockExecutions = [
+      {
+        id: "run-1",
+        taskId: "task-1",
+        title: "Pinned execution",
+        pinnedAt: "2026-07-16T11:00:00Z",
+        startedAt: "2026-07-16T10:00:00Z",
+        endedAt: null,
+        state: "TASK_STATE_WORKING",
+        stateChangedAt: "2026-07-16T10:00:00Z",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    expect(screen.getByText("Pinned execution")).toBeInTheDocument();
+    expect(screen.queryByText("Today")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Unpin" }));
+    expect(mockUpdateExecutionMutate).toHaveBeenCalledWith({
+      taskId: "task-1",
+      pinnedAt: null,
+    });
   });
 
   it("shows 3 recent chats when no chats are pinned", () => {

@@ -432,7 +432,7 @@ describe("Agent Background execution routes", () => {
     expect(forbidden.statusCode).toBe(404);
   });
 
-  test("lets the initiating user rename and delete a finished execution", async () => {
+  test("lets the initiating user rename, pin, unpin, and delete a finished execution", async () => {
     const task = await createTask(agent.id);
     const run = await AgentRunModel.create({
       organizationId,
@@ -455,6 +455,32 @@ describe("Agent Background execution routes", () => {
     });
     expect(renamed.statusCode).toBe(200);
     expect(renamed.json().title).toBe("Concise session title");
+
+    const pinnedAt = new Date("2026-08-31T18:00:00.000Z").toISOString();
+    const pinned = await app.inject({
+      method: "PATCH",
+      url: `/api/agent-executions/${task.id}`,
+      payload: { pinnedAt },
+    });
+    expect(pinned.statusCode).toBe(200);
+    expect(pinned.json().pinnedAt).toBe(pinnedAt);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/agent-executions",
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()[0]).toEqual(
+      expect.objectContaining({ taskId: task.id, pinnedAt }),
+    );
+
+    const unpinned = await app.inject({
+      method: "PATCH",
+      url: `/api/agent-executions/${task.id}`,
+      payload: { pinnedAt: null },
+    });
+    expect(unpinned.statusCode).toBe(200);
+    expect(unpinned.json().pinnedAt).toBeNull();
 
     const activeDelete = await app.inject({
       method: "DELETE",
@@ -485,6 +511,16 @@ describe("Agent Background execution routes", () => {
           action: "agentExecution.updated",
           before: expect.objectContaining({ title: "Opening request" }),
           after: expect.objectContaining({ title: "Concise session title" }),
+        }),
+        expect.objectContaining({
+          action: "agentExecution.updated",
+          before: expect.objectContaining({ pinnedAt: null }),
+          after: expect.objectContaining({ pinnedAt }),
+        }),
+        expect.objectContaining({
+          action: "agentExecution.updated",
+          before: expect.objectContaining({ pinnedAt }),
+          after: expect.objectContaining({ pinnedAt: null }),
         }),
         expect.objectContaining({
           action: "agentExecution.deleted",

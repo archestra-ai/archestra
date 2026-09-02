@@ -3130,6 +3130,13 @@
       "when": 1788282334283,
       "tag": "0446_ordinary_firestar",
       "breakpoints": true
+    },
+    {
+      "idx": 447,
+      "version": "7",
+      "when": 1788359412680,
+      "tag": "0447_pale_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

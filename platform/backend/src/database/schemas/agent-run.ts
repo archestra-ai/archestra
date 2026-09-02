@@ -47,6 +47,8 @@ const agentRunsTable = pgTable(
     }),
     /** Concise, user-editable label shown beside foreground conversations. */
     title: text("title").notNull().default("Execution"),
+    /** Personal sidebar pin; the run is already owned by one initiating user. */
+    pinnedAt: timestamp("pinned_at", { mode: "date" }),
     /** Frozen at creation so a rename can never orphan the workload. */
     deploymentName: text("deployment_name").notNull(),
     /** Frozen because a restart must re-adopt through the original backend. */

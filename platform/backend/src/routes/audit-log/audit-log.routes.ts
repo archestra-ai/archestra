@@ -1,6 +1,6 @@
 import {
-  createPaginatedResponseSchema,
-  PaginationQuerySchema,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -66,9 +66,9 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .extend({
             sortDirection: SortDirectionSchema.optional().default("desc"),
           })
-          .merge(PaginationQuerySchema),
+          .merge(CursorQuerySchema),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(AuditLogWithImpersonatorSchema),
+          createCursorPaginatedResponseSchema(AuditLogWithImpersonatorSchema),
         ),
       },
     },
@@ -85,7 +85,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resourceId,
           search,
           limit,
-          offset,
+          cursor,
           sortDirection,
         },
         user,
@@ -102,10 +102,10 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "admin",
       );
 
-      const result = await AuditLogModel.findPaginated({
+      const result = await AuditLogModel.findCursorPaginated({
         organizationId,
         limit,
-        offset,
+        cursor,
         sortDirection,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,

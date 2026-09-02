@@ -11,11 +11,15 @@ import {
   lte,
   or,
   type SQL,
+  sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import {
+  type CursorPaginatedResult,
+  createCursorPaginatedResult,
   createPaginatedResult,
+  decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import type {
@@ -97,71 +101,10 @@ class AuditLogModel {
     resourceId?: string;
     search?: string;
   }): Promise<PaginatedResult<AuditLogWithImpersonator>> {
-    const {
-      organizationId,
-      limit,
-      offset,
-      sortDirection = "desc",
-      startDate,
-      endDate,
-      actorId,
-      action,
-      outcome,
-      actorType,
-      resourceType,
-      resourceId,
-      search,
-    } = opts;
+    const { limit, offset, sortDirection = "desc" } = opts;
 
-    const conditions: SQL[] = [
-      eq(schema.auditLogsTable.organizationId, organizationId),
-    ];
-
-    if (startDate) {
-      conditions.push(gte(schema.auditLogsTable.createdAt, startDate));
-    }
-    if (endDate) {
-      conditions.push(lte(schema.auditLogsTable.createdAt, endDate));
-    }
-    if (actorId) {
-      conditions.push(eq(schema.auditLogsTable.actorId, actorId));
-    }
-    if (action) {
-      conditions.push(eq(schema.auditLogsTable.action, action));
-    }
-    if (outcome) {
-      conditions.push(eq(schema.auditLogsTable.outcome, outcome));
-    }
-    if (actorType) {
-      conditions.push(eq(schema.auditLogsTable.actorType, actorType));
-    }
-    if (resourceType) {
-      conditions.push(eq(schema.auditLogsTable.resourceType, resourceType));
-    }
-    if (resourceId) {
-      conditions.push(eq(schema.auditLogsTable.resourceId, resourceId));
-    }
-    if (search) {
-      const searchCondition = buildSearchCondition(search);
-      if (searchCondition) {
-        conditions.push(searchCondition);
-      }
-    }
-
-    const whereClause = and(...conditions);
-
-    // Two-column sort: created_at tiebroken by event_sequence (postgres-assigned
-    // bigserial, always monotonic). The matching index covers both columns.
-    const orderBy =
-      sortDirection === "asc"
-        ? [
-            asc(schema.auditLogsTable.createdAt),
-            asc(schema.auditLogsTable.eventSequence),
-          ]
-        : [
-            desc(schema.auditLogsTable.createdAt),
-            desc(schema.auditLogsTable.eventSequence),
-          ];
+    const whereClause = and(...AuditLogModel.buildFilterConditions(opts));
+    const orderBy = AuditLogModel.buildOrderBy(sortDirection);
 
     const [data, [{ total }]] = await Promise.all([
       db
@@ -197,6 +140,83 @@ class AuditLogModel {
     );
   }
 
+  /**
+   * The same listing, walked by cursor instead of offset.
+   *
+   * Two costs disappear. There is no `count()`, so a page no longer scans
+   * every row in the organization to render a page number nobody navigates
+   * by. And there is no offset, so page one thousand costs what page one
+   * costs — the keyset predicate seeks straight to the position and reads
+   * `limit + 1` rows, where an offset would have read and thrown away
+   * everything above it.
+   *
+   * `(created_at, event_sequence)` is the key. `event_sequence` is a
+   * postgres-assigned bigserial, so the pair is strictly ordered and unique
+   * even when many rows share a timestamp, and the existing index covers it.
+   */
+  static async findCursorPaginated(opts: {
+    organizationId: string;
+    limit: number;
+    cursor?: string;
+    sortDirection?: SortDirection;
+    startDate?: Date;
+    endDate?: Date;
+    actorId?: string;
+    action?: AuditEventName;
+    outcome?: AuditOutcome;
+    actorType?: AuditActorType;
+    resourceType?: string;
+    resourceId?: string;
+    search?: string;
+  }): Promise<CursorPaginatedResult<AuditLogWithImpersonator>> {
+    const { limit, cursor, sortDirection = "desc" } = opts;
+
+    const conditions = AuditLogModel.buildFilterConditions(opts);
+
+    // An unreadable cursor is treated as no cursor, so a stale or truncated
+    // link lands on the newest page instead of erroring.
+    const position = decodeCursor(cursor);
+    if (position) {
+      const at = new Date(position.value);
+      const seq = Number(position.id);
+      if (!Number.isNaN(at.getTime()) && Number.isFinite(seq)) {
+        // Row comparison, not two ANDed predicates: `(a, b) < (x, y)` is one
+        // ordered comparison the planner can drive the composite index from.
+        const keyset = sql`(${schema.auditLogsTable.createdAt}, ${schema.auditLogsTable.eventSequence})`;
+        conditions.push(
+          sortDirection === "asc"
+            ? sql`${keyset} > (${at}, ${seq})`
+            : sql`${keyset} < (${at}, ${seq})`,
+        );
+      }
+    }
+
+    const rows = await db
+      .select({
+        ...getTableColumns(schema.auditLogsTable),
+        impersonatedByEmail: impersonatorUsers.email,
+      })
+      .from(schema.auditLogsTable)
+      .leftJoin(
+        impersonatorUsers,
+        eq(schema.auditLogsTable.impersonatedBy, impersonatorUsers.id),
+      )
+      .where(and(...conditions))
+      .orderBy(...AuditLogModel.buildOrderBy(sortDirection))
+      // One more than the page needs: its presence is what answers "is there
+      // another page", replacing the count this method no longer runs.
+      .limit(limit + 1);
+
+    return createCursorPaginatedResult(
+      rows as AuditLogWithImpersonator[],
+      { limit, cursor },
+      (row) => ({
+        value: row.createdAt.toISOString(),
+        id: String(row.eventSequence),
+      }),
+    );
+  }
+
   static async deleteOlderThan(opts: {
     organizationId: string;
     before: Date;
@@ -227,6 +247,79 @@ class AuditLogModel {
       .where(lt(schema.auditLogsTable.createdAt, before))
       .returning({ id: schema.auditLogsTable.id });
     return deleted.length;
+  }
+
+  /**
+   * The filter predicates both listing methods share, so the offset and
+   * cursor paths cannot drift into disagreeing about what a filter means.
+   */
+  private static buildFilterConditions(opts: {
+    organizationId: string;
+    startDate?: Date;
+    endDate?: Date;
+    actorId?: string;
+    action?: AuditEventName;
+    outcome?: AuditOutcome;
+    actorType?: AuditActorType;
+    resourceType?: string;
+    resourceId?: string;
+    search?: string;
+  }): SQL[] {
+    const conditions: SQL[] = [
+      eq(schema.auditLogsTable.organizationId, opts.organizationId),
+    ];
+
+    if (opts.startDate) {
+      conditions.push(gte(schema.auditLogsTable.createdAt, opts.startDate));
+    }
+    if (opts.endDate) {
+      conditions.push(lte(schema.auditLogsTable.createdAt, opts.endDate));
+    }
+    if (opts.actorId) {
+      conditions.push(eq(schema.auditLogsTable.actorId, opts.actorId));
+    }
+    if (opts.action) {
+      conditions.push(eq(schema.auditLogsTable.action, opts.action));
+    }
+    if (opts.outcome) {
+      conditions.push(eq(schema.auditLogsTable.outcome, opts.outcome));
+    }
+    if (opts.actorType) {
+      conditions.push(eq(schema.auditLogsTable.actorType, opts.actorType));
+    }
+    if (opts.resourceType) {
+      conditions.push(
+        eq(schema.auditLogsTable.resourceType, opts.resourceType),
+      );
+    }
+    if (opts.resourceId) {
+      conditions.push(eq(schema.auditLogsTable.resourceId, opts.resourceId));
+    }
+    if (opts.search) {
+      const searchCondition = buildSearchCondition(opts.search);
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
+    }
+
+    return conditions;
+  }
+
+  /**
+   * Two-column sort: created_at tiebroken by event_sequence (a
+   * postgres-assigned bigserial, always monotonic). The matching index covers
+   * both columns, and the cursor's keyset predicate compares the same pair.
+   */
+  private static buildOrderBy(sortDirection: SortDirection) {
+    return sortDirection === "asc"
+      ? [
+          asc(schema.auditLogsTable.createdAt),
+          asc(schema.auditLogsTable.eventSequence),
+        ]
+      : [
+          desc(schema.auditLogsTable.createdAt),
+          desc(schema.auditLogsTable.eventSequence),
+        ];
   }
 }
 

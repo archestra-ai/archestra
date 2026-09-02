@@ -1,5 +1,6 @@
 import type {
   ClientFilter,
+  CursorQuery,
   InteractionSource,
   PaginationQuery,
 } from "@archestra/shared";
@@ -37,7 +38,10 @@ import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
+  type CursorPaginatedResult,
   createPaginatedResult,
+  decodeCursor,
+  encodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
@@ -94,6 +98,13 @@ const SESSION_SCAN_MAX_ROWS = 20_000;
  * round-trip to the distributed cache to share it between pods. Bounded well
  * above the number of distinct filter combinations in flight at once.
  */
+/**
+ * Returned by the session-list condition builder when the caller can reach
+ * no agents at all. A distinct value rather than `undefined`, which already
+ * means "no predicates" — returning that for a denial would list everything.
+ */
+const SESSION_ACCESS_DENIED = Symbol("session-access-denied");
+
 const sessionTotalCache = new LRUCacheManager<number>({
   maxSize: 500,
   defaultTtl: SESSION_TOTAL_CACHE_TTL_MS,
@@ -1177,6 +1188,224 @@ class InteractionModel {
       endDate?: Date;
     },
   ): Promise<PaginatedResult<SessionSummary>> {
+    const access = await InteractionModel.buildSessionConditions(
+      requestingUserId,
+      isAgentAdmin,
+      filters,
+    );
+    if (access === SESSION_ACCESS_DENIED) {
+      return createPaginatedResult([], 0, pagination);
+    }
+    const whereClause = access;
+
+    // The session total is the same for every page of one filter set, but the
+    // count it needs scans `interactions` — the largest, write-hot table — so
+    // paying it per page made a client walking the pages re-run a full scan on
+    // every request (the dominant cost of this endpoint, and enough on its own
+    // to push the query into statement timeout as the table grows). Compute it
+    // for the first page of a sweep and reuse it for the rest; a total that
+    // trails new rows by at most SESSION_TOTAL_CACHE_TTL_MS is the intended
+    // trade, since it only sizes the pager.
+    const sessionTotalCacheKey = JSON.stringify([
+      requestingUserId ?? null,
+      isAgentAdmin ?? false,
+      filters?.profileId ?? null,
+      filters?.userId ?? null,
+      filters?.source ?? null,
+      filters?.client ?? null,
+      filters?.externalAgentId ?? null,
+      filters?.sessionId ?? null,
+      filters?.startDate?.toISOString() ?? null,
+      filters?.endDate?.toISOString() ?? null,
+    ]);
+    const cachedTotal = sessionTotalCache.get(sessionTotalCacheKey);
+
+    // PHASE 1: Find only the session keys for this page. The summary query has
+    // several joins and aggregates; applying LIMIT after all of that made every
+    // page summarize every session in the table before discarding almost all of
+    // the work. Selecting the page first keeps the expensive phase bounded by
+    // the requested page instead of total history size.
+    const [sessionPage, [{ total }]] = await Promise.all([
+      InteractionModel.findSessionKeysForPage(whereClause, pagination),
+      // Total = distinct sessions + sessionless interactions (each its own
+      // "session"). Counted without COUNT(DISTINCT COALESCE(session_id,
+      // id::text)) — the per-row uuid cast defeats the session_id index — and
+      // without the conversations join the summary query needs for titles: the
+      // filters only touch interactions columns, and joining on the
+      // conversations PK can't change the count.
+      cachedTotal !== undefined
+        ? [{ total: cachedTotal }]
+        : db
+            .select({
+              total: sql<number>`COUNT(DISTINCT ${schema.interactionsTable.sessionId}) + COUNT(*) FILTER (WHERE ${schema.interactionsTable.sessionId} IS NULL)`,
+            })
+            .from(schema.interactionsTable)
+            .where(whereClause),
+    ]);
+
+    if (cachedTotal === undefined) {
+      sessionTotalCache.set(sessionTotalCacheKey, Number(total));
+    }
+
+    if (sessionPage.length === 0) {
+      return createPaginatedResult([], Number(total), pagination);
+    }
+
+    const sessions = await InteractionModel.summarizeSessionPage(
+      sessionPage,
+      whereClause,
+    );
+
+    return createPaginatedResult(sessions, Number(total), pagination);
+  }
+
+  /**
+   * The session keys for one page, most recently active first.
+   *
+   * Grouping the whole table to produce twenty keys meant every page paid a
+   * sequential scan of `interactions` plus a sort of one row per interaction —
+   * on a table whose row count grows with every proxied call, and large enough
+   * that the sort spilled to disk. Nothing about a page of recent sessions
+   * needs that: walking `interactions_created_at_idx` newest-first and taking
+   * distinct session keys in the order they first appear yields exactly the
+   * same ordering, because the first row seen for a session IS that session's
+   * most recent one. The scan stops as soon as the page is covered, so the
+   * cost tracks the page, not the history.
+   *
+   * Falls back to the whole-table grouping if a page cannot be filled within
+   * SESSION_SCAN_MAX_ROWS — a pathological case (a filter matching very few
+   * sessions spread over very many rows) where the walk would be the slower of
+   * the two. Correctness is identical either way.
+   */
+
+  /**
+   * The same session list, walked by cursor instead of offset.
+   *
+   * Two costs disappear. There is no total, so a page stops scanning every
+   * interaction in the table to count distinct sessions for a page number.
+   * And there is no offset, so a page deep in the log costs what the first
+   * page costs, instead of walking every session above it.
+   *
+   * Phase 1 changes shape entirely. The offset walk reads batches of
+   * interactions and dedupes session keys in memory, which needs
+   * `offset + limit` keys in hand before it can serve page N. A cursor
+   * cannot work that way, and does not need to: a session's place in the
+   * list is its newest interaction, so the list *is* the rows that have no
+   * newer sibling in their own session. Selecting those directly gives each
+   * session exactly once, in the right order, with no dedupe pass and no
+   * whole-table grouping to fall back to.
+   */
+  static async getSessionsCursor(
+    cursorQuery: CursorQuery,
+    requestingUserId?: string,
+    isAgentAdmin?: boolean,
+    filters?: {
+      profileId?: string;
+      userId?: string;
+      source?: InteractionSource;
+      client?: ClientFilter;
+      externalAgentId?: string;
+      sessionId?: string;
+      startDate?: Date;
+      endDate?: Date;
+    },
+  ): Promise<CursorPaginatedResult<SessionSummary>> {
+    const emptyPage = (): CursorPaginatedResult<SessionSummary> => ({
+      data: [],
+      pagination: {
+        limit: cursorQuery.limit,
+        hasNext: false,
+        nextCursor: null,
+      },
+    });
+
+    const access = await InteractionModel.buildSessionConditions(
+      requestingUserId,
+      isAgentAdmin,
+      filters,
+    );
+    if (access === SESSION_ACCESS_DENIED) {
+      return emptyPage();
+    }
+    const whereClause = access;
+
+    // One row past the page is fetched so its presence can answer "is there
+    // another page" — the job the total count used to do.
+    const heads = await InteractionModel.findSessionHeadsForCursor(
+      whereClause,
+      cursorQuery,
+    );
+    const hasNext = heads.length > cursorQuery.limit;
+    const pageRows = hasNext ? heads.slice(0, cursorQuery.limit) : heads;
+    if (pageRows.length === 0) {
+      return emptyPage();
+    }
+
+    const summaries = await InteractionModel.summarizeSessionPage(
+      pageRows.map(({ sessionId, interactionId }) => ({
+        sessionId,
+        interactionId,
+      })),
+      whereClause,
+    );
+
+    // The summary query groups, so its row order is not the head order. Emit
+    // in head order instead, because that is the order the cursor is cut from
+    // — returning them in any other order would make the next page skip or
+    // repeat rows.
+    const byKey = new Map(
+      summaries.map((summary) => [
+        summary.sessionId ?? summary.interactionId ?? "",
+        summary,
+      ]),
+    );
+    const data = pageRows.flatMap((row) => {
+      const summary = byKey.get(row.sessionId ?? row.interactionId ?? "");
+      return summary ? [summary] : [];
+    });
+
+    const last = pageRows[pageRows.length - 1];
+
+    return {
+      data,
+      pagination: {
+        limit: cursorQuery.limit,
+        hasNext,
+        // No cursor past the end: it could only produce an empty page.
+        nextCursor:
+          hasNext && last
+            ? encodeCursor({
+                value: last.headCreatedAt.toISOString(),
+                id: last.headId,
+              })
+            : null,
+      },
+    };
+  }
+
+  /**
+   * Access-control and filter predicates for the session list, shared by the
+   * offset and cursor paths so they cannot drift into showing different rows.
+   *
+   * Returns {@link SESSION_ACCESS_DENIED} when the caller can reach no agents.
+   * That is deliberately distinct from `undefined`, which means "no
+   * predicates, show everything" — conflating the two would turn a permission
+   * denial into a full listing.
+   */
+  private static async buildSessionConditions(
+    requestingUserId?: string,
+    isAgentAdmin?: boolean,
+    filters?: {
+      profileId?: string;
+      userId?: string;
+      source?: InteractionSource;
+      client?: ClientFilter;
+      externalAgentId?: string;
+      sessionId?: string;
+      startDate?: Date;
+      endDate?: Date;
+    },
+  ): Promise<SQL | undefined | typeof SESSION_ACCESS_DENIED> {
     // Build where clauses for access control
     const conditions: SQL[] = [];
 
@@ -1187,7 +1416,7 @@ class InteractionModel {
       );
 
       if (accessibleAgentIds.length === 0) {
-        return createPaginatedResult([], 0, pagination);
+        return SESSION_ACCESS_DENIED;
       }
 
       conditions.push(
@@ -1250,66 +1479,99 @@ class InteractionModel {
       conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
     }
 
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    return conditions.length > 0 ? and(...conditions) : undefined;
+  }
 
-    // For sessions, we use COALESCE to give null sessionIds a unique identifier
-    // based on the interaction ID so they appear as individual "sessions"
-    // Cast id to text since session_id is VARCHAR and id is UUID
-    const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
+  /**
+   * The newest interaction of each session, newest first, for one cursor page.
+   *
+   * A row qualifies when no newer row shares its session — that row is the
+   * session's head, and a session has exactly one, so the result needs no
+   * deduplication. Ordering by the head row's own `(created_at, id)` is
+   * therefore the same ordering as by the session's last activity, which is
+   * what makes a keyset cursor possible here at all.
+   *
+   * The `NOT EXISTS` probe runs against `interactions_session_created_at_idx`
+   * — `(session_id, created_at DESC)` — so it is an index lookup per candidate
+   * row rather than a scan. Sessionless rows skip the probe: each one is its
+   * own session, so it is always its own head.
+   *
+   * Fetches `limit + 1` rows; the caller uses the extra to decide whether
+   * another page exists.
+   */
+  private static async findSessionHeadsForCursor(
+    whereClause: SQL | undefined,
+    cursorQuery: CursorQuery,
+  ): Promise<
+    Array<{
+      sessionId: string | null;
+      interactionId: string | null;
+      headCreatedAt: Date;
+      headId: string;
+    }>
+  > {
+    const t = schema.interactionsTable;
 
-    // The session total is the same for every page of one filter set, but the
-    // count it needs scans `interactions` — the largest, write-hot table — so
-    // paying it per page made a client walking the pages re-run a full scan on
-    // every request (the dominant cost of this endpoint, and enough on its own
-    // to push the query into statement timeout as the table grows). Compute it
-    // for the first page of a sweep and reuse it for the rest; a total that
-    // trails new rows by at most SESSION_TOTAL_CACHE_TTL_MS is the intended
-    // trade, since it only sizes the pager.
-    const sessionTotalCacheKey = JSON.stringify([
-      requestingUserId ?? null,
-      isAgentAdmin ?? false,
-      filters?.profileId ?? null,
-      filters?.userId ?? null,
-      filters?.source ?? null,
-      filters?.client ?? null,
-      filters?.externalAgentId ?? null,
-      filters?.sessionId ?? null,
-      filters?.startDate?.toISOString() ?? null,
-      filters?.endDate?.toISOString() ?? null,
-    ]);
-    const cachedTotal = sessionTotalCache.get(sessionTotalCacheKey);
+    const conditions: SQL[] = [];
+    if (whereClause) conditions.push(whereClause);
 
-    // PHASE 1: Find only the session keys for this page. The summary query has
-    // several joins and aggregates; applying LIMIT after all of that made every
-    // page summarize every session in the table before discarding almost all of
-    // the work. Selecting the page first keeps the expensive phase bounded by
-    // the requested page instead of total history size.
-    const [sessionPage, [{ total }]] = await Promise.all([
-      InteractionModel.findSessionKeysForPage(whereClause, pagination),
-      // Total = distinct sessions + sessionless interactions (each its own
-      // "session"). Counted without COUNT(DISTINCT COALESCE(session_id,
-      // id::text)) — the per-row uuid cast defeats the session_id index — and
-      // without the conversations join the summary query needs for titles: the
-      // filters only touch interactions columns, and joining on the
-      // conversations PK can't change the count.
-      cachedTotal !== undefined
-        ? [{ total: cachedTotal }]
-        : db
-            .select({
-              total: sql<number>`COUNT(DISTINCT ${schema.interactionsTable.sessionId}) + COUNT(*) FILTER (WHERE ${schema.interactionsTable.sessionId} IS NULL)`,
-            })
-            .from(schema.interactionsTable)
-            .where(whereClause),
-    ]);
-
-    if (cachedTotal === undefined) {
-      sessionTotalCache.set(sessionTotalCacheKey, Number(total));
+    // An unreadable cursor is treated as absent, so a stale or hand-edited
+    // link lands on the newest page instead of erroring.
+    const position = decodeCursor(cursorQuery.cursor);
+    if (position) {
+      const at = new Date(position.value);
+      if (!Number.isNaN(at.getTime())) {
+        conditions.push(
+          sql`(${t.createdAt}, ${t.id}) < (${at}, ${position.id}::uuid)`,
+        );
+      }
     }
 
-    if (sessionPage.length === 0) {
-      return createPaginatedResult([], Number(total), pagination);
-    }
+    // Newer sibling in the same session => this row is not the head.
+    const newerSibling = sql`
+      NOT EXISTS (
+        SELECT 1
+        FROM ${t} AS newer
+        WHERE newer.session_id = ${t.sessionId}
+          AND (newer.created_at, newer.id) > (${t.createdAt}, ${t.id})
+      )
+    `;
+    conditions.push(sql`(${t.sessionId} IS NULL OR ${newerSibling})`);
 
+    const rows = await db
+      .select({
+        id: t.id,
+        sessionId: t.sessionId,
+        createdAt: t.createdAt,
+      })
+      .from(t)
+      .where(and(...conditions))
+      .orderBy(desc(t.createdAt), desc(t.id))
+      .limit(cursorQuery.limit + 1);
+
+    return rows.map((row) => ({
+      sessionId: row.sessionId,
+      interactionId: row.sessionId ? null : row.id,
+      headCreatedAt: row.createdAt,
+      headId: row.id,
+    }));
+  }
+
+  /**
+   * Phases 2 and 3 for one page of session keys: aggregate the sessions, then
+   * fetch the interaction window each row's tip is read from.
+   *
+   * Split out of {@link getSessions} so the offset and cursor paths share it.
+   * Everything expensive here is already bounded by the page, which is the
+   * property both phase-1 strategies exist to preserve.
+   */
+  private static async summarizeSessionPage(
+    sessionPage: Array<{
+      sessionId: string | null;
+      interactionId: string | null;
+    }>,
+    whereClause: SQL | undefined,
+  ): Promise<SessionSummary[]> {
     const pageSessionIds = sessionPage.flatMap((session) =>
       session.sessionId ? [session.sessionId] : [],
     );
@@ -1537,28 +1799,9 @@ class InteractionModel {
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
       };
     });
-
-    return createPaginatedResult(sessions, Number(total), pagination);
+    return sessions;
   }
 
-  /**
-   * The session keys for one page, most recently active first.
-   *
-   * Grouping the whole table to produce twenty keys meant every page paid a
-   * sequential scan of `interactions` plus a sort of one row per interaction —
-   * on a table whose row count grows with every proxied call, and large enough
-   * that the sort spilled to disk. Nothing about a page of recent sessions
-   * needs that: walking `interactions_created_at_idx` newest-first and taking
-   * distinct session keys in the order they first appear yields exactly the
-   * same ordering, because the first row seen for a session IS that session's
-   * most recent one. The scan stops as soon as the page is covered, so the
-   * cost tracks the page, not the history.
-   *
-   * Falls back to the whole-table grouping if a page cannot be filled within
-   * SESSION_SCAN_MAX_ROWS — a pathological case (a filter matching very few
-   * sessions spread over very many rows) where the walk would be the slower of
-   * the two. Correctness is identical either way.
-   */
   private static async findSessionKeysForPage(
     whereClause: SQL | undefined,
     pagination: PaginationQuery,

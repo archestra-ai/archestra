@@ -504,7 +504,7 @@ function TableLoadingBar() {
       // across it, and rounded to match the corner it tucks into.
       className="pointer-events-none absolute inset-x-px top-px z-10 h-[3px] overflow-hidden rounded-t-[5px] bg-primary/15 animate-in fade-in-0 duration-200 [animation-delay:150ms] [animation-fill-mode:backwards] motion-reduce:animate-none"
     >
-      <div className="archestra-table-loading-sweep h-full rounded-full bg-primary" />
+      <div className="archestra-loading-sweep h-full rounded-full bg-primary" />
     </div>
   );
 }

@@ -757,7 +757,7 @@ button.plugin-featured-action::after {
    and fade-in live in the component; only the animation needs a keyframe, and
    the width belongs with it because the two are one motion. */
 
-@keyframes archestra-table-loading-sweep {
+@keyframes archestra-loading-sweep {
   0% {
     transform: translateX(-100%);
   }
@@ -766,15 +766,15 @@ button.plugin-featured-action::after {
   }
 }
 
-.archestra-table-loading-sweep {
+.archestra-loading-sweep {
   width: 30%;
-  animation: archestra-table-loading-sweep 1.1s ease-in-out infinite;
+  animation: archestra-loading-sweep 1.1s ease-in-out infinite;
 }
 
 /* Motion sensitivity: hold the bar still and fill the track instead. It still
-   marks the table as busy, which is the information the bar carries. */
+   marks the area as busy, which is the information the bar carries. */
 @media (prefers-reduced-motion: reduce) {
-  .archestra-table-loading-sweep {
+  .archestra-loading-sweep {
     width: 100%;
     animation: none;
   }

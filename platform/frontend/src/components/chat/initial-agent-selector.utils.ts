@@ -78,6 +78,25 @@ export function truncateAgentDescription(description?: string | null) {
   return `${safeTruncation.trimEnd()}...`;
 }
 
+export function getAdjacentAgentId(params: {
+  agentIds: string[];
+  currentAgentId: string | null;
+  direction: "next" | "previous";
+}) {
+  const { agentIds, currentAgentId, direction } = params;
+  if (agentIds.length === 0) {
+    return null;
+  }
+
+  const currentIndex = currentAgentId ? agentIds.indexOf(currentAgentId) : -1;
+  if (currentIndex === -1) {
+    return direction === "next" ? agentIds[0] : (agentIds.at(-1) ?? null);
+  }
+
+  const offset = direction === "next" ? 1 : -1;
+  return agentIds[(currentIndex + offset + agentIds.length) % agentIds.length];
+}
+
 function getScopeOrder(scope: InitialAgentListItem["scope"]) {
   switch (scope) {
     case "personal":

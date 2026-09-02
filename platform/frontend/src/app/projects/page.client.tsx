@@ -789,7 +789,7 @@ function CreateProjectDialog({
       onOpenChange={onOpenChange}
       title="New project"
       description="Files the agent saves in this project are kept together and show up in your files."
-      size="small"
+      size="medium"
       isDirty={form.formState.isDirty || labels.length > 0}
       onSubmit={onSubmit}
       bodyClassName="space-y-4"

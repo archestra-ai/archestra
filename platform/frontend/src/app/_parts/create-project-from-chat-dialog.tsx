@@ -85,7 +85,7 @@ export function CreateProjectFromChatDialog({
       onOpenChange={onOpenChange}
       title="Create project from chat"
       description="This chat and its files move into the new project. Files the agent saves here are kept together and show up in your files."
-      size="small"
+      size="medium"
       isDirty={form.formState.isDirty || labels.length > 0}
       onSubmit={onSubmit}
       bodyClassName="space-y-4"

@@ -33,6 +33,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
+import { type ProfileLabel, ProfileLabels } from "@/components/agent-labels";
 
 export type EditableVirtualKey =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
@@ -65,6 +66,7 @@ export function EditVirtualKeyDialog({
     getDefaultVirtualKeyScope(visibilityOptions),
   );
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
@@ -84,6 +86,7 @@ export function EditVirtualKeyDialog({
       ]),
     );
     setName(virtualKey.name);
+    setLabels(virtualKey.labels);
     setExpiresAt(initialExpiresAt);
     setScope(initialScope);
     setTeamIds(initialTeamIds);
@@ -107,6 +110,7 @@ export function EditVirtualKeyDialog({
             name: name.trim(),
             keyType: "passthrough",
             expiresAt: expiresAt ?? undefined,
+            labels,
           }
         : {
             name: name.trim(),
@@ -115,12 +119,14 @@ export function EditVirtualKeyDialog({
             scope,
             teams: scope === "team" ? teamIds : [],
             providerApiKeys: providerApiKeyMapToArray(providerApiKeyIds),
+            labels,
           },
     });
     if (result) onOpenChange(false);
   }, [
     expiresAt,
     isPassthrough,
+    labels,
     name,
     onOpenChange,
     providerApiKeyIds,
@@ -212,6 +218,7 @@ export function EditVirtualKeyDialog({
               />
             </>
           )}
+          <ProfileLabels labels={labels} onLabelsChange={setLabels} />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           <DialogCancelButton>Cancel</DialogCancelButton>

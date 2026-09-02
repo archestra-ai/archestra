@@ -81,4 +81,35 @@ describe("buildTaskCompletionNotification", () => {
       }),
     ).toBe("Task finished.");
   });
+
+  test("does not post terminal control streams as completion summaries", () => {
+    expect(
+      buildTaskCompletionNotification({
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output:
+          "\u001b[20;3H\u001b[?25hWorking\u001b[14B\u001b[38;5;244mGenerating",
+      }),
+    ).toBe("Task finished.");
+  });
+
+  test("detects terminal control streams after escape bytes are stripped", () => {
+    expect(
+      buildTaskCompletionNotification({
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output: "[20;3H[?25hWorking[14B[38;5;244mGenerating",
+      }),
+    ).toBe("Task finished.");
+  });
+
+  test("keeps ordinary prose containing bracketed references", () => {
+    expect(
+      buildTaskCompletionNotification({
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output: "Finished the requested work; see notes [1] and [2].",
+      }),
+    ).toBe("Finished the requested work; see notes [1] and [2].");
+  });
 });

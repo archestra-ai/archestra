@@ -317,7 +317,7 @@ Practical starting point for worker autoscaling:
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
 - `archestra.ingress.routeBackendApisDirectly` - Route `/v1` and `/v2` to the backend port on hosts that serve the UI (default: true)
 
-`/v1` (the LLM proxy) and `/v2` (A2A) have no frontend route — the frontend only forwards them to the backend. `/v1` requests carry large bodies and stay open for the length of a completion, so forwarding them runs that traffic on the same process that answers the dashboard's API calls, and the UI slows down while an agent is working. The chart routes both prefixes to the backend port for you.
+`/v1` and `/v2` have no frontend route — the frontend only forwards them to the backend. `/v1` carries the LLM proxy and the MCP gateway, `/v2` carries A2A. That is all of your agents' traffic: completions with large request bodies held open for the length of a response, and tool calls. Forwarding it runs it on the same process that answers the dashboard's API calls, so the UI slows down while an agent is working. The chart routes both prefixes to the backend port for you.
 
 A host that declares its own `/v1` or `/v2` path keeps it. So does a host that never routes to the frontend port. Set `routeBackendApisDirectly: false` to turn the behavior off. It does not apply when you supply a complete `spec`, which replaces the generated rules.
 
@@ -586,7 +586,11 @@ If pgvector is not installed or the database user lacks permissions, the Knowled
 
 Send `/v1` and `/v2` to the backend port (9000), and everything else to the frontend port (3000).
 
-Both prefixes are backend APIs. Neither has a frontend route — the frontend receives them only to forward them on. `/v1` is the LLM proxy, and its requests carry large bodies and stay open for the length of a completion. Routed through the frontend port, that traffic runs on the same single-threaded process that answers the dashboard's own API calls, so the UI gets slow while an agent is working.
+Both prefixes are backend APIs. Neither has a frontend route — the frontend receives them only to forward them on.
+
+`/v1` is the LLM proxy and the MCP gateway. `/v2` is A2A. Together they are the traffic your agents make: completions whose request bodies are large and stay open for the length of a response, and MCP tool calls, which include a poll that runs about once a second per connected client. None of it comes from a browser.
+
+Routed through the frontend port, that traffic runs on the same single-threaded process that answers the dashboard's own API calls, so the UI gets slow while an agent is working.
 
 Keep `/` on the frontend. `/api/auth` is a real frontend route and must stay there, so route the two specific prefixes rather than all of `/api`.
 

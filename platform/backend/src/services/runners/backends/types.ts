@@ -102,6 +102,17 @@ export interface RunnerBackend {
     abortSignal?: AbortSignal;
   }): Promise<void>;
 
+  /**
+   * Read the output currently retained by the backend without following it.
+   * Resolves only after the complete snapshot has been written.
+   */
+  snapshotOutput(params: {
+    session: AgentRun;
+    destination: Writable;
+    lines?: number;
+    abortSignal?: AbortSignal;
+  }): Promise<void>;
+
   /** Interject into a live execution using the deployment's delivery mode. */
   steer(params: {
     session: AgentRun;

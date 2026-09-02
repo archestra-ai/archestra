@@ -90,6 +90,20 @@ class KubernetesRunnerBackend implements RunnerBackend {
     });
   }
 
+  async snapshotOutput(params: {
+    session: AgentRun;
+    destination: Writable;
+    lines?: number;
+    abortSignal?: AbortSignal;
+  }): Promise<void> {
+    await runnerRuntimeManager.snapshotLogs({
+      session: params.session,
+      destination: params.destination,
+      lines: params.lines ?? RUNNER_LOG_TAIL_LINES,
+      abortSignal: params.abortSignal,
+    });
+  }
+
   async steer(params: {
     session: AgentRun;
     steerMode: AgentDeploymentSteerMode;

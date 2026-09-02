@@ -11,7 +11,7 @@ import {
 import { eq, inArray, type SQL } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
-import type { InsertInteraction } from "@/types";
+import type { InsertInteraction, InteractionResponse } from "@/types";
 import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
@@ -2949,6 +2949,158 @@ describe("InteractionModel", () => {
       expect(ourSession?.interactionId).toBe(interaction.id);
       expect(ourSession?.lastUserMessagePreview).toBe(
         "This is a standalone interaction without a session ID",
+      );
+    });
+  });
+
+  describe("getSessions windowed sampling of long sessions", () => {
+    const userTurn = (text: string) => ({
+      model: "claude-3-5-sonnet",
+      messages: [{ role: "user", content: text }],
+    });
+    const emptyResponse: InteractionResponse = {
+      id: "msg_x",
+      content: [],
+      model: "claude-3-5-sonnet",
+      role: "assistant",
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      type: "message",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    };
+
+    test("previews the newest turn of a session far longer than the sampling window", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      for (let turn = 1; turn <= 12; turn++) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: "long-session",
+          request: userTurn(`turn ${turn}`),
+          response: emptyResponse,
+          type: "anthropic:messages",
+        });
+      }
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "long-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastUserMessagePreview).toBe("turn 12");
+    });
+
+    test("finds the title of a long session, which Claude Code generates at its start", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      // Claude Code asks for a title once, on the session's first turn.
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "long-titled-session",
+        request: userTurn(
+          "Please write a 5-10 word title summarizing this conversation.",
+        ),
+        response: {
+          ...emptyResponse,
+          content: [{ type: "text", text: "Refactoring The Session List" }],
+        },
+        type: "anthropic:messages",
+      });
+      // Enough turns to bury that first call well outside a newest-only window.
+      for (let turn = 1; turn <= 25; turn++) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: "long-titled-session",
+          request: userTurn(`turn ${turn}`),
+          response: emptyResponse,
+          type: "anthropic:messages",
+        });
+      }
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "long-titled-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].claudeCodeTitle).toBe(
+        "Refactoring The Session List",
+      );
+      expect(sessions.data[0].lastUserMessagePreview).toBe("turn 25");
+    });
+
+    test("previews a session whose only real turn sits between scaffolding at both ends", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      // Both sampling windows land on scaffolding, so the real turn is only
+      // reachable by re-reading the session at the deeper fallback depth.
+      const scaffolding = [
+        "Please write a 5-10 word title summarizing this conversation.",
+        "You are a prompt suggestion generator.",
+        "You are a prompt suggestion generator.",
+      ];
+      for (const text of scaffolding) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: "buried-turn-session",
+          request: userTurn(text),
+          response: emptyResponse,
+          type: "anthropic:messages",
+        });
+      }
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "buried-turn-session",
+        request: userTurn("the only real question in this session"),
+        response: emptyResponse,
+        type: "anthropic:messages",
+      });
+      for (const text of scaffolding) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: "buried-turn-session",
+          request: userTurn(text),
+          response: emptyResponse,
+          type: "anthropic:messages",
+        });
+      }
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "buried-turn-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastUserMessagePreview).toBe(
+        "the only real question in this session",
       );
     });
   });

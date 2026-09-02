@@ -39,6 +39,7 @@ export function TerminalPlayback({ content }: { content: string }) {
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
         scrollback: 5000,
+        scrollSensitivity: TERMINAL_SCROLL_SENSITIVITY,
         theme: {
           background: "#020617",
           foreground: "#34d399",
@@ -51,22 +52,35 @@ export function TerminalPlayback({ content }: { content: string }) {
       terminal.open(containerRef.current);
       let layoutReady = false;
       let rendered = false;
+      let renderedDimensions: { cols: number; rows: number } | null = null;
 
       const fitAndRender = () => {
         if (disposed) return;
         const dims = fitAddon.proposeDimensions();
         if (!layoutReady || !isUsableTerminalDimensions(dims)) return;
+        const dimensionsChanged =
+          renderedDimensions !== null &&
+          (renderedDimensions.cols !== dims.cols ||
+            renderedDimensions.rows !== dims.rows);
         try {
           fitAddon.fit();
         } catch {
           return;
         }
         if (!rendered) {
-          terminal.write(withHiddenCursor(contentRef.current));
+          terminal.write(withReadOnlyTerminalState(contentRef.current));
           renderedContentRef.current = contentRef.current;
           terminalRef.current = terminal;
           rendered = true;
+        } else if (dimensionsChanged) {
+          // A live TUI redraws after a PTY resize. A retained one cannot, so
+          // replay its byte stream into the new grid instead of reflowing a
+          // screen full of absolute cursor positions from the old dimensions.
+          terminal.reset();
+          terminal.write(withReadOnlyTerminalState(contentRef.current));
+          renderedContentRef.current = contentRef.current;
         }
+        renderedDimensions = dims;
       };
 
       resizeObserver = new ResizeObserver(() => {
@@ -108,10 +122,10 @@ export function TerminalPlayback({ content }: { content: string }) {
 
     const rendered = renderedContentRef.current;
     if (content.startsWith(rendered)) {
-      terminal.write(withHiddenCursor(content.slice(rendered.length)));
+      terminal.write(withReadOnlyTerminalState(content.slice(rendered.length)));
     } else {
       terminal.reset();
-      terminal.write(withHiddenCursor(content));
+      terminal.write(withReadOnlyTerminalState(content));
     }
     renderedContentRef.current = content;
   }, [content]);
@@ -129,8 +143,10 @@ export function TerminalPlayback({ content }: { content: string }) {
 
 // ===================== internals =====================
 
-const HIDE_CURSOR_SEQUENCE = "\u001b[?25l";
+const READ_ONLY_TERMINAL_STATE =
+  "\u001b[?25l\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l\u001b[?1015l";
+const TERMINAL_SCROLL_SENSITIVITY = 3;
 
-function withHiddenCursor(content: string): string {
-  return `${content}${HIDE_CURSOR_SEQUENCE}`;
+function withReadOnlyTerminalState(content: string): string {
+  return `${content}${READ_ONLY_TERMINAL_STATE}`;
 }

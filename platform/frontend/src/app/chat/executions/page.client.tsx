@@ -38,6 +38,9 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
   const [connectionCommand, setConnectionCommand] = useState<string | null>(
     null,
   );
+  const [liveTerminalTaskId, setLiveTerminalTaskId] = useState<string | null>(
+    null,
+  );
   const [commandCopied, setCommandCopied] = useState(false);
   const execution = query.data;
 
@@ -55,6 +58,8 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
   }
 
   const live = !execution || execution.endedAt === null;
+  const preserveLiveTerminal = liveTerminalTaskId === taskId;
+  const showLiveTerminal = live || preserveLiveTerminal;
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background">
@@ -135,14 +140,17 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
-        {live ? (
+        {showLiveTerminal ? (
           <AgentExecutionTerminal
             taskId={taskId}
             active
-            title="Live terminal"
+            title={live ? "Live terminal" : "Output"}
             showManualCommand={false}
             showDisconnectedStatus={false}
-            onCommandChange={setConnectionCommand}
+            onCommandChange={(command) => {
+              setConnectionCommand(command);
+              if (command) setLiveTerminalTaskId(taskId);
+            }}
             onClosed={() => void query.refetch()}
           />
         ) : execution ? (

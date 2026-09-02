@@ -166,6 +166,7 @@ export function ExecTerminal({
           cursor: "#34d399",
         },
         scrollback: 5000,
+        scrollSensitivity: TERMINAL_SCROLL_SENSITIVITY,
       });
 
       terminal.loadAddon(fitAddon);
@@ -227,7 +228,8 @@ export function ExecTerminal({
           },
           onOutput: (data) => {
             if (disposed) return;
-            terminal.write(data);
+            const output = withoutTmuxExitNotice(data);
+            if (output) terminal.write(output);
           },
           onError: (message) => {
             if (disposed) return;
@@ -244,7 +246,7 @@ export function ExecTerminal({
       };
 
       terminal.onData((data) => {
-        const input = withoutMouseHoverReports(data);
+        const input = normalizeTerminalInput(data);
         if (input) transportRef.current.sendInput(input);
       });
 
@@ -393,14 +395,46 @@ export function ExecTerminal({
 // visible `^[[<35;...M` text. Hover has no useful terminal action, so drop only
 // motion reports whose low button bits mean "no button". Clicks, button drags,
 // wheel events, and ordinary keyboard input continue to the remote PTY.
-function withoutMouseHoverReports(data: string): string {
+function normalizeTerminalInput(data: string): string {
   return data.replace(SGR_MOUSE_REPORT_PATTERN, (report, encodedButton) => {
     const button = Number(encodedButton);
     const isMotion = (button & 32) !== 0;
     const hasNoButton = (button & 3) === 3;
-    return isMotion && hasNoButton ? "" : report;
+    if (isMotion && hasNoButton) return "";
+
+    // tmux owns scrolling while a TUI has mouse reporting enabled. One report
+    // per browser wheel tick makes its copy-mode history feel much slower than
+    // the rest of the app, so give wheel reports a modest boost. Clicks,
+    // drags, and keyboard input remain byte-for-byte unchanged.
+    const isWheel = (button & 64) !== 0;
+    return isWheel ? report.repeat(REMOTE_WHEEL_SCROLL_MULTIPLIER) : report;
   });
+}
+
+function withoutTmuxExitNotice(data: string): string {
+  const exitNoticeIndex = data.indexOf(TMUX_EXIT_NOTICE);
+  if (exitNoticeIndex === -1) return data;
+
+  // tmux can put the alternate-screen teardown and its own `[exited]` notice
+  // in the same final chunk. Replaying the teardown replaces the useful TUI
+  // frame with the empty shell screen just before the socket closes. Keep any
+  // output before that teardown and let the execution header convey the end.
+  const alternateScreenExitIndex = data.lastIndexOf(
+    ALTERNATE_SCREEN_EXIT_SEQUENCE,
+    exitNoticeIndex,
+  );
+  const visibleOutput = data.slice(
+    0,
+    alternateScreenExitIndex === -1
+      ? exitNoticeIndex
+      : alternateScreenExitIndex,
+  );
+  return visibleOutput.replace(/\r?\n$/, "");
 }
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ESC begins every SGR mouse report.
 const SGR_MOUSE_REPORT_PATTERN = /\x1b\[<(\d+);\d+;\d+[Mm]/g;
+const TMUX_EXIT_NOTICE = "[exited]";
+const ALTERNATE_SCREEN_EXIT_SEQUENCE = "\u001b[?1049l";
+const REMOTE_WHEEL_SCROLL_MULTIPLIER = 3;
+const TERMINAL_SCROLL_SENSITIVITY = 3;

@@ -178,7 +178,7 @@ export function useInteractionSessions({
   startDate,
   endDate,
   limit = DEFAULT_TABLE_LIMIT,
-  offset = 0,
+  cursor,
   initialData,
   toastOnError,
 }: {
@@ -190,7 +190,7 @@ export function useInteractionSessions({
   startDate?: string;
   endDate?: string;
   limit?: number;
-  offset?: number;
+  cursor?: string;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
   toastOnError?: boolean;
 } = {}) {
@@ -206,7 +206,7 @@ export function useInteractionSessions({
       startDate,
       endDate,
       limit,
-      offset,
+      cursor,
     ],
     queryFn: async () => {
       const response = await getInteractionSessions({
@@ -219,18 +219,15 @@ export function useInteractionSessions({
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
           limit,
-          offset,
+          ...(cursor ? { cursor } : {}),
         },
       });
       const emptyResponse = {
         data: [],
         pagination: {
-          currentPage: 1,
           limit,
-          total: 0,
-          totalPages: 0,
+          nextCursor: null,
           hasNext: false,
-          hasPrev: false,
         },
       };
 
@@ -238,7 +235,7 @@ export function useInteractionSessions({
       return response.data ?? emptyResponse;
     },
     initialData:
-      offset === 0 &&
+      !cursor &&
       limit === DEFAULT_TABLE_LIMIT &&
       !profileId &&
       !userId &&

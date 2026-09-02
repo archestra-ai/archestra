@@ -23608,13 +23608,8 @@ export type GetAuditLogsData = {
          * Filter by resource ID (e.g. a specific agent's ID)
          */
         resourceId?: string;
-        /**
-         * Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name
-         */
-        search?: string;
-        sortDirection?: 'asc' | 'desc';
         limit?: number;
-        offset?: number;
+        cursor?: string;
     };
     url: '/api/audit-logs';
 };
@@ -23721,12 +23716,9 @@ export type GetAuditLogsResponses = {
             impersonatedByEmail: string | null;
         }>;
         pagination: {
-            currentPage: number;
             limit: number;
-            total: number;
-            totalPages: number;
+            nextCursor: string | null;
             hasNext: boolean;
-            hasPrev: boolean;
         };
     };
 };
@@ -48321,7 +48313,7 @@ export type GetInteractionSessionsData = {
          */
         endDate?: string;
         limit?: number;
-        offset?: number;
+        cursor?: string;
     };
     url: '/api/interactions/sessions';
 };
@@ -48441,12 +48433,9 @@ export type GetInteractionSessionsResponses = {
             claudeCodeTitle: string | null;
         }>;
         pagination: {
-            currentPage: number;
             limit: number;
-            total: number;
-            totalPages: number;
+            nextCursor: string | null;
             hasNext: boolean;
-            hasPrev: boolean;
         };
     };
 };
@@ -72444,13 +72433,11 @@ export type GetMcpToolCallsData = {
          */
         endDate?: string;
         /**
-         * Free-text search across MCP server name, tool name, and arguments (case-insensitive)
+         * Filter by exact MCP server name
          */
-        search?: string;
+        mcpServerName?: string;
         limit?: number;
-        offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';
-        sortDirection?: 'asc' | 'desc';
+        cursor?: string;
     };
     url: '/api/mcp-tool-calls';
 };
@@ -72552,12 +72539,9 @@ export type GetMcpToolCallsResponses = {
             appName: string | null;
         }>;
         pagination: {
-            currentPage: number;
             limit: number;
-            total: number;
-            totalPages: number;
+            nextCursor: string | null;
             hasNext: boolean;
-            hasPrev: boolean;
         };
     };
 };

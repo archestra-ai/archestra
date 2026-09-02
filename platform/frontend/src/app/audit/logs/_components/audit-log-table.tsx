@@ -1,20 +1,17 @@
 "use client";
 
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, User } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
   filterControlClass,
-  filterSearchClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
-import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
@@ -30,6 +27,7 @@ import {
 } from "@/lib/audit-log/audit-log.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -77,19 +75,6 @@ const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
 // ACTION_LABEL and the filter.
 type AuditLogRow = Omit<AuditLog, "action"> & { action: string };
 
-function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
-  const upArrow = <ChevronUp className="h-3 w-3" />;
-  const downArrow = <ChevronDown className="h-3 w-3" />;
-  if (isSorted === "asc") return upArrow;
-  if (isSorted === "desc") return downArrow;
-  return (
-    <div className="text-muted-foreground flex flex-col items-center">
-      {upArrow}
-      <span className="mt-[-4px]">{downArrow}</span>
-    </div>
-  );
-}
-
 export function AuditLogTable() {
   const router = useRouter();
   const pathname = usePathname();
@@ -97,7 +82,6 @@ export function AuditLogTable() {
 
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
-  const searchFromUrl = searchParams.get("search");
   const actionFromUrl = (searchParams.get("action") ?? ALL_VALUE) as
     | typeof ALL_VALUE
     | AuditEventName;
@@ -110,13 +94,34 @@ export function AuditLogTable() {
   const actorTypeFromUrl = (searchParams.get("actorType") ?? ALL_VALUE) as
     | typeof ALL_VALUE
     | AuditActorType;
+  const cursorFromUrl = searchParams.get("cursor");
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
+  const searchFromUrl = searchParams.get("search");
 
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: DEFAULT_TABLE_LIMIT,
+  const cursorPagination = useCursorPagination({
+    defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
+  useEffect(() => {
+    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl && !searchFromUrl)
+      return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("cursor");
+    params.delete("page");
+    params.delete("pageSize");
+    params.delete("search");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [
+    cursorFromUrl,
+    pageFromUrl,
+    pageSizeFromUrl,
+    pathname,
+    router,
+    searchFromUrl,
+    searchParams,
   ]);
   const eventId = searchParams.get("event");
   const { data: eventFromUrl } = useAuditLog(eventId ?? undefined);
@@ -159,62 +164,60 @@ export function AuditLogTable() {
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
-        setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+        cursorPagination.goNewest();
         updateUrlParams({ startDate, endDate });
       },
-      [updateUrlParams],
+      [cursorPagination.goNewest, updateUrlParams],
     ),
   });
 
   const handleActionChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ action: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleResourceChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ resourceType: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleActorChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ actorId: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleEntityChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ resourceId: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleOutcomeChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ outcome: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
 
   const handleActorTypeChange = useCallback(
     (value: string) => {
-      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      cursorPagination.goNewest();
       updateUrlParams({ actorType: value === ALL_VALUE ? null : value });
     },
-    [updateUrlParams],
+    [cursorPagination.goNewest, updateUrlParams],
   );
-
-  const sortDirection = sorting[0]?.desc === false ? "asc" : "desc";
 
   const action = (ALL_ACTIONS as readonly string[]).includes(actionFromUrl)
     ? (actionFromUrl as AuditEventName)
@@ -239,9 +242,8 @@ export function AuditLogTable() {
     isLoadingError: isAuditLogsLoadError,
     refetch: refetchAuditLogs,
   } = useAuditLogs({
-    limit: pagination.pageSize,
-    offset: pagination.pageIndex * pagination.pageSize,
-    sortDirection,
+    limit: cursorPagination.pageSize,
+    cursor: cursorPagination.cursor,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
     actorId,
@@ -250,7 +252,6 @@ export function AuditLogTable() {
     actorType,
     resourceType,
     resourceId,
-    search: searchFromUrl ?? undefined,
   });
 
   // Server-side search rather than a client filter over the first N members:
@@ -496,16 +497,7 @@ export function AuditLogTable() {
       },
       {
         id: "createdAt",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Time
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        ),
+        header: "Time",
         size: 190,
         minSize: 175,
         cell: ({ row }) => (
@@ -527,7 +519,6 @@ export function AuditLogTable() {
   );
 
   const hasFilters =
-    !!searchFromUrl ||
     action !== undefined ||
     outcome !== undefined ||
     actorType !== undefined ||
@@ -537,7 +528,7 @@ export function AuditLogTable() {
     dateTimePicker.startDate !== undefined;
 
   const clearFilters = useCallback(() => {
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateUrlParams({
       search: null,
@@ -549,9 +540,11 @@ export function AuditLogTable() {
       actorId: null,
       startDate: null,
       endDate: null,
-      page: "1",
+      cursor: null,
+      page: null,
+      pageSize: null,
     });
-  }, [dateTimePicker, updateUrlParams]);
+  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
 
   if (isAuditLogsLoadError) {
     return (
@@ -643,13 +636,6 @@ export function AuditLogTable() {
               : []),
           ]}
         >
-          <SearchInput
-            isLoading={isFetching}
-            objectNamePlural="audit events"
-            searchFields={["actor", "path", "resource"]}
-            paramName="search"
-            className={filterSearchClass}
-          />
           <FilterSelect
             value={action ?? ALL_VALUE}
             onValueChange={handleActionChange}
@@ -687,20 +673,21 @@ export function AuditLogTable() {
         columns={columns}
         data={rows}
         hideSelectedCount
-        pagination={
+        cursorPagination={
           paginationMeta
             ? {
-                pageIndex: pagination.pageIndex,
-                pageSize: pagination.pageSize,
-                total: paginationMeta.total,
+                pageIndex: cursorPagination.pageIndex,
+                pageSize: cursorPagination.pageSize,
+                hasNext: paginationMeta.hasNext,
+                canGoNewer: cursorPagination.canGoNewer,
+                onPageSizeChange: cursorPagination.setPageSize,
+                onNewer: cursorPagination.goNewer,
+                onOlder: () =>
+                  cursorPagination.goOlder(paginationMeta.nextCursor),
               }
             : undefined
         }
         manualPagination
-        onPaginationChange={setPagination}
-        manualSorting
-        sorting={sorting}
-        onSortingChange={setSorting}
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyMessage="No audit events recorded yet. Administrative actions will appear here as they happen."

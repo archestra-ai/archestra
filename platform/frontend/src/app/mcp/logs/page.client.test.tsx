@@ -60,11 +60,12 @@ async function openGatewayFilter(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByText("All Agents & MCP Gateways"));
 }
 
-describe("McpGatewayLogsPage gateway filter", () => {
+describe("McpGatewayLogsPage filters", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push,
+      replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
@@ -83,7 +84,10 @@ describe("McpGatewayLogsPage gateway filter", () => {
       data: [],
     } as unknown as ReturnType<typeof useInternalMcpCatalog>);
     vi.mocked(useMcpToolCalls).mockReturnValue({
-      data: { data: [], pagination: { total: 0 } },
+      data: {
+        data: [],
+        pagination: { limit: 10, nextCursor: null, hasNext: false },
+      },
       isFetching: false,
     } as unknown as ReturnType<typeof useMcpToolCalls>);
   });
@@ -141,6 +145,41 @@ describe("McpGatewayLogsPage gateway filter", () => {
     );
   });
 
+  it("filters by MCP server with a searchable icon-and-name picker", async () => {
+    vi.mocked(useMcpServers).mockReturnValue({
+      data: [
+        {
+          name: "document-search-deployment",
+          catalogName: "Document Search",
+          catalogId: "document-search-catalog",
+        },
+      ],
+    } as unknown as ReturnType<typeof useMcpServers>);
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [
+        {
+          id: "document-search-catalog",
+          name: "Document Search",
+          icon: "📚",
+        },
+      ],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    const user = userEvent.setup();
+    render(<McpGatewayLogsPage />);
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Filter by MCP server" }),
+    );
+    expect(screen.getByPlaceholderText("Search MCP servers…")).toBeVisible();
+    expect(screen.getByText("📚")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /Document Search/ }));
+
+    expect(push).toHaveBeenCalledWith(
+      expect.stringContaining("mcpServerName=document-search-deployment"),
+      expect.anything(),
+    );
+  });
+
   it("presents the call context without separate method, server, and arguments columns", () => {
     vi.mocked(useMcpServers).mockReturnValue({
       data: [
@@ -183,7 +222,7 @@ describe("McpGatewayLogsPage gateway filter", () => {
             appName: null,
           },
         ],
-        pagination: { total: 1 },
+        pagination: { limit: 10, nextCursor: null, hasNext: false },
       },
       isFetching: false,
     } as unknown as ReturnType<typeof useMcpToolCalls>);
@@ -195,6 +234,7 @@ describe("McpGatewayLogsPage gateway filter", () => {
         screen.getByRole("columnheader", { name: header }),
       ).toBeInTheDocument();
     }
+    expect(screen.queryByRole("button", { name: /Time/ })).toBeNull();
     expect(screen.getByText("search_documents")).toBeVisible();
     expect(screen.getByText("Document Search")).toBeVisible();
     expect(screen.getByText("📚")).toBeInTheDocument();

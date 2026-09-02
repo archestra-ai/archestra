@@ -1,5 +1,7 @@
 import {
   ClientFilterSchema,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   createPaginatedResponseSchema,
   InteractionSourceSchema,
   PaginationQuerySchema,
@@ -145,7 +147,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       fastify.log.info(
         {
           resultCount: result.data.length,
-          total: result.pagination.total,
+          hasNext: result.pagination.hasNext,
         },
         "GetInteractions result",
       );
@@ -192,9 +194,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .optional()
               .describe("Filter by end date (ISO 8601 format)"),
           })
-          .merge(PaginationQuerySchema),
+          .merge(CursorQuerySchema),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SessionSummarySchema),
+          createCursorPaginatedResponseSchema(SessionSummarySchema),
         ),
       },
     },
@@ -209,14 +211,14 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           startDate,
           endDate,
           limit,
-          offset,
+          cursor,
         },
         user,
         organizationId,
       },
       reply,
     ) => {
-      const pagination = { limit, offset };
+      const cursorQuery = { limit, cursor };
 
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
@@ -242,13 +244,13 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sessionId,
           startDate,
           endDate,
-          pagination,
+          cursorQuery,
         },
         "GetInteractionSessions request",
       );
 
-      const result = await InteractionModel.getSessions(
-        pagination,
+      const result = await InteractionModel.getSessionsCursor(
+        cursorQuery,
         user.id,
         isAgentAdmin,
         {
@@ -265,7 +267,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       fastify.log.info(
         {
           resultCount: result.data.length,
-          total: result.pagination.total,
+          hasNext: result.pagination.hasNext,
         },
         "GetInteractionSessions result",
       );

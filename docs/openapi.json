@@ -82884,28 +82884,6 @@
           },
           {
             "schema": {
-              "type": "string"
-            },
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "description": "Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name"
-          },
-          {
-            "schema": {
-              "default": "desc",
-              "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ]
-            },
-            "in": "query",
-            "name": "sortDirection",
-            "required": false
-          },
-          {
-            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -82917,13 +82895,10 @@
           },
           {
             "schema": {
-              "default": 0,
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
+              "type": "string"
             },
             "in": "query",
-            "name": "offset",
+            "name": "cursor",
             "required": false
           }
         ],
@@ -83281,40 +83256,23 @@
                     "pagination": {
                       "type": "object",
                       "properties": {
-                        "currentPage": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 9007199254740991
-                        },
                         "limit": {
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
                         },
-                        "total": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "totalPages": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "hasNext": {
-                          "type": "boolean"
-                        },
-                        "hasPrev": {
                           "type": "boolean"
                         }
                       },
                       "required": [
-                        "currentPage",
                         "limit",
-                        "total",
-                        "totalPages",
-                        "hasNext",
-                        "hasPrev"
+                        "nextCursor",
+                        "hasNext"
                       ],
                       "additionalProperties": false
                     }
@@ -184076,13 +184034,10 @@
           },
           {
             "schema": {
-              "default": 0,
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
+              "type": "string"
             },
             "in": "query",
-            "name": "offset",
+            "name": "cursor",
             "required": false
           }
         ],
@@ -184389,40 +184344,23 @@
                     "pagination": {
                       "type": "object",
                       "properties": {
-                        "currentPage": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 9007199254740991
-                        },
                         "limit": {
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
                         },
-                        "total": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "totalPages": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "hasNext": {
-                          "type": "boolean"
-                        },
-                        "hasPrev": {
                           "type": "boolean"
                         }
                       },
                       "required": [
-                        "currentPage",
                         "limit",
-                        "total",
-                        "totalPages",
-                        "hasNext",
-                        "hasPrev"
+                        "nextCursor",
+                        "hasNext"
                       ],
                       "additionalProperties": false
                     }
@@ -284272,7 +284210,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get all MCP tool calls with pagination and sorting\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get all MCP tool calls with cursor pagination\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -284312,9 +284250,9 @@
               "type": "string"
             },
             "in": "query",
-            "name": "search",
+            "name": "mcpServerName",
             "required": false,
-            "description": "Free-text search across MCP server name, tool name, and arguments (case-insensitive)"
+            "description": "Filter by exact MCP server name"
           },
           {
             "schema": {
@@ -284329,40 +284267,10 @@
           },
           {
             "schema": {
-              "default": 0,
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
+              "type": "string"
             },
             "in": "query",
-            "name": "offset",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "createdAt",
-                "agentId",
-                "mcpServerName",
-                "method"
-              ]
-            },
-            "in": "query",
-            "name": "sortBy",
-            "required": false
-          },
-          {
-            "schema": {
-              "default": "desc",
-              "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ]
-            },
-            "in": "query",
-            "name": "sortDirection",
+            "name": "cursor",
             "required": false
           }
         ],
@@ -284525,40 +284433,23 @@
                     "pagination": {
                       "type": "object",
                       "properties": {
-                        "currentPage": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 9007199254740991
-                        },
                         "limit": {
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
                         },
-                        "total": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "totalPages": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
                         },
                         "hasNext": {
-                          "type": "boolean"
-                        },
-                        "hasPrev": {
                           "type": "boolean"
                         }
                       },
                       "required": [
-                        "currentPage",
                         "limit",
-                        "total",
-                        "totalPages",
-                        "hasNext",
-                        "hasPrev"
+                        "nextCursor",
+                        "hasNext"
                       ],
                       "additionalProperties": false
                     }

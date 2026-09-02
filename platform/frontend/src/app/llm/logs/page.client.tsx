@@ -11,7 +11,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
@@ -38,6 +38,7 @@ import {
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
@@ -124,8 +125,9 @@ export default function LlmProxyLogsPage() {
 
 function SessionsTable() {
   const router = useRouter();
-  const { searchParams, pageIndex, pageSize, offset, updateQueryParams } =
+  const { searchParams, pathname, updateQueryParams } =
     useDataTableQueryParams();
+  const cursorPagination = useCursorPagination();
 
   // Get URL params
   const profileIdFromUrl = searchParams.get("profileId");
@@ -140,6 +142,23 @@ function SessionsTable() {
   const sourceFilter = sourceFromUrl || "all";
   const clientFilter = clientFromUrl || "all";
 
+  // Cursors are transient navigation state. Keep filters shareable, but scrub
+  // pagination from old links rather than exposing opaque cursors in the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    const hasLegacyPagination = ["cursor", "page", "pageSize"].some((key) =>
+      params.has(key),
+    );
+    if (!hasLegacyPagination) return;
+    params.delete("cursor");
+    params.delete("page");
+    params.delete("pageSize");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [pathname, router, searchParams]);
+
   // The logs search box only filters by session ID (free-text content search
   // was removed). Translate the typed term into a sessionId filter when it is a
   // valid session ID; otherwise it filters nothing and we surface a hint.
@@ -153,64 +172,64 @@ function SessionsTable() {
     endDateFromUrl,
     onDateRangeChange: useCallback(
       ({ startDate, endDate }) => {
+        cursorPagination.goNewest();
         updateQueryParams({
           startDate,
           endDate,
-          page: "1", // Reset to first page
+          page: null,
+          pageSize: null,
         });
       },
-      [updateQueryParams],
+      [cursorPagination.goNewest, updateQueryParams],
     ),
   });
 
-  const handlePaginationChange = useCallback(
-    (newPagination: { pageIndex: number; pageSize: number }) => {
-      updateQueryParams({
-        page: String(newPagination.pageIndex + 1),
-        pageSize: String(newPagination.pageSize),
-      });
-    },
-    [updateQueryParams],
-  );
-
   const handleProfileFilterChange = useCallback(
     (value: string) => {
+      cursorPagination.goNewest();
       updateQueryParams({
         profileId: value === "all" ? null : value,
-        page: "1", // Reset to first page
+        page: null,
+        pageSize: null,
       });
     },
-    [updateQueryParams],
+    [cursorPagination.goNewest, updateQueryParams],
   );
 
   const handleUserFilterChange = useCallback(
     (value: string) => {
+      cursorPagination.goNewest();
       updateQueryParams({
         userId: value === "all" ? null : value,
-        page: "1", // Reset to first page
+        page: null,
+        pageSize: null,
       });
     },
-    [updateQueryParams],
+    [cursorPagination.goNewest, updateQueryParams],
   );
 
   const handleSourceFilterChange = useCallback(
     (value: string) => {
+      cursorPagination.goNewest();
       updateQueryParams({
         source: value === "all" ? null : value,
-        page: "1", // Reset to first page
+        page: null,
+        pageSize: null,
       });
     },
-    [updateQueryParams],
+    [cursorPagination.goNewest, updateQueryParams],
   );
 
   const handleClientFilterChange = useCallback(
     (value: string) => {
+      cursorPagination.goNewest();
       updateQueryParams({
         client: value === "all" ? null : value,
-        page: "1", // Reset to first page
+        page: null,
+        pageSize: null,
       });
     },
-    [updateQueryParams],
+    [cursorPagination.goNewest, updateQueryParams],
   );
 
   const {
@@ -219,8 +238,8 @@ function SessionsTable() {
     isLoadingError,
     refetch: refetchSessions,
   } = useInteractionSessions({
-    limit: pageSize,
-    offset,
+    limit: cursorPagination.pageSize,
+    cursor: cursorPagination.cursor,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
     source:
@@ -250,6 +269,7 @@ function SessionsTable() {
     !!searchFromUrl;
 
   const clearFilters = useCallback(() => {
+    cursorPagination.goNewest();
     dateTimePicker.clearDateRange();
     updateQueryParams({
       profileId: null,
@@ -259,9 +279,10 @@ function SessionsTable() {
       startDate: null,
       endDate: null,
       search: null,
-      page: "1",
+      page: null,
+      pageSize: null,
     });
-  }, [dateTimePicker, updateQueryParams]);
+  }, [cursorPagination.goNewest, dateTimePicker, updateQueryParams]);
 
   const columns: ColumnDef<SessionData>[] = useMemo(
     () => [
@@ -507,6 +528,8 @@ function SessionsTable() {
               searchFields={["session ID"]}
               paramName="search"
               className="relative w-full"
+              paginationMode="cursor"
+              onSearchChange={cursorPagination.goNewest}
             />
             {searchIsNotSessionId && (
               <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
@@ -598,12 +621,20 @@ function SessionsTable() {
         data={sessions}
         hideSelectedCount
         manualPagination
-        pagination={{
-          pageIndex,
-          pageSize,
-          total: paginationMeta?.total ?? 0,
-        }}
-        onPaginationChange={handlePaginationChange}
+        cursorPagination={
+          paginationMeta
+            ? {
+                pageIndex: cursorPagination.pageIndex,
+                pageSize: cursorPagination.pageSize,
+                hasNext: paginationMeta.hasNext,
+                canGoNewer: cursorPagination.canGoNewer,
+                onPageSizeChange: cursorPagination.setPageSize,
+                onNewer: cursorPagination.goNewer,
+                onOlder: () =>
+                  cursorPagination.goOlder(paginationMeta.nextCursor),
+              }
+            : undefined
+        }
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyIcon={MessagesSquare}

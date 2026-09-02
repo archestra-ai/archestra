@@ -286,7 +286,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - **Error Handling**: Always use `throw new ApiError(statusCode, message)` for error responses - never use manual `reply.status().send({ error: ... })`. The centralized Fastify error handler formats all errors consistently as `{ error: { message, type } }` and logs appropriately.
 - **Protected Routes & Authentication**: Routes under `/api/` are protected by the auth middleware which guarantees `request.user` and `request.organizationId` exist. Never add redundant null checks like `if (!request.organizationId) throw new ApiError(401, "Unauthorized")` - just use `request.organizationId` directly. The middleware handles authentication; routes handle authorization and business logic.
 - **Type Organization**: Keep database schemas in `database/schemas/`, extract business types to dedicated `types/` files
-- **Pagination**: Use `PaginationQuerySchema` and `createPaginatedResponseSchema` for consistent pagination across APIs
+- **Pagination**: Use `PaginationQuerySchema` and `createPaginatedResponseSchema` for ordinary bounded tables that need page counts. Use `CursorQuerySchema` and `createCursorPaginatedResponseSchema` for write-hot or unbounded logs; keyset queries must fetch `limit + 1` rows and must not calculate totals.
 - **Sorting**: Use `SortingQuerySchema` or `createSortingQuerySchema` for standardized sorting parameters
 - **Database Types via drizzle-zod**: Never manually define TypeScript interfaces for database entities. Use `drizzle-zod` to generate Zod schemas from Drizzle table definitions, then infer types with `z.infer<>`. This keeps types in sync with the schema automatically:
 

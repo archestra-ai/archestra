@@ -95,10 +95,14 @@ async function runSlackChatOpsCompletion(
       async () => {
         const sessions = await request.get(
           `${API_BASE_URL}/api/interactions/sessions` +
-            `?limit=10&offset=0&sessionId=${encodeURIComponent(sessionId)}`,
+            `?limit=1&sessionId=${encodeURIComponent(sessionId)}`,
         );
         if (!sessions.ok()) return -1;
-        return (await sessions.json()).pagination.total;
+        const body = await sessions.json();
+        return body.data.some(
+          (session: { sessionId: string | null }) =>
+            session.sessionId === sessionId,
+        );
       },
       {
         timeout: 30_000,
@@ -106,7 +110,7 @@ async function runSlackChatOpsCompletion(
           "A Slack ChatOps stream that reported no usage was never recorded as an interaction",
       },
     )
-    .toBe(1);
+    .toBe(true);
 
   return { sessionId, prompt };
 }

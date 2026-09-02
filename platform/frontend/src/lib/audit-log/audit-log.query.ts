@@ -23,19 +23,15 @@ export const AUDIT_LOG_QUERY_KEY = ["audit-logs"] as const;
 const EMPTY_RESPONSE = (limit: number): AuditLogsResponse => ({
   data: [],
   pagination: {
-    currentPage: 1,
     limit,
-    total: 0,
-    totalPages: 0,
+    nextCursor: null,
     hasNext: false,
-    hasPrev: false,
   },
 });
 
 export function useAuditLogs({
   limit = DEFAULT_TABLE_LIMIT,
-  offset = 0,
-  sortDirection = "desc",
+  cursor,
   startDate,
   endDate,
   actorId,
@@ -44,11 +40,9 @@ export function useAuditLogs({
   actorType,
   resourceType,
   resourceId,
-  search,
 }: {
   limit?: number;
-  offset?: number;
-  sortDirection?: AuditLogsQuery["sortDirection"];
+  cursor?: string;
   startDate?: string;
   endDate?: string;
   actorId?: string;
@@ -57,15 +51,13 @@ export function useAuditLogs({
   actorType?: AuditActorType;
   resourceType?: string;
   resourceId?: string;
-  search?: string;
 } = {}) {
   return useQuery({
     queryKey: [
       ...AUDIT_LOG_QUERY_KEY,
       {
         limit,
-        offset,
-        sortDirection,
+        cursor,
         startDate,
         endDate,
         actorId,
@@ -74,15 +66,13 @@ export function useAuditLogs({
         actorType,
         resourceType,
         resourceId,
-        search,
       },
     ],
     queryFn: async () => {
       const response = await getAuditLogs({
         query: {
           limit,
-          offset,
-          ...(sortDirection ? { sortDirection } : {}),
+          ...(cursor ? { cursor } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
           ...(actorId ? { actorId } : {}),
@@ -91,7 +81,6 @@ export function useAuditLogs({
           ...(actorType ? { actorType } : {}),
           ...(resourceType ? { resourceType } : {}),
           ...(resourceId ? { resourceId } : {}),
-          ...(search ? { search } : {}),
         },
       });
       // Screen renders its own QueryLoadError panel; don't also toast.

@@ -10,7 +10,6 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { AddToKnowledgeBaseDialog } from "@/app/knowledge/files/_parts/add-to-knowledge-base-dialog";
@@ -133,10 +132,16 @@ function VisibilityBadge({
 }
 
 export default function KnowledgeFilesPage() {
-  const { pageIndex, pageSize, offset, setPagination, updateQueryParams } =
-    useDataTableQueryParams();
+  const {
+    pageIndex,
+    pageSize,
+    offset,
+    setPagination,
+    searchParams,
+    updateQueryParams,
+  } = useDataTableQueryParams();
   // Label filtering is server-side, so the value rides the list query.
-  const labelsFilter = useSearchParams().get("labels") || undefined;
+  const labelsFilter = searchParams.get("labels") || undefined;
 
   /** null = the top level, which lists directories plus unfiled documents. */
   const [openDirectoryId, setOpenDirectoryId] = useState<string | null>(null);
@@ -213,7 +218,11 @@ export default function KnowledgeFilesPage() {
    * different directory or changing the search drops it rather than silently
    * re-pointing "all 40 documents" at a different 40.
    */
-  const viewSignature = JSON.stringify({ openDirectoryId, search });
+  const viewSignature = JSON.stringify({
+    openDirectoryId,
+    search,
+    labelsFilter,
+  });
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === viewSignature;
   const { effectiveRowSelection, onRowSelectionChange } =
@@ -258,6 +267,7 @@ export default function KnowledgeFilesPage() {
       {
         directoryId: openDirectoryId ?? ROOT_DIRECTORY,
         search: search || undefined,
+        labels: labelsFilter,
       },
       { enabled: allMatchingSelected },
     );
@@ -311,6 +321,12 @@ export default function KnowledgeFilesPage() {
     setRowSelection({});
     setEscalatedFor(null);
   }, []);
+
+  const hasActiveFilters = Boolean(search || labelsFilter);
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    updateQueryParams({ labels: null, page: "1" });
+  }, [updateQueryParams]);
 
   const columns: ColumnDef<Row>[] = useMemo(
     () => [
@@ -527,14 +543,7 @@ export default function KnowledgeFilesPage() {
         <CollectionFilters>
           <FilterBar
             leading
-            onClearFilters={
-              search
-                ? () => {
-                    setSearch("");
-                    updateQueryParams({ page: "1" });
-                  }
-                : undefined
-            }
+            onClearFilters={hasActiveFilters ? clearFilters : undefined}
           >
             {openDirectory ? (
               <Button

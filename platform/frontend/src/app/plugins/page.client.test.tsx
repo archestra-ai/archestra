@@ -157,4 +157,21 @@ describe("PluginsPage", () => {
       screen.getByRole("combobox", { name: "Filter by repository" }),
     ).toBeVisible();
   });
+
+  it("clears the active label filter", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=region%3Anorth") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<PluginsPage />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(push).toHaveBeenCalledWith("/plugins?", { scroll: false });
+  });
 });

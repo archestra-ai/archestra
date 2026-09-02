@@ -209,7 +209,7 @@ function KnowledgeBasesList() {
 
   // Changing a filter invalidates an escalation rather than silently
   // re-pointing "all N" at a different N.
-  const filterSignature = `${search}|${isDeletedView}`;
+  const filterSignature = `${search}|${isDeletedView}|${labelsFilter ?? ""}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
@@ -232,6 +232,7 @@ function KnowledgeBasesList() {
       {
         search: search || undefined,
         status: isDeletedView ? "deleted" : undefined,
+        labels: labelsFilter,
       },
       { enabled: allMatchingActive },
     );
@@ -258,10 +259,10 @@ function KnowledgeBasesList() {
     [pathname, router, searchParams],
   );
 
-  const hasActiveFilters = !!search || isDeletedView;
+  const hasActiveFilters = !!search || isDeletedView || Boolean(labelsFilter);
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const key of ["search", "status"]) {
+    for (const key of ["search", "status", "labels"]) {
       params.delete(key);
     }
     params.set("page", "1");
@@ -471,6 +472,7 @@ function KnowledgeBasesList() {
             <FilterBar
               leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+              onClearFilters={hasActiveFilters ? clearFilters : undefined}
             >
               <SearchInput
                 paramName="search"

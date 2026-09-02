@@ -389,6 +389,26 @@ describe("SkillsPage rows", () => {
     );
   });
 
+  it("clears the active label filter", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=region%3Anorth&page=3") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear filters" }),
+    );
+    expect(push).toHaveBeenCalledWith("/skills?page=1", { scroll: false });
+  });
+
   it("keeps the OpenAPPA source badge unqualified", () => {
     mockUseFeature.mockImplementation((name: string) => name === "plugins");
     vi.mocked(usePluginSkills).mockReturnValue({

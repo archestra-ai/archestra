@@ -281,7 +281,8 @@ function PluginsList() {
       source !== "all" ||
       sourceRepo ||
       searchParams.has("state") ||
-      scopeFilter.hasActiveScopeFilters,
+      scopeFilter.hasActiveScopeFilters ||
+      Boolean(labelsFilter),
   );
 
   const clearFilters = useCallback(() => {
@@ -297,6 +298,7 @@ function PluginsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      "labels",
     ]) {
       params.delete(key);
     }
@@ -324,6 +326,7 @@ function PluginsList() {
       source,
       sourceRepo,
       scopeFilter,
+      labels: labelsFilter,
     }),
   });
   const cardSelection = useBulkCardSelection({

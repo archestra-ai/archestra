@@ -394,8 +394,12 @@ function EditProjectDialogForm({
       </VisibilitySelector>
 
       {canReadAgents === true && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <Label>Default agent</Label>
+          <FieldDescription>
+            Preselected for new chats and scheduled tasks in this project.
+            Anyone can still pick a different agent for an individual chat.
+          </FieldDescription>
           <AgentSelector
             mode="single"
             agents={selectableAgents}
@@ -415,10 +419,6 @@ function EditProjectDialogForm({
             }}
             className="w-full"
           />
-          <FieldDescription>
-            Preselected for new chats and scheduled tasks in this project.
-            Anyone can still pick a different agent for an individual chat.
-          </FieldDescription>
         </div>
       )}
     </StandardFormDialog>

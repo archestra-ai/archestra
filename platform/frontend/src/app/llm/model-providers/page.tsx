@@ -466,7 +466,7 @@ export default function ApiKeysPage() {
     rows,
     getId: (row) => row.id,
     canSelect: (row) => !row.isSystem && getKeyUsage(row.id) === null,
-    filterSignature: `${search}\u0000${providerFilter}`,
+    filterSignature: `${search}\u0000${providerFilter}\u0000${labelsFilter ?? ""}`,
     matchDescription:
       search || providerFilter !== "all"
         ? "match the current filters"
@@ -730,7 +730,18 @@ export default function ApiKeysPage() {
 
         <BulkActionsScope>
           <CollectionFilters>
-            <FilterBar>
+            <FilterBar
+              onClearFilters={
+                search || providerFilter !== "all" || labelsFilter
+                  ? () =>
+                      updateQueryParams({
+                        search: null,
+                        provider: null,
+                        labels: null,
+                      })
+                  : undefined
+              }
+            >
               <SearchInput
                 isLoading={isFetching}
                 objectNamePlural="credentials"
@@ -812,12 +823,15 @@ export default function ApiKeysPage() {
               isLoading={permissionsPending || isFetching}
               emptyIcon={Boxes}
               emptyMessage="No credentials configured"
-              hasActiveFilters={Boolean(search || providerFilter !== "all")}
+              hasActiveFilters={Boolean(
+                search || providerFilter !== "all" || labelsFilter,
+              )}
               filteredEmptyMessage="No LLM provider credentials match your filters"
               onClearFilters={() =>
                 updateQueryParams({
                   search: null,
                   provider: null,
+                  labels: null,
                 })
               }
             />

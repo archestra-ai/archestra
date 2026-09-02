@@ -828,8 +828,11 @@ function CreateProjectDialog({
       </IdentityFields>
 
       {canReadAgents === true && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <Label>Default agent</Label>
+          <FieldDescription>
+            Preselected for new chats and scheduled tasks in this project.
+          </FieldDescription>
           <AgentSelector
             mode="single"
             agents={accessibleAgents}
@@ -848,9 +851,6 @@ function CreateProjectDialog({
             }}
             className="w-full"
           />
-          <FieldDescription>
-            Preselected for new chats and scheduled tasks in this project.
-          </FieldDescription>
         </div>
       )}
     </StandardFormDialog>

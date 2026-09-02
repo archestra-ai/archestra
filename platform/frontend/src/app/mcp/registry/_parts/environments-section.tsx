@@ -218,6 +218,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     [defaultAssignedCatalogCount, defaultEnvironment, environments],
   );
   const selectedLabels = useSelectedLabels();
+  const labelsFilter = searchParams.get("labels") ?? "";
   const normalizedSearch = search.trim().toLowerCase();
   const filteredRows = useMemo(
     () =>
@@ -256,7 +257,16 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     ],
   );
   const hasActiveFilters =
-    normalizedSearch !== "" || egressModeFilter !== "all";
+    normalizedSearch !== "" ||
+    egressModeFilter !== "all" ||
+    Boolean(labelsFilter);
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setEgressModeFilter("all");
+    const params = new URLSearchParams(searchString);
+    params.delete("labels");
+    writeSearch(params.toString());
+  }, [searchString, writeSearch]);
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteEnvironments();
@@ -275,7 +285,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     // delete route refuses one that still has catalog items assigned.
     canSelect: (row) =>
       row.kind === "environment" && row.assignedCatalogCount === 0,
-    filterSignature: `environments:${normalizedSearch}:${egressModeFilter}`,
+    filterSignature: `environments:${normalizedSearch}:${egressModeFilter}:${labelsFilter}`,
     matchDescription: "can be deleted",
   });
 
@@ -381,14 +391,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
       <CollectionFilters>
         <FilterBar
           leading
-          onClearFilters={
-            hasActiveFilters
-              ? () => {
-                  setSearch("");
-                  setEgressModeFilter("all");
-                }
-              : undefined
-          }
+          onClearFilters={hasActiveFilters ? clearFilters : undefined}
         >
           <SearchInput
             placeholder="Search by name or namespace"
@@ -451,10 +454,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         emptyMessage="No environments"
         hasActiveFilters={hasActiveFilters}
         filteredEmptyMessage="No environments match your filters"
-        onClearFilters={() => {
-          setSearch("");
-          setEgressModeFilter("all");
-        }}
+        onClearFilters={clearFilters}
       />
 
       {bulkDeleteOpen && (

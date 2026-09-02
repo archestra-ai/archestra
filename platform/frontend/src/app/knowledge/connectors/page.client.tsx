@@ -187,7 +187,7 @@ function ConnectorsList() {
 
   // Changing a filter invalidates an escalation rather than silently
   // re-pointing "all N" at a different N.
-  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}`;
+  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}|${labelsFilter ?? ""}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
@@ -216,6 +216,7 @@ function ConnectorsList() {
                 archestraApiTypes.GetConnectorsData["query"]
               >["connectorType"]),
         status: isDeletedView ? "deleted" : undefined,
+        labels: labelsFilter,
       },
       { enabled: allMatchingActive },
     );
@@ -233,7 +234,10 @@ function ConnectorsList() {
   const selectedConnectors =
     allMatchingActive && allMatching ? allMatching : pageSelection;
   const hasActiveFilters =
-    !!search || connectorTypeFilter !== "all" || isDeletedView;
+    !!search ||
+    connectorTypeFilter !== "all" ||
+    isDeletedView ||
+    Boolean(labelsFilter);
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -261,7 +265,7 @@ function ConnectorsList() {
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const key of ["search", "connectorType", "status"]) {
+    for (const key of ["search", "connectorType", "status", "labels"]) {
       params.delete(key);
     }
     params.set("page", "1");
@@ -433,6 +437,7 @@ function ConnectorsList() {
             <FilterBar
               leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+              onClearFilters={hasActiveFilters ? clearFilters : undefined}
             >
               <SearchInput
                 paramName="search"

@@ -165,7 +165,13 @@ export default function ServiceAccountsSettingsPage() {
 
   const clearFilters = useCallback(
     () =>
-      updateQueryParams({ search: null, role: null, status: null, page: "1" }),
+      updateQueryParams({
+        search: null,
+        role: null,
+        status: null,
+        labels: null,
+        page: "1",
+      }),
     [updateQueryParams],
   );
 
@@ -196,7 +202,7 @@ export default function ServiceAccountsSettingsPage() {
   } = useBulkSelection({
     rows: filteredServiceAccounts,
     getId: (account) => account.id,
-    filterSignature: `${search}|${roleFilter}|${statusFilter}`,
+    filterSignature: `${search}|${roleFilter}|${statusFilter}|${labelsFilter ?? ""}`,
     matchDescription: hasActiveFilters ? "match these filters" : "exist",
   });
 

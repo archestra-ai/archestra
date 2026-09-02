@@ -65,7 +65,7 @@ export function useKnowledgeFiles(params: {
  * so nothing about them is hidden behind a page.
  */
 export function useAllMatchingKnowledgeFiles(
-  params: { directoryId?: string; search?: string },
+  params: { directoryId?: string; search?: string; labels?: string },
   options?: { enabled?: boolean },
 ) {
   return useAllMatching({

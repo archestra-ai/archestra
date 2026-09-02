@@ -287,6 +287,33 @@ describe("KnowledgeBasesPage", () => {
     ).toBe(true);
   });
 
+  it("clears label filters and keeps select-all matching scoped to them", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=region%3Anorth&page=3") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<KnowledgeBasesPage />);
+
+    expect(mockUseKnowledgeBasesPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: "region:north" }),
+    );
+    expect(mockUseAllMatchingKnowledgeBases).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: "region:north" }),
+      expect.any(Object),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(push).toHaveBeenCalledWith("/knowledge/knowledge-bases?page=1", {
+      scroll: false,
+    });
+  });
+
   it("deleted view: rows show how long they have sat in the trash and collapse to Restore + Delete permanently", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("status=deleted") as unknown as ReturnType<

@@ -237,6 +237,7 @@ export default function LimitsPage() {
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
   const modelFilter = searchParams.get("model") || "all";
+  const labelsFilter = searchParams.get("labels") || "";
   const selectedLabels = useSelectedLabels();
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
@@ -501,6 +502,7 @@ export default function LimitsPage() {
       statusFilter,
       appliedToFilter,
       modelFilter,
+      labelsFilter,
     }),
     matchDescription: "match the current filters",
   });
@@ -688,7 +690,18 @@ export default function LimitsPage() {
   const hasActiveFilters =
     statusFilter !== "all" ||
     appliedToFilter !== "all" ||
-    modelFilter !== "all";
+    modelFilter !== "all" ||
+    Boolean(labelsFilter);
+  const clearFilters = useCallback(
+    () =>
+      updateQueryParams({
+        status: null,
+        appliedTo: null,
+        model: null,
+        labels: null,
+      }),
+    [updateQueryParams],
+  );
   const shouldShowDefaultUserLimitNotice =
     formState.entityType === "user" && defaultUserLimits.length > 0;
   const limitsDocsUrl = getFrontendDocsUrl(
@@ -794,16 +807,7 @@ export default function LimitsPage() {
       <BulkActionsScope>
         <CollectionFilters>
           <FilterBar
-            onClearFilters={
-              hasActiveFilters
-                ? () =>
-                    updateQueryParams({
-                      status: null,
-                      appliedTo: null,
-                      model: null,
-                    })
-                : undefined
-            }
+            onClearFilters={hasActiveFilters ? clearFilters : undefined}
           >
             <FilterSelect
               value={statusFilter}
@@ -894,9 +898,7 @@ export default function LimitsPage() {
             emptyMessage="No limits configured"
             hasActiveFilters={hasActiveFilters}
             filteredEmptyMessage="No limits match your filters"
-            onClearFilters={() => {
-              updateQueryParams({ status: null, appliedTo: null, model: null });
-            }}
+            onClearFilters={clearFilters}
           />
         </LoadingWrapper>
       </BulkActionsScope>

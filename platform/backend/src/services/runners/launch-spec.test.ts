@@ -401,6 +401,8 @@ describe("buildRunnerLaunchSpec", () => {
   }) => {
     const setup = await makeConfiguredAgent({
       provider: "anthropic",
+      modelId: "claude-opus-4-8",
+      contextLength: 1_000_000,
       makeOrganization,
       makeAdmin,
       makeMember,
@@ -457,6 +459,12 @@ describe("buildRunnerLaunchSpec", () => {
     );
     expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toMatch(
       /X-Archestra-Virtual-Key: arch_/,
+    );
+    expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL).toBe(
+      "claude-opus-4-8",
+    );
+    expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL).toBe(
+      "claude-opus-4-8[1m]",
     );
 
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
@@ -665,6 +673,7 @@ describe("buildRunnerLaunchSpec", () => {
 async function makeConfiguredAgent(params: {
   provider: SupportedProvider;
   modelId?: string;
+  contextLength?: number;
   makeOrganization: () => Promise<{ id: string }>;
   makeAdmin: () => Promise<User>;
   makeMember: (
@@ -706,6 +715,7 @@ async function makeConfiguredAgent(params: {
     modelId,
     inputModalities: ["text"],
     outputModalities: ["text"],
+    contextLength: params.contextLength,
     supportsToolCalling: true,
     lastSyncedAt: new Date(),
   });

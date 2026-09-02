@@ -1,5 +1,6 @@
 import {
   hasArchestraTokenPrefix,
+  resolveClaudeContextVariant,
   type SupportedProvider,
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
@@ -124,9 +125,6 @@ function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** The window size the `[1m]` context-variant marker names. */
-const ONE_MILLION_TOKEN_CONTEXT = 1_000_000;
-
 export function extractBearerToken(
   authorization: string | string[] | undefined,
 ): string | undefined {
@@ -184,7 +182,6 @@ export async function appendClaudeContextVariants(
   const withVariants: ModelInfo[] = [];
   for (const model of models) {
     withVariants.push(model);
-    const variantId = `${model.id}[1m]`;
     // Resolved, not raw: an admin-set window is a statement about what this
     // model's endpoint actually serves, and it is what the rest of the
     // platform sizes against.
@@ -192,11 +189,11 @@ export async function appendClaudeContextVariants(
     const contextLength = catalogRow
       ? ModelModel.resolveArchitecturalContextLength(catalogRow)
       : null;
-    if (
-      contextLength != null &&
-      contextLength >= ONE_MILLION_TOKEN_CONTEXT &&
-      !listedIds.has(variantId)
-    ) {
+    const variantId = resolveClaudeContextVariant({
+      modelId: model.id,
+      contextLength,
+    });
+    if (variantId !== model.id && !listedIds.has(variantId)) {
       withVariants.push({
         ...model,
         id: variantId,

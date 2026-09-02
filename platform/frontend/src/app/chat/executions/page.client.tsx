@@ -16,15 +16,8 @@ import { AgentExecutionTerminal } from "@/components/agent-execution-terminal";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -170,47 +163,41 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
           })
         }
       />
-      <Dialog
+      <StandardDialog
         open={connectionDialogOpen}
         onOpenChange={setConnectionDialogOpen}
+        title="Terminal connection details"
+        description="Attach to this execution from a shell with access to its cluster."
+        className="max-w-3xl"
+        bodyClassName="space-y-2"
       >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Terminal connection details</DialogTitle>
-            <DialogDescription>
-              Attach to this execution from a shell with access to its cluster.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="space-y-2">
-            <p className="text-sm font-medium">Manual attach command</p>
-            <div className="flex flex-col gap-3 rounded-md border bg-slate-950 p-3 sm:flex-row sm:items-center">
-              <code className="min-w-0 flex-1 break-all font-mono text-xs text-emerald-400">
-                {connectionCommand}
-              </code>
-              <Button
-                className="shrink-0 self-end sm:self-auto"
-                variant="outline"
-                size="sm"
-                aria-label="Copy terminal command"
-                onClick={async () => {
-                  if (!connectionCommand) return;
-                  try {
-                    await copyToClipboard(connectionCommand);
-                    setCommandCopied(true);
-                    toast.success("Terminal command copied");
-                    setTimeout(() => setCommandCopied(false), 2000);
-                  } catch {
-                    toast.error("Failed to copy terminal command");
-                  }
-                }}
-              >
-                <Copy className="size-3.5" />
-                <span>{commandCopied ? "Copied!" : "Copy"}</span>
-              </Button>
-            </div>
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
+        <p className="text-sm font-medium">Manual attach command</p>
+        <div className="flex flex-col gap-3 rounded-md border bg-slate-950 p-3 sm:flex-row sm:items-center">
+          <code className="min-w-0 flex-1 break-all font-mono text-xs text-emerald-400">
+            {connectionCommand}
+          </code>
+          <Button
+            className="shrink-0 self-end sm:self-auto"
+            variant="outline"
+            size="sm"
+            aria-label="Copy terminal command"
+            onClick={async () => {
+              if (!connectionCommand) return;
+              try {
+                await copyToClipboard(connectionCommand);
+                setCommandCopied(true);
+                toast.success("Terminal command copied");
+                setTimeout(() => setCommandCopied(false), 2000);
+              } catch {
+                toast.error("Failed to copy terminal command");
+              }
+            }}
+          >
+            <Copy className="size-3.5" />
+            <span>{commandCopied ? "Copied!" : "Copy"}</span>
+          </Button>
+        </div>
+      </StandardDialog>
     </main>
   );
 }

@@ -32,7 +32,6 @@ const EMPTY_RESPONSE = (limit: number): AuditLogsResponse => ({
 export function useAuditLogs({
   limit = DEFAULT_TABLE_LIMIT,
   cursor,
-  sortDirection = "desc",
   startDate,
   endDate,
   actorId,
@@ -41,11 +40,9 @@ export function useAuditLogs({
   actorType,
   resourceType,
   resourceId,
-  search,
 }: {
   limit?: number;
   cursor?: string;
-  sortDirection?: AuditLogsQuery["sortDirection"];
   startDate?: string;
   endDate?: string;
   actorId?: string;
@@ -54,7 +51,6 @@ export function useAuditLogs({
   actorType?: AuditActorType;
   resourceType?: string;
   resourceId?: string;
-  search?: string;
 } = {}) {
   return useQuery({
     queryKey: [
@@ -62,7 +58,6 @@ export function useAuditLogs({
       {
         limit,
         cursor,
-        sortDirection,
         startDate,
         endDate,
         actorId,
@@ -71,7 +66,6 @@ export function useAuditLogs({
         actorType,
         resourceType,
         resourceId,
-        search,
       },
     ],
     queryFn: async () => {
@@ -79,7 +73,6 @@ export function useAuditLogs({
         query: {
           limit,
           ...(cursor ? { cursor } : {}),
-          ...(sortDirection ? { sortDirection } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
           ...(actorId ? { actorId } : {}),
@@ -88,7 +81,6 @@ export function useAuditLogs({
           ...(actorType ? { actorType } : {}),
           ...(resourceType ? { resourceType } : {}),
           ...(resourceId ? { resourceId } : {}),
-          ...(search ? { search } : {}),
         },
       });
       // Screen renders its own QueryLoadError panel; don't also toast.

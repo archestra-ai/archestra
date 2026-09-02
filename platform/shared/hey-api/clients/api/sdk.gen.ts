@@ -6272,7 +6272,7 @@ export const hardResetMcpServer = <ThrowOnError extends boolean = false>(options
 export const reloadMcpServerTools = <ThrowOnError extends boolean = false>(options: Options<ReloadMcpServerToolsData, ThrowOnError>) => (options.client ?? client).post<ReloadMcpServerToolsResponses, ReloadMcpServerToolsErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/reload-tools', ...options });
 
 /**
- * Get all MCP tool calls with pagination and sorting
+ * Get all MCP tool calls with cursor pagination
  *
  * Authentication:
  *

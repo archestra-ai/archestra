@@ -13,8 +13,8 @@ import { AuditLogTable } from "./audit-log-table";
  * with network metadata reserved for the detail dialog,
  * resource NAME shown in grid (denormalized, snapshot fallback) for the
  * high-signal picker types only, while the raw resource id stays hidden,
- * detail dialog on row click, URL-driven filters (incl. the entity picker →
- * resourceId) + clear resets page.
+ * detail dialog on row click, structured URL-driven filters (incl. the entity
+ * picker → resourceId) + clear resets cursor pagination.
  */
 
 global.ResizeObserver = class ResizeObserver {
@@ -112,29 +112,23 @@ function makeEvent(overrides: Partial<AuditLog> = {}): AuditLog {
 
 function makeEmptyPagination() {
   return {
-    currentPage: 1,
     limit: 10,
-    total: 0,
-    totalPages: 0,
+    nextCursor: null,
     hasNext: false,
-    hasPrev: false,
   };
 }
 
-function makePagination(total = 1) {
+function makePagination() {
   return {
-    currentPage: 1,
     limit: 10,
-    total,
-    totalPages: 1,
+    nextCursor: null,
     hasNext: false,
-    hasPrev: false,
   };
 }
 
 function withRows(events: AuditLog[]) {
   return {
-    data: { data: events, pagination: makePagination(events.length) },
+    data: { data: events, pagination: makePagination() },
     isFetching: false,
     refetch: vi.fn(),
   };
@@ -208,6 +202,7 @@ describe("AuditLogTable", () => {
     expect(
       screen.getByRole("columnheader", { name: "Activity" }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Time/ })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Where" })).toBeNull();
     expect(screen.queryByText("10.0.0.1")).toBeNull();
   });
@@ -416,7 +411,12 @@ describe("AuditLogTable", () => {
     ).toBeInTheDocument();
   });
 
-  it("reads action and resource filters from URL params and passes to useAuditLogs", () => {
+  it("keeps structured URL filters and removes retired free-text search", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams(
         "action=agent.updated&resourceType=role&search=alice",
@@ -431,10 +431,11 @@ describe("AuditLogTable", () => {
       expect.objectContaining({
         action: "agent.updated",
         resourceType: "role",
-        search: "alice",
-        offset: 0,
-        sortDirection: "desc",
       }),
+    );
+    expect(replace).toHaveBeenCalledWith(
+      "/audit/logs?action=agent.updated&resourceType=role",
+      { scroll: false },
     );
   });
 

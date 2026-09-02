@@ -55,46 +55,40 @@ const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
 export function useMcpToolCalls({
   agentId,
+  mcpServerName,
   startDate,
   endDate,
-  search,
   limit = DEFAULT_TABLE_LIMIT,
   cursor,
-  sortDirection = "desc",
   initialData,
 }: {
   agentId?: string;
+  mcpServerName?: string;
   startDate?: string;
   endDate?: string;
-  search?: string;
   limit?: number;
   cursor?: string;
-  sortDirection?: NonNullable<
-    archestraApiTypes.GetMcpToolCallsData["query"]
-  >["sortDirection"];
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
 } = {}) {
   return useQuery({
     queryKey: [
       "mcpToolCalls",
       agentId,
+      mcpServerName,
       startDate,
       endDate,
-      search,
       limit,
       cursor,
-      sortDirection,
     ],
     queryFn: async () => {
       const response = await getMcpToolCalls({
         query: {
           ...(agentId ? { agentId } : {}),
+          ...(mcpServerName ? { mcpServerName } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
-          ...(search ? { search } : {}),
           limit,
           ...(cursor ? { cursor } : {}),
-          sortDirection,
         },
       });
       // Screen renders its own QueryLoadError panel; don't also toast.
@@ -115,10 +109,9 @@ export function useMcpToolCalls({
       !cursor &&
       limit === DEFAULT_TABLE_LIMIT &&
       !agentId &&
-      sortDirection === "desc" &&
+      !mcpServerName &&
       !startDate &&
-      !endDate &&
-      !search
+      !endDate
         ? initialData
         : undefined,
   });

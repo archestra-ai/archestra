@@ -6,14 +6,8 @@ import {
   isLockedChatUnavailableContent,
   parseFullToolName,
 } from "@archestra/shared";
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import {
-  Boxes,
-  ChevronDown,
-  ChevronUp,
-  MessagesSquare,
-  User,
-} from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Boxes, MessagesSquare, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
@@ -22,16 +16,14 @@ import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
-  filterSearchClass,
 } from "@/components/filter-bar";
 import { LockedChatContentUnavailableLabel } from "@/components/locked-chat-content-unavailable";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
-import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -50,31 +42,6 @@ import { ErrorBoundary } from "../../_parts/error-boundary";
 
 type McpToolCallData =
   archestraApiTypes.GetMcpToolCallsResponses["200"]["data"][number];
-
-function SortIcon({
-  isSorted,
-}: {
-  isSorted:
-    | NonNullable<
-        archestraApiTypes.GetMcpToolCallsData["query"]
-      >["sortDirection"]
-    | false;
-}) {
-  const upArrow = <ChevronUp className="h-3 w-3" />;
-  const downArrow = <ChevronDown className="h-3 w-3" />;
-  if (isSorted === "asc") {
-    return upArrow;
-  }
-  if (isSorted === "desc") {
-    return downArrow;
-  }
-  return (
-    <div className="text-muted-foreground flex flex-col items-center">
-      {upArrow}
-      <span className="mt-[-4px]">{downArrow}</span>
-    </div>
-  );
-}
 
 export default function McpGatewayLogsPage({
   initialData,
@@ -108,6 +75,7 @@ function McpToolCallsTable({
   const endDateFromUrl = searchParams.get("endDate");
   const profileIdFromUrl =
     searchParams.get("profileId") || searchParams.get("profileID");
+  const mcpServerNameFromUrl = searchParams.get("mcpServerName") ?? "all";
   const searchFromUrl = searchParams.get("search");
   const cursorFromUrl = searchParams.get("cursor");
   const pageFromUrl = searchParams.get("page");
@@ -117,21 +85,19 @@ function McpToolCallsTable({
   const cursorPagination = useCursorPagination({
     defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
-  ]);
-
   useEffect(() => {
     setProfileFilter(profileIdFromUrl || "all");
     cursorPagination.goNewest();
   }, [cursorPagination.goNewest, profileIdFromUrl]);
 
   useEffect(() => {
-    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl) return;
+    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl && !searchFromUrl)
+      return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete("cursor");
     params.delete("page");
     params.delete("pageSize");
+    params.delete("search");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
@@ -142,6 +108,7 @@ function McpToolCallsTable({
     pageSizeFromUrl,
     pathname,
     router,
+    searchFromUrl,
     searchParams,
   ]);
 
@@ -174,6 +141,14 @@ function McpToolCallsTable({
     [cursorPagination.goNewest, updateUrlParams],
   );
 
+  const handleMcpServerChange = useCallback(
+    (value: string) => {
+      cursorPagination.goNewest();
+      updateUrlParams({ mcpServerName: value === "all" ? null : value });
+    },
+    [cursorPagination.goNewest, updateUrlParams],
+  );
+
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
     startDateFromUrl,
@@ -190,15 +165,6 @@ function McpToolCallsTable({
     ),
   });
 
-  const sortDirection = sorting[0]?.desc ? "desc" : "asc";
-  const handleSortingChange = useCallback(
-    (nextSorting: SortingState) => {
-      setSorting(nextSorting);
-      cursorPagination.goNewest();
-    },
-    [cursorPagination.goNewest],
-  );
-
   const {
     data: mcpToolCallsResponse,
     isFetching,
@@ -206,12 +172,12 @@ function McpToolCallsTable({
     refetch: refetchMcpToolCalls,
   } = useMcpToolCalls({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
+    mcpServerName:
+      mcpServerNameFromUrl !== "all" ? mcpServerNameFromUrl : undefined,
     limit: cursorPagination.pageSize,
     cursor: cursorPagination.cursor,
-    sortDirection,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    search: searchFromUrl || undefined,
     initialData: initialData?.mcpToolCalls,
   });
 
@@ -253,6 +219,68 @@ function McpToolCallsTable({
 
   const mcpToolCalls = mcpToolCallsResponse?.data ?? [];
   const paginationMeta = mcpToolCallsResponse?.pagination;
+
+  const mcpServerOptions = useMemo(() => {
+    const installedByName = new Map(
+      (mcpServers ?? []).map((server) => [server.name, server]),
+    );
+    const serverNames = new Set(installedByName.keys());
+    for (const call of mcpToolCallsResponse?.data ?? []) {
+      serverNames.add(call.mcpServerName);
+    }
+
+    return [...serverNames]
+      .map((serverName) => {
+        const installed = installedByName.get(serverName);
+        const display = serverDisplayByName.get(serverName);
+        const displayName = display?.name ?? serverName;
+        const secondaryLabel =
+          displayName !== serverName
+            ? serverName
+            : installed
+              ? undefined
+              : "From logs";
+        const icon = (
+          <span
+            key={serverName}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+          >
+            <McpCatalogIcon
+              icon={display?.icon}
+              catalogId={display?.catalogId ?? installed?.catalogId}
+              size={14}
+            />
+          </span>
+        );
+        return {
+          value: serverName,
+          label: displayName,
+          searchText: `${displayName} ${serverName}`,
+          content: (
+            <span className="flex min-w-0 items-center gap-2">
+              {icon}
+              <span className="min-w-0">
+                <span className="block truncate font-medium">
+                  {displayName}
+                </span>
+                {secondaryLabel ? (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {secondaryLabel}
+                  </span>
+                ) : null}
+              </span>
+            </span>
+          ),
+          selectedContent: (
+            <span className="flex min-w-0 items-center gap-2">
+              {icon}
+              <span className="truncate">{displayName}</span>
+            </span>
+          ),
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [mcpServers, mcpToolCallsResponse?.data, serverDisplayByName]);
 
   const columns: ColumnDef<McpToolCallData>[] = [
     {
@@ -429,18 +457,7 @@ function McpToolCallsTable({
     },
     {
       id: "createdAt",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Time
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        );
-      },
+      header: "Time",
       size: 175,
       minSize: 160,
       cell: ({ row }) => (
@@ -461,8 +478,9 @@ function McpToolCallsTable({
 
   const hasFilters =
     profileFilter !== "all" ||
+    mcpServerNameFromUrl !== "all" ||
     dateTimePicker.startDate !== undefined ||
-    !!searchFromUrl;
+    dateTimePicker.endDate !== undefined;
 
   const clearFilters = useCallback(() => {
     setProfileFilter("all");
@@ -471,6 +489,7 @@ function McpToolCallsTable({
     updateUrlParams({
       profileId: null,
       profileID: null,
+      mcpServerName: null,
       startDate: null,
       endDate: null,
       search: null,
@@ -500,19 +519,6 @@ function McpToolCallsTable({
     />
   );
 
-  // Shared search input component
-  const searchInputComponent = (
-    <SearchInput
-      isLoading={isFetching}
-      objectNamePlural="tool calls"
-      searchFields={["tool name", "server name"]}
-      paramName="search"
-      className={filterSearchClass}
-      paginationMode="cursor"
-      onSearchChange={cursorPagination.goNewest}
-    />
-  );
-
   if (isMcpToolCallsLoadError) {
     return (
       <div className="space-y-4">
@@ -531,7 +537,6 @@ function McpToolCallsTable({
           leading
           onClearFilters={hasFilters ? clearFilters : undefined}
         >
-          {searchInputComponent}
           {/* Two people's personal gateways can both be called "My Gateway", so
             the picker carries each one's scope and owner email rather than a
             bare name. */}
@@ -553,6 +558,19 @@ function McpToolCallsTable({
             searchPlaceholder="Search agents and MCP gateways…"
             emptyMessage="No agents or MCP gateways found."
             className={filterControlClass({ active: profileFilter !== "all" })}
+          />
+          <SearchableSelect
+            value={mcpServerNameFromUrl}
+            onValueChange={handleMcpServerChange}
+            ariaLabel="Filter by MCP server"
+            searchPlaceholder="Search MCP servers…"
+            emptyMessage="No MCP servers found."
+            items={mcpServerOptions}
+            pinnedItems={[{ value: "all", label: "All MCP Servers" }]}
+            className={filterControlClass({
+              active: mcpServerNameFromUrl !== "all",
+            })}
+            contentClassName="min-w-[min(20rem,calc(100vw-2rem))]"
           />
           {datePickerComponent}
         </FilterBar>
@@ -577,9 +595,6 @@ function McpToolCallsTable({
             : undefined
         }
         manualPagination
-        manualSorting
-        sorting={sorting}
-        onSortingChange={handleSortingChange}
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyIcon={MessagesSquare}

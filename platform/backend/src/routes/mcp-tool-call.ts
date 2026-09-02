@@ -11,7 +11,6 @@ import {
   ApiError,
   constructResponseSchema,
   McpToolCallResponseSchema,
-  SortDirectionSchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -21,7 +20,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetMcpToolCalls,
-        description: "Get all MCP tool calls with pagination and sorting",
+        description: "Get all MCP tool calls with cursor pagination",
         tags: ["MCP Tool Call"],
         querystring: z
           .object({
@@ -36,17 +35,12 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .datetime()
               .optional()
               .describe("Filter by end date (ISO 8601 format)"),
-            search: z
+            mcpServerName: z
               .string()
               .optional()
-              .describe(
-                "Free-text search across MCP server name, tool name, and arguments (case-insensitive)",
-              ),
+              .describe("Filter by exact MCP server name"),
           })
-          .merge(CursorQuerySchema)
-          .extend({
-            sortDirection: SortDirectionSchema.optional().default("desc"),
-          }),
+          .merge(CursorQuerySchema),
         response: constructResponseSchema(
           createCursorPaginatedResponseSchema(McpToolCallResponseSchema),
         ),
@@ -54,15 +48,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: {
-          agentId,
-          startDate,
-          endDate,
-          search,
-          limit,
-          cursor,
-          sortDirection,
-        },
+        query: { agentId, startDate, endDate, mcpServerName, limit, cursor },
         user,
         organizationId,
         headers,
@@ -100,14 +86,13 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await McpToolCallModel.findAllCursorPaginated(
           cursorQuery,
-          sortDirection,
           user.id,
           isMcpServerAdmin,
           {
             agentId,
             startDate: startDate ? new Date(startDate) : undefined,
             endDate: endDate ? new Date(endDate) : undefined,
-            search: search || undefined,
+            mcpServerName,
             ownUserId: canSeeAllLogs ? undefined : user.id,
           },
         ),

@@ -23608,11 +23608,6 @@ export type GetAuditLogsData = {
          * Filter by resource ID (e.g. a specific agent's ID)
          */
         resourceId?: string;
-        /**
-         * Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name
-         */
-        search?: string;
-        sortDirection?: 'asc' | 'desc';
         limit?: number;
         cursor?: string;
     };
@@ -72438,12 +72433,11 @@ export type GetMcpToolCallsData = {
          */
         endDate?: string;
         /**
-         * Free-text search across MCP server name, tool name, and arguments (case-insensitive)
+         * Filter by exact MCP server name
          */
-        search?: string;
+        mcpServerName?: string;
         limit?: number;
         cursor?: string;
-        sortDirection?: 'asc' | 'desc';
     };
     url: '/api/mcp-tool-calls';
 };

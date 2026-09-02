@@ -39,12 +39,7 @@ import {
   decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
-import type {
-  InsertMcpToolCall,
-  McpToolCall,
-  SortDirection,
-  SortingQuery,
-} from "@/types";
+import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
 
@@ -179,25 +174,22 @@ class McpToolCallModel {
    * columns are deliberately not carried over: none of them is indexed, and
    * several are nullable, which a keyset predicate handles badly — a NULL on
    * either side makes the row comparison NULL and silently truncates the
-   * walk. Narrowing a log by server or tool name is what the search filter is
-   * for, and it stays available here.
+   * walk. The cursor listing supports an exact server-name filter instead.
    */
   static async findAllCursorPaginated(
     cursorQuery: CursorQuery,
-    sortDirection: SortDirection | undefined,
     userId?: string,
     isMcpServerAdmin?: boolean,
     filters?: {
       agentId?: string;
       startDate?: Date;
       endDate?: Date;
-      search?: string;
+      mcpServerName?: string;
       /** Narrow to rows attributed to this user (the own-logs log:read view). */
       ownUserId?: string;
     },
   ): Promise<CursorPaginatedResult<McpToolCall>> {
     const { limit, cursor } = cursorQuery;
-    const ascending = sortDirection === "asc";
 
     const conditions = await McpToolCallModel.buildListConditions(
       userId,
@@ -219,14 +211,11 @@ class McpToolCallModel {
       if (!Number.isNaN(at.getTime())) {
         const keyset = sql`(${schema.mcpToolCallsTable.createdAt}, ${schema.mcpToolCallsTable.id})`;
         conditions.push(
-          ascending
-            ? sql`${keyset} > (${position.value}::timestamp, ${position.id}::uuid)`
-            : sql`${keyset} < (${position.value}::timestamp, ${position.id}::uuid)`,
+          sql`${keyset} < (${position.value}::timestamp, ${position.id}::uuid)`,
         );
       }
     }
 
-    const order = ascending ? asc : desc;
     const rows = await db
       .select({
         ...getTableColumns(schema.mcpToolCallsTable),
@@ -250,8 +239,8 @@ class McpToolCallModel {
       )
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(
-        order(schema.mcpToolCallsTable.createdAt),
-        order(schema.mcpToolCallsTable.id),
+        desc(schema.mcpToolCallsTable.createdAt),
+        desc(schema.mcpToolCallsTable.id),
       )
       // One more than the page needs: its presence answers "is there another
       // page", replacing the count this method no longer runs.
@@ -301,6 +290,7 @@ class McpToolCallModel {
       startDate?: Date;
       endDate?: Date;
       search?: string;
+      mcpServerName?: string;
       ownUserId?: string;
     },
   ): Promise<SQL[] | null> {
@@ -311,6 +301,11 @@ class McpToolCallModel {
     }
     if (filters?.ownUserId) {
       conditions.push(eq(schema.mcpToolCallsTable.userId, filters.ownUserId));
+    }
+    if (filters?.mcpServerName) {
+      conditions.push(
+        eq(schema.mcpToolCallsTable.mcpServerName, filters.mcpServerName),
+      );
     }
 
     if (userId && !isMcpServerAdmin) {

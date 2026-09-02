@@ -1,20 +1,17 @@
 "use client";
 
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, User } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
   filterControlClass,
-  filterSearchClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
-import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
@@ -78,19 +75,6 @@ const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
 // ACTION_LABEL and the filter.
 type AuditLogRow = Omit<AuditLog, "action"> & { action: string };
 
-function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
-  const upArrow = <ChevronUp className="h-3 w-3" />;
-  const downArrow = <ChevronDown className="h-3 w-3" />;
-  if (isSorted === "asc") return upArrow;
-  if (isSorted === "desc") return downArrow;
-  return (
-    <div className="text-muted-foreground flex flex-col items-center">
-      {upArrow}
-      <span className="mt-[-4px]">{downArrow}</span>
-    </div>
-  );
-}
-
 export function AuditLogTable() {
   const router = useRouter();
   const pathname = usePathname();
@@ -98,7 +82,6 @@ export function AuditLogTable() {
 
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
-  const searchFromUrl = searchParams.get("search");
   const actionFromUrl = (searchParams.get("action") ?? ALL_VALUE) as
     | typeof ALL_VALUE
     | AuditEventName;
@@ -114,20 +97,19 @@ export function AuditLogTable() {
   const cursorFromUrl = searchParams.get("cursor");
   const pageFromUrl = searchParams.get("page");
   const pageSizeFromUrl = searchParams.get("pageSize");
+  const searchFromUrl = searchParams.get("search");
 
   const cursorPagination = useCursorPagination({
     defaultPageSize: DEFAULT_TABLE_LIMIT,
   });
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
-  ]);
-
   useEffect(() => {
-    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl) return;
+    if (!cursorFromUrl && !pageFromUrl && !pageSizeFromUrl && !searchFromUrl)
+      return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete("cursor");
     params.delete("page");
     params.delete("pageSize");
+    params.delete("search");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
@@ -138,6 +120,7 @@ export function AuditLogTable() {
     pageSizeFromUrl,
     pathname,
     router,
+    searchFromUrl,
     searchParams,
   ]);
   const eventId = searchParams.get("event");
@@ -236,15 +219,6 @@ export function AuditLogTable() {
     [cursorPagination.goNewest, updateUrlParams],
   );
 
-  const sortDirection = sorting[0]?.desc === false ? "asc" : "desc";
-  const handleSortingChange = useCallback(
-    (nextSorting: SortingState) => {
-      setSorting(nextSorting);
-      cursorPagination.goNewest();
-    },
-    [cursorPagination.goNewest],
-  );
-
   const action = (ALL_ACTIONS as readonly string[]).includes(actionFromUrl)
     ? (actionFromUrl as AuditEventName)
     : undefined;
@@ -270,7 +244,6 @@ export function AuditLogTable() {
   } = useAuditLogs({
     limit: cursorPagination.pageSize,
     cursor: cursorPagination.cursor,
-    sortDirection,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
     actorId,
@@ -279,7 +252,6 @@ export function AuditLogTable() {
     actorType,
     resourceType,
     resourceId,
-    search: searchFromUrl ?? undefined,
   });
 
   // Server-side search rather than a client filter over the first N members:
@@ -525,16 +497,7 @@ export function AuditLogTable() {
       },
       {
         id: "createdAt",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Time
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        ),
+        header: "Time",
         size: 190,
         minSize: 175,
         cell: ({ row }) => (
@@ -556,7 +519,6 @@ export function AuditLogTable() {
   );
 
   const hasFilters =
-    !!searchFromUrl ||
     action !== undefined ||
     outcome !== undefined ||
     actorType !== undefined ||
@@ -674,15 +636,6 @@ export function AuditLogTable() {
               : []),
           ]}
         >
-          <SearchInput
-            isLoading={isFetching}
-            objectNamePlural="audit events"
-            searchFields={["actor", "path", "resource"]}
-            paramName="search"
-            className={filterSearchClass}
-            paginationMode="cursor"
-            onSearchChange={cursorPagination.goNewest}
-          />
           <FilterSelect
             value={action ?? ALL_VALUE}
             onValueChange={handleActionChange}
@@ -735,9 +688,6 @@ export function AuditLogTable() {
             : undefined
         }
         manualPagination
-        manualSorting
-        sorting={sorting}
-        onSortingChange={handleSortingChange}
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyMessage="No audit events recorded yet. Administrative actions will appear here as they happen."

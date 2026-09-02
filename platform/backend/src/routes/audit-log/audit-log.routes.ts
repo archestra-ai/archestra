@@ -14,7 +14,6 @@ import {
   AuditLogWithImpersonatorSchema,
   AuditOutcomeSchema,
   constructResponseSchema,
-  SortDirectionSchema,
 } from "@/types";
 
 const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -56,15 +55,6 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by resource ID (e.g. a specific agent's ID)"),
-            search: z
-              .string()
-              .optional()
-              .describe(
-                "Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name",
-              ),
-          })
-          .extend({
-            sortDirection: SortDirectionSchema.optional().default("desc"),
           })
           .merge(CursorQuerySchema),
         response: constructResponseSchema(
@@ -83,10 +73,8 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           actorType,
           resourceType,
           resourceId,
-          search,
           limit,
           cursor,
-          sortDirection,
         },
         user,
         organizationId,
@@ -106,7 +94,6 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         limit,
         cursor,
-        sortDirection,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
         actorId: canSeeAllAuditLogs ? actorId : user.id,
@@ -115,7 +102,6 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         actorType,
         resourceType,
         resourceId,
-        search,
       });
 
       return reply.send(result);

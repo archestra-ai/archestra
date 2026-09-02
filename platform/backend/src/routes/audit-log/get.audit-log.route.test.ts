@@ -2,12 +2,12 @@
  * Contract: GET /api/audit-logs
  * - Requires a successful permission check for RouteId.GetAuditLogs (admin-only).
  * - Returns cursor-paginated audit rows strictly scoped to request.organizationId.
- * - Query filters map to AuditLogModel.findCursorPaginated; invalid limits/sortDirection → 400.
+ * - Query filters map to AuditLogModel.findCursorPaginated; invalid limits → 400.
  * - actorId, action (dotted), outcome, actorType, resourceType, resourceId filters
  *   narrow results; unknown filter values that fail the closed enum are rejected
  *   with 400.
- * - search matches case-insensitively across actor email, actor name, HTTP path,
- *   resource ID, and resource name.
+ * - Results are always newest-first; retired free-text search and sorting
+ *   parameters are silently ignored.
  * - Legacy actorUserId param is not accepted by the route; it is silently ignored
  *   (Fastify strips unknown query params) — the regression guard verifies results are
  *   NOT narrowed when only actorUserId is passed.
@@ -191,7 +191,7 @@ describe("GET /api/audit-logs", () => {
     expect(ids).not.toContain(otherRow.id);
   });
 
-  test("cross-org isolation: searching another org row id from home org returns nothing", async ({
+  test("cross-org isolation: filtering by another org resource id returns nothing", async ({
     makeOrganization,
   }) => {
     const otherOrg = await makeOrganization();
@@ -201,7 +201,7 @@ describe("GET /api/audit-logs", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: `/api/audit-logs?search=${encodeURIComponent(otherRow.resourceId ?? "")}`,
+      url: `/api/audit-logs?resourceId=${encodeURIComponent(otherRow.resourceId ?? "")}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -373,63 +373,6 @@ describe("GET /api/audit-logs", () => {
     expect(body.data[0].id).toBe(targeted.id);
   });
 
-  test("search filter matches resource name case-insensitively", async () => {
-    const matchedRow = await seedRow(organizationId, {
-      resourceType: "agent",
-      resourceId: "renamed-agent-id",
-      resourceName: "Support Agent",
-    });
-    await seedRow(organizationId, {
-      resourceType: "agent",
-      resourceId: "other-agent-id",
-      resourceName: "Unrelated Agent",
-    });
-
-    const response = await app.inject({
-      method: "GET",
-      url: "/api/audit-logs?search=support",
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.data).toHaveLength(1);
-    expect(body.data[0].id).toBe(matchedRow.id);
-    expect(body.data[0].resourceName).toBe("Support Agent");
-  });
-
-  test("search filter matches actor email case-insensitively", async () => {
-    const matchedRow = await seedRow(organizationId, {
-      actorEmail: "UNIQUE-ADMIN@EXAMPLE.COM",
-    });
-    await seedRow(organizationId, { actorEmail: "other@example.com" });
-
-    const response = await app.inject({
-      method: "GET",
-      url: `/api/audit-logs?search=unique-admin%40example.com`,
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.data.length).toBeGreaterThan(0);
-    expect(body.data.some((r: AuditLog) => r.id === matchedRow.id)).toBe(true);
-  });
-
-  test("search filter matches http path", async () => {
-    const matchedRow = await seedRow(organizationId, {
-      httpPath: "/api/agents/unique-path-abc123",
-    });
-    await seedRow(organizationId, { httpPath: "/api/agents/other" });
-
-    const response = await app.inject({
-      method: "GET",
-      url: `/api/audit-logs?search=unique-path-abc123`,
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.data.some((r: AuditLog) => r.id === matchedRow.id)).toBe(true);
-  });
-
   test("combined action + resourceType filters AND together", async () => {
     await seedRow(organizationId, {
       action: "agent.created",
@@ -567,15 +510,6 @@ describe("GET /api/audit-logs", () => {
     });
   });
 
-  test("invalid sortDirection is rejected with 400", async () => {
-    const response = await app.inject({
-      method: "GET",
-      url: "/api/audit-logs?sortDirection=sideways",
-    });
-
-    expect(response.statusCode).toBe(400);
-  });
-
   test("sortBy is not an accepted query param (regression guard)", async () => {
     await seedRow(organizationId);
 
@@ -616,23 +550,23 @@ describe("GET /api/audit-logs", () => {
     }
   });
 
-  test("sortDirection=asc returns events in ascending createdAt order", async () => {
-    for (let i = 0; i < 3; i++) {
-      await seedRow(organizationId, { actorEmail: `sort-${i}@example.com` });
-    }
+  test("ignores retired search and sort inputs and stays newest-first", async () => {
+    await seedRow(organizationId, {
+      actorEmail: "search-target@example.com",
+      createdAt: new Date("2098-01-01T00:00:00.000Z"),
+    });
+    const newest = await seedRow(organizationId, {
+      actorEmail: "newest@example.com",
+      createdAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/audit-logs?sortDirection=asc",
+      url: "/api/audit-logs?limit=1&sortDirection=asc&search=search-target",
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.data.length).toBeGreaterThan(0);
-    const sequences = body.data.map((r: AuditLog) => r.eventSequence);
-    for (let i = 1; i < sequences.length; i++) {
-      expect(sequences[i]).toBeGreaterThanOrEqual(sequences[i - 1]);
-    }
+    expect(response.json().data[0].id).toBe(newest.id);
   });
 
   describe("own-vs-all visibility (auditLog:read vs auditLog:admin)", () => {

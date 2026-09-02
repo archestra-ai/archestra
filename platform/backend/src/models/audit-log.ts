@@ -158,7 +158,6 @@ class AuditLogModel {
     organizationId: string;
     limit: number;
     cursor?: string;
-    sortDirection?: SortDirection;
     startDate?: Date;
     endDate?: Date;
     actorId?: string;
@@ -167,9 +166,8 @@ class AuditLogModel {
     actorType?: AuditActorType;
     resourceType?: string;
     resourceId?: string;
-    search?: string;
   }): Promise<CursorPaginatedResult<AuditLogWithImpersonator>> {
-    const { limit, cursor, sortDirection = "desc" } = opts;
+    const { limit, cursor } = opts;
 
     const conditions = AuditLogModel.buildFilterConditions(opts);
 
@@ -184,9 +182,7 @@ class AuditLogModel {
         // ordered comparison the planner can drive the composite index from.
         const keyset = sql`(${schema.auditLogsTable.createdAt}, ${schema.auditLogsTable.eventSequence})`;
         conditions.push(
-          sortDirection === "asc"
-            ? sql`${keyset} > (${position.value}::timestamptz, ${seq})`
-            : sql`${keyset} < (${position.value}::timestamptz, ${seq})`,
+          sql`${keyset} < (${position.value}::timestamptz, ${seq})`,
         );
       }
     }
@@ -202,7 +198,10 @@ class AuditLogModel {
         eq(schema.auditLogsTable.impersonatedBy, impersonatorUsers.id),
       )
       .where(and(...conditions))
-      .orderBy(...AuditLogModel.buildOrderBy(sortDirection))
+      .orderBy(
+        desc(schema.auditLogsTable.createdAt),
+        desc(schema.auditLogsTable.eventSequence),
+      )
       // One more than the page needs: its presence is what answers "is there
       // another page", replacing the count this method no longer runs.
       .limit(limit + 1);

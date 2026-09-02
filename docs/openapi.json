@@ -82884,28 +82884,6 @@
           },
           {
             "schema": {
-              "type": "string"
-            },
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "description": "Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name"
-          },
-          {
-            "schema": {
-              "default": "desc",
-              "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ]
-            },
-            "in": "query",
-            "name": "sortDirection",
-            "required": false
-          },
-          {
-            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -284232,7 +284210,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get all MCP tool calls with pagination and sorting\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get all MCP tool calls with cursor pagination\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -284272,9 +284250,9 @@
               "type": "string"
             },
             "in": "query",
-            "name": "search",
+            "name": "mcpServerName",
             "required": false,
-            "description": "Free-text search across MCP server name, tool name, and arguments (case-insensitive)"
+            "description": "Filter by exact MCP server name"
           },
           {
             "schema": {
@@ -284293,19 +284271,6 @@
             },
             "in": "query",
             "name": "cursor",
-            "required": false
-          },
-          {
-            "schema": {
-              "default": "desc",
-              "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ]
-            },
-            "in": "query",
-            "name": "sortDirection",
             "required": false
           }
         ],

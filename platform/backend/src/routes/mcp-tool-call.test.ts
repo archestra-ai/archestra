@@ -35,10 +35,14 @@ describe("mcp-tool-call routes", () => {
 
   const seedCall = (
     userId: string | null,
-    overrides: { method?: string; createdAt?: Date } = {},
+    overrides: {
+      method?: string;
+      createdAt?: Date;
+      mcpServerName?: string;
+    } = {},
   ) =>
     McpToolCallModel.create({
-      mcpServerName: "test-server",
+      mcpServerName: overrides.mcpServerName ?? "test-server",
       method: overrides.method ?? "tools/call",
       userId,
       agentId,
@@ -256,5 +260,39 @@ describe("mcp-tool-call routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json().data[0].id).toBe(newest.id);
     }
+  });
+
+  test("ignores retired sort inputs and stays newest-first", async () => {
+    await seedCall(currentUser.id, {
+      createdAt: new Date("2098-01-01T00:00:00.000Z"),
+    });
+    const newest = await seedCall(currentUser.id, {
+      createdAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/mcp-tool-calls?limit=1&sortDirection=asc&sortBy=method",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data[0].id).toBe(newest.id);
+  });
+
+  test("filters by exact MCP server name and ignores retired search", async () => {
+    const targeted = await seedCall(currentUser.id, {
+      mcpServerName: "target-server",
+    });
+    await seedCall(currentUser.id, { mcpServerName: "other-server" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/mcp-tool-calls?mcpServerName=target-server&search=other-server",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.map((row: { id: string }) => row.id)).toEqual([
+      targeted.id,
+    ]);
   });
 });

@@ -32,7 +32,6 @@ export default async function McpGatewayLogsPageServer() {
       headers,
       query: {
         limit: DEFAULT_TABLE_LIMIT,
-        sortDirection: "desc",
       },
     });
     if (mcpToolCallsResponse.error) {

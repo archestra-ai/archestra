@@ -35,6 +35,30 @@ describe("buildPinnedSidebarItems", () => {
     ]);
   });
 
+  it("interleaves pinned executions with the other sidebar resources", () => {
+    const chats = [{ id: "c1", pinnedAt: "2026-06-01T00:00:00.000Z" }];
+    const projects = [{ id: "p1", pinnedAt: "2026-06-03T00:00:00.000Z" }];
+    const apps = [{ id: "a1", pinnedAt: "2026-06-05T00:00:00.000Z" }];
+    const executions = [
+      { id: "e1", pinnedAt: "2026-06-04T00:00:00.000Z" },
+      { id: "e2", pinnedAt: null },
+    ];
+
+    const result = buildPinnedSidebarItems({
+      chats,
+      projects,
+      apps,
+      executions,
+    });
+
+    expect(result.map((r) => [r.type, r.item.id])).toEqual([
+      ["app", "a1"],
+      ["execution", "e1"],
+      ["project", "p1"],
+      ["chat", "c1"],
+    ]);
+  });
+
   it("excludes items without a pinnedAt", () => {
     const chats = [
       { id: "c1", pinnedAt: null },

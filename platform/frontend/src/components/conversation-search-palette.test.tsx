@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -324,6 +324,36 @@ describe("ConversationSearchPalette", () => {
 
     fireEvent.click(screen.getByTestId("cmd-item-exec-task-1"));
     expect(mockRouterPush).toHaveBeenCalledWith("/chat/executions/task-1");
+  });
+
+  it("shows pinned execution sessions under Pinned instead of Recent", () => {
+    mockUseMyAgentExecutions.mockReturnValue({
+      data: [
+        {
+          taskId: "task-pinned",
+          title: "Pinned report run",
+          state: "TASK_STATE_WORKING",
+          startedAt: new Date().toISOString(),
+          stateChangedAt: new Date().toISOString(),
+          endedAt: null,
+          pinnedAt: new Date().toISOString(),
+        },
+      ],
+      isLoading: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    const pinnedGroup = screen.getByText("Pinned").parentElement;
+    const recentGroup = screen.getByText("Recent").parentElement;
+    expect(pinnedGroup).not.toBeNull();
+    expect(recentGroup).not.toBeNull();
+    expect(
+      within(pinnedGroup as HTMLElement).getByText("Pinned report run"),
+    ).toBeInTheDocument();
+    expect(
+      within(recentGroup as HTMLElement).queryByText("Pinned report run"),
+    ).not.toBeInTheDocument();
   });
 
   it("matches execution sessions by title during search", () => {

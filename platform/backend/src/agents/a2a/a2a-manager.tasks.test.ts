@@ -181,6 +181,7 @@ describe("A2AManager full task mode", () => {
       actorId: actor.id,
       actorUserId: actor.id,
       title: "Recovered task",
+      pinnedAt: null,
       deploymentName: "runner-background-agent-recovery",
       backend: "kubernetes",
       runtimeScope: "archestra-dev",

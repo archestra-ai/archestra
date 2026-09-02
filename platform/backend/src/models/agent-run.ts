@@ -215,15 +215,16 @@ class AgentRunModel {
     return updated.length > 0;
   }
 
-  static async updateTitleForActor(params: {
+  static async updateForActor(params: {
     taskId: string;
     actorUserId: string;
     organizationId: string;
-    title: string;
+    title?: string;
+    pinnedAt?: Date | null;
   }): Promise<AgentExecutionSession | null> {
     const updated = await db
       .update(schema.agentRunsTable)
-      .set({ title: params.title })
+      .set({ title: params.title, pinnedAt: params.pinnedAt })
       .where(
         and(
           eq(schema.agentRunsTable.taskId, params.taskId),

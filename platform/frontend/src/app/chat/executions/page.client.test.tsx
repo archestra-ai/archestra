@@ -58,17 +58,17 @@ describe("BackgroundExecutionChatSession", () => {
     };
   });
 
-  it("shows the durable startup state while the session is being created", () => {
+  it("opens the shared terminal while the session is being created", () => {
     queryState.value.isPending = true;
 
     render(<BackgroundExecutionChatSession taskId="task-1" />);
 
-    expect(screen.getByText("Starting execution…")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Scheduling the workload and preparing its terminal. You can leave this page and come back.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
+    expect(screen.queryByText("Starting execution…")).not.toBeInTheDocument();
+    expect(terminalState.props).toMatchObject({
+      showManualCommand: false,
+      showDisconnectedStatus: false,
+    });
   });
 
   it("keeps the last execution visible when a background refresh fails", () => {
@@ -80,7 +80,8 @@ describe("BackgroundExecutionChatSession", () => {
 
     render(<BackgroundExecutionChatSession taskId="task-1" />);
 
-    expect(screen.getByText("Starting Codex…")).toBeInTheDocument();
+    expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
+    expect(screen.getByText("Starting")).toBeInTheDocument();
     expect(
       screen.queryByText("Couldn't load this execution"),
     ).not.toBeInTheDocument();

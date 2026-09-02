@@ -7,6 +7,8 @@ const terminalHarness = vi.hoisted(() => {
     resizeHandler: null as
       | ((dimensions: { cols: number; rows: number }) => void)
       | null,
+    resizeObserverCallback: null as ResizeObserverCallback | null,
+    proposedDimensions: { cols: 80, rows: 24 },
     emitData(data: string) {
       this.dataHandler?.(data);
     },
@@ -35,7 +37,7 @@ vi.mock("@xterm/xterm", () => ({
 vi.mock("@xterm/addon-fit", () => ({
   FitAddon: class FitAddon {
     fit = vi.fn();
-    proposeDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+    proposeDimensions = vi.fn(() => terminalHarness.proposedDimensions);
   },
 }));
 
@@ -48,6 +50,9 @@ import {
 } from "./exec-terminal";
 
 global.ResizeObserver = class ResizeObserver {
+  constructor(callback: ResizeObserverCallback) {
+    terminalHarness.resizeObserverCallback = callback;
+  }
   observe() {}
   unobserve() {}
   disconnect() {}
@@ -58,6 +63,40 @@ describe("ExecTerminal", () => {
     vi.clearAllMocks();
     terminalHarness.dataHandler = null;
     terminalHarness.resizeHandler = null;
+    terminalHarness.resizeObserverCallback = null;
+    terminalHarness.proposedDimensions = { cols: 80, rows: 24 };
+  });
+
+  it("waits for a usable terminal grid before opening the remote session", async () => {
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 0;
+    });
+    terminalHarness.proposedDimensions = { cols: 1, rows: 1 };
+    const transport: ExecSessionTransport = {
+      open: vi.fn(() => vi.fn()),
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal sessionKey="task-layout" transport={transport} isActive />,
+    );
+
+    await waitFor(() =>
+      expect(terminalHarness.resizeObserverCallback).not.toBeNull(),
+    );
+    expect(transport.open).not.toHaveBeenCalled();
+
+    terminalHarness.proposedDimensions = { cols: 120, rows: 40 };
+    act(() =>
+      terminalHarness.resizeObserverCallback?.(
+        [],
+        {} as unknown as ResizeObserver,
+      ),
+    );
+
+    await waitFor(() => expect(transport.open).toHaveBeenCalledOnce());
   });
 
   it("keeps the remote PTY synchronized with xterm dimension changes", async () => {

@@ -181,7 +181,9 @@ async function openCatalogToolAssignment({
   await page.waitForLoadState("domcontentloaded");
 
   // The row's Edit opens the record's own page, where the configuration is
-  // edited in place; the tools live on its Tools & Knowledge tab.
+  // edited in place. A gateway folds its editable sections into a single
+  // Settings tab, so its tools live there; every other kind keeps a Tools &
+  // Knowledge tab of its own.
   const editButton = page.getByTestId(
     `${E2eTestId.EditAgentButton}-${targetName}`,
   );
@@ -190,11 +192,15 @@ async function openCatalogToolAssignment({
   await page.waitForURL(new RegExp(`${pagePath}/[^/?]+`), { timeout: 30_000 });
   // Retry the tab click until the URL says so: like the row's Edit above, the
   // tab can render before hydration wires its handler.
+  const toolsSection = pagePath === "/mcp/gateways" ? "settings" : "tools";
+  const onToolsSection = new RegExp(`[?&]section=${toolsSection}`);
   await expect(async () => {
-    if (!/[?&]section=tools/.test(page.url())) {
-      await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
+    if (!onToolsSection.test(page.url())) {
+      await page
+        .getByTestId(`${E2eTestId.AgentSetupStep}-${toolsSection}`)
+        .click();
     }
-    await page.waitForURL(/[?&]section=tools/, { timeout: 3_000 });
+    await page.waitForURL(onToolsSection, { timeout: 3_000 });
   }).toPass({ timeout: 30_000 });
 
   const toolsSectionAnchor = page.getByTestId(E2eTestId.AgentToolsSection);

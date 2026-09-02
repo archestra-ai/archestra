@@ -91,8 +91,15 @@ async function createViaWizard(
   }).toPass({ timeout: 20_000 });
   await createResponsePromise;
 
-  // 5. The create lands on the new record's Connect section.
-  const connectUrl = new RegExp(`${listPath}/([^/?#]+)\\?section=connect`);
+  // 5. The create lands on the new record's Connect section. A gateway opens
+  // on Connect, so that section IS its bare detail URL and the redirect names
+  // no section; every other kind opens on its configuration and so names
+  // Connect explicitly. Anchored either way, so a URL carrying some other
+  // section cannot satisfy the wait.
+  const connectUrl =
+    listPath === "/mcp/gateways"
+      ? new RegExp(`${listPath}/([^/?#]+)$`)
+      : new RegExp(`${listPath}/([^/?#]+)\\?section=connect$`);
   await page.waitForURL(connectUrl, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
   const id = page.url().match(connectUrl)?.[1];

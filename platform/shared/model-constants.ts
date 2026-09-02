@@ -871,6 +871,31 @@ export const CACHE_PRICE_MULTIPLIERS: Partial<
  * such as the `[1m]` in `claude-opus-4-8[1m]`.
  */
 const CLAUDE_CONTEXT_VARIANT_SUFFIX = /\[\d+[km]\]$/i;
+const ONE_MILLION_TOKEN_CONTEXT = 1_000_000;
+
+/**
+ * Select Claude's explicit 1M client variant when the model's catalogued
+ * architectural window supports it.
+ *
+ * Claude Code cannot infer subscription entitlements behind an LLM gateway,
+ * so callers that know the model serves 1M tokens must name the `[1m]`
+ * variant. Models with a smaller or unknown window retain their original id.
+ */
+export function resolveClaudeContextVariant(params: {
+  modelId: string;
+  contextLength: number | null;
+}): string {
+  if (
+    !/claude/i.test(params.modelId) ||
+    stripClaudeContextVariantSuffix(params.modelId) !== params.modelId ||
+    params.contextLength == null ||
+    params.contextLength < ONE_MILLION_TOKEN_CONTEXT
+  ) {
+    return params.modelId;
+  }
+
+  return `${params.modelId}[1m]`;
+}
 
 /**
  * Drop a client-side context-variant marker from a Claude model id.

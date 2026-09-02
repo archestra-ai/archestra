@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { filterAndSortInitialAgents } from "./initial-agent-selector.utils";
+import {
+  filterAndSortInitialAgents,
+  getAdjacentAgentId,
+} from "./initial-agent-selector.utils";
 
 const userId = "user-1";
 
@@ -160,5 +163,67 @@ describe("filterAndSortInitialAgents", () => {
     });
 
     expect(result.map((agent) => agent.id)).toEqual(["a", "m", "z"]);
+  });
+});
+
+describe("getAdjacentAgentId", () => {
+  const agentIds = ["agent-1", "agent-2", "agent-3"];
+
+  it("moves in either direction and wraps at the ends", () => {
+    expect(
+      getAdjacentAgentId({
+        agentIds,
+        currentAgentId: "agent-2",
+        direction: "next",
+      }),
+    ).toBe("agent-3");
+    expect(
+      getAdjacentAgentId({
+        agentIds,
+        currentAgentId: "agent-2",
+        direction: "previous",
+      }),
+    ).toBe("agent-1");
+    expect(
+      getAdjacentAgentId({
+        agentIds,
+        currentAgentId: "agent-3",
+        direction: "next",
+      }),
+    ).toBe("agent-1");
+    expect(
+      getAdjacentAgentId({
+        agentIds,
+        currentAgentId: "agent-1",
+        direction: "previous",
+      }),
+    ).toBe("agent-3");
+  });
+
+  it("starts at the nearest end when nothing is highlighted", () => {
+    expect(
+      getAdjacentAgentId({
+        agentIds,
+        currentAgentId: null,
+        direction: "next",
+      }),
+    ).toBe("agent-1");
+    expect(
+      getAdjacentAgentId({
+        agentIds,
+        currentAgentId: null,
+        direction: "previous",
+      }),
+    ).toBe("agent-3");
+  });
+
+  it("returns null for an empty result list", () => {
+    expect(
+      getAdjacentAgentId({
+        agentIds: [],
+        currentAgentId: "agent-1",
+        direction: "next",
+      }),
+    ).toBeNull();
   });
 });

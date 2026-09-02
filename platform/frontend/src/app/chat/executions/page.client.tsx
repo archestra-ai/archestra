@@ -19,6 +19,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -173,21 +174,22 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
         open={connectionDialogOpen}
         onOpenChange={setConnectionDialogOpen}
       >
-        <DialogContent>
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Terminal connection details</DialogTitle>
             <DialogDescription>
               Attach to this execution from a shell with access to its cluster.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
+          <DialogBody className="space-y-2">
             <p className="text-sm font-medium">Manual attach command</p>
-            <div className="flex items-center gap-2 rounded-md border bg-slate-950 p-3">
+            <div className="flex flex-col gap-3 rounded-md border bg-slate-950 p-3 sm:flex-row sm:items-center">
               <code className="min-w-0 flex-1 break-all font-mono text-xs text-emerald-400">
                 {connectionCommand}
               </code>
               <Button
-                variant="ghost"
+                className="shrink-0 self-end sm:self-auto"
+                variant="outline"
                 size="sm"
                 aria-label="Copy terminal command"
                 onClick={async () => {
@@ -206,7 +208,7 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
                 <span>{commandCopied ? "Copied!" : "Copy"}</span>
               </Button>
             </div>
-          </div>
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </main>

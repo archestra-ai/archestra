@@ -181,58 +181,67 @@ export function ExecTerminal({
         }
       });
 
-      // Fit after a short delay to ensure container is measured
-      requestAnimationFrame(() => {
-        if (!disposed) {
-          try {
-            fitAddon.fit();
-          } catch {
-            // Container may not be visible yet
-          }
-        }
-      });
-
       terminalInstanceRef.current = terminal;
       fitAddonRef.current = fitAddon;
       initializedRef.current = true;
 
-      setStatus("connecting");
-      setProgress(null);
-      setConnectingSince(Date.now());
-      setErrorMessage(null);
+      let closeSession: (() => void) | undefined;
+      let layoutReady = false;
 
-      const closeSession = transportRef.current.open({
-        onProgress: (sessionProgress) => {
-          if (disposed) return;
-          setProgress(sessionProgress);
-        },
-        onStarted: (startedCommand) => {
-          if (disposed) return;
-          setStatus("connected");
-          setProgress(null);
-          setCommand(startedCommand);
-          onCommandChangeRef.current?.(startedCommand);
-          const dims = fitAddon.proposeDimensions();
-          if (isUsableTerminalDimensions(dims)) {
-            transportRef.current.sendResize(dims.cols, dims.rows);
-          }
-        },
-        onOutput: (data) => {
-          if (disposed) return;
-          terminal.write(data);
-        },
-        onError: (message) => {
-          if (disposed) return;
-          setStatus("error");
-          setErrorMessage(message);
-        },
-        onClosed: (reason) => {
-          if (disposed) return;
-          setClosedReason(reason);
-          setStatus("disconnected");
-          onClosedRef.current?.();
-        },
-      });
+      const fitAndOpenSession = () => {
+        if (disposed || closeSession) return;
+        const dims = fitAddon.proposeDimensions();
+        if (!layoutReady || !isUsableTerminalDimensions(dims)) return;
+        try {
+          fitAddon.fit();
+        } catch {
+          return;
+        }
+
+        setStatus("connecting");
+        setProgress(null);
+        setConnectingSince(Date.now());
+        setErrorMessage(null);
+
+        // Do not subscribe until the terminal has a real grid. Otherwise the
+        // first tmux frame can arrive at a transient 1-column tab width and
+        // remain scrambled in scrollback after the panel finishes laying out.
+        closeSession = transportRef.current.open({
+          onProgress: (sessionProgress) => {
+            if (disposed) return;
+            setProgress(sessionProgress);
+          },
+          onStarted: (startedCommand) => {
+            if (disposed) return;
+            setStatus("connected");
+            setProgress(null);
+            setCommand(startedCommand);
+            onCommandChangeRef.current?.(startedCommand);
+            const startedDims = fitAddon.proposeDimensions();
+            if (isUsableTerminalDimensions(startedDims)) {
+              transportRef.current.sendResize(
+                startedDims.cols,
+                startedDims.rows,
+              );
+            }
+          },
+          onOutput: (data) => {
+            if (disposed) return;
+            terminal.write(data);
+          },
+          onError: (message) => {
+            if (disposed) return;
+            setStatus("error");
+            setErrorMessage(message);
+          },
+          onClosed: (reason) => {
+            if (disposed) return;
+            setClosedReason(reason);
+            setStatus("disconnected");
+            onClosedRef.current?.();
+          },
+        });
+      };
 
       terminal.onData((data) => {
         const input = withoutMouseHoverReports(data);
@@ -242,20 +251,33 @@ export function ExecTerminal({
       // Resize observer
       const resizeObserver = new ResizeObserver(() => {
         if (disposed) return;
+        const dims = fitAddon.proposeDimensions();
+        if (!isUsableTerminalDimensions(dims)) return;
         try {
           fitAddon.fit();
         } catch {
           // Ignore fit errors during transitions
         }
+        fitAndOpenSession();
       });
 
       if (terminalRef.current) {
         resizeObserver.observe(terminalRef.current);
       }
 
+      // Two frames let Radix tabs and the responsive grid settle before the
+      // first PTY frame is allowed in. ResizeObserver remains the fallback for
+      // a panel that becomes visible later.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          layoutReady = true;
+          fitAndOpenSession();
+        });
+      });
+
       return () => {
         resizeObserver.disconnect();
-        closeSession();
+        closeSession?.();
       };
     };
 

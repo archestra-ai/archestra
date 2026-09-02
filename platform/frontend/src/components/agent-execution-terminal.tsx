@@ -57,6 +57,15 @@ export function createAgentExecutionTransport(
 ): ExecSessionTransport {
   return {
     open: (handlers) => {
+      // An Agent attach always has a known first wait. Seed the shared progress
+      // panel immediately so neither execution surface flashes the generic
+      // "Connecting..." placeholder before the backend reports a finer phase.
+      handlers.onProgress?.({
+        phase: "queued",
+        message: "Preparing the execution environment",
+        detail: null,
+        resourceName: null,
+      });
       const subscriptions = [
         websocketService.subscribe(
           "agent_run_attach_started",

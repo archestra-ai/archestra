@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { isUsableTerminalDimensions } from "./exec/exec-terminal.utils";
 
 /**
  * Replays a captured PTY byte stream through xterm so cursor movement, clears,
@@ -19,6 +20,7 @@ export function TerminalPlayback({ content }: { content: string }) {
 
     let disposed = false;
     let resizeObserver: ResizeObserver | undefined;
+    let initializedTerminal: import("@xterm/xterm").Terminal | null = null;
 
     const initialize = async () => {
       const [{ Terminal }, { FitAddon }] = await Promise.all([
@@ -43,30 +45,58 @@ export function TerminalPlayback({ content }: { content: string }) {
           cursor: "#34d399",
         },
       });
+      initializedTerminal = terminal;
 
       terminal.loadAddon(fitAddon);
       terminal.open(containerRef.current);
-      fitAddon.fit();
-      terminal.write(contentRef.current);
-      renderedContentRef.current = contentRef.current;
-      terminalRef.current = terminal;
+      let layoutReady = false;
+      let rendered = false;
+
+      const fitAndRender = () => {
+        if (disposed) return;
+        const dims = fitAddon.proposeDimensions();
+        if (!layoutReady || !isUsableTerminalDimensions(dims)) return;
+        try {
+          fitAddon.fit();
+        } catch {
+          return;
+        }
+        if (!rendered) {
+          terminal.write(contentRef.current);
+          renderedContentRef.current = contentRef.current;
+          terminalRef.current = terminal;
+          rendered = true;
+        }
+      };
 
       resizeObserver = new ResizeObserver(() => {
         if (disposed) return;
+        const dims = fitAddon.proposeDimensions();
+        if (!isUsableTerminalDimensions(dims)) return;
         try {
           fitAddon.fit();
         } catch {
           // The panel may be between layouts while an execution tab changes.
         }
+        fitAndRender();
       });
       resizeObserver.observe(containerRef.current);
+
+      // Avoid replaying a whole TUI recording into the transient dimensions
+      // produced while the surrounding tab/grid is still mounting.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          layoutReady = true;
+          fitAndRender();
+        });
+      });
     };
 
     void initialize();
     return () => {
       disposed = true;
       resizeObserver?.disconnect();
-      terminalRef.current?.dispose();
+      initializedTerminal?.dispose();
       terminalRef.current = null;
       renderedContentRef.current = "";
     };

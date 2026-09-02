@@ -117,6 +117,15 @@ export interface AgentToolsEditorRef {
 }
 
 interface AgentToolsEditorProps {
+  /**
+   * Show the assignment without offering to change it: pills lose their pencil
+   * and remove control, and the Add combobox is not rendered.
+   *
+   * The form has always taken a `readOnly`, but it stopped at the fields it
+   * owns — this picker kept working for a reader who could not save, and the
+   * Connect page needs the same list purely as a statement of fact.
+   */
+  readOnly?: boolean;
   agentId?: string;
   assignmentScope?: AgentScope;
   assignmentTeamIds?: string[];
@@ -171,6 +180,7 @@ export const AgentToolsEditor = forwardRef<
   AgentToolsEditorProps
 >(function AgentToolsEditor(
   {
+    readOnly = false,
     agentId,
     assignmentScope,
     assignmentTeamIds,
@@ -189,6 +199,7 @@ export const AgentToolsEditor = forwardRef<
 ) {
   return (
     <AgentToolsEditorContent
+      readOnly={readOnly}
       agentId={agentId}
       assignmentScope={assignmentScope}
       assignmentTeamIds={assignmentTeamIds}
@@ -212,6 +223,7 @@ const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorProps
 >(function AgentToolsEditorContent(
   {
+    readOnly = false,
     agentId,
     assignmentScope,
     assignmentTeamIds,
@@ -839,31 +851,35 @@ const AgentToolsEditorContent = forwardRef<
             initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
             onPendingChanges={registerPendingChanges}
             onClearPendingChanges={clearPendingChanges}
+            readOnly={readOnly}
             onRemove={handleCatalogToggle}
             autoOpen={catalog.id === autoOpenCatalogId}
             onAutoOpened={() => setAutoOpenCatalogId(null)}
           />
         ))}
-        <AssignmentCombobox
-          items={comboboxItems}
-          selectedIds={selectedCatalogIds}
-          onToggle={handleCatalogToggle}
-          onItemAdded={setAutoOpenCatalogId}
-          placeholder="Search MCP servers..."
-          emptyMessage="No MCP servers found."
-          // The scope belongs to this list, not to the pills a pick produces.
-          note={
-            environmentScopingEnabled
-              ? `Filtered to the ${agentEnvironmentName ?? "Default"} environment.`
-              : undefined
-          }
-          testId={E2eTestId.AgentToolsAddButton}
-          defaultOpen={openComboboxOnMount}
-          createAction={{
-            label: "Install New MCP Server",
-            href: "/mcp/registry",
-          }}
-        />
+        {/* Nothing to add when the list is a statement of fact. */}
+        {!readOnly && (
+          <AssignmentCombobox
+            items={comboboxItems}
+            selectedIds={selectedCatalogIds}
+            onToggle={handleCatalogToggle}
+            onItemAdded={setAutoOpenCatalogId}
+            placeholder="Search MCP servers..."
+            emptyMessage="No MCP servers found."
+            // The scope belongs to this list, not to the pills a pick produces.
+            note={
+              environmentScopingEnabled
+                ? `Filtered to the ${agentEnvironmentName ?? "Default"} environment.`
+                : undefined
+            }
+            testId={E2eTestId.AgentToolsAddButton}
+            defaultOpen={openComboboxOnMount}
+            createAction={{
+              label: "Install New MCP Server",
+              href: "/mcp/registry",
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -916,6 +932,8 @@ function McpServerCard({
 }
 
 interface McpServerPillProps {
+  /** Show the assignment without offering to change it. */
+  readOnly?: boolean;
   catalogItem: InternalMcpCatalogItem;
   displayName: string;
   assignedTools: AssignedTool[];
@@ -933,6 +951,7 @@ interface McpServerPillProps {
 }
 
 function McpServerPill({
+  readOnly = false,
   catalogItem,
   displayName,
   assignedTools,
@@ -1137,6 +1156,7 @@ function McpServerPill({
           size={14}
         />
       }
+      readOnly={readOnly}
       displayName={displayName}
       count={displayedCount}
       isEmpty={isEmpty}

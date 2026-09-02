@@ -23,6 +23,8 @@ export interface KnowledgeSourceOption {
 }
 
 interface KnowledgeSourcesEditorProps {
+  /** Show the assignment without offering to change it. */
+  readOnly?: boolean;
   sources: KnowledgeSourceOption[];
   selectedIds: string[];
   onToggle: (id: string) => void;
@@ -61,6 +63,7 @@ export function KnowledgeSourcesEditor({
   emptyMessage = "No knowledge sources found.",
   createAction,
   testIds,
+  readOnly = false,
 }: KnowledgeSourcesEditorProps) {
   const comboboxItems: AssignmentComboboxItem[] = sources.map((source) => ({
     id: source.id,
@@ -114,32 +117,36 @@ export function KnowledgeSourcesEditor({
             <KnowledgeSourceIcon connectorType={source.connectorType} />
             <span className="min-w-0 truncate font-medium">{source.name}</span>
           </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
-            onClick={() => onToggle(source.id)}
-            aria-label={
-              tone === "exclude"
-                ? `Re-enable ${source.name}`
-                : `Remove ${source.name}`
-            }
-          >
-            <X className="h-3 w-3" />
-          </Button>
+          {!readOnly && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+              onClick={() => onToggle(source.id)}
+              aria-label={
+                tone === "exclude"
+                  ? `Re-enable ${source.name}`
+                  : `Remove ${source.name}`
+              }
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       ))}
-      <AssignmentCombobox
-        items={comboboxItems}
-        selectedIds={selectedIds}
-        onToggle={onToggle}
-        testId={testIds.combobox}
-        label={label}
-        placeholder={placeholder}
-        emptyMessage={emptyMessage}
-        createAction={createAction}
-      />
+      {!readOnly && (
+        <AssignmentCombobox
+          items={comboboxItems}
+          selectedIds={selectedIds}
+          onToggle={onToggle}
+          testId={testIds.combobox}
+          label={label}
+          placeholder={placeholder}
+          emptyMessage={emptyMessage}
+          createAction={createAction}
+        />
+      )}
     </div>
   );
 }

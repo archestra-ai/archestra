@@ -22,8 +22,6 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import {
   AlertTriangle,
@@ -32,11 +30,9 @@ import {
   ChevronRight,
   Globe,
   InfoIcon,
-  PackageSearch,
   Plus,
   RotateCcw,
   Settings2,
-  Unplug,
   User,
   Users,
   X,
@@ -72,6 +68,7 @@ import {
   type EditableSkill,
 } from "@/components/agent-skills-editor";
 import type { GatewayLike } from "@/components/agent-skills-editor.utils";
+import { AgentToolBehaviorSettings } from "@/components/agent-tool-behavior-settings";
 import {
   AgentToolExclusionsEditor,
   type AgentToolExclusionsEditorRef,
@@ -210,13 +207,10 @@ import {
   excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
-  MISSING_CREDENTIAL_BEHAVIOR_OPTIONS,
-  MISSING_CREDENTIAL_TONE,
   normalizeSuggestedPrompts,
   publishedSkillsSummary,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
-  TOOL_CONNECTION_PROMPTING,
 } from "./agent-form.utils";
 import { AgentBackgroundExecutionCard } from "./agent-pages/agent-background-execution-card";
 
@@ -3082,6 +3076,7 @@ export function AgentForm({
                           )}
                           {isKnowledgeConfigured ? (
                             <KnowledgeSourcesEditor
+                              readOnly={readOnly}
                               sources={environmentConnectors.map(
                                 (connector) => ({
                                   id: connector.id,
@@ -3132,6 +3127,7 @@ export function AgentForm({
                           </p>
                         )}
                         <AgentToolsEditor
+                          readOnly={readOnly}
                           ref={agentToolsEditorRef}
                           agentId={agent?.id}
                           assignmentScope={scope}
@@ -3171,6 +3167,7 @@ export function AgentForm({
                             )}
                           {isKnowledgeConfigured ? (
                             <KnowledgeSourcesEditor
+                              readOnly={readOnly}
                               sources={assignableKnowledgeSources}
                               selectedIds={assignedKnowledgeSourceIds}
                               onToggle={toggleAssignedKnowledgeSource}
@@ -3218,154 +3215,23 @@ export function AgentForm({
                     )}
                     data-testid={E2eTestId.AgentToolLoadingSection}
                   >
-                    {/* Auto mode is progressive loading — dynamic access only
-                        works through the search/run dispatch surface, and the
-                        backend coerces the mode to match on every write path. The
-                        row used to be hidden there, which left the one setting
-                        Auto decides for you invisible; it now shows in both
-                        modes, on and locked in Auto. The row reads like the
-                        detail page's: the setting's icon tinted by its state, and
-                        a line on what the state means. */}
-                    <div className="flex items-center gap-3 pb-4">
-                      <SettingIcon tone={progressiveToolLoading ? "on" : "off"}>
-                        <PackageSearch className="size-4" />
-                      </SettingIcon>
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <Label htmlFor="load-tools-when-needed">
-                          Progressive tool loading
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          {/* Says what the setting buys before how it works:
-                              the mechanism was three clauses long and the
-                              reason it exists was in none of them. */}
-                          {progressiveToolLoading ? (
-                            <>
-                              Saves context by exposing only two tools:{" "}
-                              <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                              <code>{TOOL_RUN_TOOL_SHORT_NAME}</code>.
-                            </>
-                          ) : (
-                            <>
-                              Every assigned tool is in the model's context from
-                              the first message.
-                            </>
-                          )}{" "}
-                          <ExternalDocsLink
-                            href={toolExposureDocsUrl}
-                            className="underline"
-                            showIcon={false}
-                          >
-                            Learn more
-                          </ExternalDocsLink>
-                        </p>
-                      </div>
-                      <Switch
-                        id="load-tools-when-needed"
-                        checked={progressiveToolLoading}
-                        disabled={autoToolsMode}
-                        onCheckedChange={(checked) =>
-                          setToolExposureMode(
-                            checked ? "search_and_run_only" : "full",
-                          )
-                        }
-                      />
-                    </div>
-
-                    {/* Auto meets missing connections too — its tools come
-                        from the same servers — it just always asks when a tool
-                        needs one: `isEnforcing` in agent-credential-readiness
-                        declines to enforce on an `accessAllTools` record, so
-                        warn and block do nothing there. Hiding the row left
-                        that unsaid and the stored value silently ignored, so it
-                        now shows in both modes, pinned and locked in Auto,
-                        exactly as progressive tool loading above it is.
-
-                        Note the gate is Auto, not progressive loading: a Custom
-                        record with progressive loading on still enforces. */}
-                    <>
-                      {/* Inset past the icon column (size-8 + gap-3) so the
-                            rule divides the two settings rather than cutting
-                            across the icons that label them. */}
-                      <div className="ml-11 border-t border-border" />
-                      <div className="flex items-center gap-3 pt-4">
-                        <SettingIcon
-                          tone={
-                            MISSING_CREDENTIAL_TONE[
-                              effectiveMissingCredentialBehavior
-                            ]
-                          }
-                        >
-                          <Unplug className="size-4" />
-                        </SettingIcon>
-                        <div className="min-w-0 flex-1 space-y-0.5">
-                          <Label htmlFor="missing-credential-behavior">
-                            Missing connections
-                          </Label>
-                          {/* The question, not the answer: the select beside
-                              this already names the choice, and the menu
-                              spells out what each one does. Repeating the
-                              chosen option's whole sentence here said the same
-                              thing three times in one row. */}
-                          <p className="text-xs text-muted-foreground">
-                            When to ask a user to connect credentials.{" "}
-                            {autoToolsMode && (
-                              <>Auto mode always asks when a tool needs it. </>
-                            )}
-                            <ExternalDocsLink
-                              href={toolConnectionsDocsUrl}
-                              className="underline"
-                              showIcon={false}
-                            >
-                              Learn more
-                            </ExternalDocsLink>
-                          </p>
-                        </div>
-                        <Select
-                          value={effectiveMissingCredentialBehavior}
-                          disabled={autoToolsMode}
-                          onValueChange={(value) =>
-                            setMissingCredentialBehavior(
-                              value as MissingCredentialBehavior,
-                            )
-                          }
-                        >
-                          {/* Fixed width: the trigger is `w-fit` by default, so
-                              the row would reflow by ~33px as the value changes. */}
-                          <SelectTrigger
-                            id="missing-credential-behavior"
-                            className="w-[240px]"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          {/* `popper` is what makes `align` bind at all: the
-                              default `item-aligned` positioning clamps only the
-                              popover's left edge, so it ended flush with the
-                              browser window — over 100px outside the wizard's
-                              panel on a wide screen. Anchored to the trigger's
-                              right edge it stays in the column, and 28rem keeps
-                              every option's explainer at two lines. */}
-                          <SelectContent
-                            position="popper"
-                            align="end"
-                            className="w-[28rem] max-w-[calc(100vw-2rem)]"
-                          >
-                            {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map(
-                              (option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                  description={
-                                    TOOL_CONNECTION_PROMPTING[option.value]
-                                  }
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ),
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </>
+                    <AgentToolBehaviorSettings
+                      progressiveToolLoading={progressiveToolLoading}
+                      onProgressiveToolLoadingChange={(progressive) =>
+                        setToolExposureMode(
+                          progressive ? "search_and_run_only" : "full",
+                        )
+                      }
+                      missingCredentialBehavior={
+                        effectiveMissingCredentialBehavior
+                      }
+                      onMissingCredentialBehaviorChange={
+                        setMissingCredentialBehavior
+                      }
+                      locked={autoToolsMode}
+                      toolExposureDocsUrl={toolExposureDocsUrl}
+                      toolConnectionsDocsUrl={toolConnectionsDocsUrl}
+                    />
                   </div>
                 </SettingsSection>
               )}

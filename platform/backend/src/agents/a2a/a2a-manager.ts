@@ -624,6 +624,12 @@ export class A2AManager {
               messages: requestMessages,
               organizationId: actor.organizationId,
               userId: actor.kind === "user" ? actor.id : "system",
+              // Scope per-execution state to the A2A context. Without a key the
+              // executor treats this as a direct execution outside a
+              // conversation, generates a throwaway one and cleans the state up
+              // when the run ends — which orphans anything the agent produced.
+              // Stateless mode has no context and keeps that behaviour.
+              isolationKey: context?.id,
               sessionId,
               source: systemParams?.source,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId

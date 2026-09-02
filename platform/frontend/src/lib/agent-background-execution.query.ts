@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FileUIPart } from "ai";
+import { toast } from "sonner";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -8,11 +9,14 @@ const {
   deleteAgentExecution,
   deleteAgentBackgroundExecutionCredential,
   getAgentBackgroundExecutionPreflight,
+  getAgentExecutionShare,
   getAgentExecutions,
   getMyAgentExecution,
   getMyAgentExecutions,
   setAgentBackgroundExecutionCredential,
+  shareAgentExecution,
   startAgentExecution,
+  unshareAgentExecution,
   updateAgentExecution,
 } = archestraApiSdk;
 
@@ -171,6 +175,79 @@ export function useDeleteAgentExecution() {
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+  });
+}
+
+export type AgentExecutionShare = NonNullable<
+  archestraApiTypes.GetAgentExecutionShareResponses["200"]
+>;
+
+/**
+ * Owner-only: reads the current share for an execution. The route 404s for
+ * anyone but the owner, so this is only queried behind the owner's share
+ * dialog. A `null` result means the execution is private (not shared).
+ */
+export function useAgentExecutionShare(taskId: string | undefined) {
+  return useQuery({
+    queryKey: ["agent-executions", taskId, "share"],
+    queryFn: async () => {
+      if (!taskId) return null;
+      const { data, error } = await getAgentExecutionShare({
+        path: { taskId },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!taskId,
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+}
+
+type ShareAgentExecutionInput = {
+  taskId: string;
+  suppressSuccessToast?: boolean;
+} & archestraApiTypes.ShareAgentExecutionData["body"];
+
+export function useShareAgentExecution() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      taskId,
+      visibility,
+      teamIds,
+      userIds,
+      suppressSuccessToast: _suppressSuccessToast,
+    }: ShareAgentExecutionInput) => {
+      const { data, error } = await shareAgentExecution({
+        path: { taskId },
+        body: { visibility, teamIds, userIds },
+      });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: (data, { taskId, suppressSuccessToast }) => {
+      if (!data) return;
+      queryClient.setQueryData(["agent-executions", taskId, "share"], data);
+      if (!suppressSuccessToast) {
+        toast.success("Execution visibility updated");
+      }
+    },
+  });
+}
+
+export function useUnshareAgentExecution() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { data, error } = await unshareAgentExecution({ path: { taskId } });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: (_data, taskId) => {
+      queryClient.setQueryData(["agent-executions", taskId, "share"], null);
+      toast.success("Execution sharing removed");
+    },
   });
 }
 

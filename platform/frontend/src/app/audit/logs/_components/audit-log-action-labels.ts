@@ -31,6 +31,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agentExecution.canceled": "Agent execution canceled",
   "agentExecution.updated": "Agent execution renamed",
   "agentExecution.deleted": "Agent execution deleted",
+  "agentExecution.shared": "Agent execution shared",
+  "agentExecution.unshared": "Agent execution unshared",
   // Execution credential
   "executionCredential.created": "Execution credential created",
   "executionCredential.updated": "Execution credential updated",

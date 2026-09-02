@@ -58,6 +58,11 @@ export { default as agentExecutionInputsTable } from "./agent-execution-input";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentRunsTable } from "./agent-run";
+export {
+  agentRunShareTeamsTable,
+  agentRunShareUsersTable,
+  default as agentRunSharesTable,
+} from "./agent-run-share";
 export { default as agentSkillsTable } from "./agent-skill";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";

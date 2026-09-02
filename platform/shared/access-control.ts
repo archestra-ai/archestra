@@ -701,6 +701,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgentExecution]: { agent: ["read"] },
   [RouteId.CancelAgentExecution]: { agent: ["read"] },
   [RouteId.DeleteAgentExecution]: { agent: ["read"] },
+  [RouteId.GetAgentExecutionShare]: { agent: ["read"] },
+  [RouteId.ShareAgentExecution]: { agent: ["read"] },
+  [RouteId.UnshareAgentExecution]: { agent: ["read"] },
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },

@@ -8,6 +8,7 @@ import {
   isNull,
   lt,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -197,6 +198,24 @@ class AgentRunModel {
     return session ?? null;
   }
 
+  /**
+   * A single execution session by task, scoped only to the organization — not
+   * to the actor who started it. Used to serve shared (read-only) viewers, whose
+   * access is authorized separately via {@link AgentRunShareModel}. Callers must
+   * verify share access before exposing the result.
+   */
+  static async findSessionByTaskId(params: {
+    taskId: string;
+    organizationId: string;
+  }): Promise<AgentExecutionSession | null> {
+    const rows = await AgentRunModel.selectExecutionSessionsWhere([
+      eq(schema.agentRunsTable.taskId, params.taskId),
+      eq(schema.agentRunsTable.organizationId, params.organizationId),
+    ]);
+    const [session] = await AgentRunModel.addExecutionPrompts(rows);
+    return session ?? null;
+  }
+
   static async updateTitleIfCurrent(params: {
     taskId: string;
     expectedTitle: string;
@@ -321,6 +340,17 @@ class AgentRunModel {
     organizationId: string;
     taskId?: string;
   }) {
+    return AgentRunModel.selectExecutionSessionsWhere([
+      eq(schema.agentRunsTable.actorKind, "user"),
+      eq(schema.agentRunsTable.actorId, params.actorUserId),
+      eq(schema.agentRunsTable.organizationId, params.organizationId),
+      ...(params.taskId
+        ? [eq(schema.agentRunsTable.taskId, params.taskId)]
+        : []),
+    ]);
+  }
+
+  private static async selectExecutionSessionsWhere(conditions: SQL[]) {
     const {
       logs: _logs,
       completionTarget: _completionTarget,
@@ -349,16 +379,7 @@ class AgentRunModel {
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
       )
-      .where(
-        and(
-          eq(schema.agentRunsTable.actorKind, "user"),
-          eq(schema.agentRunsTable.actorId, params.actorUserId),
-          eq(schema.agentRunsTable.organizationId, params.organizationId),
-          ...(params.taskId
-            ? [eq(schema.agentRunsTable.taskId, params.taskId)]
-            : []),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(desc(schema.agentRunsTable.startedAt));
   }
 

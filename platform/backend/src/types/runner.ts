@@ -233,6 +233,19 @@ export const SelectAgentExecutionSessionSchema =
     }),
   });
 
+/**
+ * How the requesting user relates to an execution they're allowed to open.
+ * `owner` started it and may attach interactively; `shared` was granted a
+ * read-only view through a share and may only stream its logs.
+ */
+export const AgentExecutionViewerRoleSchema = z.enum(["owner", "shared"]);
+
+/** A single execution session plus the viewer's relationship to it. */
+export const GetAgentExecutionResponseSchema =
+  SelectAgentExecutionSessionSchema.extend({
+    viewerRole: AgentExecutionViewerRoleSchema,
+  });
+
 export const UpdateAgentExecutionSchema = createUpdateSchema(
   schema.agentRunsTable,
 )
@@ -260,6 +273,12 @@ export type InsertAgentRun = z.infer<typeof InsertAgentRunSchema>;
 export type AgentExecution = z.infer<typeof SelectAgentExecutionSchema>;
 export type AgentExecutionSession = z.infer<
   typeof SelectAgentExecutionSessionSchema
+>;
+export type AgentExecutionViewerRole = z.infer<
+  typeof AgentExecutionViewerRoleSchema
+>;
+export type GetAgentExecutionResponse = z.infer<
+  typeof GetAgentExecutionResponseSchema
 >;
 
 export const SelectUserCredentialSchema = createSelectSchema(

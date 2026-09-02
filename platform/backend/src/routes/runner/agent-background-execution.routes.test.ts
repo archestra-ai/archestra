@@ -669,6 +669,233 @@ describe("Agent Background execution routes", () => {
     expect(audit.before).not.toEqual(audit.after);
   });
 
+  test("reports the initiating user as the owner viewer of their execution", async () => {
+    const task = await createTask(agent.id);
+    await createRun(task.id, user.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({ taskId: task.id, viewerRole: "owner" }),
+    );
+  });
+
+  test("opens an organization-shared execution read-only for a colleague and 404s without a share", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const task = await createTask(agent.id);
+    await createRun(task.id, user.id);
+    const owner = user;
+
+    const colleague = await makeAdmin();
+    await makeMember(colleague.id, organizationId, { role: "member" });
+
+    // No share yet: a colleague cannot open someone else's execution.
+    user = colleague;
+    const beforeShare = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(beforeShare.statusCode).toBe(404);
+
+    // The owner shares it organization-wide.
+    user = owner;
+    const shared = await app.inject({
+      method: "PUT",
+      url: `/api/agent-executions/${task.id}/share`,
+      payload: { visibility: "organization" },
+    });
+    expect(shared.statusCode).toBe(200);
+    expect(shared.json()).toEqual(
+      expect.objectContaining({ taskId: task.id, visibility: "organization" }),
+    );
+
+    // The colleague now gets a read-only view flagged as shared.
+    user = colleague;
+    const afterShare = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(afterShare.statusCode).toBe(200);
+    expect(afterShare.json()).toEqual(
+      expect.objectContaining({ taskId: task.id, viewerRole: "shared" }),
+    );
+
+    const [audit] = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        resourceId: schema.auditLogsTable.resourceId,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "agentExecution.shared"),
+          eq(schema.auditLogsTable.resourceId, task.id),
+        ),
+      );
+    expect(audit).toMatchObject({
+      action: "agentExecution.shared",
+      resourceId: task.id,
+      before: null,
+      after: expect.objectContaining({ visibility: "organization" }),
+    });
+  });
+
+  test("limits a team share to members of the shared team", async ({
+    makeAdmin,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const task = await createTask(agent.id);
+    await createRun(task.id, user.id);
+    const owner = user;
+
+    const team = await makeTeam(organizationId, owner.id);
+    const teamMember = await makeAdmin();
+    await makeMember(teamMember.id, organizationId, { role: "member" });
+    await makeTeamMember(team.id, teamMember.id);
+    const outsider = await makeAdmin();
+    await makeMember(outsider.id, organizationId, { role: "member" });
+
+    const shared = await app.inject({
+      method: "PUT",
+      url: `/api/agent-executions/${task.id}/share`,
+      payload: { visibility: "team", teamIds: [team.id] },
+    });
+    expect(shared.statusCode).toBe(200);
+    expect(shared.json()).toEqual(
+      expect.objectContaining({ visibility: "team", teamIds: [team.id] }),
+    );
+
+    user = teamMember;
+    const memberView = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(memberView.statusCode).toBe(200);
+    expect(memberView.json()).toEqual(
+      expect.objectContaining({ viewerRole: "shared" }),
+    );
+
+    user = outsider;
+    const outsiderView = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(outsiderView.statusCode).toBe(404);
+  });
+
+  test("limits a user share to the named recipients", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const task = await createTask(agent.id);
+    await createRun(task.id, user.id);
+
+    const invited = await makeAdmin();
+    await makeMember(invited.id, organizationId, { role: "member" });
+    const uninvited = await makeAdmin();
+    await makeMember(uninvited.id, organizationId, { role: "member" });
+
+    const shared = await app.inject({
+      method: "PUT",
+      url: `/api/agent-executions/${task.id}/share`,
+      payload: { visibility: "user", userIds: [invited.id] },
+    });
+    expect(shared.statusCode).toBe(200);
+
+    user = invited;
+    const invitedView = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(invitedView.statusCode).toBe(200);
+
+    user = uninvited;
+    const uninvitedView = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(uninvitedView.statusCode).toBe(404);
+  });
+
+  test("revokes sharing and keeps share management owner-only", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const task = await createTask(agent.id);
+    await createRun(task.id, user.id);
+    const owner = user;
+
+    await app.inject({
+      method: "PUT",
+      url: `/api/agent-executions/${task.id}/share`,
+      payload: { visibility: "organization" },
+    });
+
+    // A non-owner can neither read nor change the share settings.
+    const colleague = await makeAdmin();
+    await makeMember(colleague.id, organizationId, { role: "member" });
+    user = colleague;
+    const readShare = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}/share`,
+    });
+    expect(readShare.statusCode).toBe(404);
+    const forbiddenShare = await app.inject({
+      method: "PUT",
+      url: `/api/agent-executions/${task.id}/share`,
+      payload: { visibility: "organization" },
+    });
+    expect(forbiddenShare.statusCode).toBe(404);
+
+    // The owner revokes the share.
+    user = owner;
+    const unshared = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-executions/${task.id}/share`,
+    });
+    expect(unshared.statusCode).toBe(200);
+    expect(unshared.json()).toEqual({ success: true });
+
+    // The colleague loses access again.
+    user = colleague;
+    const afterRevoke = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(afterRevoke.statusCode).toBe(404);
+
+    const [audit] = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        resourceId: schema.auditLogsTable.resourceId,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "agentExecution.unshared"),
+          eq(schema.auditLogsTable.resourceId, task.id),
+        ),
+      );
+    expect(audit).toMatchObject({
+      action: "agentExecution.unshared",
+      resourceId: task.id,
+      before: expect.objectContaining({ visibility: "organization" }),
+      after: { success: true },
+    });
+  });
+
   async function createTask(agentId: string) {
     const context = await A2AContextModel.create({
       actorKind: "user",
@@ -678,6 +905,21 @@ describe("Agent Background execution routes", () => {
       contextId: context.id,
       agentId,
       state: "TASK_STATE_SUBMITTED",
+    });
+  }
+
+  async function createRun(taskId: string, actorUserId: string) {
+    return await AgentRunModel.create({
+      organizationId,
+      taskId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: actorUserId,
+      actorUserId,
+      deploymentName: `agent-run-${taskId}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
     });
   }
 });

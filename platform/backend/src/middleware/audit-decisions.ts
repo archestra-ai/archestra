@@ -658,6 +658,19 @@ export const AUDIT_DECISIONS = {
     reason:
       "task-owned runtime inputs; the execution start event records the file count without logging file names or content",
   },
+  agentRunSharesTable: {
+    audited: false,
+    reason:
+      "agent execution share metadata; share and unshare are audited at the route level (agentExecution.shared/unshared)",
+  },
+  agentRunShareTeamsTable: {
+    audited: false,
+    reason: "join: agent run share × team",
+  },
+  agentRunShareUsersTable: {
+    audited: false,
+    reason: "join: agent run share × user",
+  },
   userCredentialsTable: {
     audited: false,
     reason:

@@ -10,6 +10,7 @@ export * from "./agent-execution-input";
 export * from "./agent-export";
 export * from "./agent-knowledge-base";
 export * from "./agent-knowledge-source-exclusion";
+export * from "./agent-run-share";
 export * from "./agent-skill";
 export * from "./agent-subagent-exclusion";
 export * from "./agent-suggested-prompt";

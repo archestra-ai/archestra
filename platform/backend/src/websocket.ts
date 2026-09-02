@@ -18,7 +18,12 @@ import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
-import { AgentRunModel, McpServerModel, UserModel } from "@/models";
+import {
+  AgentRunModel,
+  AgentRunShareModel,
+  McpServerModel,
+  UserModel,
+} from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { resolveRunnerBackend } from "@/services/runners/backends";
@@ -668,7 +673,7 @@ class WebSocketService {
       });
       return;
     }
-    if (!(await this.mayControlSession(session, clientContext))) {
+    if (!(await this.mayViewSessionLogs(session, clientContext))) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
         payload: {
@@ -755,6 +760,25 @@ class WebSocketService {
       "agent",
       "admin",
     );
+  }
+
+  /**
+   * Who may stream a run's logs read-only: anyone who could control it, plus
+   * anyone a share grants access to. Interactive attach stays owner-only (see
+   * {@link handleSubscribeAgentRunAttach}) — a share never lends the owner's
+   * live credentials, only a view of the output.
+   */
+  private async mayViewSessionLogs(
+    session: { actorUserId: string | null; taskId: string },
+    clientContext: WebSocketClientContext,
+  ): Promise<boolean> {
+    if (await this.mayControlSession(session, clientContext)) return true;
+    const share = await AgentRunShareModel.findAccessibleByTaskId({
+      taskId: session.taskId,
+      organizationId: clientContext.organizationId,
+      userId: clientContext.userId,
+    });
+    return share !== null;
   }
 
   private async handleSubscribeMcpExec(

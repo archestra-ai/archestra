@@ -6,8 +6,10 @@ import {
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
 import { Globe, Lock, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
 import { IdentityFields } from "@/components/identity-fields";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -117,6 +119,8 @@ function EditProjectDialogForm({
     useState<ProjectVisibility>(initialVisibility);
   const [teamIds, setTeamIds] = useState<string[]>(project.shareTeamIds ?? []);
   const [userIds, setUserIds] = useState<string[]>(project.shareUserIds ?? []);
+  const [labels, setLabels] = useState<ProfileLabel[]>(project.labels);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const userOption = useUserShareOption<ProjectVisibility>("user");
 
   // Sharing is edited in this same dialog, so the offer follows the pending
@@ -198,7 +202,8 @@ function EditProjectDialogForm({
         [...(project.shareUserIds ?? [])].sort(),
         [...userIds].sort(),
       ));
-  const isDirty = form.formState.isDirty || sharingDirty;
+  const labelsDirty = hasUnsavedChanges(project.labels, labels);
+  const isDirty = form.formState.isDirty || sharingDirty || labelsDirty;
   const teamSelectionMissing = visibility === "team" && teamIds.length === 0;
   // Same guard as Teams: saving Users with nobody picked would quietly make the
   // project private again.
@@ -210,6 +215,7 @@ function EditProjectDialogForm({
   const onSubmit = form.handleSubmit(
     async ({ name, description, icon, defaultAgentId }) => {
       if (teamSelectionMissing || userSelectionMissing) return;
+      const nextLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
 
       const nextTeamIds = visibility === "team" ? teamIds : [];
       // Both lists are always sent, so leaving Teams or Users revokes what that
@@ -248,6 +254,7 @@ function EditProjectDialogForm({
         ...(form.formState.dirtyFields.defaultAgentId
           ? { defaultAgentId }
           : {}),
+        labels: nextLabels,
       });
       if (!ok) return;
 
@@ -421,6 +428,12 @@ function EditProjectDialogForm({
           />
         </div>
       )}
+
+      <AdvancedLabelsSection
+        ref={labelsRef}
+        labels={labels}
+        onLabelsChange={setLabels}
+      />
     </StandardFormDialog>
   );
 }

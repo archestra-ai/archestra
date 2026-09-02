@@ -16,6 +16,7 @@ import {
   FileNameExistsError,
   lookupCreator,
   ProjectAlreadyAssignedError,
+  ProjectLabelModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
@@ -27,6 +28,7 @@ import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
   AgentScope,
+  LabelWithDetails,
   Project,
   ProjectConversationItem,
   ProjectDetail,
@@ -63,6 +65,7 @@ class ProjectService {
     description: string | null;
     icon?: string | null;
     defaultAgentId?: string | null;
+    labels?: LabelWithDetails[];
   }): Promise<Project> {
     const name = params.name.trim();
     const invalid = validateProjectName(name);
@@ -79,7 +82,7 @@ class ProjectService {
       });
     }
     try {
-      return await ProjectModel.create({
+      const project = await ProjectModel.create({
         organizationId: params.organizationId,
         userId: params.userId,
         name,
@@ -87,6 +90,10 @@ class ProjectService {
         icon: params.icon ?? null,
         defaultAgentId: params.defaultAgentId ?? null,
       });
+      if (params.labels?.length) {
+        await ProjectLabelModel.syncLabels(project.id, params.labels);
+      }
+      return project;
     } catch (error) {
       if (error instanceof ProjectNameExistsError) {
         throw new ApiError(
@@ -112,6 +119,7 @@ class ProjectService {
     name?: string | null;
     description?: string | null;
     icon?: string | null;
+    labels?: LabelWithDetails[];
   }): Promise<{ project: Project; filesMoved: number }> {
     const meta = await ConversationModel.getOwnedMeta({
       id: params.conversationId,
@@ -144,7 +152,7 @@ class ProjectService {
     }
 
     try {
-      return await ProjectModel.createFromConversation({
+      const result = await ProjectModel.createFromConversation({
         organizationId: params.organizationId,
         userId: params.userId,
         conversationId: params.conversationId,
@@ -152,6 +160,10 @@ class ProjectService {
         description: params.description ?? null,
         icon: params.icon ?? null,
       });
+      if (params.labels?.length) {
+        await ProjectLabelModel.syncLabels(result.project.id, params.labels);
+      }
+      return result;
     } catch (error) {
       if (error instanceof ConversationNotOwnedError) {
         throw new ApiError(404, "Conversation not found");
@@ -189,6 +201,7 @@ class ProjectService {
     excludeAuthorIds?: string[];
     search?: string;
     status?: ProjectLifecycle;
+    labelFilteredIds?: string[];
   }): Promise<ProjectListItem[]> {
     const { organizationId, userId, scope } = params;
 
@@ -224,6 +237,13 @@ class ProjectService {
           ? "shared"
           : "admin") as ProjectViewerRole,
     }));
+
+    if (params.labelFilteredIds !== undefined) {
+      const matchingIds = new Set(params.labelFilteredIds);
+      candidates = candidates.filter(({ project }) =>
+        matchingIds.has(project.id),
+      );
+    }
 
     // scope filters on the project's share visibility.
     if (scope === "personal") {
@@ -295,15 +315,17 @@ class ProjectService {
 
     const projectIds = candidates.map((c) => c.project.id);
     const ownerIds = [...new Set(candidates.map((c) => c.project.userId))];
-    const [counts, pins, ownerNames, creators, shareUsers] = await Promise.all([
-      ProjectModel.countConversations(projectIds),
-      ProjectPinModel.getPinnedAtForProjects({ userId, projectIds }),
-      UserModel.getNamesByIds(ownerIds),
-      // A project's owner is its creator: `projects.user_id` is NOT NULL and
-      // stamped from the acting user, and ownership does not transfer.
-      CreatedByModel.resolve(ownerIds),
-      ProjectShareModel.getShareUsersForProjects(projectIds),
-    ]);
+    const [counts, pins, ownerNames, creators, shareUsers, labelsByProject] =
+      await Promise.all([
+        ProjectModel.countConversations(projectIds),
+        ProjectPinModel.getPinnedAtForProjects({ userId, projectIds }),
+        UserModel.getNamesByIds(ownerIds),
+        // A project's owner is its creator: `projects.user_id` is NOT NULL and
+        // stamped from the acting user, and ownership does not transfer.
+        CreatedByModel.resolve(ownerIds),
+        ProjectShareModel.getShareUsersForProjects(projectIds),
+        ProjectLabelModel.getLabelsForMany(projectIds),
+      ]);
     return candidates.map(({ project, viewerRole }) => ({
       id: project.id,
       name: project.name,
@@ -312,6 +334,7 @@ class ProjectService {
       viewerRole,
       ownerName: ownerNames.get(project.userId) ?? null,
       createdBy: lookupCreator(creators, project.userId),
+      labels: labelsByProject.get(project.id) ?? [],
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
       // Team-shared projects expose their team names for the badge to the
@@ -357,18 +380,26 @@ class ProjectService {
     });
     const projectIds = deleted.map((p) => p.id);
     const ownerIds = [...new Set(deleted.map((p) => p.userId))];
-    const [counts, pins, ownerNames, creators, shareTeams, shareUsers] =
-      await Promise.all([
-        ProjectModel.countConversations(projectIds),
-        ProjectPinModel.getPinnedAtForProjects({
-          userId: params.userId,
-          projectIds,
-        }),
-        UserModel.getNamesByIds(ownerIds),
-        CreatedByModel.resolve(ownerIds),
-        ProjectShareModel.getShareTeamsForProjects(projectIds),
-        ProjectShareModel.getShareUsersForProjects(projectIds),
-      ]);
+    const [
+      counts,
+      pins,
+      ownerNames,
+      creators,
+      shareTeams,
+      shareUsers,
+      labelsByProject,
+    ] = await Promise.all([
+      ProjectModel.countConversations(projectIds),
+      ProjectPinModel.getPinnedAtForProjects({
+        userId: params.userId,
+        projectIds,
+      }),
+      UserModel.getNamesByIds(ownerIds),
+      CreatedByModel.resolve(ownerIds),
+      ProjectShareModel.getShareTeamsForProjects(projectIds),
+      ProjectShareModel.getShareUsersForProjects(projectIds),
+      ProjectLabelModel.getLabelsForMany(projectIds),
+    ]);
     return deleted.map((project) => ({
       id: project.id,
       name: project.name,
@@ -377,6 +408,7 @@ class ProjectService {
       viewerRole: "admin" as ProjectViewerRole,
       ownerName: ownerNames.get(project.userId) ?? null,
       createdBy: lookupCreator(creators, project.userId),
+      labels: labelsByProject.get(project.id) ?? [],
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
       shareTeamNames:
@@ -409,6 +441,7 @@ class ProjectService {
       shareTeams,
       shareUsers,
       defaultAgent,
+      labels,
     ] = await Promise.all([
       ProjectShareModel.findByProjectId(project.id),
       ProjectModel.countConversations([project.id]),
@@ -426,6 +459,7 @@ class ProjectService {
             organizationId: project.organizationId,
           })
         : null,
+      ProjectLabelModel.getLabelsFor(project.id),
     ]);
     // Re-checked rather than returned raw: a pin can outlive its eligibility —
     // the agent soft-deleted, rescoped, or the project shared more widely than
@@ -465,6 +499,7 @@ class ProjectService {
       viewerRole,
       ownerName: ownerNames.get(project.userId) ?? null,
       createdBy: lookupCreator(creators, project.userId),
+      labels,
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
       shareTeamIds: canManage ? (share?.teamIds ?? []) : null,
@@ -496,6 +531,7 @@ class ProjectService {
     description?: string | null;
     icon?: string | null;
     defaultAgentId?: string | null;
+    labels?: LabelWithDetails[];
   }): Promise<void> {
     const project = await this.requireManageable(params);
     const fields: {
@@ -538,9 +574,14 @@ class ProjectService {
       });
       if (!stillReachable) fields.defaultAgentId = null;
     }
-    if (Object.keys(fields).length === 0) return;
+    if (Object.keys(fields).length === 0 && params.labels === undefined) return;
     try {
-      await ProjectModel.update({ id: params.id, fields });
+      if (Object.keys(fields).length > 0) {
+        await ProjectModel.update({ id: params.id, fields });
+      }
+      if (params.labels !== undefined) {
+        await ProjectLabelModel.syncLabels(params.id, params.labels);
+      }
     } catch (error) {
       if (error instanceof ProjectNameExistsError) {
         throw new ApiError(

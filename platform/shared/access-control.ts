@@ -1917,6 +1917,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // tool's RBAC). The owner can always read their own chat.
   [RouteId.CreateProjectFromConversation]: { project: ["create"] },
   [RouteId.GetProjects]: { project: ["read"] },
+  [RouteId.GetProjectLabelKeys]: { project: ["read"] },
+  [RouteId.GetProjectLabelValues]: { project: ["read"] },
   [RouteId.GetProject]: { project: ["read"] },
   [RouteId.UpdateProject]: { project: ["update"] },
   [RouteId.SetProjectShare]: { project: ["update"] },

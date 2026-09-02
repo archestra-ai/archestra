@@ -20,6 +20,7 @@ import {
   softDelete,
 } from "@/database/soft-delete";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
+import { ProjectLabelModel } from "./entity-labels";
 import ProjectShareModel from "./project-share";
 
 /**
@@ -538,12 +539,16 @@ class ProjectModel {
       .limit(1);
     if (!row) return null;
 
-    const share = await ProjectShareModel.findByProjectId(id);
+    const [share, labels] = await Promise.all([
+      ProjectShareModel.findByProjectId(id),
+      ProjectLabelModel.getLabelsFor(id),
+    ]);
     return {
       ...row,
       visibility: share?.visibility ?? null,
       shareTeamIds: [...(share?.teamIds ?? [])].sort(),
       shareUserIds: [...(share?.userIds ?? [])].sort(),
+      labels: labels.map(({ key, value }) => `${key}:${value}`).sort(),
     };
   }
 

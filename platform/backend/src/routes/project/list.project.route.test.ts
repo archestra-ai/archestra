@@ -68,6 +68,35 @@ describe("GET /api/projects (scope + search)", () => {
   const list = (query = "") =>
     app.inject({ method: "GET", url: `/api/projects${query}` });
 
+  test("returns labels and filters by them", async () => {
+    await projectService.create({
+      organizationId,
+      userId: viewer.id,
+      name: "ready-project",
+      description: null,
+      labels: [{ key: "stage", value: "ready" }],
+    });
+    await create(viewer, "plain-project");
+
+    const response = await list("?labels=stage%3Aready");
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject([
+      {
+        name: "ready-project",
+        labels: [{ key: "stage", value: "ready" }],
+      },
+    ]);
+
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/projects/labels/keys",
+        })
+      ).json(),
+    ).toEqual(["stage"]);
+  });
+
   test("scope filters by share visibility (personal / team / org)", async ({
     makeTeam,
     makeTeamMember,

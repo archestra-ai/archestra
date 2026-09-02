@@ -8,21 +8,26 @@ import {
 import { FolderKanban, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AgentIcon } from "@/components/agent-icon";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { IdentityFields } from "@/components/identity-fields";
+import { LabelTags } from "@/components/label-tags";
 import { LoadingState } from "@/components/loading";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
@@ -59,6 +64,10 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import {
+  useProjectLabelKeys,
+  useProjectLabelValues,
+} from "@/lib/entity-labels.query";
 import {
   type BulkCardSelectionProps,
   useBulkCardSelection,
@@ -104,6 +113,7 @@ function ProjectsList() {
   const { scope, teamIds, authorIds, excludeAuthorIds, hasActiveScopeFilters } =
     useScopeFilterParams();
   const search = searchParams.get("search") ?? undefined;
+  const labelsFilter = searchParams.get("labels") ?? undefined;
   // The trash. The backend serves this slice to project admins only (empty for
   // everyone else), and the status filter that reaches it is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
@@ -120,6 +130,7 @@ function ProjectsList() {
     authorIds,
     excludeAuthorIds,
     status: isDeletedView ? "deleted" : undefined,
+    labels: labelsFilter,
     toastOnError: false,
   });
   const {
@@ -161,7 +172,7 @@ function ProjectsList() {
   const togglePin = (project: ProjectListItem) =>
     pinProjectMutation.mutate({ id: project.id, pinned: !project.pinnedAt });
   // Only consulted on the active slice; the trash has its own empty state.
-  const hasActiveFilter = hasActiveScopeFilters || !!search;
+  const hasActiveFilter = hasActiveScopeFilters || !!search || !!labelsFilter;
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).
   // Show a retry state rather than the setup prompt, which would wrongly imply
@@ -276,6 +287,13 @@ function ProjectsList() {
                     ownerLabelPlural="projects"
                     allLabel="All projects"
                     adminPermission={{ project: ["admin"] }}
+                  />
+                  <EntityLabelFilter
+                    useLabelKeys={useProjectLabelKeys}
+                    useLabelValues={useProjectLabelValues}
+                    className={filterControlClass({
+                      active: Boolean(labelsFilter),
+                    })}
                   />
                 </>
               )}
@@ -638,15 +656,24 @@ function ProjectCard({
           }
         />
         <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-          <Link
-            href={`/projects/${project.id}`}
-            className="flex min-w-0 items-center gap-2"
-          >
-            <span className="shrink-0">
-              <AgentIcon icon={project.icon} fallbackType="project" size={18} />
-            </span>
-            <span className="min-w-0 truncate font-medium">{project.name}</span>
-          </Link>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Link
+              href={`/projects/${project.id}`}
+              className="flex min-w-0 items-center gap-2"
+            >
+              <span className="shrink-0">
+                <AgentIcon
+                  icon={project.icon}
+                  fallbackType="project"
+                  size={18}
+                />
+              </span>
+              <span className="min-w-0 truncate font-medium">
+                {project.name}
+              </span>
+            </Link>
+            <LabelTags labels={project.labels} />
+          </div>
           <span className="flex shrink-0 items-center gap-1">
             {/* Scope pill (personal/team/org) on every card. The owner label is
               added only on another member's PERSONAL project (admin oversight),
@@ -718,6 +745,8 @@ function CreateProjectDialog({
     mode: "onChange",
   });
   const createProject = useCreateProject();
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   // Without `agent:read` the list comes back empty, which would read as "this
   // org has no agents" rather than "not yours to set" — hide the field instead.
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -737,14 +766,17 @@ function CreateProjectDialog({
 
   const onSubmit = form.handleSubmit(
     async ({ name, description, icon, defaultAgentId }) => {
+      const nextLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
       const project = await createProject.mutateAsync({
         name: name.trim(),
         description: description.trim() || null,
         icon,
         defaultAgentId,
+        labels: nextLabels,
       });
       if (project) {
         form.reset();
+        setLabels([]);
         onOpenChange(false);
         router.push(`/projects/${project.id}`);
       }
@@ -758,7 +790,7 @@ function CreateProjectDialog({
       title="New project"
       description="Files the agent saves in this project are kept together and show up in your files."
       size="small"
-      isDirty={form.formState.isDirty}
+      isDirty={form.formState.isDirty || labels.length > 0}
       onSubmit={onSubmit}
       bodyClassName="space-y-4"
       footer={
@@ -854,6 +886,11 @@ function CreateProjectDialog({
           />
         </div>
       )}
+      <AdvancedLabelsSection
+        ref={labelsRef}
+        labels={labels}
+        onLabelsChange={setLabels}
+      />
     </StandardFormDialog>
   );
 }

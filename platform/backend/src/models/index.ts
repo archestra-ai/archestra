@@ -55,6 +55,7 @@ export {
   ModelLabelModel,
   OauthClientLabelModel,
   PluginLabelModel,
+  ProjectLabelModel,
   ServiceAccountLabelModel,
   SkillLabelModel,
   VirtualApiKeyLabelModel,

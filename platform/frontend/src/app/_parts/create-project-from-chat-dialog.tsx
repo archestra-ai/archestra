@@ -5,8 +5,10 @@ import {
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { IdentityFields } from "@/components/identity-fields";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -43,6 +45,8 @@ export function CreateProjectFromChatDialog({
     mode: "onChange",
   });
   const createFromChat = useCreateProjectFromConversation();
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const icon = form.watch("icon");
   const name = form.watch("name");
   const description = form.watch("description");
@@ -55,16 +59,19 @@ export function CreateProjectFromChatDialog({
   useEffect(() => {
     if (open) {
       form.reset({ name: defaultName, description: "", icon: null });
+      setLabels([]);
     }
   }, [open, defaultName, form]);
 
   const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
     if (!conversationId) return;
+    const nextLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const project = await createFromChat.mutateAsync({
       conversationId,
       name: name.trim(),
       description: description.trim() || null,
       icon,
+      labels: nextLabels,
     });
     if (project) {
       onOpenChange(false);
@@ -79,7 +86,9 @@ export function CreateProjectFromChatDialog({
       title="Create project from chat"
       description="This chat and its files move into the new project. Files the agent saves here are kept together and show up in your files."
       size="small"
+      isDirty={form.formState.isDirty || labels.length > 0}
       onSubmit={onSubmit}
+      bodyClassName="space-y-4"
       footer={
         <>
           <Button
@@ -150,6 +159,11 @@ export function CreateProjectFromChatDialog({
           </div>
         </div>
       </IdentityFields>
+      <AdvancedLabelsSection
+        ref={labelsRef}
+        labels={labels}
+        onLabelsChange={setLabels}
+      />
     </StandardFormDialog>
   );
 }

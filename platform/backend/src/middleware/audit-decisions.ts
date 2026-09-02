@@ -203,6 +203,10 @@ export const AUDIT_DECISIONS = {
   // admin — so delete and restore are cross-user administrative actions on
   // someone else's data, not the personal grouping this table started as.
   projectsTable: { audited: true, model: ProjectModel },
+  projectLabelsTable: {
+    audited: false,
+    reason: "join: project × label; parent (project) audited",
+  },
   projectSharesTable: {
     audited: false,
     reason: "project share metadata; parent (project) audited",

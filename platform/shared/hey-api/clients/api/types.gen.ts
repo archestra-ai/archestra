@@ -85308,12 +85308,183 @@ export type GetPluginSkillResponses = {
 
 export type GetPluginSkillResponse = GetPluginSkillResponses[keyof GetPluginSkillResponses];
 
+export type ProjectLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/projects/labels/keys';
+};
+
+export type ProjectLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ProjectLabelKeysError = ProjectLabelKeysErrors[keyof ProjectLabelKeysErrors];
+
+export type ProjectLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type ProjectLabelKeysResponse = ProjectLabelKeysResponses[keyof ProjectLabelKeysResponses];
+
+export type ProjectLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/projects/labels/values';
+};
+
+export type ProjectLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ProjectLabelValuesError = ProjectLabelValuesErrors[keyof ProjectLabelValuesErrors];
+
+export type ProjectLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type ProjectLabelValuesResponse = ProjectLabelValuesResponses[keyof ProjectLabelValuesResponses];
+
 export type GetProjectsData = {
     body?: never;
     path?: never;
     query?: {
         scope?: 'personal' | 'team' | 'org';
         search?: string;
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
         /**
          * Team IDs (comma-separated); only used when scope=team.
          */
@@ -85415,6 +85586,12 @@ export type GetProjectsResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -85433,6 +85610,12 @@ export type CreateProjectData = {
         description?: string | null;
         icon?: string | null;
         defaultAgentId?: string | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -85520,6 +85703,12 @@ export type CreateProjectResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -85538,6 +85727,12 @@ export type CreateProjectFromConversationData = {
         name?: string;
         description?: string | null;
         icon?: string | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -85625,6 +85820,12 @@ export type CreateProjectFromConversationResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -85812,6 +86013,12 @@ export type GetProjectResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -85836,6 +86043,15 @@ export type UpdateProjectData = {
         description?: string | null;
         icon?: string | null;
         defaultAgentId?: string | null;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -86301,6 +86517,12 @@ export type RestoreProjectResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;

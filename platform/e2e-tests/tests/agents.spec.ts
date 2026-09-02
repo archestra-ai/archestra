@@ -207,7 +207,7 @@ test("can create and delete an agent", {
   await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
 });
 
-test("can create an MCP gateway and land on the pre-selected connection guide", {
+test("can create an MCP gateway and land on its connection instructions", {
   tag: ["@firefox", "@webkit"],
 }, async ({ page, request, deleteAgent, makeRandomString, goToPage }) => {
   test.setTimeout(120_000);
@@ -221,15 +221,19 @@ test("can create an MCP gateway and land on the pre-selected connection guide", 
   try {
     gatewayId = await createViaWizard(page, "/mcp/gateways", GATEWAY_NAME);
 
-    // The create lands on the connection instructions, whose guided-setup link
-    // lands on /connection with the new gateway pre-selected.
-    await page
-      .getByRole("link", { name: /Set up a client step by step/ })
-      .click();
-    await page.waitForURL(
-      new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
-      { timeout: 15_000 },
-    );
+    // The create lands on the gateway's connection instructions — Connect is
+    // a gateway's own default section, so the endpoint someone needs in order
+    // to connect is the first thing on screen. `createViaWizard` has already
+    // asserted the URL; this asserts the section actually rendered.
+    //
+    // It used to click through a "set up a client step by step" footer link to
+    // /connection. That footer is gone: the page it pointed at is the one the
+    // reader is already on the equivalent of, and the link offered a Connect
+    // page to someone standing on one. /connection keeps its own coverage in
+    // skill-share.spec.ts.
+    await expect(page.getByRole("heading", { name: "Endpoint" })).toBeVisible({
+      timeout: 15_000,
+    });
   } finally {
     if (gatewayId) await deleteAgent(request, gatewayId);
   }

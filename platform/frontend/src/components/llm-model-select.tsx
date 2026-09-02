@@ -92,16 +92,20 @@ export function LlmModelOptionLabel({
   showPricing?: boolean;
   truncateModelName?: boolean;
 }) {
+  const secondaryText = showPricing
+    ? formatPricing(option)
+    : option.description;
+
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-start gap-2">
       <Image
         src={providerLogoUrl(option.provider)}
         alt={builtInProviderLabel(option.provider)}
         width={16}
         height={16}
-        className="shrink-0 rounded dark:invert"
+        className="mt-0.5 shrink-0 rounded dark:invert"
       />
-      <div className="min-w-0 flex-1 flex flex-col">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span
             className={cn(
@@ -114,26 +118,25 @@ export function LlmModelOptionLabel({
             {option.model}
           </span>
           <ModelBadges option={option} />
-          {option.capabilities && (
-            <div className="ml-auto flex max-w-full shrink-0 items-center gap-2">
-              <ModelCapabilityBadges
-                capabilities={option.capabilities}
-                showTextInput
-              />
-              <ModelContextLengthIndicator
-                contextLength={option.capabilities.contextLength}
-              />
-            </div>
-          )}
         </div>
-        {showPricing && (
-          <div className="truncate text-xs text-muted-foreground">
-            {formatPricing(option)}
-          </div>
-        )}
-        {!showPricing && option.description && (
-          <div className="truncate text-xs text-muted-foreground">
-            {option.description}
+        {(secondaryText || option.capabilities) && (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            {secondaryText && (
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                {secondaryText}
+              </span>
+            )}
+            {option.capabilities && (
+              <div className="ml-auto flex max-w-full shrink-0 items-center gap-2">
+                <ModelCapabilityBadges
+                  capabilities={option.capabilities}
+                  showTextInput
+                />
+                <ModelContextLengthIndicator
+                  contextLength={option.capabilities.contextLength}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

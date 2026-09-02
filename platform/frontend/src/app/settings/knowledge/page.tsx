@@ -470,7 +470,7 @@ function OcrModelSelector({
   selectedKeyId: string | null;
 }) {
   const { data: apiKeys } = useAvailableLlmProviderApiKeys();
-  const { data: allModels, isPending: modelsLoading } = useModelsWithApiKeys();
+  const { data: allModels, isPending: modelsLoading } = useLlmModels();
 
   const selectedProvider = useMemo(() => {
     if (!selectedKeyId || !apiKeys) return null;
@@ -484,9 +484,10 @@ function OcrModelSelector({
       // Vision-capable models only. Modality metadata is advisory: a model
       // with none (a custom endpoint) stays selectable — the save probe sends
       // a real PDF page and is the actual gate.
-      if (!m.inputModalities) return true;
+      if (!m.capabilities?.inputModalities) return true;
       return (
-        m.inputModalities.includes("pdf") || m.inputModalities.includes("image")
+        m.capabilities.inputModalities.includes("pdf") ||
+        m.capabilities.inputModalities.includes("image")
       );
     });
   }, [allModels, selectedProvider]);
@@ -513,9 +514,14 @@ function OcrModelSelector({
       value={value ?? ""}
       onValueChange={(v) => onChange(v || null)}
       options={models.map((model) => ({
-        value: model.modelId,
-        model: model.modelId,
+        value: model.id,
+        model: model.displayName ?? model.id,
+        modelId: model.id,
         provider: model.provider,
+        description: model.displayName === model.id ? undefined : model.id,
+        capabilities: model.capabilities,
+        isFree: model.isFree,
+        isBest: model.isBest,
       }))}
       placeholder="Select vision model..."
       searchPlaceholder="Search vision models..."

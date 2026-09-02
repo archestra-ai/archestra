@@ -206,6 +206,18 @@ function getRerankerModelTrigger() {
   return modelTrigger;
 }
 
+function getOcrModelTrigger() {
+  const modelTrigger = screen
+    .getAllByRole("combobox")
+    .find((el) => el.textContent?.includes("Select vision model"));
+
+  if (!modelTrigger) {
+    throw new Error("OCR model trigger not found");
+  }
+
+  return modelTrigger;
+}
+
 function makeCapabilities(
   overrides: Partial<ModelCapabilities> = {},
 ): ModelCapabilities {
@@ -573,6 +585,53 @@ describe("KnowledgeSettingsPage", () => {
       ).toBeInTheDocument();
       expect(
         screen.getByLabelText("Supports tool calling"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows OCR model names, ids, modalities, and capabilities in the dropdown", async () => {
+      const user = userEvent.setup();
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+        ocrChatApiKeyId: "key-1",
+        ocrModel: null,
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "Vision Key",
+          provider: "openai",
+          scope: "org",
+        },
+      ];
+      mockLlmModels = [
+        {
+          id: "vision-model-v1",
+          provider: "openai",
+          displayName: "Vision Model",
+          capabilities: makeCapabilities({
+            inputModalities: ["text", "image"],
+            supportsToolCalling: true,
+          }),
+        },
+      ];
+      renderPage();
+
+      await user.click(getOcrModelTrigger());
+
+      expect(screen.getByText("Vision Model")).toBeInTheDocument();
+      expect(screen.getByText("vision-model-v1")).toBeInTheDocument();
+      expect(screen.getByLabelText("Supports text input")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Supports vision (images)"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Supports tool calling"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("128,000 token context window"),
       ).toBeInTheDocument();
     });
   });

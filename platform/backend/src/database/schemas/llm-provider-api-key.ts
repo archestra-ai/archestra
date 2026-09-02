@@ -36,6 +36,20 @@ const llmProviderApiKeysTable = pgTable(
     teamId: text("team_id").references(() => team.id, {
       onDelete: "cascade",
     }),
+    /**
+     * Who created this key. Deliberately NOT `userId` above: that column is the
+     * *audience* of a `personal`-scoped key and is null on every `org`- and
+     * `team`-scoped one, so it answers "who may use this", not "who added it" —
+     * and the org-scoped keys are exactly the ones somebody needs to ask about.
+     * Its `ON DELETE cascade` is wrong here too: deleting the author must not
+     * delete an organization's provider key.
+     *
+     * Nullable: keys predating creator tracking have no answer, and the FK
+     * returns the column to "unknown" when the account is deleted.
+     */
+    createdBy: text("created_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
     /** Optional custom base URL override for the LLM provider API */
     baseUrl: text("base_url"),
     /** Optional runtime endpoint override when discovery and inference use different provider URLs. */

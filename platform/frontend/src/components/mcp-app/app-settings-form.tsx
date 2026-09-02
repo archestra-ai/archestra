@@ -13,6 +13,8 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { createdByFact } from "@/components/created-by-cell";
+import { DetailFacts } from "@/components/detail-facts";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
 import { Input } from "@/components/ui/input";
@@ -411,6 +413,9 @@ export function AppSettingsForm({
       className="flex min-h-0 flex-1 flex-col"
     >
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
+        {/* Who to ask about this app, stated before its settings — an admin
+            opening one through oversight is the reader who most needs it. */}
+        <DetailFacts facts={[createdByFact(app.createdBy)]} />
         {canUpdate && (
           <>
             <IdentityFields

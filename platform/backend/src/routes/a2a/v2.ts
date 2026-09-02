@@ -935,18 +935,21 @@ class A2AV2RouterError extends Error {
   }
 }
 
+/** The parsed `params` of any non-streaming JSON-RPC method this router serves. */
+type A2ARouteRequest =
+  | A2AProtocolSendMessageRequest
+  | A2AProtocolGetTaskRequest
+  | A2AProtocolCancelTaskRequest
+  | A2AProtocolListTasksRequest
+  | A2AProtocolTaskPushNotificationConfig
+  | A2AProtocolGetTaskPushNotificationConfigRequest
+  | A2AProtocolListTaskPushNotificationConfigsRequest
+  | A2AProtocolDeleteTaskPushNotificationConfigRequest;
+
 type A2ARouteFunc = (params: {
   actor: A2AActor;
   agentId: string;
-  request:
-    | A2AProtocolSendMessageRequest
-    | A2AProtocolGetTaskRequest
-    | A2AProtocolCancelTaskRequest
-    | A2AProtocolListTasksRequest
-    | A2AProtocolTaskPushNotificationConfig
-    | A2AProtocolGetTaskPushNotificationConfigRequest
-    | A2AProtocolListTaskPushNotificationConfigsRequest
-    | A2AProtocolDeleteTaskPushNotificationConfigRequest;
+  request: A2ARouteRequest;
 }) => Promise<unknown>;
 
 /** A validated SSE request: a streaming send, or a task subscription. */
@@ -987,10 +990,13 @@ class A2AV2Router {
       Boolean(resolveAgentDeployment(agent)),
     );
 
-    // Throws ZodError if request schema is invalid
-    schema.parse(params);
+    // Throws ZodError if request schema is invalid. Handlers receive the
+    // PARSED value rather than the raw params, so schema-level normalization
+    // (a generated `messageId`) reaches them — the streaming path below has
+    // always worked this way.
+    const parsed = schema.parse(params) as A2ARouteRequest;
 
-    return await func({ actor, agentId: agent.id, request: params });
+    return await func({ actor, agentId: agent.id, request: parsed });
   }
 
   /**

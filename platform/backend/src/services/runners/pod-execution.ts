@@ -297,7 +297,7 @@ async function followBackgroundTask(params: {
     // the answer at exactly the point the reader cares about.
     await Promise.race([streaming, delayMs(LOG_DRAIN_GRACE_MS)]);
 
-    const text = transcript.join("");
+    const text = extractFinalAnswer(transcript.join(""));
 
     if (completion.outcome === "failed") {
       throw new ApiError(
@@ -394,6 +394,33 @@ function delayMs(ms: number, signal?: AbortSignal): Promise<void> {
     }
     signal?.addEventListener("abort", finish, { once: true });
   });
+}
+
+/**
+ * Fence a maintained image writes its final answer between when the agent
+ * ran under a full-screen TUI. The pane transcript is then a screen
+ * recording — cursor moves, redraws, box glyphs — and joining it produces
+ * an unreadable "answer". A runtime that renders a TUI prints the fence and
+ * the answer once, after the session ends, so the reader gets prose.
+ *
+ * Absent (every one-shot runtime, and any image that predates this), the
+ * whole transcript is the answer, exactly as before.
+ */
+const FINAL_ANSWER_FENCE = "===ARCHESTRA-FINAL-ANSWER===";
+
+/**
+ * Take what a runtime fenced as its final answer, else the whole transcript.
+ * The LAST fence wins: a TUI can scroll an earlier one back into view, and
+ * the runtime prints the real one after the session is over.
+ */
+/** @public — exercised through pod-execution.test.ts */
+export function extractFinalAnswer(transcript: string): string {
+  const start = transcript.lastIndexOf(FINAL_ANSWER_FENCE);
+  if (start === -1) return transcript;
+  const answer = transcript.slice(start + FINAL_ANSWER_FENCE.length);
+  // A fence with nothing after it means the runtime died mid-write; the
+  // transcript is worth more than an empty string.
+  return answer.trim() === "" ? transcript : answer.replace(/^\r?\n/, "");
 }
 
 const LOG_DRAIN_GRACE_MS = 2_000;

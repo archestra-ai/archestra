@@ -1,4 +1,5 @@
 import {
+  CreatedByNullableSchema,
   EnvFromSchema,
   ImagePullSecretConfigSchema,
   LocalConfigEnvironmentDefaultSchema,
@@ -176,6 +177,8 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
       )
       .default([]),
     authorName: z.string().nullable().optional(),
+    /** The author, in the shape shared by every major object. */
+    createdBy: CreatedByNullableSchema.optional(),
   });
 
 export const ListInternalMcpCatalogSchema =

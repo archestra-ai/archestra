@@ -350,6 +350,54 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
+  it("states the creator on the General section and nowhere else", () => {
+    mockAgent({
+      ...baseAgent,
+      createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByText("Created by")).toBeVisible();
+    expect(screen.getByText("Ada Lovelace")).toBeVisible();
+  });
+
+  it("keeps the creator off the other sections, which repeat the record", () => {
+    mockSection("tools");
+    mockAgent({
+      ...baseAgent,
+      createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByText("Created by")).toBeNull();
+  });
+
+  it("states the creator on a gateway's Settings section, which is its General", () => {
+    // A gateway folds its editable sections into one Settings tab, so there
+    // is no `general` to key this on. The fact follows the form group that
+    // section mounts, not the section's name — keying it by name dropped the
+    // creator from gateways entirely.
+    mockSection("settings");
+    mockAgent({
+      ...baseAgent,
+      agentType: "mcp_gateway",
+      createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
+    });
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
+
+    expect(screen.getByText("Created by")).toBeVisible();
+    expect(screen.getByText("Ada Lovelace")).toBeVisible();
+  });
+
+  it("omits the creator for a built-in record, which belongs to nobody", () => {
+    // Absent rather than present-but-empty, which would read as missing data.
+    access = { ...access, isBuiltIn: true };
+    mockAgent({ ...baseAgent, builtIn: true });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByText("Created by")).toBeNull();
+  });
+
   it("names delegated task history Executions and gives it a section", () => {
     vi.mocked(useFeature).mockReturnValue(true);
     mockAgent({ ...baseAgent, backgroundExecution: {} });

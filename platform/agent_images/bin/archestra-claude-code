@@ -48,10 +48,84 @@ case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
     exec claude "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}"
     ;;
   one_shot)
-    # Delegation surfaces have nobody attached to exit the TUI. Print mode
-    # produces one terminal result and exits so the task can settle and report
-    # back to Slack, MCP, schedules, or an A2A caller.
-    exec claude --print "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}"
+    # Delegation has nobody attached to exit a TUI, which is why this mode
+    # exists — but `--print` draws NOTHING until the final answer, so the
+    # execution's live terminal sits blank for the whole run and a person who
+    # attaches cannot tell a working session from a wedged one.
+    #
+    # Run the real TUI instead, and give it the completion contract print mode
+    # provided for free: a Stop hook fires when the turn ends, writes the final
+    # assistant message out of the transcript, and drops a marker. A watchdog
+    # sees the marker, ends the session, and prints the answer behind the
+    # platform's fence — so the task still settles on one clean terminal
+    # result while the pane shows the native interface throughout.
+    #
+    # ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLAIN=1 forces the old print mode.
+    if [[ "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLAIN:-0}" == "1" ]] \
+      || ! command -v jq >/dev/null 2>&1; then
+      exec claude --print "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}"
+    fi
+
+    answer_file="${runtime_dir}/final-answer.txt"
+    done_marker="${runtime_dir}/turn-complete"
+    hook_script="${runtime_dir}/stop-hook.sh"
+    settings_file="${runtime_dir}/claude-settings.json"
+    rm -f "${answer_file}" "${done_marker}"
+
+    # The hook is handed the session JSON on stdin, including the transcript
+    # path. The last assistant text in that JSONL is the final answer —
+    # written before the marker so the watchdog never sees a marker without
+    # an answer beside it.
+    cat > "${hook_script}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+payload="$(cat)"
+transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
+if [[ -n "${transcript}" && -r "${transcript}" ]]; then
+  jq -rs '[.[]
+      | select(.type == "assistant")
+      | .message.content
+      | if type == "array" then (map(select(.type == "text") | .text) | join("")) else . end
+      | select(. != null and . != "")
+    ] | last // ""' "${transcript}" > "${runtime_dir}/final-answer.txt" 2>/dev/null || true
+fi
+touch "${runtime_dir}/turn-complete"
+HOOK
+    chmod 0700 "${hook_script}"
+    jq -n --arg cmd "${hook_script}" \
+      '{hooks:{Stop:[{matcher:"",hooks:[{type:"command",command:$cmd}]}]}}' \
+      > "${settings_file}"
+    args+=(--settings "${settings_file}")
+
+    claude "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" &
+    claude_pid=$!
+
+    # Bounded by the run's own lifetime: the pod's TTL and the platform's
+    # cancellation both outrank this loop, so it never becomes the reason a
+    # session hangs. A vanished process without a marker means Claude Code
+    # exited on its own — normal for an error path.
+    while kill -0 "${claude_pid}" 2>/dev/null; do
+      if [[ -f "${done_marker}" ]]; then
+        # Let the pane settle on the finished frame before tearing it down,
+        # then end the session the way a person would.
+        sleep 2
+        kill -TERM "${claude_pid}" 2>/dev/null || true
+        break
+      fi
+      sleep 2
+    done
+    wait "${claude_pid}" 2>/dev/null || true
+
+    # The fence tells the platform where the prose starts; without it the
+    # "answer" would be a recording of the TUI redrawing itself.
+    printf '\n===ARCHESTRA-FINAL-ANSWER===\n'
+    if [[ -s "${answer_file}" ]]; then
+      cat "${answer_file}"
+    else
+      echo "The session ended without producing a final message."
+    fi
+    printf '\n'
     ;;
   *)
     echo "archestra: unknown Background execution mode" >&2

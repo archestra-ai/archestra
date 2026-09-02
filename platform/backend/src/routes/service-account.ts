@@ -90,6 +90,7 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
         name: request.body.name,
         role: request.body.role,
+        createdBy: request.user.id,
       });
 
       return reply.send(serviceAccount);

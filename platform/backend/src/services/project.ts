@@ -12,7 +12,9 @@ import {
   AgentTeamModel,
   ConversationModel,
   ConversationNotOwnedError,
+  CreatedByModel,
   FileNameExistsError,
+  lookupCreator,
   ProjectAlreadyAssignedError,
   ProjectModel,
   ProjectNameExistsError,
@@ -293,10 +295,13 @@ class ProjectService {
 
     const projectIds = candidates.map((c) => c.project.id);
     const ownerIds = [...new Set(candidates.map((c) => c.project.userId))];
-    const [counts, pins, ownerNames, shareUsers] = await Promise.all([
+    const [counts, pins, ownerNames, creators, shareUsers] = await Promise.all([
       ProjectModel.countConversations(projectIds),
       ProjectPinModel.getPinnedAtForProjects({ userId, projectIds }),
       UserModel.getNamesByIds(ownerIds),
+      // A project's owner is its creator: `projects.user_id` is NOT NULL and
+      // stamped from the acting user, and ownership does not transfer.
+      CreatedByModel.resolve(ownerIds),
       ProjectShareModel.getShareUsersForProjects(projectIds),
     ]);
     return candidates.map(({ project, viewerRole }) => ({
@@ -306,6 +311,7 @@ class ProjectService {
       icon: project.icon,
       viewerRole,
       ownerName: ownerNames.get(project.userId) ?? null,
+      createdBy: lookupCreator(creators, project.userId),
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
       // Team-shared projects expose their team names for the badge to the
@@ -351,7 +357,7 @@ class ProjectService {
     });
     const projectIds = deleted.map((p) => p.id);
     const ownerIds = [...new Set(deleted.map((p) => p.userId))];
-    const [counts, pins, ownerNames, shareTeams, shareUsers] =
+    const [counts, pins, ownerNames, creators, shareTeams, shareUsers] =
       await Promise.all([
         ProjectModel.countConversations(projectIds),
         ProjectPinModel.getPinnedAtForProjects({
@@ -359,6 +365,7 @@ class ProjectService {
           projectIds,
         }),
         UserModel.getNamesByIds(ownerIds),
+        CreatedByModel.resolve(ownerIds),
         ProjectShareModel.getShareTeamsForProjects(projectIds),
         ProjectShareModel.getShareUsersForProjects(projectIds),
       ]);
@@ -369,6 +376,7 @@ class ProjectService {
       icon: project.icon,
       viewerRole: "admin" as ProjectViewerRole,
       ownerName: ownerNames.get(project.userId) ?? null,
+      createdBy: lookupCreator(creators, project.userId),
       conversationCount: counts.get(project.id) ?? 0,
       visibility: project.visibility,
       shareTeamNames:
@@ -397,6 +405,7 @@ class ProjectService {
       counts,
       pins,
       ownerNames,
+      creators,
       shareTeams,
       shareUsers,
       defaultAgent,
@@ -408,6 +417,7 @@ class ProjectService {
         projectIds: [project.id],
       }),
       UserModel.getNamesByIds([project.userId]),
+      CreatedByModel.resolve([project.userId]),
       ProjectShareModel.getShareTeamsForProjects([project.id]),
       ProjectShareModel.getShareUsersForProjects([project.id]),
       project.defaultAgentId
@@ -454,6 +464,7 @@ class ProjectService {
       icon: project.icon,
       viewerRole,
       ownerName: ownerNames.get(project.userId) ?? null,
+      createdBy: lookupCreator(creators, project.userId),
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
       shareTeamIds: canManage ? (share?.teamIds ?? []) : null,

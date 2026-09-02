@@ -23,7 +23,9 @@ import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
+import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DetailFacts } from "@/components/detail-facts";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -590,6 +592,18 @@ function AgentDetails({
                   </AlertDescription>
                 </Alert>
               )
+            )}
+
+            {/* Who to ask about this record, stated before its settings. A
+                built-in belongs to nobody, so the fact is absent there rather
+                than present-but-empty, which would read as missing data.
+
+                Keyed to the section that mounts the `configuration` group
+                rather than to `general` by name: a gateway's editable
+                sections are folded into one `settings` tab, which has no
+                `general` to hang this on. */}
+            {activeFormGroups.includes("configuration") && !isBuiltIn && (
+              <DetailFacts facts={[createdByFact(agent.createdBy)]} />
             )}
 
             {activeFormGroups.length > 0 && (

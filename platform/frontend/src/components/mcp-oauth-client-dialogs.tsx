@@ -9,6 +9,8 @@ import {
   AgentSelector,
   type AgentSelectorAgent,
 } from "@/components/agent-selector";
+import { createdByFact } from "@/components/created-by-cell";
+import { DetailFacts } from "@/components/detail-facts";
 import { FormDialog } from "@/components/form-dialog";
 import {
   GatewayGrantField,
@@ -96,6 +98,9 @@ export function EditOAuthClientDialog({
         }}
       >
         <DialogBody className="space-y-4">
+          {/* Provenance before the editable fields: who to ask before you
+              change somebody else's credential. */}
+          <DetailFacts facts={[createdByFact(oauthClient?.createdBy)]} />
           <div className="space-y-2">
             <Label htmlFor="edit-oauth-client-name">Name</Label>
             <Input

@@ -5,6 +5,8 @@ import type {
   ResourceVisibilityScope,
 } from "@archestra/shared";
 import { useEffect, useState } from "react";
+import { createdByFact } from "@/components/created-by-cell";
+import { DetailFacts } from "@/components/detail-facts";
 import { FormDialog } from "@/components/form-dialog";
 import {
   parseRedirectUris,
@@ -101,6 +103,9 @@ export function EditOAuthClientDialog({
         }}
       >
         <DialogBody className="space-y-4">
+          {/* Provenance before the editable fields: who to ask before you
+              change somebody else's credential. */}
+          <DetailFacts facts={[createdByFact(oauthClient?.createdBy)]} />
           <div className="space-y-2">
             <Label htmlFor="edit-oauth-client-name">Name</Label>
             <Input

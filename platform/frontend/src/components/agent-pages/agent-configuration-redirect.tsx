@@ -12,6 +12,7 @@ import {
 const SETUP_STEP_IDS: readonly AgentSetupStepId[] = [
   "configuration",
   "tools",
+  "messaging",
   "advanced",
 ];
 

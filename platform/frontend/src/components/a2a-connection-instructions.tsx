@@ -528,182 +528,176 @@ curl -X POST "${a2aEndpoint}" \\
             </>
           }
         >
-          {/* Collapsed by default: this is reference material, and open it
-              pushed everything else off the screen. */}
-          <Collapsible className="overflow-hidden rounded-md border">
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-              Show examples
-              <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-4 border-t p-4">
-              <div className="space-y-2">
-                <div className="space-y-1">
-                  <Label htmlFor={exampleTokenSelectId}>
-                    Token for examples
-                  </Label>
-                  <FieldDescription>
-                    Which token the requests below are written with.
-                  </FieldDescription>
-                </div>
-                <Select
-                  value={effectiveTokenId}
-                  onValueChange={setSelectedTokenId}
+          {/* No outer fold: the section is already named, and a box whose
+              closed state was one line of text made the reader open something
+              to find out what the section they had opened contained. The bulk
+              still folds — each request below is its own disclosure. */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label htmlFor={exampleTokenSelectId}>Token for examples</Label>
+                <FieldDescription>
+                  Which token the requests below are written with.
+                </FieldDescription>
+              </div>
+              <Select
+                value={effectiveTokenId}
+                onValueChange={setSelectedTokenId}
+              >
+                <SelectTrigger
+                  id={exampleTokenSelectId}
+                  className="min-h-[60px] w-full py-2.5"
                 >
-                  <SelectTrigger
-                    id={exampleTokenSelectId}
-                    className="min-h-[60px] w-full py-2.5"
-                  >
-                    <SelectValue placeholder="Select token">
-                      {effectiveTokenId && (
-                        <div className="flex flex-col items-start gap-0.5 text-left">
-                          <div>{getTokenDisplayName()}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {isPersonalTokenSelected
-                              ? "For your own integrations"
-                              : selectedTeamToken?.isOrganizationToken
-                                ? "Shared across the organization"
-                                : "Shared with this team"}
-                          </div>
+                  <SelectValue placeholder="Select token">
+                    {effectiveTokenId && (
+                      <div className="flex flex-col items-start gap-0.5 text-left">
+                        <div>{getTokenDisplayName()}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {isPersonalTokenSelected
+                            ? "For your own integrations"
+                            : selectedTeamToken?.isOrganizationToken
+                              ? "Shared across the organization"
+                              : "Shared with this team"}
                         </div>
-                      )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {userToken && (
-                      <SelectItem value={PERSONAL_TOKEN_ID}>
-                        <div className="flex flex-col items-start gap-0.5">
-                          <div>Personal Token</div>
-                          <div className="text-xs text-muted-foreground">
-                            For your own integrations
-                          </div>
-                        </div>
-                      </SelectItem>
+                      </div>
                     )}
-                    {tokens
-                      ?.filter((token) => !token.isOrganizationToken)
-                      .map((token) => {
-                        const unusable = token.worksWithProfile === false;
-                        return (
-                          <SelectItem
-                            key={token.id}
-                            value={token.id}
-                            disabled={unusable}
-                          >
-                            <div className="flex flex-col items-start gap-0.5">
-                              <div>
-                                {token.team?.name
-                                  ? `Team Token (${token.team.name})`
-                                  : token.name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {unusable
-                                  ? unusableTokenReason
-                                  : "Shared with this team"}
-                              </div>
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
-                    {tokens
-                      ?.filter((token) => token.isOrganizationToken)
-                      .map((token) => (
-                        <SelectItem key={token.id} value={token.id}>
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {userToken && (
+                    <SelectItem value={PERSONAL_TOKEN_ID}>
+                      <div className="flex flex-col items-start gap-0.5">
+                        <div>Personal Token</div>
+                        <div className="text-xs text-muted-foreground">
+                          For your own integrations
+                        </div>
+                      </div>
+                    </SelectItem>
+                  )}
+                  {tokens
+                    ?.filter((token) => !token.isOrganizationToken)
+                    .map((token) => {
+                      const unusable = token.worksWithProfile === false;
+                      return (
+                        <SelectItem
+                          key={token.id}
+                          value={token.id}
+                          disabled={unusable}
+                        >
                           <div className="flex flex-col items-start gap-0.5">
-                            <div>Organization Token</div>
+                            <div>
+                              {token.team?.name
+                                ? `Team Token (${token.team.name})`
+                                : token.name}
+                            </div>
                             <div className="text-xs text-muted-foreground">
-                              Shared across the organization
+                              {unusable
+                                ? unusableTokenReason
+                                : "Shared with this team"}
                             </div>
                           </div>
                         </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-3 border-t pt-4">
-                <CurlExampleSection
-                  key={`card-${effectiveTokenId}`}
-                  code={agentCardCurlCode}
-                  {...curlExampleProps}
-                />
-                <CurlExampleSection
-                  key={`send-${effectiveTokenId}`}
-                  code={curlCode}
-                  {...curlExampleProps}
-                />
-                <CurlExampleSection
-                  key={`stream-${effectiveTokenId}`}
-                  code={streamingCurlCode}
-                  {...curlExampleProps}
-                />
-                <Collapsible className="rounded-lg border">
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                    Continue the conversation
-                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="px-4 pb-4">
-                    <CurlExampleSection
-                      key={`reply-${effectiveTokenId}`}
-                      code={replyCurlCode}
-                      {...curlExampleProps}
-                    />
-                  </CollapsibleContent>
-                </Collapsible>
-                <Collapsible className="rounded-lg border">
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                    Approve or deny tool calls
-                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="px-4 pb-4">
-                    <CurlExampleSection
-                      key={`approval-${effectiveTokenId}`}
-                      code={approvalCurlCode}
-                      {...curlExampleProps}
-                    />
-                  </CollapsibleContent>
-                </Collapsible>
-                <Collapsible className="rounded-lg border">
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                    Run in the background
-                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="px-4 pb-4">
-                    <CurlExampleSection
-                      key={`background-${effectiveTokenId}`}
-                      code={backgroundTaskCurlCode}
-                      {...curlExampleProps}
-                    />
-                  </CollapsibleContent>
-                </Collapsible>
-                <Collapsible className="rounded-lg border">
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                    Reconnect to a running task
-                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="px-4 pb-4">
-                    <CurlExampleSection
-                      key={`subscribe-${effectiveTokenId}`}
-                      code={subscribeCurlCode}
-                      {...curlExampleProps}
-                    />
-                  </CollapsibleContent>
-                </Collapsible>
-                <Collapsible className="rounded-lg border">
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                    List and cancel tasks
-                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="px-4 pb-4">
-                    <CurlExampleSection
-                      key={`manage-${effectiveTokenId}`}
-                      code={manageTasksCurlCode}
-                      {...curlExampleProps}
-                    />
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-              {chatDeepLinkBlock}
-            </CollapsibleContent>
-          </Collapsible>
+                      );
+                    })}
+                  {tokens
+                    ?.filter((token) => token.isOrganizationToken)
+                    .map((token) => (
+                      <SelectItem key={token.id} value={token.id}>
+                        <div className="flex flex-col items-start gap-0.5">
+                          <div>Organization Token</div>
+                          <div className="text-xs text-muted-foreground">
+                            Shared across the organization
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-3 border-t pt-4">
+              <CurlExampleSection
+                key={`card-${effectiveTokenId}`}
+                code={agentCardCurlCode}
+                {...curlExampleProps}
+              />
+              <CurlExampleSection
+                key={`send-${effectiveTokenId}`}
+                code={curlCode}
+                {...curlExampleProps}
+              />
+              <CurlExampleSection
+                key={`stream-${effectiveTokenId}`}
+                code={streamingCurlCode}
+                {...curlExampleProps}
+              />
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  Continue the conversation
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`reply-${effectiveTokenId}`}
+                    code={replyCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  Approve or deny tool calls
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`approval-${effectiveTokenId}`}
+                    code={approvalCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  Run in the background
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`background-${effectiveTokenId}`}
+                    code={backgroundTaskCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  Reconnect to a running task
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`subscribe-${effectiveTokenId}`}
+                    code={subscribeCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  List and cancel tasks
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`manage-${effectiveTokenId}`}
+                    code={manageTasksCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+            {chatDeepLinkBlock}
+          </div>
         </SettingsSection>
       </SettingsSectionGroup>
     );

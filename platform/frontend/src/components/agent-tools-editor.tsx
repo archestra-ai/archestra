@@ -11,7 +11,14 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Search,
+  Server,
+} from "lucide-react";
+import Link from "next/link";
 import {
   forwardRef,
   useCallback,
@@ -21,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   AssignmentCombobox,
@@ -109,6 +117,15 @@ export interface AgentToolsEditorRef {
 }
 
 interface AgentToolsEditorProps {
+  /**
+   * Show the assignment without offering to change it: pills lose their pencil
+   * and remove control, and the Add combobox is not rendered.
+   *
+   * The form has always taken a `readOnly`, but it stopped at the fields it
+   * owns — this picker kept working for a reader who could not save, and the
+   * Connect page needs the same list purely as a statement of fact.
+   */
+  readOnly?: boolean;
   agentId?: string;
   assignmentScope?: AgentScope;
   assignmentTeamIds?: string[];
@@ -163,6 +180,7 @@ export const AgentToolsEditor = forwardRef<
   AgentToolsEditorProps
 >(function AgentToolsEditor(
   {
+    readOnly = false,
     agentId,
     assignmentScope,
     assignmentTeamIds,
@@ -181,6 +199,7 @@ export const AgentToolsEditor = forwardRef<
 ) {
   return (
     <AgentToolsEditorContent
+      readOnly={readOnly}
       agentId={agentId}
       assignmentScope={assignmentScope}
       assignmentTeamIds={assignmentTeamIds}
@@ -204,6 +223,7 @@ const AgentToolsEditorContent = forwardRef<
   AgentToolsEditorProps
 >(function AgentToolsEditorContent(
   {
+    readOnly = false,
     agentId,
     assignmentScope,
     assignmentTeamIds,
@@ -731,10 +751,20 @@ const AgentToolsEditorContent = forwardRef<
   }
 
   if (catalogItems.length === 0) {
+    // Installing one is an organization-wide job, not this record's, so the
+    // panel says whose it is and points there rather than stopping at the fact.
     return (
-      <p className="text-sm text-muted-foreground">
-        No MCP servers available in the catalog.
-      </p>
+      <EmptyState
+        className="py-6"
+        icon={Server}
+        title="No MCP servers are installed"
+        description="Servers are installed once for the whole organization. Until one is, there is nothing to assign here."
+        action={
+          <Button type="button" variant="outline" size="sm" asChild>
+            <Link href="/mcp/registry">Browse the MCP Registry</Link>
+          </Button>
+        }
+      />
     );
   }
 
@@ -782,9 +812,30 @@ const AgentToolsEditorContent = forwardRef<
     );
   }
 
+  // Nothing assigned yet, but there is something to assign: say what that costs
+  // the record rather than leaving a lone Add button to imply it.
+  const isEmpty = selectedCatalogs.length === 0;
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
+      <div
+        className={cn(
+          "flex flex-wrap gap-2",
+          isEmpty &&
+            "flex-col items-center rounded-md border border-dashed px-4 py-6 text-center",
+        )}
+      >
+        {isEmpty && (
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">No tools assigned yet</p>
+            {/* No record noun: this editor serves agents, gateways and
+                proxies, and naming one of them here is how the connection
+                strings drifted apart before. */}
+            <p className="text-xs text-muted-foreground">
+              Add an MCP server to choose tools from.
+            </p>
+          </div>
+        )}
         {selectedCatalogs.map((catalog) => (
           <McpServerPill
             key={catalog.id}
@@ -800,25 +851,35 @@ const AgentToolsEditorContent = forwardRef<
             initialPendingChanges={pendingChangesRef.current.get(catalog.id)}
             onPendingChanges={registerPendingChanges}
             onClearPendingChanges={clearPendingChanges}
+            readOnly={readOnly}
             onRemove={handleCatalogToggle}
             autoOpen={catalog.id === autoOpenCatalogId}
             onAutoOpened={() => setAutoOpenCatalogId(null)}
           />
         ))}
-        <AssignmentCombobox
-          items={comboboxItems}
-          selectedIds={selectedCatalogIds}
-          onToggle={handleCatalogToggle}
-          onItemAdded={setAutoOpenCatalogId}
-          placeholder="Search MCP servers..."
-          emptyMessage="No MCP servers found."
-          testId={E2eTestId.AgentToolsAddButton}
-          defaultOpen={openComboboxOnMount}
-          createAction={{
-            label: "Install New MCP Server",
-            href: "/mcp/registry",
-          }}
-        />
+        {/* Nothing to add when the list is a statement of fact. */}
+        {!readOnly && (
+          <AssignmentCombobox
+            items={comboboxItems}
+            selectedIds={selectedCatalogIds}
+            onToggle={handleCatalogToggle}
+            onItemAdded={setAutoOpenCatalogId}
+            placeholder="Search MCP servers..."
+            emptyMessage="No MCP servers found."
+            // The scope belongs to this list, not to the pills a pick produces.
+            note={
+              environmentScopingEnabled
+                ? `Filtered to the ${agentEnvironmentName ?? "Default"} environment.`
+                : undefined
+            }
+            testId={E2eTestId.AgentToolsAddButton}
+            defaultOpen={openComboboxOnMount}
+            createAction={{
+              label: "Install New MCP Server",
+              href: "/mcp/registry",
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -871,6 +932,8 @@ function McpServerCard({
 }
 
 interface McpServerPillProps {
+  /** Show the assignment without offering to change it. */
+  readOnly?: boolean;
   catalogItem: InternalMcpCatalogItem;
   displayName: string;
   assignedTools: AssignedTool[];
@@ -888,6 +951,7 @@ interface McpServerPillProps {
 }
 
 function McpServerPill({
+  readOnly = false,
   catalogItem,
   displayName,
   assignedTools,
@@ -1092,6 +1156,7 @@ function McpServerPill({
           size={14}
         />
       }
+      readOnly={readOnly}
       displayName={displayName}
       count={displayedCount}
       isEmpty={isEmpty}

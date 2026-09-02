@@ -22,8 +22,6 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import {
   AlertTriangle,
@@ -32,11 +30,9 @@ import {
   ChevronRight,
   Globe,
   InfoIcon,
-  PackageSearch,
   Plus,
   RotateCcw,
   Settings2,
-  Unplug,
   User,
   Users,
   X,
@@ -72,6 +68,7 @@ import {
   type EditableSkill,
 } from "@/components/agent-skills-editor";
 import type { GatewayLike } from "@/components/agent-skills-editor.utils";
+import { AgentToolBehaviorSettings } from "@/components/agent-tool-behavior-settings";
 import {
   AgentToolExclusionsEditor,
   type AgentToolExclusionsEditorRef,
@@ -204,14 +201,17 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn, isReportedApiError } from "@/lib/utils";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
+  assignedSubagentsSummary,
+  assignedToolsSummary,
+  excludedSourcesSummary,
+  excludedSubagentsSummary,
+  excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
-  MISSING_CREDENTIAL_BEHAVIOR_OPTIONS,
-  MISSING_CREDENTIAL_TONE,
   normalizeSuggestedPrompts,
+  publishedSkillsSummary,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
-  TOOL_CONNECTION_PROMPTING,
 } from "./agent-form.utils";
 import { AgentBackgroundExecutionCard } from "./agent-pages/agent-background-execution-card";
 
@@ -500,8 +500,26 @@ function SubagentsEditor({
     selectedAgentIds.includes(a.id),
   );
 
+  // Same rule as the knowledge editor: nothing excluded is a complete answer,
+  // nothing delegated is a state worth naming.
+  const isEmpty = tone === "delegate" && selectedAgents.length === 0;
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div
+      className={cn(
+        "flex flex-wrap gap-2",
+        isEmpty &&
+          "flex-col items-center rounded-md border border-dashed px-4 py-6 text-center",
+      )}
+    >
+      {isEmpty && (
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">No subagents assigned</p>
+          <p className="text-xs text-muted-foreground">
+            Every task is handled here, with nothing handed on.
+          </p>
+        </div>
+      )}
       {selectedAgents.map((agent) => (
         <SubagentPill
           key={agent.id}
@@ -515,6 +533,9 @@ function SubagentsEditor({
         items={comboboxItems}
         selectedIds={selectedAgentIds}
         onToggle={handleToggle}
+        // Without this the exclude side inherited the default "Add", so Auto
+        // mode offered to add an agent and then disabled whichever was picked.
+        label={tone === "exclude" ? "Disable subagents" : "Add"}
         placeholder={placeholder}
         emptyMessage="No agents found."
         createAction={
@@ -1172,17 +1193,23 @@ export function AgentForm({
   const [backgroundExecution, setBackgroundExecution] =
     useState<BackgroundExecutionConfig | null>(null);
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
-  const channelAssignmentsSaveRef = useRef<(() => Promise<boolean>) | null>(
-    null,
-  );
+  // Takes the id to write against: on create it is the one the record was just
+  // given, which does not exist when the handler is registered.
+  const channelAssignmentsSaveRef = useRef<
+    ((params?: { agentId: string }) => Promise<boolean>) | null
+  >(null);
   const registerChannelAssignmentsSave = useCallback(
-    (handler: (() => Promise<boolean>) | null) => {
+    (handler: ((params?: { agentId: string }) => Promise<boolean>) | null) => {
       channelAssignmentsSaveRef.current = handler;
     },
     [],
   );
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
+  // What the record will actually do. `isEnforcing` in
+  // agent-credential-readiness refuses to enforce on an `accessAllTools`
+  // record, so an Auto agent asks when a tool needs one whatever is stored —
+  // the same shape as progressive tool loading, which Auto also pins.
   const [missingCredentialBehavior, setMissingCredentialBehavior] =
     useState<MissingCredentialBehavior>("allow");
   // New agents default to Auto mode (implicit access to all tools); editing an
@@ -1250,21 +1277,31 @@ export function AgentForm({
     );
   // Knowledge needs an embedding model before either field can do anything, so
   // both modes say so in the same place and with the same words.
+  /**
+   * Knowledge is set up once for the organization, so this is a step nobody has
+   * taken rather than anything wrong with this record. As a bare grey sentence
+   * under a "(0)" count it read as the latter; framed, it reads as the former,
+   * and carries the way out where the reader can take it.
+   */
   const knowledgeNotConfiguredNotice = (
-    <p className="text-xs text-muted-foreground">
-      Configure an embedding model to use knowledge sources.
+    <div className="flex flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-center">
+      <p className="text-sm font-medium">Knowledge isn&apos;t set up</p>
+      <p className="max-w-prose text-xs text-muted-foreground">
+        An embedding model is set up once for the whole organization. Until one
+        is, there is nothing to assign here.
+      </p>
       {canAccessKnowledgeSettings && (
-        <>
-          {" "}
-          <Link
-            href="/settings/knowledge"
-            className="underline underline-offset-2"
-          >
-            Configure knowledge
-          </Link>
-        </>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          asChild
+        >
+          <Link href="/settings/knowledge">Configure knowledge</Link>
+        </Button>
       )}
-    </p>
+    </div>
   );
   // Skills published over `skill://`. Auto exposes every org-scoped skill in the
   // agent's environment minus exclusions; Custom publishes exactly the assigned
@@ -1339,9 +1376,19 @@ export function AgentForm({
     agentType === "mcp_gateway" || agentType === "agent";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   // The agents page documents this setting for gateways too.
+  // Auto pins the behaviour, so the row reports what will happen rather than
+  // the stored value the backend will ignore.
+  const effectiveMissingCredentialBehavior: MissingCredentialBehavior =
+    autoToolsMode ? "allow" : missingCredentialBehavior;
+  // `selectedToolsCount` counts only tools touched since load — it is summed
+  // from the editor's pending-changes map, which is empty for a record just
+  // opened. `pendingSelectedToolIds` is the editor's effective selection:
+  // pending edits unioned with the saved assignments of every catalog left
+  // alone. That is what "assigned" means here.
+  const assignedToolCount = pendingSelectedToolIds.size;
   const toolConnectionsDocsUrl = getDocsUrl(
     DocsPage.PlatformAgents,
-    "tool-connections",
+    "missing-connections",
   );
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
@@ -1388,7 +1435,9 @@ export function AgentForm({
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
-  const toolsPanelHasContent = showTools || showSkills || showsHooks;
+  // Skills moved to Advanced, so they no longer keep this panel alive: a record
+  // with only skills would otherwise mount an empty Tools & Knowledge tab.
+  const toolsPanelHasContent = showTools || showsHooks;
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change
   // is what the API will judge the assignment against.
@@ -2208,6 +2257,17 @@ export function AgentForm({
               });
             }
             await savePublishedSkills(savedAgentId);
+            // Channels picked on the wizard's messaging step, which had no id
+            // to be written against until a moment ago.
+            if (channelAssignmentsDirty) {
+              const saveChannelAssignments = channelAssignmentsSaveRef.current;
+              if (
+                saveChannelAssignments &&
+                !(await saveChannelAssignments({ agentId: savedAgentId }))
+              ) {
+                throw new Error("The messaging channels could not be assigned");
+              }
+            }
           } catch (error) {
             await deleteAgent.mutateAsync(savedAgentId);
             throw error;
@@ -2383,6 +2443,7 @@ export function AgentForm({
     supportsSubagents,
     agentBackgroundExecutionEnabled,
     backgroundExecution,
+    channelAssignmentsDirty,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2394,7 +2455,10 @@ export function AgentForm({
       toast.error("Please select at least one team");
       return;
     }
-    if (channelAssignmentsDirty) {
+    // Edit mode writes the assignments first, against an id that already
+    // exists. On create there is no id yet, so `performSave` writes them after
+    // the record lands, under the same rollback as the other staged editors.
+    if (agent && channelAssignmentsDirty) {
       const saveChannelAssignments = channelAssignmentsSaveRef.current;
       if (!saveChannelAssignments) {
         toast.error(
@@ -2410,6 +2474,7 @@ export function AgentForm({
     }
     await performSave();
   }, [
+    agent,
     name,
     isAdmin,
     scope,
@@ -2896,7 +2961,6 @@ export function AgentForm({
           {showMessagingSection &&
             agentType === "agent" &&
             !isBuiltIn &&
-            agent &&
             canReadAgentTriggers && (
               <SettingsSectionGroup
                 className={cn(!isActiveSection("messaging") && "hidden")}
@@ -2905,7 +2969,22 @@ export function AgentForm({
                     the two are different kinds of thing, and neither belongs
                     inside the other's list. */}
                 <AgentChatAppsEditor
-                  agent={agent}
+                  // Before the record exists the channels are picked against
+                  // the draft on this form, and written once Create has given
+                  // it an id.
+                  subject={
+                    agent ?? {
+                      id: null,
+                      name: name.trim() || "This agent",
+                      icon: icon || null,
+                      scope,
+                      authorId: currentUserId,
+                    }
+                  }
+                  emailAgent={agent ?? null}
+                  // See `confirmTransfers`: on create the write happens after
+                  // the record exists, so a cancel there would mean deleting it.
+                  confirmTransfers={!!agent}
                   readOnly={readOnly}
                   onDirtyChange={setChannelAssignmentsDirty}
                   standaloneSave={false}
@@ -2920,25 +2999,46 @@ export function AgentForm({
             >
               {/* Section 3: Tools & Knowledge Sources */}
               {showTools && (
-                <SettingsSection data-testid={E2eTestId.AgentToolsSection}>
-                  <div className="space-y-2">
-                    <Tabs
-                      value={autoToolsMode ? "auto" : "custom"}
-                      onValueChange={(value) => {
-                        const auto = value === "auto";
-                        setAccessAllTools(auto);
-                        // Dynamic access only works through the search/run
-                        // dispatch surface, so picking it enables that mode.
-                        if (auto) {
-                          setToolExposureMode("search_and_run_only");
-                        }
-                      }}
-                    >
-                      <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="auto">Auto</TabsTrigger>
-                        <TabsTrigger value="custom">Custom</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                <SettingsSection
+                  title="Tools &amp; Knowledge"
+                  description="What this agent can call while it works, and what it can search before answering."
+                  data-testid={E2eTestId.AgentToolsSection}
+                >
+                  <div className="space-y-3">
+                    {/* What the mode means, beside the control that sets it.
+                        A full-width tab bar over the whole panel read as the
+                        page's own navigation rather than this block's switch,
+                        and the count it governed sat somewhere else entirely.
+                        Both panels stay mounted, so the sentence is resolved
+                        here rather than inside either of them. */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm text-muted-foreground">
+                        {autoToolsMode
+                          ? excludedToolsSummary(
+                              exclusionsState
+                                ? exclusionsState.current.excludedToolIds.length
+                                : null,
+                            )
+                          : assignedToolsSummary(assignedToolCount)}
+                      </p>
+                      <Tabs
+                        value={autoToolsMode ? "auto" : "custom"}
+                        onValueChange={(value) => {
+                          const auto = value === "auto";
+                          setAccessAllTools(auto);
+                          // Dynamic access only works through the search/run
+                          // dispatch surface, so picking it enables that mode.
+                          if (auto) {
+                            setToolExposureMode("search_and_run_only");
+                          }
+                        }}
+                      >
+                        <TabsList>
+                          <TabsTrigger value="auto">All</TabsTrigger>
+                          <TabsTrigger value="custom">Manual</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
                     {/* Auto and Custom are the same pair of fields inversed —
                         every tool and source minus a set, or exactly a set — so
                         they carry the same order, the same widgets and the same
@@ -2951,17 +3051,10 @@ export function AgentForm({
                         !autoToolsMode && "hidden",
                       )}
                     >
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">
-                          {/* No count until the editor has loaded: it opens on
-                              a server-side pre-fill, so "(0)" would be a claim
-                              that nothing is excluded rather than "not yet
-                              known". */}
-                          All tools except
-                          {exclusionsState
-                            ? ` (${exclusionsState.current.excludedToolIds.length})`
-                            : ""}
-                        </p>
+                      <div
+                        className="space-y-2"
+                        data-testid={E2eTestId.AgentToolExclusions}
+                      >
                         <AgentToolExclusionsEditor
                           ref={agentToolExclusionsEditorRef}
                           agentId={agent?.id}
@@ -2973,12 +3066,19 @@ export function AgentForm({
                       </div>
                       {canReadKnowledgeBase && (
                         <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            All knowledge sources except (
-                            {disabledKnowledgeSourceIds.length})
-                          </p>
+                          {/* The count and the hint describe assigning, which
+                              is not on offer until knowledge is set up. The
+                              empty state is the whole answer there. */}
+                          {isKnowledgeConfigured && (
+                            <p className="text-sm text-muted-foreground">
+                              {excludedSourcesSummary(
+                                disabledKnowledgeSourceIds.length,
+                              )}
+                            </p>
+                          )}
                           {isKnowledgeConfigured ? (
                             <KnowledgeSourcesEditor
+                              readOnly={readOnly}
                               sources={environmentConnectors.map(
                                 (connector) => ({
                                   id: connector.id,
@@ -2992,7 +3092,7 @@ export function AgentForm({
                               selectedIds={disabledKnowledgeSourceIds}
                               onToggle={toggleDisabledKnowledgeSource}
                               tone="exclude"
-                              label="Disable"
+                              label="Disable sources"
                               createAction={KNOWLEDGE_CONNECTOR_CREATE_ACTION}
                               testIds={{
                                 container:
@@ -3014,32 +3114,22 @@ export function AgentForm({
                         autoToolsMode && "hidden",
                       )}
                     >
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">
-                          Tools ({selectedToolsCount})
-                        </p>
-                        {((!agent && selectedToolsCount > 0) ||
-                          environmentScopingEnabled) && (
+                      <div
+                        className="space-y-2"
+                        data-testid={E2eTestId.AgentToolAssignments}
+                      >
+                        {/* The environment scope moved into the server
+                            picker, where the list it describes actually is —
+                            here it sat over the pills a pick produces, which
+                            it says nothing about. */}
+                        {!agent && selectedToolsCount > 0 && (
                           <p className="text-xs text-muted-foreground">
-                            {!agent && selectedToolsCount > 0 && (
-                              <>
-                                Some recommended {appName} MCP tools are
-                                pre-selected for you.{" "}
-                              </>
-                            )}
-                            {environmentScopingEnabled && (
-                              <>
-                                MCP servers are filtered to the selected
-                                environment
-                                {agentEnvironmentName
-                                  ? ` ("${agentEnvironmentName}")`
-                                  : " (Default)"}
-                                .
-                              </>
-                            )}
+                            Some recommended {appName} MCP tools are
+                            pre-selected for you.
                           </p>
                         )}
                         <AgentToolsEditor
+                          readOnly={readOnly}
                           ref={agentToolsEditorRef}
                           agentId={agent?.id}
                           assignmentScope={scope}
@@ -3057,18 +3147,29 @@ export function AgentForm({
                       </div>
                       {canReadKnowledgeBase && (
                         <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            Knowledge sources (
-                            {assignedKnowledgeSourceIds.length})
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Assigning a source gives this{" "}
-                            {agentType === "mcp_gateway" ? "gateway" : "agent"}{" "}
-                            a <code>query_knowledge_sources</code> tool to
-                            search it.
-                          </p>
+                          {/* At zero the editor's own empty state names the
+                              count and the tool assigning one produces, so
+                              neither is repeated above it. */}
+                          {isKnowledgeConfigured &&
+                            assignedKnowledgeSourceIds.length > 0 && (
+                              <>
+                                <p className="text-sm text-muted-foreground">
+                                  Knowledge sources (
+                                  {assignedKnowledgeSourceIds.length})
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Assigning a source gives this{" "}
+                                  {agentType === "mcp_gateway"
+                                    ? "gateway"
+                                    : "agent"}{" "}
+                                  a <code>query_knowledge_sources</code> tool to
+                                  search it.
+                                </p>
+                              </>
+                            )}
                           {isKnowledgeConfigured ? (
                             <KnowledgeSourcesEditor
+                              readOnly={readOnly}
                               sources={assignableKnowledgeSources}
                               selectedIds={assignedKnowledgeSourceIds}
                               onToggle={toggleAssignedKnowledgeSource}
@@ -3090,132 +3191,50 @@ export function AgentForm({
                     </div>
                   </div>
 
-                  {/* Auto mode is progressive loading — dynamic access only
-                      works through the search/run dispatch surface, and the
-                      backend coerces the mode to match on every write path. The
-                      row used to be hidden there, which left the one setting
-                      Auto decides for you invisible; it now shows in both
-                      modes, on and locked in Auto. The row reads like the
-                      detail page's: the setting's icon tinted by its state, and
-                      a line on what the state means. */}
-                  <div className="flex items-center gap-3">
-                    <SettingIcon tone={progressiveToolLoading ? "on" : "off"}>
-                      <PackageSearch className="size-4" />
-                    </SettingIcon>
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <Label htmlFor="load-tools-when-needed">
-                        Progressive tool loading
-                      </Label>
-                      <FieldDescription>
-                        {/* Word for word the detail page's "Tools loaded"
-                            row, so the setting reads the same where it is
-                            chosen and where it is reported. */}
-                        {progressiveToolLoading ? (
-                          <>
-                            The model starts with{" "}
-                            <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                            <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> only, and
-                            reaches the rest by searching for them
-                            mid-conversation.
-                          </>
-                        ) : (
-                          <>
-                            Every assigned tool is in the model's context from
-                            the first message.
-                          </>
-                        )}{" "}
-                        {autoToolsMode && <>Auto mode always uses it. </>}
-                        <ExternalDocsLink
-                          href={toolExposureDocsUrl}
-                          className="underline"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      </FieldDescription>
-                    </div>
-                    <Switch
-                      id="load-tools-when-needed"
-                      checked={progressiveToolLoading}
-                      disabled={autoToolsMode}
-                      onCheckedChange={(checked) =>
+                  {/* How the tools above reach the model. They were briefly a
+                      section of their own, which gave two switches a heading
+                      and a description of their own and made the tab longer
+                      without making it clearer — and named that section
+                      "Loading" when only one of the two is about loading. They
+                      belong under the tools they qualify, ruled off so they do
+                      not read as a footnote to the pill row. */}
+                  {/* Hidden in Auto alone, where the backend pins both —
+                      progressive loading on, missing connections to asking
+                      when a tool needs one — and the mode's summary says so,
+                      which beats two locked controls.
+
+                      Not hidden merely because nothing is assigned yet: these
+                      are stored per record, so someone may set one before
+                      adding a tool, and a saved value with no way to reach it
+                      is worse than a row with nothing yet to act on. */}
+                  <div
+                    className={cn(
+                      // No `divide-y`: the row below draws its own rule,
+                      // inset past the icon column, and the two together
+                      // stacked one line on another.
+                      "mt-2 border-t pt-2",
+                      autoToolsMode && "hidden",
+                    )}
+                    data-testid={E2eTestId.AgentToolLoadingSection}
+                  >
+                    <AgentToolBehaviorSettings
+                      progressiveToolLoading={progressiveToolLoading}
+                      onProgressiveToolLoadingChange={(progressive) =>
                         setToolExposureMode(
-                          checked ? "search_and_run_only" : "full",
+                          progressive ? "search_and_run_only" : "full",
                         )
                       }
+                      missingCredentialBehavior={
+                        effectiveMissingCredentialBehavior
+                      }
+                      onMissingCredentialBehaviorChange={
+                        setMissingCredentialBehavior
+                      }
+                      locked={autoToolsMode}
+                      toolExposureDocsUrl={toolExposureDocsUrl}
+                      toolConnectionsDocsUrl={toolConnectionsDocsUrl}
                     />
                   </div>
-
-                  {/* Only meaningful for Custom mode: an Auto agent resolves
-                      tools from what each caller can already reach, so no
-                      caller can be missing a connection. */}
-                  {!autoToolsMode && (
-                    <div className="flex items-center gap-3">
-                      <SettingIcon
-                        tone={
-                          MISSING_CREDENTIAL_TONE[missingCredentialBehavior]
-                        }
-                      >
-                        <Unplug className="size-4" />
-                      </SettingIcon>
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <Label htmlFor="missing-credential-behavior">
-                          Tool connections
-                        </Label>
-                        <FieldDescription>
-                          {TOOL_CONNECTION_PROMPTING[missingCredentialBehavior]}{" "}
-                          <ExternalDocsLink
-                            href={toolConnectionsDocsUrl}
-                            className="underline"
-                            showIcon={false}
-                          >
-                            Learn more
-                          </ExternalDocsLink>
-                        </FieldDescription>
-                      </div>
-                      <Select
-                        value={missingCredentialBehavior}
-                        onValueChange={(value) =>
-                          setMissingCredentialBehavior(
-                            value as MissingCredentialBehavior,
-                          )
-                        }
-                      >
-                        {/* Fixed width: the trigger is `w-fit` by default, so
-                            the row would reflow by ~33px as the value changes. */}
-                        <SelectTrigger
-                          id="missing-credential-behavior"
-                          className="w-[240px]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        {/* `popper` is what makes `align` bind at all: the
-                            default `item-aligned` positioning clamps only the
-                            popover's left edge, so it ended flush with the
-                            browser window — over 100px outside the wizard's
-                            panel on a wide screen. Anchored to the trigger's
-                            right edge it stays in the column, and 28rem keeps
-                            every option's explainer at two lines. */}
-                        <SelectContent
-                          position="popper"
-                          align="end"
-                          className="w-[28rem] max-w-[calc(100vw-2rem)]"
-                        >
-                          {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map((option) => (
-                            <SelectItem
-                              key={option.value}
-                              value={option.value}
-                              description={
-                                TOOL_CONNECTION_PROMPTING[option.value]
-                              }
-                            >
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
                 </SettingsSection>
               )}
 
@@ -3230,21 +3249,25 @@ export function AgentForm({
                       <span>Loading subagents…</span>
                     </p>
                   ) : (
-                    <div className="space-y-2">
-                      <Tabs
-                        value={accessAllSubagents ? "auto" : "custom"}
-                        onValueChange={handleSubagentModeChange}
-                      >
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="auto">Auto</TabsTrigger>
-                          <TabsTrigger value="custom">Custom</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm text-muted-foreground">
+                          {accessAllSubagents
+                            ? excludedSubagentsSummary(disabledSubagentCount)
+                            : assignedSubagentsSummary(delegationTargetCount)}
+                        </p>
+                        <Tabs
+                          value={accessAllSubagents ? "auto" : "custom"}
+                          onValueChange={handleSubagentModeChange}
+                        >
+                          <TabsList>
+                            <TabsTrigger value="auto">All</TabsTrigger>
+                            <TabsTrigger value="custom">Manual</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </div>
                       {accessAllSubagents ? (
                         <div className="space-y-1.5">
-                          <p className="text-sm text-muted-foreground">
-                            All subagents except ({disabledSubagentCount})
-                          </p>
                           <SubagentsEditor
                             availableAgents={allInternalAgents}
                             selectedAgentIds={disabledSubagentIds}
@@ -3257,14 +3280,6 @@ export function AgentForm({
                         </div>
                       ) : (
                         <div className="space-y-1.5">
-                          <p className="pt-1 text-xs text-muted-foreground">
-                            Only the subagents you assign below can be delegated
-                            to by this{" "}
-                            {agentTypeDisplayName[agentType] || "agent"}.
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Subagents ({delegationTargetCount})
-                          </p>
                           <SubagentsEditor
                             availableAgents={allInternalAgents}
                             selectedAgentIds={selectedDelegationTargetIds}
@@ -3360,11 +3375,38 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
-              {/* Section 5: Skills published over MCP (SEP-2640). Gateways
-                  only, behind the draft-extension feature flag. */}
+              {/* Hooks (internal agents only; shown when the agent runtime is
+                  available, since hooks run in its sandbox). Hooks staged on
+                  a record that does not exist yet are written right after the
+                  create. */}
+              {showsHooks && (
+                <SettingsSection
+                  title="Hooks"
+                  description="Commands this agent runs around its own tool calls, inside its sandbox."
+                >
+                  <AgentHooksEditor
+                    ref={agentHooksEditorRef}
+                    agentId={agent?.id}
+                  />
+                </SettingsSection>
+              )}
+            </SettingsSectionGroup>
+          )}
+
+          {/* The Advanced step: background execution, security, passthrough
+              headers, the identity provider, and labels. A built-in agent has
+              none. */}
+          {showAdvancedSections && !isBuiltIn && (
+            <SettingsSectionGroup
+              className={cn(!isActiveSection("advanced") && "hidden")}
+            >
+              {/* Skills served over MCP (SEP-2640). Gateways only, behind the
+                  draft-extension feature flag. It sits in Advanced rather than
+                  beside Tools & Knowledge: these are resources the gateway
+                  serves out to clients, not things it calls for itself. */}
               {showSkills && (
                 <SettingsSection
-                  title="Published skills"
+                  title="Skills over MCP"
                   description={
                     <>
                       Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
@@ -3392,18 +3434,27 @@ export function AgentForm({
                       <span>Loading published skills…</span>
                     </p>
                   ) : (
-                    <div className="space-y-2">
-                      <Tabs
-                        value={accessAllSkills ? "auto" : "custom"}
-                        onValueChange={(value) =>
-                          setAccessAllSkills(value === "auto")
-                        }
-                      >
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="auto">Auto</TabsTrigger>
-                          <TabsTrigger value="custom">Custom</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm text-muted-foreground">
+                          {publishedSkillsSummary({
+                            publishesAll: accessAllSkills,
+                            excludedCount: excludedSkillIds.length,
+                            assignedCount: assignedSkillIds.length,
+                          })}
+                        </p>
+                        <Tabs
+                          value={accessAllSkills ? "auto" : "custom"}
+                          onValueChange={(value) =>
+                            setAccessAllSkills(value === "auto")
+                          }
+                        >
+                          <TabsList>
+                            <TabsTrigger value="auto">All</TabsTrigger>
+                            <TabsTrigger value="custom">Manual</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </div>
                       {accessAllSkills ? (
                         <div className="space-y-2">
                           <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
@@ -3420,9 +3471,6 @@ export function AgentForm({
                             </li>
                           </ul>
                           <div className="space-y-1.5">
-                            <p className="text-sm text-muted-foreground">
-                              All skills except ({excludedSkillIds.length})
-                            </p>
                             <AgentSkillsEditor
                               availableSkills={orgScopedSkills}
                               selectedSkillIds={excludedSkillIds}
@@ -3445,9 +3493,6 @@ export function AgentForm({
                             and a skill restricted to other environments not at
                             all.
                           </p>
-                          <p className="text-sm text-muted-foreground">
-                            Skills ({assignedSkillIds.length})
-                          </p>
                           <AgentSkillsEditor
                             availableSkills={availableSkills}
                             selectedSkillIds={assignedSkillIds}
@@ -3464,31 +3509,6 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
-              {/* Hooks (internal agents only; shown when the agent runtime is
-                  available, since hooks run in its sandbox). Hooks staged on
-                  a record that does not exist yet are written right after the
-                  create. */}
-              {showsHooks && (
-                <SettingsSection
-                  title="Hooks"
-                  description="Commands this agent runs around its own tool calls, inside its sandbox."
-                >
-                  <AgentHooksEditor
-                    ref={agentHooksEditorRef}
-                    agentId={agent?.id}
-                  />
-                </SettingsSection>
-              )}
-            </SettingsSectionGroup>
-          )}
-
-          {/* The Advanced step: background execution, security, passthrough
-              headers, the identity provider, and labels. A built-in agent has
-              none. */}
-          {showAdvancedSections && !isBuiltIn && (
-            <SettingsSectionGroup
-              className={cn(!isActiveSection("advanced") && "hidden")}
-            >
               {showsEnvironmentSelector && (
                 <SettingsSection
                   title="Environment"

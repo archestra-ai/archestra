@@ -12,6 +12,12 @@ import { cn } from "@/lib/utils";
 import { CatalogDocsLink } from "./catalog-docs-link";
 
 interface McpServerPillShellProps {
+  /**
+   * Render the pill as a statement rather than a control: no pencil, no
+   * popover, no remove button. Used where the assignment is shown for
+   * reference — the Connect page, or a reader who cannot change it.
+   */
+  readOnly?: boolean;
   /** Rendered inside the pill trigger, e.g. an `<McpCatalogIcon />`. */
   icon: React.ReactNode;
   displayName: string;
@@ -41,6 +47,7 @@ interface McpServerPillShellProps {
  * render an identical pill without sharing their (incompatible) data wiring.
  */
 export function McpServerPillShell({
+  readOnly = false,
   icon,
   displayName,
   count,
@@ -56,6 +63,21 @@ export function McpServerPillShell({
   triggerTestId,
   children,
 }: McpServerPillShellProps) {
+  if (readOnly) {
+    return (
+      <span className="inline-flex h-8 max-w-full min-w-0 items-center gap-1.5 rounded-md border px-3 text-xs opacity-70">
+        {icon}
+        <span className="min-w-0 truncate font-medium">{displayName}</span>
+        <span className="shrink-0 text-muted-foreground">({count})</span>
+        {note ? (
+          <span className="shrink-0 font-normal text-muted-foreground">
+            {note}
+          </span>
+        ) : null}
+      </span>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={onOpenChange} modal>
       <div className="flex max-w-full min-w-0 items-center">

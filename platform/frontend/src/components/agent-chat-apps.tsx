@@ -1,14 +1,25 @@
 "use client";
 
 import {
+  type AgentScope,
   type archestraApiTypes,
   MESSAGING_CHANNEL_LABELS,
 } from "@archestra/shared";
-import { ArrowRight, Info, LockKeyhole, Plus, X } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Info,
+  LockKeyhole,
+  Plus,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ChannelDetailsDialog } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
+import {
+  ChannelDetailsDialog,
+  channelDisplayName,
+} from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { ChannelIcon } from "@/components/channel-icon";
@@ -37,6 +48,7 @@ import {
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
+import { cn } from "@/lib/utils";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
 type Binding =
@@ -49,19 +61,54 @@ type AgentReferenceData = {
   href?: string;
 };
 
+/**
+ * What assigning channels needs to know about the record they are being
+ * assigned to. `id` is null in the create wizard, where the channels are picked
+ * before the record exists and written against its new id once it does.
+ */
+export type ChannelSubject = {
+  id: string | null;
+  name: string;
+  icon?: string | null;
+  scope: AgentScope;
+  authorId?: string | null;
+};
+
 /** Edit-wizard channel assignment and per-channel configuration. */
 export function AgentChatAppsEditor({
-  agent,
+  subject,
+  emailAgent,
   readOnly = false,
   onDirtyChange,
   standaloneSave = true,
+  confirmTransfers = true,
   onSaveHandlerChange,
 }: {
-  agent: Agent;
+  subject: ChannelSubject;
+  /**
+   * The saved record, for the Email half only — an address is issued to an
+   * agent that exists, so the create wizard passes null and the section is not
+   * rendered at all.
+   */
+  emailAgent: Agent | null;
   readOnly?: boolean;
   onDirtyChange?: (isDirty: boolean) => void;
   standaloneSave?: boolean;
-  onSaveHandlerChange?: (handler: (() => Promise<boolean>) | null) => void;
+  /**
+   * Ask before taking a channel off the agent that answers there now.
+   *
+   * The create wizard turns this off. Its save runs *after* the record has been
+   * written, so a dialog there would appear on top of "Creating...", and
+   * cancelling it would have to delete the agent just made. The claim is
+   * already disclosed twice before then — the pool row says "Answered by X"
+   * and the staged row says "Takes over from X" — and Create is itself the
+   * confirmation, the same way the wizard's staged tools and hooks are applied
+   * without one.
+   */
+  confirmTransfers?: boolean;
+  onSaveHandlerChange?: (
+    handler: ((params?: { agentId: string }) => Promise<boolean>) | null,
+  ) => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [optionOrder, setOptionOrder] = useState<string[]>([]);
@@ -81,9 +128,13 @@ export function AgentChatAppsEditor({
     >
   >({});
   const saveResultRef = useRef<((saved: boolean) => void) | null>(null);
-  const requestSaveRef = useRef<() => Promise<boolean>>(() =>
-    Promise.resolve(true),
-  );
+  // The id a pending plan will be written against. In the create wizard it
+  // arrives with the save call, after the record has been written, so it
+  // cannot be read off `subject` when the confirmation is finally accepted.
+  const saveTargetIdRef = useRef<string | null>(null);
+  const requestSaveRef = useRef<
+    (params?: { agentId: string }) => Promise<boolean>
+  >(() => Promise.resolve(true));
   const { data: session } = useSession();
   const { data: canCreateDm = false } = useHasPermissions({
     agentTrigger: ["create"],
@@ -116,7 +167,9 @@ export function AgentChatAppsEditor({
   const emailChannelVisible =
     emailProviderEnabled && !messagingChannelCatalog.isHidden("email");
   const { data: emailAddressData } = useAgentEmailAddress(
-    emailChannelVisible && agent.incomingEmailEnabled ? agent.id : null,
+    emailChannelVisible && emailAgent?.incomingEmailEnabled
+      ? emailAgent.id
+      : null,
   );
   const emailAddress = emailAddressData?.emailAddress ?? null;
   const applyBindingPlanMutation = useApplyChatOpsBindingPlan();
@@ -137,15 +190,18 @@ export function AgentChatAppsEditor({
   const bindings = (data?.bindings ?? []).filter((binding) =>
     visibleProviderIds.has(binding.provider),
   );
-  const assignedBindings = bindings.filter(
-    (binding) => binding.agentId === agent.id,
+  // Before the record exists its id is null, and a null-to-null comparison
+  // would claim every UNASSIGNED channel in the organization as this agent's.
+  const subjectId = subject.id;
+  const isOurs = (bindingAgentId: string | null | undefined) =>
+    !!subjectId && bindingAgentId === subjectId;
+  const assignedBindings = bindings.filter((binding) =>
+    isOurs(binding.agentId),
   );
   const foreignAgentIds = [
     ...new Set(
       bindings.flatMap((binding) =>
-        binding.agentId && binding.agentId !== agent.id
-          ? [binding.agentId]
-          : [],
+        binding.agentId && !isOurs(binding.agentId) ? [binding.agentId] : [],
       ),
     ),
   ];
@@ -175,14 +231,16 @@ export function AgentChatAppsEditor({
   const detailsDialogBinding = detailsBinding
     ? { ...detailsBinding, ...pendingChannelDetails[detailsBinding.id] }
     : null;
+  // Only a saved record has a page to link to.
+  const subjectReference: AgentReferenceData = {
+    id: subjectId ?? "",
+    name: subject.name,
+    icon: subject.icon,
+    ...(subjectId && { href: `/agents/${subjectId}` }),
+  };
   const detailsAssignedAgent = detailsBinding?.agentId
-    ? detailsBinding.agentId === agent.id
-      ? {
-          id: agent.id,
-          name: agent.name,
-          icon: agent.icon,
-          href: `/agents/${agent.id}`,
-        }
+    ? isOurs(detailsBinding.agentId)
+      ? subjectReference
       : (agentReferences.get(detailsBinding.agentId) ?? null)
     : null;
   const existingDmProviders = new Set(
@@ -203,14 +261,22 @@ export function AgentChatAppsEditor({
     [assignedBindings],
   );
   const assignmentOptions = buildAssignmentOptions({
-    agent,
+    subject,
+    // Same field, two hosts: the record's page calls its first tab General,
+    // the create wizard calls its first step Configuration.
+    visibilityLocation: emailAgent
+      ? "the General tab"
+      : "the Configuration step",
     agentNames,
     bindings,
     configuredDmProviders,
     currentUserId: session?.user?.id,
     canCreateDm,
   });
-  const persistedSelectionKey = `${agent.id}:${currentIds.join(",")}`;
+  // "new" while the record has no id, so the wizard's own selection still has
+  // a stable key to be compared against.
+  const subjectKey = subjectId ?? "new";
+  const persistedSelectionKey = `${subjectKey}:${currentIds.join(",")}`;
   const orderedOptions = orderAssignmentOptions(
     assignmentOptions,
     optionOrder,
@@ -218,7 +284,7 @@ export function AgentChatAppsEditor({
   );
   const normalizedSelectedIds = [...selectedIds].sort();
   const isDirty =
-    initializedAgentId === agent.id &&
+    initializedAgentId === subjectKey &&
     (normalizedSelectedIds.length !== currentIds.length ||
       normalizedSelectedIds.some((id, index) => id !== currentIds[index]) ||
       Object.keys(pendingChannelDetails).length > 0);
@@ -233,7 +299,7 @@ export function AgentChatAppsEditor({
 
   useEffect(() => {
     if (
-      initializedAgentId === agent.id ||
+      initializedAgentId === subjectKey ||
       isPending ||
       isLoadingError ||
       !allBindingsLoaded
@@ -243,9 +309,9 @@ export function AgentChatAppsEditor({
     setSelectedIds(currentIds);
     setOptionOrder(sortAssignmentOptionIds(assignmentOptions, currentIds));
     setOptionOrderKey(persistedSelectionKey);
-    setInitializedAgentId(agent.id);
+    setInitializedAgentId(subjectKey);
   }, [
-    agent.id,
+    subjectKey,
     allBindingsLoaded,
     currentIds,
     initializedAgentId,
@@ -257,7 +323,7 @@ export function AgentChatAppsEditor({
 
   useEffect(() => {
     if (
-      initializedAgentId !== agent.id ||
+      initializedAgentId !== subjectKey ||
       isDirty ||
       optionOrderKey === persistedSelectionKey
     ) {
@@ -266,7 +332,7 @@ export function AgentChatAppsEditor({
     setOptionOrder(sortAssignmentOptionIds(assignmentOptions, currentIds));
     setOptionOrderKey(persistedSelectionKey);
   }, [
-    agent.id,
+    subjectKey,
     assignmentOptions,
     currentIds,
     initializedAgentId,
@@ -292,8 +358,7 @@ export function AgentChatAppsEditor({
       result.data.bindings
         .filter(
           (binding) =>
-            visibleProviderIds.has(binding.provider) &&
-            binding.agentId === agent.id,
+            visibleProviderIds.has(binding.provider) && isOurs(binding.agentId),
         )
         .map((binding) => binding.id)
         .sort(),
@@ -306,13 +371,13 @@ export function AgentChatAppsEditor({
     saveResultRef.current = null;
   }
 
-  const applyAssignmentPlan = (plan: AssignmentPlan) => {
+  const applyAssignmentPlan = (plan: AssignmentPlan, targetAgentId: string) => {
     const changedAssignments = new Map<string, AtomicAssignmentUpdate>();
     for (const expected of plan.expectedAssignments) {
       changedAssignments.set(expected.id, {
         bindingId: expected.id,
         expectedAgentId: expected.agentId,
-        nextAgentId: agent.id,
+        nextAgentId: targetAgentId,
       });
     }
     for (const expected of plan.expectedUnassignments) {
@@ -326,7 +391,7 @@ export function AgentChatAppsEditor({
       const binding = bindings.find((item) => item.id === bindingId);
       if (!binding) continue;
       const changedAssignment = changedAssignments.get(bindingId);
-      if (!changedAssignment && binding.agentId !== agent.id) continue;
+      if (!changedAssignment && !isOurs(binding.agentId)) continue;
       const update = changedAssignment ?? {
         bindingId,
         expectedAgentId: binding.agentId,
@@ -344,7 +409,7 @@ export function AgentChatAppsEditor({
 
     applyBindingPlanMutation.mutate(
       {
-        targetAgentId: agent.id,
+        targetAgentId,
         updates: [...changedAssignments.values()],
         directMessages: plan.dmProviders.map((provider) => ({ provider })),
       },
@@ -376,22 +441,32 @@ export function AgentChatAppsEditor({
     );
   };
 
-  const requestSave = () =>
+  const requestSave = (params?: { agentId: string }) =>
     new Promise<boolean>((resolve) => {
       saveResultRef.current?.(false);
       saveResultRef.current = resolve;
+      // Created a moment ago by the wizard, or the record we are already on.
+      const targetAgentId = params?.agentId ?? subjectId;
+      if (!targetAgentId) {
+        toast.error(
+          "The channels could not be assigned: this agent has no id yet.",
+        );
+        resolveSave(false);
+        return;
+      }
+      saveTargetIdRef.current = targetAgentId;
       const plan = buildAssignmentPlan({
-        agentId: agent.id,
+        agentId: subjectId,
         agentNames,
         assignedBindings,
         bindings,
         selectedIds,
       });
-      if (plan.reassignments.length > 0) {
+      if (confirmTransfers && plan.reassignments.length > 0) {
         setPendingPlan(plan);
         return;
       }
-      applyAssignmentPlan(plan);
+      applyAssignmentPlan(plan, targetAgentId);
     });
 
   const cancelReassignment = () => {
@@ -448,7 +523,13 @@ export function AgentChatAppsEditor({
         resolveSave(false);
         return;
       }
-      applyAssignmentPlan(pendingPlan);
+      const targetAgentId = saveTargetIdRef.current;
+      if (!targetAgentId) {
+        setPendingPlan(null);
+        resolveSave(false);
+        return;
+      }
+      applyAssignmentPlan(pendingPlan, targetAgentId);
     } finally {
       setIsConfirming(false);
     }
@@ -459,7 +540,8 @@ export function AgentChatAppsEditor({
   });
   useEffect(() => {
     if (!onSaveHandlerChange) return;
-    const handler = () => requestSaveRef.current();
+    const handler = (params?: { agentId: string }) =>
+      requestSaveRef.current(params);
     onSaveHandlerChange(handler);
     return () => {
       onSaveHandlerChange(null);
@@ -558,9 +640,27 @@ export function AgentChatAppsEditor({
               {assignedOptions.length === 0 ? (
                 <div className="rounded-md border border-dashed px-4 py-6 text-center">
                   <p className="text-sm font-medium">Not in any channel yet</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Add one and this agent starts answering there.
-                  </p>
+                  {/* Which products those channels can come from. An empty
+                      state that only says "nothing here" leaves the reader to
+                      press Add channel to find out what is even on offer —
+                      and what the agent would do there is already the
+                      section's own description, so it is not repeated. */}
+                  {connectedProviders.length > 0 && (
+                    <ul className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+                      {connectedProviders.map((provider) => (
+                        <li
+                          key={provider}
+                          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+                        >
+                          <ChannelIcon
+                            channel={provider}
+                            className="size-4 shrink-0"
+                          />
+                          {MESSAGING_CHANNEL_LABELS[provider]}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ) : (
                 <ul className="space-y-2">
@@ -583,7 +683,7 @@ export function AgentChatAppsEditor({
                   selectedIds={selectedIds}
                   connectedProviders={connectedProviders}
                   unconnectedProviders={unconnectedProviders}
-                  agentId={agent.id}
+                  agentId={subjectId ?? ""}
                   agentReferences={agentReferences}
                   disabled={isSaving}
                   onPick={(id) => setOptionChecked(id, true)}
@@ -615,18 +715,22 @@ export function AgentChatAppsEditor({
         </SettingsSection>
       )}
 
-      <SettingsSection
-        title="Email"
-        description="An address that reaches this agent."
-      >
-        <AgentEmailSection
-          agent={agent}
-          emailAddress={emailAddress}
-          providerEnabled={emailProviderEnabled}
-          readOnly={readOnly}
-          onEdit={() => setEmailSettingsOpen(true)}
-        />
-      </SettingsSection>
+      {/* An address is issued to a record that exists, so there is nothing to
+          turn on or name while one is still being created. */}
+      {emailAgent && (
+        <SettingsSection
+          title="Email"
+          description="An address that reaches this agent."
+        >
+          <AgentEmailSection
+            agent={emailAgent}
+            emailAddress={emailAddress}
+            providerEnabled={emailProviderEnabled}
+            readOnly={readOnly}
+            onEdit={() => setEmailSettingsOpen(true)}
+          />
+        </SettingsSection>
+      )}
 
       <ReassignmentConfirmDialog
         open={!!pendingPlan}
@@ -636,12 +740,7 @@ export function AgentChatAppsEditor({
           }
         }}
         plan={pendingPlan}
-        targetAgent={{
-          id: agent.id,
-          name: agent.name,
-          icon: agent.icon,
-          href: `/agents/${agent.id}`,
-        }}
+        targetAgent={subjectReference}
         agentReferences={agentReferences}
         isPending={isSaving}
         onConfirm={() => void confirmReassignment()}
@@ -675,12 +774,14 @@ export function AgentChatAppsEditor({
           setDetailsBindingId(null);
         }}
       />
-      <AgentEmailSettingsDialog
-        agent={agent}
-        open={emailSettingsOpen}
-        onOpenChange={setEmailSettingsOpen}
-        providerEnabled={emailProviderEnabled}
-      />
+      {emailAgent && (
+        <AgentEmailSettingsDialog
+          agent={emailAgent}
+          open={emailSettingsOpen}
+          onOpenChange={setEmailSettingsOpen}
+          providerEnabled={emailProviderEnabled}
+        />
+      )}
     </>
   );
 }
@@ -711,7 +812,7 @@ function AssignedChannelRow({
   const staged = option.virtualDm
     ? "New direct message"
     : option.assignedAgentName
-      ? `Moving from ${option.assignedAgentName}`
+      ? `Takes over from ${option.assignedAgentName}`
       : null;
   return (
     // Named: the row's controls say "Settings" and an X, which only mean
@@ -722,8 +823,13 @@ function AssignedChannelRow({
     >
       <ChannelIcon channel={option.provider} className="size-4 shrink-0" />
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="truncate text-sm font-medium">{option.name}</span>
-        <span className="truncate text-xs text-muted-foreground">
+        {/* A flex item will not shrink past its content without min-w-0, so
+            without it `truncate` never fires and a long name pushes the row's
+            controls off the card instead. */}
+        <span className="min-w-0 max-w-full truncate text-sm font-medium">
+          {option.name}
+        </span>
+        <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground">
           {[MESSAGING_CHANNEL_LABELS[option.provider], option.workspaceName]
             .filter(Boolean)
             .join(" · ")}
@@ -821,9 +927,19 @@ function AddChannelPicker({
   const shown = unassigned.filter(
     (option) => option.provider === activeProvider && matches(option),
   );
+  // What you can actually click stays the list. An option this agent may never
+  // hold — most of the pool, for a personal agent — would otherwise bury the
+  // one or two pickable rows under its own copy of the same refusal.
+  const available = shown.filter((option) => !option.disabledReason);
+  const blocked = groupByDisabledReason(shown);
   // Searched here, found there: rather than an empty list, say where it is.
+  // Only pickable ones count — pointing at a tab with nothing claimable in it
+  // is a wasted trip.
   const elsewhere = unassigned.filter(
-    (option) => option.provider !== activeProvider && matches(option),
+    (option) =>
+      option.provider !== activeProvider &&
+      !option.disabledReason &&
+      matches(option),
   );
 
   if (!open) {
@@ -899,9 +1015,12 @@ function AddChannelPicker({
           }
         />
       </div>
-      <ScrollArea className="max-h-64">
+      {/* Radix scrolls its viewport, not the root, and the root here is sized
+          by max-height alone — without clipping it, a long pool spills out of
+          the panel and over whatever the page renders underneath. */}
+      <ScrollArea className="max-h-64 overflow-auto">
         <div className="p-2 pt-0">
-          {shown.map((option) => {
+          {available.map((option) => {
             const heldBy =
               option.assignedAgentId && option.assignedAgentId !== agentId
                 ? (agentReferences.get(option.assignedAgentId)?.name ??
@@ -912,8 +1031,7 @@ function AddChannelPicker({
               <button
                 key={option.id}
                 type="button"
-                disabled={!!option.disabledReason}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60"
                 onClick={() => {
                   onPick(option.id);
                   setOpen(false);
@@ -923,18 +1041,16 @@ function AddChannelPicker({
                 <span className="min-w-0 flex-1 truncate text-sm">
                   {option.name}
                 </span>
-                {option.disabledReason ? (
-                  <span className="flex shrink-0 items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-                    <LockKeyhole className="size-3" />
-                    {option.disabledReason}
-                  </span>
-                ) : option.virtualDm ? (
+                {option.virtualDm ? (
                   <span className="shrink-0 text-xs text-muted-foreground">
                     A private chat with this agent
                   </span>
                 ) : (
                   heldBy && (
-                    <span className="shrink-0 text-xs text-muted-foreground">
+                    <span
+                      className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground"
+                      title={`Answered by ${heldBy}`}
+                    >
                       Answered by {heldBy}
                     </span>
                   )
@@ -942,7 +1058,7 @@ function AddChannelPicker({
               </button>
             );
           })}
-          {shown.length === 0 && (
+          {available.length === 0 && (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">
               {elsewhere.length > 0 && activeProvider ? (
                 <>
@@ -956,15 +1072,80 @@ function AddChannelPicker({
                     {MESSAGING_CHANNEL_LABELS[elsewhere[0].provider]}
                   </button>
                 </>
-              ) : normalized ? (
+              ) : blocked.length >
+                0 ? /* Something did match, so "no channels match" would be a lie —
+                   and the group below already names them and says why. */
+              null : normalized ? (
                 "No channels match."
               ) : (
                 "Every channel here is already assigned to this agent."
               )}
             </p>
           )}
+          {blocked.map(([reason, blockedOptions]) => (
+            <BlockedOptions
+              key={reason}
+              reason={reason}
+              options={blockedOptions}
+            />
+          ))}
         </div>
       </ScrollArea>
+    </div>
+  );
+}
+
+/**
+ * The part of the pool this agent may never hold, folded into one line.
+ *
+ * Every option in a group is refused for the same reason, so the reason is
+ * written once here rather than once per row — a personal agent is refused
+ * every shared channel in the organization, and thirty copies of that sentence
+ * was the loudest thing on the page. They stay one click from view, because
+ * "where did my channel go" is a fair question to ask of a picker.
+ */
+function BlockedOptions({
+  reason,
+  options,
+}: {
+  reason: string;
+  options: AssignmentOption[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-1 border-t pt-1">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        className="flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm">
+            {options.length} not available to this agent
+          </span>
+          <span className="block text-xs text-muted-foreground">{reason}</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+            expanded && "rotate-180",
+          )}
+        />
+      </button>
+      {expanded && (
+        <ul className="pb-1">
+          {options.map((option) => (
+            <li
+              key={option.id}
+              className="truncate px-2 py-1.5 pl-9 text-sm text-muted-foreground"
+            >
+              {option.name}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1095,6 +1276,8 @@ type AssignmentOption = {
   id: string;
   provider: ChatProvider;
   name: string;
+  /** Whose direct message this is, when it is one. Names it in the a11y label. */
+  ownerEmail: string | null;
   workspaceName: string | null;
   assignedAgentId: string | null;
   assignedAgentName: string | null;
@@ -1113,6 +1296,7 @@ type AssignmentPlan = {
     provider: ChatProvider;
     channelName: string;
     agentName: string;
+    isDm: boolean;
   }>;
 };
 
@@ -1179,30 +1363,34 @@ function orderAssignmentOptions(
 }
 
 function buildAssignmentOptions({
-  agent,
+  subject,
   agentNames,
   bindings,
   configuredDmProviders,
   currentUserId,
   canCreateDm,
+  visibilityLocation,
 }: {
-  agent: Agent;
+  subject: ChannelSubject;
   agentNames: Map<string, string>;
   bindings: Binding[];
   configuredDmProviders: ChatProvider[];
   currentUserId: string | undefined;
   canCreateDm: boolean;
+  /** Where this agent's Visibility field is, named as its host names it. */
+  visibilityLocation: string;
 }): AssignmentOption[] {
   const virtualDmOptions = configuredDmProviders.map((provider) => ({
     id: `${VIRTUAL_DM_PREFIX}${provider}`,
     provider,
     name: "Direct message",
+    ownerEmail: null,
     workspaceName: null,
     assignedAgentId: null,
     assignedAgentName: null,
     disabledReason: !canCreateDm
       ? "You do not have permission to create a direct message assignment."
-      : agent.scope === "personal" && agent.authorId !== currentUserId
+      : subject.scope === "personal" && subject.authorId !== currentUserId
         ? "Only this personal agent's owner can assign a direct message."
         : null,
     virtualDm: true,
@@ -1210,26 +1398,48 @@ function buildAssignmentOptions({
   }));
   const realOptions = bindings.map((binding) => {
     const personalAssignmentRefused =
-      agent.scope === "personal" &&
-      (!binding.isDm || agent.authorId !== currentUserId);
+      subject.scope === "personal" &&
+      (!binding.isDm || subject.authorId !== currentUserId);
     return {
       id: binding.id,
       provider: binding.provider,
-      name: channelName(binding),
+      name: channelDisplayName(binding),
+      ownerEmail: binding.isDm ? binding.dmOwnerEmail : null,
       workspaceName: binding.workspaceName,
       assignedAgentId: binding.agentId,
       assignedAgentName:
-        binding.agentId && binding.agentId !== agent.id
+        binding.agentId && !(!!subject.id && binding.agentId === subject.id)
           ? (agentNames.get(binding.agentId) ?? "another agent")
           : null,
       disabledReason: personalAssignmentRefused
-        ? "This personal agent can use only its owner's direct messages."
+        ? // Says what to do about it, not just that it is so: the refusal is
+          // the agent's visibility, which is one field away and the reader's
+          // to change.
+          `A personal agent answers only in its owner's direct messages. Change Visibility from Personal on ${visibilityLocation} to use shared channels.`
         : null,
       virtualDm: false,
       isDm: binding.isDm,
     };
   });
   return [...virtualDmOptions, ...realOptions];
+}
+
+/**
+ * Refused options bucketed by the sentence that explains them, in the order
+ * the reasons first appear. Usually one bucket; a personal agent looking at a
+ * provider it cannot DM on has two.
+ */
+function groupByDisabledReason(
+  options: AssignmentOption[],
+): Array<[string, AssignmentOption[]]> {
+  const groups = new Map<string, AssignmentOption[]>();
+  for (const option of options) {
+    if (!option.disabledReason) continue;
+    const group = groups.get(option.disabledReason);
+    if (group) group.push(option);
+    else groups.set(option.disabledReason, [option]);
+  }
+  return [...groups];
 }
 
 function buildAssignmentPlan({
@@ -1239,7 +1449,8 @@ function buildAssignmentPlan({
   bindings,
   selectedIds,
 }: {
-  agentId: string;
+  /** Null before the record exists, when nothing can already be assigned to it. */
+  agentId: string | null;
   agentNames: Map<string, string>;
   assignedBindings: Binding[];
   bindings: Binding[];
@@ -1250,7 +1461,11 @@ function buildAssignmentPlan({
   );
   const toAssignBindings = bindings.filter(
     (binding) =>
-      selectedRealIds.includes(binding.id) && binding.agentId !== agentId,
+      selectedRealIds.includes(binding.id) &&
+      // `!== agentId` alone would skip an unassigned channel while the record
+      // itself is still unsaved: null !== null is false, so the very channels
+      // the wizard picked would never be written.
+      !(!!agentId && binding.agentId === agentId),
   );
   const toUnassignBindings = assignedBindings.filter(
     (binding) => !selectedRealIds.includes(binding.id),
@@ -1274,8 +1489,9 @@ function buildAssignmentPlan({
               bindingId: binding.id,
               expectedAgentId: binding.agentId,
               provider: binding.provider as ChatProvider,
-              channelName: channelName(binding),
+              channelName: channelDisplayName(binding),
               agentName: agentNames.get(binding.agentId) ?? "another agent",
+              isDm: binding.isDm,
             },
           ]
         : [],
@@ -1302,17 +1518,21 @@ function ReassignmentConfirmDialog({
 }) {
   const count = plan?.reassignments.length ?? 0;
   const singular = count === 1;
+  const noun = reassignmentNoun(plan);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
+      // Nothing is being moved anywhere: the room stays where it is and the
+      // agent answering in it changes. "Move channel to n8n" read as though
+      // the channel itself were being relocated between agents.
       title={
         singular
-          ? `Move channel to ${targetAgent.name}?`
-          : `Move ${count} channels to ${targetAgent.name}?`
+          ? `Change the agent for this ${noun.one}?`
+          : `Change the agent for ${count} ${noun.many}?`
       }
-      description="Each messaging channel can be assigned to only one agent at a time."
+      description={`A ${noun.one} answers with one agent at a time.`}
       size="medium"
       initialFocusRef={cancelButtonRef}
       headerClassName="px-12 sm:px-4"
@@ -1336,8 +1556,8 @@ function ReassignmentConfirmDialog({
                 .
               </p>
               <p className="text-muted-foreground">
-                The current {singular ? "agent" : "agents"} will stop receiving
-                messages from {singular ? "this channel" : "these channels"}.
+                The current {singular ? "agent" : "agents"} will stop answering{" "}
+                {singular ? `in this ${noun.one}` : `in these ${noun.many}`}.
               </p>
             </div>
           </div>
@@ -1345,7 +1565,7 @@ function ReassignmentConfirmDialog({
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium">Assignment changes</p>
             <Badge variant="secondary">
-              {count} {singular ? "channel" : "channels"}
+              {count} {singular ? noun.one : noun.many}
             </Badge>
           </div>
 
@@ -1360,9 +1580,11 @@ function ReassignmentConfirmDialog({
                   name={reassignment.channelName}
                 />
                 <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] grid-rows-[auto_minmax(1.25rem,auto)] items-center gap-x-3 gap-y-1">
-                  <p className="text-xs text-muted-foreground">From</p>
+                  <p className="text-xs text-muted-foreground">Answers now</p>
                   <span aria-hidden="true" />
-                  <p className="text-xs text-muted-foreground">To</p>
+                  <p className="text-xs text-muted-foreground">
+                    Answers after saving
+                  </p>
                   <div className="min-w-0 self-center">
                     <PlainAgentIdentity
                       agent={
@@ -1398,10 +1620,10 @@ function ReassignmentConfirmDialog({
           <Button type="submit" disabled={isPending}>
             <span>
               {isPending
-                ? "Moving..."
+                ? "Saving..."
                 : singular
-                  ? "Move channel"
-                  : "Move channels"}
+                  ? "Change agent"
+                  : "Change agents"}
             </span>
           </Button>
         </DialogStickyFooter>
@@ -1410,11 +1632,28 @@ function ReassignmentConfirmDialog({
   );
 }
 
+/**
+ * What to call the things being reassigned. A direct message is not a channel,
+ * and a confirmation that says "channel" over a row reading "Direct message
+ * (someone@example.com)" is the reason this dialog was hard to read.
+ */
+function reassignmentNoun(plan: AssignmentPlan | null) {
+  const items = plan?.reassignments ?? [];
+  if (items.length > 0 && items.every((item) => item.isDm)) {
+    return { one: "direct message", many: "direct messages" };
+  }
+  if (items.some((item) => item.isDm)) {
+    return { one: "conversation", many: "conversations" };
+  }
+  return { one: "channel", many: "channels" };
+}
+
 function assignmentOptionLabel(option: AssignmentOption) {
   const provider = MESSAGING_CHANNEL_LABELS[option.provider];
-  return option.isDm
-    ? `${provider} direct message`
-    : `${provider} channel ${option.name}`;
+  if (!option.isDm) return `${provider} channel ${option.name}`;
+  return option.ownerEmail
+    ? `${provider} direct message for ${option.ownerEmail}`
+    : `${provider} direct message`;
 }
 
 function PlainAgentIdentity({ agent }: { agent: AgentReferenceData }) {
@@ -1439,10 +1678,4 @@ function PlainChannelIdentity({
       <span className="break-words leading-5">{name}</span>
     </span>
   );
-}
-
-function channelName(binding: Binding) {
-  return binding.isDm
-    ? "Direct message"
-    : (binding.channelName ?? binding.channelId);
 }

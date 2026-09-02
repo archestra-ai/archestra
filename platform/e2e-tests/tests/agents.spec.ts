@@ -91,8 +91,19 @@ async function createViaWizard(
   }).toPass({ timeout: 20_000 });
   await createResponsePromise;
 
-  // 5. The create lands on the new record's Connect section.
-  const connectUrl = new RegExp(`${listPath}/([^/?#]+)\\?section=connect`);
+  // 5. The create lands on the new record's Connect section. A gateway opens
+  // on Connect, so that section IS its bare detail URL and the redirect names
+  // no section; every other kind opens on its configuration and so names
+  // Connect explicitly. Anchored either way, so a URL carrying some other
+  // section cannot satisfy the wait.
+  // Matched as a UUID, not as "any segment": the wizard itself lives at
+  // `<list>/new`, which a looser pattern satisfies the moment it loads —
+  // handing back "new" as the record id, which then 400s on cleanup.
+  const RECORD_ID = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
+  const connectUrl =
+    listPath === "/mcp/gateways"
+      ? new RegExp(`${listPath}/(${RECORD_ID})$`)
+      : new RegExp(`${listPath}/(${RECORD_ID})\\?section=connect$`);
   await page.waitForURL(connectUrl, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
   const id = page.url().match(connectUrl)?.[1];
@@ -196,7 +207,7 @@ test("can create and delete an agent", {
   await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
 });
 
-test("can create an MCP gateway and land on the pre-selected connection guide", {
+test("can create an MCP gateway and land on its connection instructions", {
   tag: ["@firefox", "@webkit"],
 }, async ({ page, request, deleteAgent, makeRandomString, goToPage }) => {
   test.setTimeout(120_000);
@@ -210,15 +221,19 @@ test("can create an MCP gateway and land on the pre-selected connection guide", 
   try {
     gatewayId = await createViaWizard(page, "/mcp/gateways", GATEWAY_NAME);
 
-    // The create lands on the connection instructions, whose guided-setup link
-    // lands on /connection with the new gateway pre-selected.
-    await page
-      .getByRole("link", { name: /Set up a client step by step/ })
-      .click();
-    await page.waitForURL(
-      new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
-      { timeout: 15_000 },
-    );
+    // The create lands on the gateway's connection instructions — Connect is
+    // a gateway's own default section, so the endpoint someone needs in order
+    // to connect is the first thing on screen. `createViaWizard` has already
+    // asserted the URL; this asserts the section actually rendered.
+    //
+    // It used to click through a "set up a client step by step" footer link to
+    // /connection. That footer is gone: the page it pointed at is the one the
+    // reader is already on the equivalent of, and the link offered a Connect
+    // page to someone standing on one. /connection keeps its own coverage in
+    // skill-share.spec.ts.
+    await expect(page.getByRole("heading", { name: "Endpoint" })).toBeVisible({
+      timeout: 15_000,
+    });
   } finally {
     if (gatewayId) await deleteAgent(request, gatewayId);
   }

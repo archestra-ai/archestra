@@ -65,7 +65,10 @@ export default function LlmProxyPage() {
   const providers = getConnectableProviders(organization);
 
   return (
-    <div className="max-w-4xl space-y-4">
+    // No inner cap: the page column is PageLayout's band, which is centred.
+    // A narrower wrapper inside it is not centred in turn, so the cards sat
+    // against the band's left edge with the leftover stranded on the right.
+    <div className="space-y-4">
       <ProxyEndpointCard
         baseUrl={baseUrl}
         providers={[...providers]}
@@ -86,12 +89,6 @@ export default function LlmProxyPage() {
         </Alert>
       )}
       <AuthenticationOverview />
-      <p className="text-xs text-muted-foreground">
-        Need setup steps for your app?{" "}
-        <Link href="/connection" className="text-primary hover:underline">
-          Open the Connect page.
-        </Link>
-      </p>
     </div>
   );
 }

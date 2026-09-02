@@ -30,9 +30,17 @@ test.describe("Agents", () => {
     await agentsPage.createButton.click();
     await page.waitForURL("/agents/new");
     await page.getByRole("textbox", { name: "Name" }).fill(NAME);
-    await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
-    await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
-    await page.getByTestId(E2eTestId.AgentSetupSubmitButton).click();
+    // Walk to the last step, however many the wizard has — the step list
+    // depends on the record's type and grows, and only the last step offers
+    // Create. Each Next is a plain state change, so this settles immediately.
+    const nextButton = page.getByTestId(E2eTestId.AgentSetupNextButton);
+    const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
+    await expect(async () => {
+      if (await submitButton.isVisible()) return;
+      await nextButton.click();
+      await expect(submitButton).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 20_000 });
+    await submitButton.click();
     await page.waitForURL(/\/agents\/agent-created\?section=connect$/);
 
     await agentsPage.goto();

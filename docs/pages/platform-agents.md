@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-31
+lastUpdated: 2026-09-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,7 +16,7 @@ An agent can include:
 - suggested prompts for common tasks in chat
 - a **Tools & Knowledge Sources** setting: **Auto** (every tool and knowledge source the chatting user can access, minus an exclusion list) or **Custom** (only assigned tools and sources)
 - optional **Load tools when needed** mode for keeping MCP `tools/list` small
-- a **Tool connections** setting — missing MCP server connections are requested when needed, requested at chat start, or required before use
+- a **Missing connections** setting — people are asked to connect a server when a tool needs it, when the chat opens, or before they can chat
 - a **Subagents** setting: **Auto** (delegate to any agent the chatting user can access, minus a disabled list) or **Custom** (only assigned delegation targets)
 - one or more assigned knowledge sources
 
@@ -79,15 +79,15 @@ Use this when the full tool menu is too large to send to the model on every turn
 
 See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
 
-## Tool Connections
+## Missing Connections
 
 An agent's tools can come from MCP servers that each person connects with their own account. Share that agent, and someone who has not connected one of those servers finds out only when a tool from it runs.
 
-**Tool connections** sits in **Custom** mode, under Tools & Knowledge Sources. It sets how the agent treats an MCP server the person using it has not connected yet:
+**Missing connections** sits under **Loading**, on the Tools & Knowledge tab. It appears in **Custom** mode. It sets when the person using the agent is asked to connect:
 
-- **Requested when needed** — the default. Nothing is shown up front; a connection is requested the moment a tool call needs one.
-- **Requested at chat start** — the chat opens by naming the servers not yet connected, with an offer to connect. Tools from those servers wait until then.
-- **Required before use** — the agent is marked unavailable in the chat picker, and a run is refused wherever it is triggered from, until every server is connected.
+- **When a tool needs it** — the default. Nothing is shown up front; a connection is requested the moment a tool call needs one.
+- **When the chat opens** — the chat opens by naming the servers not yet connected, with an offer to connect. Tools from those servers wait until then.
+- **Before they can chat** — the agent is marked unavailable in the chat picker, and a run is refused wherever it is triggered from, until every server is connected.
 
 A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the agent pins one shared account. Servers that need no credentials never count as missing.
 

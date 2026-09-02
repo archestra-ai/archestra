@@ -68,30 +68,35 @@ export const MISSING_CREDENTIAL_BEHAVIOR_OPTIONS: Array<{
   value: MissingCredentialBehavior;
   label: string;
 }> = [
-  { value: "allow", label: "Requested when needed" },
-  { value: "warn", label: "Requested at chat start" },
-  { value: "block", label: "Required before use" },
+  { value: "allow", label: "When a tool needs it" },
+  { value: "warn", label: "When the chat opens" },
+  { value: "block", label: "Before they can chat" },
 ];
 
 /**
- * When users get prompted to connect the servers behind these tools: one line
- * per choice, in the order the options are offered.
+ * What each choice actually does to the person chatting: one line per choice,
+ * in the order the options are offered.
  *
  * Written from inside a chat rather than from the wizard's side of the
  * decision, because the same sentence has to serve a reader who is choosing
  * and a reader who is looking up what was chosen. That also keeps the record's
  * own noun out of it: a sentence naming the agent needs a different noun on a
  * gateway and on a proxy, and interpolating one into a shared template is what
- * let the two surfaces drift apart before.
+ * let the two surfaces drift apart before — which `block` did anyway, naming
+ * the gateway on agents and proxies too until this was rewritten.
+ *
+ * Each says what happens rather than what is "requested": the old labels never
+ * said who was asked, for what, or what followed if they declined.
  */
 export const TOOL_CONNECTION_PROMPTING: Record<
   MissingCredentialBehavior,
   string
 > = {
-  allow: "Prompt only when a tool needs a server connection.",
-  warn: "At chat start, prompt for every server that is not connected. Their tools remain unavailable until it is.",
+  allow:
+    "Nothing up front. A missing credential surfaces mid-answer, the moment a tool needs it.",
+  warn: "The chat opens by naming every credential not yet connected. Tools needing one wait until it is connected.",
   block:
-    "Require every backing server to be connected before the gateway can be used.",
+    "Nothing can be sent until every credential the tools need is connected.",
 };
 
 /**
@@ -110,3 +115,72 @@ export const MISSING_CREDENTIAL_TONE: Record<
 
 type MissingCredentialBehavior =
   archestraApiTypes.GetAgentResponses["200"]["missingCredentialBehavior"];
+
+/**
+ * Auto mode as a sentence rather than a count.
+ *
+ * Auto pins two settings the reader cannot change — progressive tool loading is
+ * forced on, and missing connections always asks when a tool needs one — so
+ * their rows are not rendered here. What progressive loading buys is the part
+ * worth keeping, and it belongs in the one line the mode does get.
+ */
+export function excludedToolsSummary(count: number | null): string {
+  const saves = "Saves context by exposing only search_tools and run_tool";
+  // The exclusions editor opens on a server-side pre-fill, so until it has
+  // loaded the reach is not known — better to say nothing about it than to
+  // claim "every tool" and correct it a moment later.
+  if (count === null) return `${saves}.`;
+  if (count === 0) return `${saves}, with access to every tool.`;
+  return `${saves}, with access to every tool except ${count}.`;
+}
+
+/** The same, for the knowledge half of Auto mode. */
+export function excludedSourcesSummary(count: number): string {
+  if (count === 0) return "Every knowledge source, with no exceptions.";
+  return `Every knowledge source, except ${count}.`;
+}
+
+/**
+ * Custom mode's counterpart to {@link excludedToolsSummary}.
+ *
+ * Empty at zero: the editor draws its own empty state directly below, and a
+ * header that says "no tools assigned" over a panel headed "No tools assigned
+ * yet" is the same sentence twice.
+ */
+export function assignedToolsSummary(count: number): string {
+  if (count === 0) return "";
+  return `${count} tool${count === 1 ? "" : "s"} assigned.`;
+}
+
+/** Auto mode for subagents, as a sentence. */
+export function excludedSubagentsSummary(count: number): string {
+  if (count === 0) return "Every subagent, with no exceptions.";
+  return `Every subagent, except ${count}.`;
+}
+
+/** Custom mode for subagents, as a sentence. Empty at zero, as above. */
+export function assignedSubagentsSummary(count: number): string {
+  if (count === 0) return "";
+  return `${count} subagent${count === 1 ? "" : "s"} assigned.`;
+}
+
+/**
+ * Published skills, both modes in one call.
+ *
+ * One function rather than a ternary in the JSX: a conditional that resolves to
+ * bare text is re-parented by Chrome's translator and crashes React
+ * (facebook/react#11538), which the repo lints for.
+ */
+export function publishedSkillsSummary(params: {
+  publishesAll: boolean;
+  excludedCount: number;
+  assignedCount: number;
+}): string {
+  if (params.publishesAll) {
+    return params.excludedCount === 0
+      ? "Every organization skill in this environment, with no exceptions."
+      : `Every organization skill in this environment, except ${params.excludedCount}.`;
+  }
+  if (params.assignedCount === 0) return "";
+  return `${params.assignedCount} skill${params.assignedCount === 1 ? "" : "s"} published.`;
+}

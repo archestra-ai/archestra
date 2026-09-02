@@ -23,6 +23,8 @@ export interface KnowledgeSourceOption {
 }
 
 interface KnowledgeSourcesEditorProps {
+  /** Show the assignment without offering to change it. */
+  readOnly?: boolean;
   sources: KnowledgeSourceOption[];
   selectedIds: string[];
   onToggle: (id: string) => void;
@@ -61,6 +63,7 @@ export function KnowledgeSourcesEditor({
   emptyMessage = "No knowledge sources found.",
   createAction,
   testIds,
+  readOnly = false,
 }: KnowledgeSourcesEditorProps) {
   const comboboxItems: AssignmentComboboxItem[] = sources.map((source) => ({
     id: source.id,
@@ -76,8 +79,29 @@ export function KnowledgeSourcesEditor({
     selectedIds.includes(source.id),
   );
 
+  // Only the assigning side gets an empty state: nothing excluded is a normal,
+  // complete answer, while nothing assigned means the feature is off and the
+  // reader is owed the reason it would be worth turning on.
+  const isEmpty = tone === "assign" && selectedSources.length === 0;
+
   return (
-    <div className="flex flex-wrap gap-2" data-testid={testIds.container}>
+    <div
+      className={cn(
+        "flex flex-wrap gap-2",
+        isEmpty &&
+          "flex-col items-center rounded-md border border-dashed px-4 py-6 text-center",
+      )}
+      data-testid={testIds.container}
+    >
+      {isEmpty && (
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">No knowledge sources assigned</p>
+          <p className="text-xs text-muted-foreground">
+            Assign one and a <code>query_knowledge_sources</code> tool appears,
+            to search it.
+          </p>
+        </div>
+      )}
       {selectedSources.map((source) => (
         <div key={source.id} className="flex items-center">
           <span
@@ -93,32 +117,36 @@ export function KnowledgeSourcesEditor({
             <KnowledgeSourceIcon connectorType={source.connectorType} />
             <span className="min-w-0 truncate font-medium">{source.name}</span>
           </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
-            onClick={() => onToggle(source.id)}
-            aria-label={
-              tone === "exclude"
-                ? `Re-enable ${source.name}`
-                : `Remove ${source.name}`
-            }
-          >
-            <X className="h-3 w-3" />
-          </Button>
+          {!readOnly && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+              onClick={() => onToggle(source.id)}
+              aria-label={
+                tone === "exclude"
+                  ? `Re-enable ${source.name}`
+                  : `Remove ${source.name}`
+              }
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       ))}
-      <AssignmentCombobox
-        items={comboboxItems}
-        selectedIds={selectedIds}
-        onToggle={onToggle}
-        testId={testIds.combobox}
-        label={label}
-        placeholder={placeholder}
-        emptyMessage={emptyMessage}
-        createAction={createAction}
-      />
+      {!readOnly && (
+        <AssignmentCombobox
+          items={comboboxItems}
+          selectedIds={selectedIds}
+          onToggle={onToggle}
+          testId={testIds.combobox}
+          label={label}
+          placeholder={placeholder}
+          emptyMessage={emptyMessage}
+          createAction={createAction}
+        />
+      )}
     </div>
   );
 }

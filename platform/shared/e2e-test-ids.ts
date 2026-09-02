@@ -67,10 +67,13 @@ export const E2eTestId = {
   ProfileTeamBadge: "profile-team-badge",
   EditAgentButton: "edit-agent-button",
   AgentToolsSection: "agent-tools-section",
+  AgentToolLoadingSection: "agent-tool-loading-section",
   AgentToolsAddButton: "agent-tools-add-button",
   AgentKnowledgeSources: "agent-knowledge-sources",
   AgentKnowledgeSourcePill: "agent-knowledge-source-pill",
   AgentKnowledgeSourcesCombobox: "agent-knowledge-sources-combobox",
+  AgentToolExclusions: "agent-tool-exclusions",
+  AgentToolAssignments: "agent-tool-assignments",
   AgentKnowledgeSourceExclusions: "agent-knowledge-source-exclusions",
   AgentKnowledgeSourceExclusionPill: "agent-knowledge-source-exclusion-pill",
   AgentKnowledgeSourceExclusionsCombobox:

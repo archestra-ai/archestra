@@ -93,7 +93,11 @@ export function agentNewHref(kind: AgentPageKind): string {
   return `${AGENT_PAGE_CONFIGS[kind].basePath}/new`;
 }
 
-export type AgentSetupStepId = "configuration" | "tools" | "advanced";
+export type AgentSetupStepId =
+  | "configuration"
+  | "tools"
+  | "messaging"
+  | "advanced";
 
 export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
 
@@ -108,6 +112,7 @@ export type AgentDetailSection =
   | "tools"
   | "messaging"
   | "advanced"
+  | "settings"
   | "connect"
   | "executions";
 
@@ -116,12 +121,36 @@ export type AgentDetailSection =
  * `general` is the form's `configuration` group under the name the sidebar
  * gives it.
  */
-export const AGENT_SECTION_FORM_GROUP = {
-  general: "configuration",
-  tools: "tools",
-  messaging: "messaging",
-  advanced: "advanced",
-} as const satisfies Partial<Record<AgentDetailSection, AgentFormSection>>;
+/**
+ * The form groups a page section mounts.
+ *
+ * `settings` is a gateway's single configuration tab: it mounts three groups at
+ * once, which is all merging them amounts to — the form renders every group it
+ * is given. An agent keeps the groups on separate tabs, where its longer
+ * configuration has room to breathe.
+ */
+export const AGENT_SECTION_FORM_GROUPS = {
+  general: ["configuration"],
+  tools: ["tools"],
+  messaging: ["messaging"],
+  advanced: ["advanced"],
+  settings: ["configuration", "tools", "advanced"],
+} as const satisfies Partial<
+  Record<AgentDetailSection, readonly AgentFormSection[]>
+>;
+
+/**
+ * Where a bare detail URL lands, which is the record's first section.
+ *
+ * A gateway exists to be connected to, so it opens on Connect; everything else
+ * opens on its own configuration. The paramless form has to agree with this,
+ * or the tab bar's current tab would link somewhere other than the address it
+ * is rendered at — which is what tells the unsaved-changes guard that clicking
+ * the tab you are on goes nowhere.
+ */
+function defaultDetailSection(kind: AgentPageKind): AgentDetailSection {
+  return kind === "mcp_gateway" ? "connect" : "general";
+}
 
 export function agentDetailHref(
   kind: AgentPageKind,
@@ -129,7 +158,9 @@ export function agentDetailHref(
   section?: AgentDetailSection,
 ): string {
   const base = `${AGENT_PAGE_CONFIGS[kind].basePath}/${encodeURIComponent(id)}`;
-  return section && section !== "general" ? `${base}?section=${section}` : base;
+  return section && section !== defaultDetailSection(kind)
+    ? `${base}?section=${section}`
+    : base;
 }
 
 /**
@@ -143,7 +174,22 @@ export function agentConfigureHref(
   id: string,
   step?: AgentSetupStepId,
 ): string {
-  return agentDetailHref(kind, id, step && SECTION_FOR_SETUP_STEP[step]);
+  // "Edit this record" means its configuration, never wherever the page
+  // happens to open — a gateway opens on Connect, which configures nothing.
+  //
+  // A gateway holds that configuration in one Settings tab, so the three steps
+  // the wizard walks separately all resolve there. Sending it to `?section=tools`
+  // would name a section it does not have, and the page would quietly correct
+  // the URL back to Connect.
+  const section = step ? SECTION_FOR_SETUP_STEP[step] : "general";
+  if (kind === "mcp_gateway") {
+    return agentDetailHref(
+      kind,
+      id,
+      section === "messaging" ? section : "settings",
+    );
+  }
+  return agentDetailHref(kind, id, section);
 }
 
 /** The section a `?section=` value names, or the first when it names none. */
@@ -158,6 +204,7 @@ export function resolveAgentDetailSection(
 const SECTION_FOR_SETUP_STEP = {
   configuration: "general",
   tools: "tools",
+  messaging: "messaging",
   advanced: "advanced",
 } as const satisfies Record<AgentSetupStepId, AgentDetailSection>;
 
@@ -166,24 +213,36 @@ const CONFIGURATION_STEP: AgentSetupStep = {
   title: "Configuration",
 };
 const TOOLS_STEP: AgentSetupStep = { id: "tools", title: "Tools & Knowledge" };
+const MESSAGING_STEP: AgentSetupStep = {
+  id: "messaging",
+  title: "Messaging Channels",
+};
 const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
 
 /**
  * The setup wizard's steps for one agent — the same on create and on edit.
  * Configuration is what the record is and who can use it; Tools & Knowledge
- * holds everything the agent reaches; Advanced the settings a record rarely
- * needs. A built-in agent is a single-step edit, so its host renders no
+ * holds everything the agent reaches; Messaging Channels where it answers;
+ * Advanced the settings a record rarely needs. Only an `agent` has channels —
+ * a gateway or proxy is not something a person messages — so the step is
+ * offered for that type alone. A built-in agent is a single-step edit, so its host renders no
  * stepper. Connecting is not a step: it is the detail page's Connect section,
  * where a record lands once created and which the list's Connect action opens.
  */
 export function getAgentSetupSteps({
+  agentType,
   builtIn,
 }: {
   agentType: AgentType;
   builtIn: boolean;
 }): AgentSetupStep[] {
   if (builtIn) return [CONFIGURATION_STEP];
-  return [CONFIGURATION_STEP, TOOLS_STEP, ADVANCED_STEP];
+  return [
+    CONFIGURATION_STEP,
+    TOOLS_STEP,
+    ...(agentType === "agent" ? [MESSAGING_STEP] : []),
+    ADVANCED_STEP,
+  ];
 }
 
 /**
@@ -223,7 +282,13 @@ export function resolveLegacyAgentDialogRedirect(
       editId,
       openTools ? "tools" : undefined,
     );
-    return withCarried(openTools ? `${href}&openTools=true` : href);
+    // `&` only works if the href already carries a query, which is not
+    // guaranteed: a section that is the record's default carries no param.
+    return withCarried(
+      openTools
+        ? `${href}${href.includes("?") ? "&" : "?"}openTools=true`
+        : href,
+    );
   }
   const viewId = searchParams.get("view");
   if (viewId) return withCarried(agentDetailHref(kind, viewId));

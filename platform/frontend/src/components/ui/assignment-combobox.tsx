@@ -56,6 +56,12 @@ interface AssignmentComboboxProps {
   isSearching?: boolean;
   placeholder?: string;
   emptyMessage?: string;
+  /**
+   * One line under the search field, for something true of the list below it —
+   * a scope it is filtered to, say. It belongs here rather than beside the
+   * result of a pick, where it describes nothing the reader is looking at.
+   */
+  note?: React.ReactNode;
   createAction?: { label: string; href: string };
   className?: string;
   label?: string;
@@ -72,6 +78,7 @@ export function AssignmentCombobox({
   isSearching = false,
   placeholder = "Search...",
   emptyMessage = "No items found.",
+  note,
   createAction,
   className,
   label = "Add",
@@ -153,6 +160,9 @@ export function AssignmentCombobox({
                 : undefined
             }
           />
+          {note && (
+            <p className="px-1 pt-1.5 text-xs text-muted-foreground">{note}</p>
+          )}
         </div>
         <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
           <DropdownMenuGroup className="min-w-0">

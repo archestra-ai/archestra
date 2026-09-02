@@ -103,16 +103,18 @@ describe("A2AConnectionInstructions — detail layout", () => {
       `${getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}#authentication`,
     );
 
-    // Reference material stays folded away, and the chat deep link is folded
-    // with it rather than sitting in a section of its own.
-    expect(screen.queryByText("Continue the conversation")).toBeNull();
-    expect(screen.queryByLabelText("Token for examples")).toBeNull();
-    expect(screen.queryByText("Chat Deep Link")).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: /Show examples/ }));
+    // The section's own contents are not behind a second door: opening
+    // Examples is what shows the examples.
     expect(screen.getByLabelText("Token for examples")).toBeVisible();
-    expect(screen.getByText("Continue the conversation")).toBeVisible();
     expect(screen.getByText("Chat Deep Link")).toBeVisible();
+
+    // The bulk still folds, one disclosure per request, so the reference
+    // material does not push the rest of the tab off the screen.
+    expect(screen.getByText("Continue the conversation")).toBeVisible();
+    expect(screen.queryByText(/Reply to the task/i)).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: /Continue the conversation/ }),
+    );
   });
 
   it("leaves the messaging channels to their own tab", () => {

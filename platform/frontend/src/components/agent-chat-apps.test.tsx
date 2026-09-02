@@ -141,7 +141,24 @@ import {
   useChatOpsStatus,
 } from "@/lib/chatops/chatops.query";
 import { useConfig } from "@/lib/config/config.query";
-import { AgentChatAppsEditor as AgentChatApps } from "./agent-chat-apps";
+import { AgentChatAppsEditor } from "./agent-chat-apps";
+
+/**
+ * The saved-record mounting, which is what the detail page does: the same agent
+ * is both the subject the channels are assigned to and the record the Email
+ * half configures. The create wizard's mounting (no id, no email) is exercised
+ * by the tests that use `AgentChatAppsEditor` directly.
+ */
+function AgentChatApps({
+  agent,
+  ...rest
+}: { agent: Parameters<typeof AgentChatAppsEditor>[0]["emailAgent"] } & Omit<
+  Parameters<typeof AgentChatAppsEditor>[0],
+  "subject" | "emailAgent"
+>) {
+  if (!agent) throw new Error("agent required");
+  return <AgentChatAppsEditor subject={agent} emailAgent={agent} {...rest} />;
+}
 
 const bindings = [
   {
@@ -336,6 +353,25 @@ describe("AgentChatAppsEditor", () => {
     ).toBeNull();
   });
 
+  it("names the connected providers in the empty state, and only those", () => {
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: { bindings: [] },
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    render(<AgentChatApps agent={agent} />);
+
+    const empty = screen.getByText("Not in any channel yet").closest("div");
+    // Slack is configured; Telegram is not, so it is not somewhere this agent
+    // could be listening and has no business being offered here.
+    expect(within(empty as HTMLElement).getByText("Slack")).toBeVisible();
+    expect(within(empty as HTMLElement).queryByText("Telegram")).toBeNull();
+  });
+
   it("points at the provider holding a channel the search found elsewhere", async () => {
     const user = userEvent.setup();
     vi.mocked(useAllChatOpsBindings).mockReturnValue({
@@ -435,7 +471,7 @@ describe("AgentChatAppsEditor", () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(
       screen.getByRole("dialog", {
-        name: "Move channel to Operations Agent?",
+        name: "Change the agent for this channel?",
       }),
     ).toBeVisible();
   });
@@ -452,20 +488,29 @@ describe("AgentChatAppsEditor", () => {
     ).toBeDisabled();
   });
 
-  it("disables pending direct messages without trigger-create permission", async () => {
+  it("folds a direct message it cannot create into the unavailable group", async () => {
     const user = userEvent.setup();
     hasCreatePermission.mockReturnValue(false);
 
     render(<AgentChatApps agent={agent} />);
 
     await openPicker(user, "Slack");
-    const directMessage = await screen.findByRole("button", {
-      name: /^Direct message/,
+    // Not offered as something to click...
+    expect(
+      screen.queryByRole("button", { name: /^Direct message/ }),
+    ).toBeNull();
+    // ...but still reachable, under one line that says how many and why.
+    const group = await screen.findByRole("button", {
+      name: /1 not available to this agent/,
     });
-    expect(directMessage).toBeDisabled();
-    expect(directMessage).toHaveTextContent(
+    expect(group).toHaveTextContent(
       "You do not have permission to create a direct message assignment.",
     );
+    expect(group).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(group);
+    expect(group).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Direct message")).toBeVisible();
   });
 
   it("edits channel behavior and instructions from one details dialog", async () => {
@@ -725,20 +770,22 @@ describe("AgentChatAppsEditor", () => {
     await addChannel(user, "Operations", "MS Teams");
     // Claimed but not yet saved, and the row says whose it still is.
     expect(
-      within(channelRow("Operations")).getByText("Moving from Incident Agent"),
+      within(channelRow("Operations")).getByText(
+        "Takes over from Incident Agent",
+      ),
     ).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
 
     const dialog = screen.getByRole("dialog", {
-      name: "Move channel to Operations Agent?",
+      name: "Change the agent for this channel?",
     });
     expect(dialog).toHaveTextContent(
-      "Each messaging channel can be assigned to only one agent at a time.",
+      "A channel answers with one agent at a time.",
     );
     expect(dialog).toHaveTextContent(
-      "The current agent will stop receiving messages from this channel.",
+      "The current agent will stop answering in this channel.",
     );
     expect(
       within(dialog).getByRole("button", { name: "Cancel" }),
@@ -758,7 +805,7 @@ describe("AgentChatAppsEditor", () => {
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
-    await user.click(screen.getByRole("button", { name: "Move channel" }));
+    await user.click(screen.getByRole("button", { name: "Change agent" }));
 
     await waitFor(() => {
       expect(applyBindingPlan).toHaveBeenCalledWith(
@@ -792,7 +839,7 @@ describe("AgentChatAppsEditor", () => {
     );
 
     expect(
-      screen.queryByRole("dialog", { name: /Move/ }),
+      screen.queryByRole("dialog", { name: /Change the agent/ }),
     ).not.toBeInTheDocument();
     await waitFor(() => {
       expect(applyBindingPlan).toHaveBeenCalledWith(
@@ -866,8 +913,12 @@ describe("AgentChatAppsEditor", () => {
     rerender(<AgentChatApps agent={agent} onDirtyChange={onDirtyChange} />);
 
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
-    // Saved: the same direct message, now a real binding rather than a claim.
-    expect(channelRow("Direct message")).toBeVisible();
+    // Saved: the same direct message, now a real binding rather than a claim —
+    // and named by its owner, which is the only thing telling two apart.
+    const saved = channelRow("Slack direct message for admin@example.com");
+    expect(
+      within(saved).getByText("Direct message (admin@example.com)"),
+    ).toBeVisible();
     expect(screen.queryByText("New direct message")).toBeNull();
   });
 
@@ -889,7 +940,7 @@ describe("AgentChatAppsEditor", () => {
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
-    await user.click(screen.getByRole("button", { name: "Move channel" }));
+    await user.click(screen.getByRole("button", { name: "Change agent" }));
 
     await waitFor(() =>
       expect(
@@ -995,7 +1046,7 @@ describe("AgentChatAppsEditor", () => {
     );
 
     const dialog = screen.getByRole("dialog", {
-      name: "Move 4 channels to Operations Agent?",
+      name: "Change the agent for 4 channels?",
     });
     expect(within(dialog).getAllByText("Incident Agent")).toHaveLength(4);
     expect(within(dialog).getAllByText("Operations Agent")).toHaveLength(5);
@@ -1038,6 +1089,196 @@ describe("AgentChatAppsEditor", () => {
     render(<AgentChatApps agent={agent} />);
 
     expect(channelRow("General")).toBeVisible();
+  });
+
+  it("folds a personal agent's refused channels behind one line per reason", async () => {
+    const user = userEvent.setup();
+    const pool = Array.from({ length: 6 }, (_, index) => ({
+      ...bindings[0],
+      id: `shared-${index}`,
+      channelId: `CS${index}`,
+      channelName: `shared-${index}`,
+      agentId: null,
+    }));
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: { bindings: pool },
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    render(
+      <AgentChatApps
+        agent={
+          {
+            id: "agent-1",
+            name: "Personal Agent",
+            scope: "personal",
+            authorId: "user-1",
+          } as never
+        }
+      />,
+    );
+
+    await openPicker(user, "Slack");
+    // The refusal names the field that lifts it, and where that field is on
+    // this surface — the record's page calls its first tab General.
+    const reason =
+      "A personal agent answers only in its owner's direct messages. Change Visibility from Personal on the General tab to use shared channels.";
+    // One sentence for the whole group, not one per row.
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+    const group = screen.getByRole("button", {
+      name: /6 not available to this agent/,
+    });
+    expect(group).toHaveAttribute("aria-expanded", "false");
+    for (const binding of pool) {
+      expect(screen.queryByText(binding.channelName as string)).toBeNull();
+    }
+
+    // Expanding shows which channels they are — the provider's pool stays
+    // visible rather than being hidden away.
+    await user.click(group);
+    expect(group).toHaveAttribute("aria-expanded", "true");
+    for (const binding of pool) {
+      expect(screen.getByText(binding.channelName as string)).toBeVisible();
+    }
+
+    // Searching finds them in the group rather than claiming nothing matched.
+    await user.type(screen.getByLabelText("Search channels"), "shared-3");
+    expect(screen.queryByText("No channels match.")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /1 not available to this agent/ }),
+    ).toBeVisible();
+  });
+
+  it("titles a direct message's settings by its owner, not its provider id", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: {
+        bindings: [
+          {
+            ...bindings[0],
+            id: "binding-dm",
+            channelId: "19:dm000001@thread.tacv2",
+            channelName: null,
+            isDm: true,
+            dmOwnerEmail: "admin@example.com",
+            agentId: "agent-1",
+          },
+        ],
+      },
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    render(<AgentChatApps agent={agent} />);
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Direct message (admin@example.com)",
+    });
+    // The raw id belongs in the fact list, not in the heading.
+    expect(within(dialog).getByText("Chat ID")).toBeVisible();
+    expect(dialog).toHaveTextContent("for messages from this direct message.");
+  });
+
+  it("names the direct message a transfer is about, and calls it one", async () => {
+    const user = userEvent.setup();
+    const dmBinding = {
+      ...bindings[0],
+      id: "binding-dm",
+      channelId: "D1",
+      channelName: null,
+      isDm: true,
+      dmOwnerEmail: "admin@example.com",
+      agentId: "agent-2",
+    };
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: { bindings: [dmBinding] },
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    refetchBindings.mockResolvedValue({
+      data: { bindings: [dmBinding] },
+      isError: false,
+    });
+    render(<AgentChatApps agent={agent} />);
+
+    await addChannel(user, "Direct message \\(admin@example.com\\)", "Slack");
+    await user.click(
+      screen.getByRole("button", { name: "Save channel changes" }),
+    );
+
+    // A direct message is not a channel, and "which one" has an answer.
+    const dialog = screen.getByRole("dialog", {
+      name: "Change the agent for this direct message?",
+    });
+    expect(dialog).toHaveTextContent(
+      "A direct message answers with one agent at a time.",
+    );
+    expect(
+      within(dialog).getByText("Direct message (admin@example.com)"),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", { name: "Change agent" }),
+    ).toBeVisible();
+  });
+
+  it("stages channels for a record that does not exist yet", async () => {
+    const user = userEvent.setup();
+    let save: ((params?: { agentId: string }) => Promise<boolean>) | null =
+      null;
+    render(
+      <AgentChatAppsEditor
+        // The create wizard's mounting: a draft with no id, and no Email half
+        // because an address is issued to a record that exists.
+        subject={{ id: null, name: "Draft", scope: "org", authorId: "user-1" }}
+        emailAgent={null}
+        standaloneSave={false}
+        confirmTransfers={false}
+        onSaveHandlerChange={(handler) => {
+          save = handler;
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Email")).toBeNull();
+    // An unassigned channel must not read as already this agent's just because
+    // both its agent id and the draft's are null.
+    expect(screen.queryByText("General")).toBeNull();
+
+    await addChannel(user, "General", "Slack");
+    expect(channelRow("General")).toBeVisible();
+
+    // The wizard writes the staged picks against the id Create just returned.
+    await (save as unknown as (p: { agentId: string }) => Promise<boolean>)?.({
+      agentId: "created-agent",
+    });
+    await waitFor(() => {
+      expect(applyBindingPlan).toHaveBeenCalledWith(
+        {
+          targetAgentId: "created-agent",
+          updates: [
+            {
+              bindingId: "binding-1",
+              expectedAgentId: "agent-1",
+              nextAgentId: "created-agent",
+            },
+          ],
+          directMessages: [],
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
   });
 
   it("keeps unsupported personal-agent channels visible but disabled", () => {

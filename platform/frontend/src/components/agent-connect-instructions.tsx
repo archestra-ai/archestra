@@ -45,14 +45,11 @@ type ConnectTarget = {
  * entity on /connection; the create flow announces itself so the guide can
  * keep doing so if the two ever diverge.
  */
-export type ConnectInstructionsOrigin = "table" | "create";
 
 export function McpGatewayConnectInstructions({
   gateway,
-  origin,
 }: {
   gateway: ConnectTarget & { slug?: string | null };
-  origin: ConnectInstructionsOrigin;
 }) {
   const { baseUrl } = useConnectionBaseUrl();
   // Callers that only carry {id, name} don't know the slug — resolve it so
@@ -69,9 +66,6 @@ export function McpGatewayConnectInstructions({
         <TerminalBlock code={`${baseUrl}/mcp/${slug}`} />
       </div>
       <McpGatewayAuthSurface gateway={gateway} />
-      <ConnectionGuideFooter
-        href={`/connection?gatewayId=${encodeURIComponent(gateway.id)}&from=${origin}`}
-      />
     </div>
   );
 }
@@ -212,26 +206,6 @@ function IdentityProviderStatus({ target }: { target: ConnectTarget }) {
         )}
       </p>
     </AuthMethodRow>
-  );
-}
-
-/**
- * The way out to the guided per-client setup at /connection.
- *
- * It used to read "Need setup steps for your app? Open the Connect page.",
- * printed under a section this page headed "Connect" — so the reader was
- * offered a Connect page while apparently already on one, and "your app"
- * named neither the client being configured nor an Archestra app. Name the
- * destination by what it does instead.
- */
-function ConnectionGuideFooter({ href }: { href: string }) {
-  return (
-    <p className="text-xs text-muted-foreground">
-      <Link href={href} className="text-primary hover:underline">
-        Set up a client step by step
-      </Link>{" "}
-      — choose your client and copy its ready-made configuration.
-    </p>
   );
 }
 

@@ -112,7 +112,9 @@ export function EditableAssistantMessage({
           important here because the right panel can narrow the chat without
           changing the viewport breakpoint. Reveal is hover on desktop and
           the tap-synthesized hover on touch; pointer-events gating keeps the
-          hidden panel from swallowing taps meant for the content. */}
+          hidden panel from swallowing taps meant for the content. The
+          positioning wrapper owns the visual gap as padding, creating a hover
+          bridge between the message and the buttons. */}
       <div className="relative max-w-[80%]">
         <MessageContent className="max-w-none">
           <Response isStreaming={isStreaming}>{displayText}</Response>
@@ -124,15 +126,16 @@ export function EditableAssistantMessage({
           )}
         </MessageContent>
         {showActions && (
-          <MessageActions
-            textToCopy={visibleText}
-            onEditClick={handleStartEdit}
-            editDisabled={editDisabled}
-            feedback={feedback}
-            onFeedbackChange={onFeedbackChange}
-            feedbackDisabled={feedbackDisabled}
-            className="pointer-events-none absolute top-full left-0 z-10 mt-1 opacity-0 transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 @2xl/chat:top-1/2 @2xl/chat:left-full @2xl/chat:mt-0 @2xl/chat:ml-2 @2xl/chat:-translate-y-1/2"
-          />
+          <div className="pointer-events-none absolute top-full left-0 z-10 pt-1 opacity-0 transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 @2xl/chat:top-1/2 @2xl/chat:left-full @2xl/chat:pt-0 @2xl/chat:pl-2 @2xl/chat:-translate-y-1/2">
+            <MessageActions
+              textToCopy={visibleText}
+              onEditClick={handleStartEdit}
+              editDisabled={editDisabled}
+              feedback={feedback}
+              onFeedbackChange={onFeedbackChange}
+              feedbackDisabled={feedbackDisabled}
+            />
+          </div>
         )}
       </div>
     </Message>

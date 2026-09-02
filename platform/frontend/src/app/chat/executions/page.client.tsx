@@ -3,7 +3,6 @@
 import {
   Bot,
   Copy,
-  Loader2,
   MoreHorizontal,
   Square,
   TerminalSquare,
@@ -48,10 +47,7 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
   const [commandCopied, setCommandCopied] = useState(false);
   const execution = query.data;
 
-  if (query.isPending && !execution) {
-    return <ExecutionBooting />;
-  }
-  if (!execution) {
+  if (!query.isPending && !execution) {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <QueryLoadError
@@ -64,78 +60,88 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
     );
   }
 
-  const live = execution.endedAt === null;
-  const terminalReady =
-    live &&
-    (execution.state === "TASK_STATE_WORKING" ||
-      execution.state === "TASK_STATE_INPUT_REQUIRED");
+  const live = !execution || execution.endedAt === null;
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b px-5 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40">
-            <AgentIcon icon={execution.agent.icon} size={20} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-sm font-medium">
-                {execution.title}
-              </h1>
-              <AgentExecutionState
-                state={execution.state}
-                statusReason={execution.statusReason}
-                compact
-              />
+      {/* Keep this slot mounted while metadata loads so inserting the header
+          cannot remount the terminal and restart its attach progress. */}
+      <header
+        className={
+          execution
+            ? "flex shrink-0 items-center justify-between gap-4 border-b px-5 py-3"
+            : "hidden"
+        }
+      >
+        {execution ? (
+          <>
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40">
+                <AgentIcon icon={execution.agent.icon} size={20} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="truncate text-sm font-medium">
+                    {execution.title}
+                  </h1>
+                  <AgentExecutionState
+                    state={execution.state}
+                    statusReason={execution.statusReason}
+                    compact
+                  />
+                </div>
+                <p className="truncate text-xs text-muted-foreground">
+                  {execution.agent.name}
+                </p>
+              </div>
             </div>
-            <p className="truncate text-xs text-muted-foreground">
-              {execution.agent.name}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {live && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setStopDialogOpen(true)}
-            >
-              <Square className="size-3.5 fill-current" />
-              Stop
-            </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-8"
-                aria-label="More execution actions"
-              >
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href={`/agents/${execution.agent.id}?section=executions`}>
-                  <Bot className="size-4" />
-                  <span>View Agent</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!connectionCommand}
-                onSelect={() => setConnectionDialogOpen(true)}
-              >
-                <TerminalSquare className="size-4" />
-                <span>View connection details</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {live && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStopDialogOpen(true)}
+                >
+                  <Square className="size-3.5 fill-current" />
+                  <span>Stop</span>
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-8"
+                    aria-label="More execution actions"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={`/agents/${execution.agent.id}?section=executions`}
+                    >
+                      <Bot className="size-4" />
+                      <span>View Agent</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!connectionCommand}
+                    onSelect={() => setConnectionDialogOpen(true)}
+                  >
+                    <TerminalSquare className="size-4" />
+                    <span>View connection details</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </>
+        ) : null}
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
-        {terminalReady ? (
+        {live ? (
           <AgentExecutionTerminal
             taskId={taskId}
             active
@@ -145,11 +151,9 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
             onCommandChange={setConnectionCommand}
             onClosed={() => void query.refetch()}
           />
-        ) : live ? (
-          <ExecutionBooting inline agentName={execution.agent.name} />
-        ) : (
+        ) : execution ? (
           <AgentExecutionLogs execution={execution} />
-        )}
+        ) : null}
       </section>
       <DeleteConfirmDialog
         open={stopDialogOpen}
@@ -214,38 +218,4 @@ function executionLoadErrorDescription(error: unknown): string | undefined {
     return "This execution no longer exists, or you no longer have access to it.";
   }
   return undefined;
-}
-
-function ExecutionBooting({
-  inline = false,
-  agentName,
-}: {
-  inline?: boolean;
-  agentName?: string;
-}) {
-  return (
-    <div
-      className={
-        inline
-          ? "flex min-h-0 flex-1 items-center justify-center rounded-lg border bg-slate-950"
-          : "flex h-full items-center justify-center p-6"
-      }
-    >
-      <div className="flex max-w-md flex-col items-center gap-3 text-center">
-        <div className="relative flex size-12 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
-          <TerminalSquare className="size-5" />
-          <Loader2 className="absolute -right-1 -top-1 size-4 animate-spin rounded-full bg-background" />
-        </div>
-        <div>
-          <p className="text-sm font-medium">
-            Starting {agentName ?? "execution"}…
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Scheduling the workload and preparing its terminal. You can leave
-            this page and come back.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
 }

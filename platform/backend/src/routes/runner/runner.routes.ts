@@ -31,6 +31,7 @@ import {
   SelectAgentExecutionSchema,
   SelectAgentExecutionSessionSchema,
   StartAgentExecutionResponseSchema,
+  UpdateAgentExecutionSchema,
 } from "@/types";
 
 const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
@@ -372,10 +373,10 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.UpdateAgentExecution,
-        description: "Rename one Background execution started by this user",
+        description: "Update one Background execution started by this user",
         tags: ["Agents"],
         params: z.object({ taskId: z.string().uuid() }),
-        body: z.object({ title: z.string().trim().min(1).max(100) }),
+        body: UpdateAgentExecutionSchema,
         response: constructResponseSchema(SelectAgentExecutionSessionSchema),
       },
     },
@@ -386,18 +387,26 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         taskId: execution.taskId,
         agentId: execution.agentId,
         title: execution.title,
+        pinnedAt: execution.pinnedAt,
       };
-      const updated = await AgentRunModel.updateTitleForActor({
+      const updated = await AgentRunModel.updateForActor({
         taskId: execution.taskId,
         actorUserId: request.user.id,
         organizationId: request.organizationId,
         title: request.body.title,
+        pinnedAt:
+          request.body.pinnedAt === undefined
+            ? undefined
+            : request.body.pinnedAt === null
+              ? null
+              : new Date(request.body.pinnedAt),
       });
       if (!updated) throw new ApiError(404, "Execution not found");
       request.auditAfter = {
         taskId: updated.taskId,
         agentId: updated.agentId,
         title: updated.title,
+        pinnedAt: updated.pinnedAt,
       };
       return reply.send(updated);
     },

@@ -3,8 +3,9 @@
 import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { FilterBar } from "@/components/filter-bar";
 import { LoadingState } from "@/components/loading";
@@ -100,6 +101,7 @@ function NewSkillWizard() {
   // The draft outlives the steps: content is written on one, access on the
   // next, and both go up together on create.
   const [draft, setDraft] = useState<SkillDraft>(blankSkillDraft);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const patchDraft = (patch: Partial<SkillDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }));
   const parsed = useMemo(
@@ -110,11 +112,12 @@ function NewSkillWizard() {
 
   const createSkill = useCreateSkill();
   const handleCreate = async () => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the
     // mutation's own `onError`; both keep the wizard where it is with the
     // draft intact, so the author can retry without retyping.
     const created = await createSkill
-      .mutateAsync(buildSkillSaveBody(draft, null))
+      .mutateAsync(buildSkillSaveBody({ ...draft, labels: finalLabels }, null))
       .catch(() => null);
     if (created) router.push(`/skills/${created.id}`);
   };
@@ -390,7 +393,11 @@ function NewSkillWizard() {
               {effectiveStep === "access" && (
                 <div className="flex flex-col gap-4">
                   <div className="rounded-lg border p-6">
-                    <SkillAccessFields draft={draft} onChange={patchDraft} />
+                    <SkillAccessFields
+                      ref={labelsRef}
+                      draft={draft}
+                      onChange={patchDraft}
+                    />
                   </div>
                   {/* No top rule — see the content step's footer. */}
                   <WizardFooter className="border-t-0">

@@ -130,6 +130,7 @@ describe("deep-link defaults", () => {
           allowedGatewayIds: ["ag-1"],
           scope: "personal",
           teams: [],
+          labels: [],
         },
       }),
     );

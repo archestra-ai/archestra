@@ -3,6 +3,8 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { Globe, Key, Loader2, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
@@ -152,6 +154,8 @@ export function CreateVirtualKeyDialog({
     getDefaultVirtualKeyScope(visibilityOptions),
   );
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
@@ -202,6 +206,7 @@ export function CreateVirtualKeyDialog({
       setExpiresAt(initialExpiresAt);
       setScope(initialScope);
       setTeamIds([]);
+      setLabels([]);
       setProviderApiKeyIds({});
       setOwnerId("");
       setSelectedOwnerName(null);
@@ -213,6 +218,7 @@ export function CreateVirtualKeyDialog({
         scope: initialScope,
         teamIds: [],
         providerApiKeyIds: {},
+        labels: [],
       };
     }
   }, [
@@ -260,10 +266,12 @@ export function CreateVirtualKeyDialog({
       scope,
       teamIds: [...teamIds].sort(),
       providerApiKeyIds,
+      labels,
     });
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const owner = showOwnerField && ownerId ? ownerId : undefined;
     try {
       const result = await createMutation.mutateAsync({
@@ -273,6 +281,7 @@ export function CreateVirtualKeyDialog({
               keyType: "passthrough",
               expiresAt: expiresAt ?? undefined,
               ownerId: owner,
+              labels: finalLabels,
             }
           : {
               name: newKeyName.trim(),
@@ -282,6 +291,7 @@ export function CreateVirtualKeyDialog({
               teams: scope === "team" ? teamIds : [],
               providerApiKeys: providerApiKeyMapToArray(providerApiKeyIds),
               ownerId: owner,
+              labels: finalLabels,
             },
       });
       setNewKeyName("");
@@ -296,6 +306,7 @@ export function CreateVirtualKeyDialog({
     createMutation,
     expiresAt,
     isPassthrough,
+    labels,
     providerApiKeyIds,
     newKeyName,
     scope,
@@ -434,6 +445,12 @@ export function CreateVirtualKeyDialog({
                   </div>
                 </>
               )}
+
+              <AdvancedLabelsSection
+                ref={labelsRef}
+                labels={labels}
+                onLabelsChange={setLabels}
+              />
             </>
           )}
         </DialogBody>

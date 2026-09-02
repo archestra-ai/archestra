@@ -27,6 +27,7 @@ export function useLlmOauthClients(params?: LlmOauthClientsParams) {
   const search = params?.search;
   const providerApiKeyId = params?.providerApiKeyId;
   const grantType = params?.grantType;
+  const labels = params?.labels;
 
   return useQuery({
     queryKey: [
@@ -36,6 +37,7 @@ export function useLlmOauthClients(params?: LlmOauthClientsParams) {
       search,
       providerApiKeyId,
       grantType,
+      labels,
     ],
     queryFn: async () => {
       const { data, error } = await getLlmOauthClients({
@@ -45,6 +47,7 @@ export function useLlmOauthClients(params?: LlmOauthClientsParams) {
           search: search || undefined,
           providerApiKeyId: providerApiKeyId || undefined,
           grantType: grantType || undefined,
+          labels,
         },
       });
       throwOnApiError(error, { toastOnError: params?.toastOnError ?? true });

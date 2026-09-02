@@ -760,6 +760,7 @@ function CreateProjectDialog({
       size="small"
       isDirty={form.formState.isDirty}
       onSubmit={onSubmit}
+      bodyClassName="space-y-4"
       footer={
         <>
           <DialogCancelButton>Cancel</DialogCancelButton>
@@ -828,8 +829,11 @@ function CreateProjectDialog({
       </IdentityFields>
 
       {canReadAgents === true && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <Label>Default agent</Label>
+          <FieldDescription>
+            Preselected for new chats and scheduled tasks in this project.
+          </FieldDescription>
           <AgentSelector
             mode="single"
             agents={accessibleAgents}
@@ -848,9 +852,6 @@ function CreateProjectDialog({
             }}
             className="w-full"
           />
-          <FieldDescription>
-            Preselected for new chats and scheduled tasks in this project.
-          </FieldDescription>
         </div>
       )}
     </StandardFormDialog>

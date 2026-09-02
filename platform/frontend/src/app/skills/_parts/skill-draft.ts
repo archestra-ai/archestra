@@ -2,6 +2,7 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
+import type { ProfileLabel } from "@/components/agent-labels";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import type { SkillDetail } from "./github-sync-panel";
 
@@ -27,6 +28,8 @@ export interface SkillDraft {
   userIds: string[];
   /** empty = not restricted (available to agents in every environment). */
   environmentIds: string[];
+  /** Key/value labels, edited in the form like any other field. */
+  labels: ProfileLabel[];
 }
 
 export interface SkillPreview {
@@ -58,6 +61,7 @@ export function blankSkillDraft(): SkillDraft {
     teamIds: [],
     userIds: [],
     environmentIds: [],
+    labels: [],
   };
 }
 
@@ -77,6 +81,7 @@ export function skillDraftFromSkill(skill: SkillDetail): SkillDraft {
     teamIds: skill.teams.map((team) => team.id),
     userIds: skill.users.map((user) => user.id),
     environmentIds: skill.environments.map((environment) => environment.id),
+    labels: skill.labels ?? [],
   };
 }
 
@@ -121,6 +126,7 @@ export function buildSkillSaveBody(
     teamIds: draft.scope === "team" ? draft.teamIds : [],
     userIds: draft.scope === "personal" ? draft.userIds : [],
     environmentIds: draft.environmentIds,
+    labels: draft.labels,
     ...(skill && !synced && baseVersion !== undefined ? { baseVersion } : {}),
   };
 }
@@ -136,6 +142,12 @@ export function isSkillDraftDirty(draft: SkillDraft, seed: SkillDraft) {
     !sameIds(draft.teamIds, seed.teamIds) ||
     !sameIds(draft.userIds, seed.userIds) ||
     !sameIds(draft.environmentIds, seed.environmentIds) ||
+    draft.labels.length !== seed.labels.length ||
+    draft.labels.some(
+      (label, i) =>
+        label.key !== seed.labels[i]?.key ||
+        label.value !== seed.labels[i]?.value,
+    ) ||
     draft.files.length !== seed.files.length ||
     draft.files.some(
       (file, i) =>

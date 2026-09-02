@@ -135,14 +135,15 @@ export function useUpdateAgentExecution() {
   return useMutation({
     mutationFn: async ({
       taskId,
-      title,
+      ...body
     }: {
       taskId: string;
-      title: string;
+      title?: string;
+      pinnedAt?: string | null;
     }) => {
       const { data, error } = await updateAgentExecution({
         path: { taskId },
-        body: { title },
+        body,
       });
       if (error) throw reportApiError(error);
       return data;

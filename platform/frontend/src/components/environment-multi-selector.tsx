@@ -72,20 +72,23 @@ export function EnvironmentMultiSelector({
   }
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("grid gap-2", className)}>
       <Label>Environments</Label>
-      {canManageEnvironments ? (
+      {helpText || canManageEnvironments ? (
         <FieldDescription>
-          <Link
-            href="/settings/environments"
-            className="underline underline-offset-2"
-          >
-            Manage environments
-          </Link>
+          {helpText ? <span>{helpText} </span> : null}
+          {canManageEnvironments ? (
+            <>
+              <Link
+                href="/settings/environments"
+                className="underline underline-offset-2"
+              >
+                Manage environments
+              </Link>
+              <span>.</span>
+            </>
+          ) : null}
         </FieldDescription>
-      ) : null}
-      {helpText ? (
-        <p className="text-xs text-muted-foreground">{helpText}</p>
       ) : null}
       <MultiSelectCombobox
         options={accessibleEnvironments.map((environment) => ({

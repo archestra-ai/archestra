@@ -5,6 +5,11 @@ import { ArrowLeft, ArrowRight, Info } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
+import {
   GithubAuthConfigFields,
   type GithubAuthMethod,
 } from "@/components/github-auth-config-fields";
@@ -80,6 +85,7 @@ interface PluginDraft {
   scope: ResourceVisibilityScope;
   teamIds: string[];
   userIds: string[];
+  labels: ProfileLabel[];
   githubRepoUrl: string;
   githubSyncRef: string;
   githubSyncInterval: "15m" | "1h" | "1d" | null;
@@ -176,6 +182,7 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
       scope: plugin.scope,
       teamIds: plugin.teams.map((team) => team.id),
       userIds: plugin.users.map((member) => member.id),
+      labels: plugin.labels ?? [],
       githubRepoUrl: plugin.sourceRepo ?? "",
       githubSyncRef: plugin.githubSyncRef ?? plugin.sourceRef ?? "",
       githubSyncInterval: plugin.githubSyncInterval,
@@ -187,6 +194,7 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
   );
   const [draft, setDraft] = useState<PluginDraft>(seed);
   const [base, setBase] = useState<PluginDraft>(seed);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(base),
     [draft, base],
@@ -223,7 +231,8 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
   const isSaving = savingWith !== null;
 
   const handleSave = async (intent: "finish" | "continue") => {
-    let submitted = draft;
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
+    let submitted = { ...draft, labels: finalLabels };
     setSavingWith(intent);
     let githubPatId =
       submitted.githubAuthMethod === "pat" ? plugin.githubPatId : null;
@@ -290,6 +299,7 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
         scope: submitted.scope,
         teamIds: submitted.scope === "team" ? submitted.teamIds : [],
         userIds: submitted.scope === "personal" ? submitted.userIds : [],
+        labels: submitted.labels,
       })
       .catch(() => null);
     setSavingWith(null);
@@ -539,6 +549,11 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                   onTeamIdsChange={(teamIds) => patchDraft({ teamIds })}
                   userIds={draft.userIds}
                   onUserIdsChange={(userIds) => patchDraft({ userIds })}
+                />
+                <ProfileLabels
+                  ref={labelsRef}
+                  labels={draft.labels}
+                  onLabelsChange={(labels) => patchDraft({ labels })}
                 />
               </fieldset>
             )}

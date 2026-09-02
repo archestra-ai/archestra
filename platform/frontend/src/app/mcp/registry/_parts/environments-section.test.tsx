@@ -94,6 +94,7 @@ vi.mock("@/components/filter-bar", () => ({
     </select>
   ),
   filterSearchClass: "",
+  filterControlClass: () => "",
 }));
 
 vi.mock("@/components/ui/data-table", () => ({
@@ -145,6 +146,7 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
 vi.mock("./environment-resource-defaults-dialog", () => ({
   EnvironmentResourceDefaultsDialog: () => null,
 }));
+vi.mock("@/lib/entity-labels.query");
 
 const mutation = { mutate: vi.fn(), isPending: false };
 const publicInternetPolicy = {
@@ -273,6 +275,25 @@ describe("EnvironmentsSection filters", () => {
     expect(table.queryByText("Offline")).not.toBeInTheDocument();
   });
 
+  test("clears the URL-backed label filter", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=region%3Anorth") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<EnvironmentsSection canEdit />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(replace).toHaveBeenCalledWith("/settings/environments", {
+      scroll: false,
+    });
+  });
+
   test("keeps infrequently used environment controls collapsed", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("create=1") as unknown as ReturnType<
@@ -360,6 +381,7 @@ function makeEnvironment(overrides: {
     restricted: false,
     validationRegex: null,
     trustedImageRegistries: null,
+    labels: [],
     sortOrder: 0,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),

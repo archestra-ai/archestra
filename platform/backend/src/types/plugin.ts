@@ -164,6 +164,9 @@ export const PluginListItemSchema = PublicPluginSchema.omit({
 }).extend({
   teams: z.array(PluginTeamSchema),
   users: z.array(PluginUserSchema),
+  // Already hydrated by `attachVisibility`; declared here so the list response
+  // carries them for the row tags and the label filter.
+  labels: z.array(LabelWithDetailsSchema),
   fileCount: z.number().int().nonnegative(),
 });
 

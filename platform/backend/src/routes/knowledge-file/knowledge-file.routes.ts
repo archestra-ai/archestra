@@ -34,6 +34,7 @@ import {
   KbDirectoryWithTeamsSchema,
   KbFileSchema,
   KnowledgeFileVisibilitySchema,
+  LabelWithDetailsSchema,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
@@ -159,6 +160,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           /** Base64, matching how chat attachments already arrive. */
           content: z.string().min(1),
           directoryId: z.string().uuid().nullable().default(null),
+          labels: z.array(LabelWithDetailsSchema).default([]),
         }),
         response: constructResponseSchema(KbFileSchema),
       },
@@ -230,6 +232,10 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw error;
       }
 
+      if (body.labels.length > 0) {
+        await KbFileLabelModel.syncLabels(file.id, body.labels);
+      }
+
       const {
         data: _data,
         objectKey: _objectKey,
@@ -242,7 +248,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         createdBy: await CreatedByModel.resolveOne(uploadedBy),
         knowledgeBases: [],
         teamIds: body.teamIds,
-        labels: [],
+        labels: await KbFileLabelModel.getLabelsFor(file.id),
       };
     },
   );
@@ -469,6 +475,13 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           directoryId: z.string().uuid().nullable().optional(),
           visibility: KnowledgeFileVisibilitySchema.optional(),
           teamIds: z.array(z.string()).optional(),
+          labels: z
+            .array(LabelWithDetailsSchema)
+            .optional()
+            .describe(
+              "Key/value labels. Omit to leave existing labels untouched; pass [] " +
+                "to clear them.",
+            ),
         }),
         response: constructResponseSchema(KbFileSchema),
       },
@@ -484,12 +497,16 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertTeamsInOrg({ teamIds: body.teamIds, organizationId });
       }
 
+      // `labels` lives in its own junction table, so it must not reach the
+      // column update below.
+      const { labels: bodyLabels, ...columns } = body;
+
       let file: Awaited<ReturnType<typeof KbFileModel.update>>;
       try {
         file = await KbFileModel.update({
           id: params.fileId,
           organizationId,
-          ...body,
+          ...columns,
         });
       } catch (error) {
         if (isUniqueConstraintError(error)) {
@@ -501,6 +518,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw error;
       }
       if (!file) throw new ApiError(404, "File not found");
+
+      // Only touch labels when the caller sent them, so an update that omits
+      // the field leaves existing labels alone.
+      if (bodyLabels !== undefined) {
+        await KbFileLabelModel.syncLabels(file.id, bodyLabels);
+      }
 
       const knowledgeBases = await KbFileModel.findKnowledgeBasesForFiles([
         file.id,

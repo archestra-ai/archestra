@@ -20,7 +20,15 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
@@ -105,6 +113,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   filterAndSortInitialAgents,
+  getAdjacentAgentId,
   truncateAgentDescription,
 } from "./initial-agent-selector.utils";
 
@@ -144,6 +153,11 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const createProfile = useCreateProfile();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [highlightedAgentId, setHighlightedAgentId] = useState<string | null>(
+    null,
+  );
+  const agentListboxId = useId();
+  const agentOptionRefs = useRef(new Map<string, HTMLButtonElement>());
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [dialogView, setDialogView] = useState<
     | "settings"
@@ -166,6 +180,17 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
       userId,
     });
   }, [allAgents, search, currentAgentId, userId]);
+  const keyboardNavigableAgentIds = useMemo(
+    () =>
+      filteredAgents
+        .filter(
+          (agent) =>
+            resolveAgentConnectionGate(readinessByAgent.get(agent.id)).kind !==
+            "block",
+        )
+        .map((agent) => agent.id),
+    [filteredAgents, readinessByAgent],
+  );
 
   const currentAgent = useMemo(
     () =>
@@ -257,7 +282,62 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     onAgentChange(agentId);
     setOpen(false);
     setSearch("");
+    setHighlightedAgentId(null);
   };
+
+  const handleSearchKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedAgentId((current) =>
+        getAdjacentAgentId({
+          agentIds: keyboardNavigableAgentIds,
+          currentAgentId: current,
+          direction: event.key === "ArrowDown" ? "next" : "previous",
+        }),
+      );
+      return;
+    }
+
+    if (
+      event.key === "Enter" &&
+      highlightedAgentId &&
+      keyboardNavigableAgentIds.includes(highlightedAgentId)
+    ) {
+      event.preventDefault();
+      handleAgentSelect(highlightedAgentId);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setHighlightedAgentId((current) => {
+      if (current && keyboardNavigableAgentIds.includes(current)) {
+        return current;
+      }
+      if (
+        currentAgentId &&
+        keyboardNavigableAgentIds.includes(currentAgentId)
+      ) {
+        return currentAgentId;
+      }
+      return keyboardNavigableAgentIds[0] ?? null;
+    });
+  }, [currentAgentId, keyboardNavigableAgentIds, open]);
+
+  useEffect(() => {
+    if (!open || !highlightedAgentId) {
+      return;
+    }
+
+    agentOptionRefs.current
+      .get(highlightedAgentId)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlightedAgentId, open]);
 
   const handleAddTool = useCallback(() => {
     if (currentAgentId) {
@@ -293,7 +373,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
         open={open}
         onOpenChange={(newOpen) => {
           setOpen(newOpen);
-          if (!newOpen) setSearch("");
+          if (!newOpen) {
+            setSearch("");
+            setHighlightedAgentId(null);
+          }
         }}
       >
         <PopoverTrigger asChild>
@@ -337,14 +420,29 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               <Input
                 placeholder="Search..."
                 aria-label="Search agents"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls={agentListboxId}
+                aria-expanded={open}
+                aria-activedescendant={
+                  highlightedAgentId
+                    ? `${agentListboxId}-option-${highlightedAgentId}`
+                    : undefined
+                }
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 className="h-8 pl-8 text-sm rounded-lg border-0 bg-muted/50 focus-visible:ring-1"
                 autoFocus
               />
             </div>
           </div>
-          <div className="max-h-[300px] overflow-y-auto px-1.5 pb-1.5">
+          <div
+            id={agentListboxId}
+            role="listbox"
+            aria-label="Agents"
+            className="max-h-[300px] overflow-y-auto px-1.5 pb-1.5"
+          >
             {filteredAgents.length === 0 ? (
               <div className="py-6 text-center text-xs text-muted-foreground">
                 No agents found
@@ -352,6 +450,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             ) : (
               filteredAgents.map((agent) => {
                 const isSelected = currentAgentId === agent.id;
+                const isHighlighted = highlightedAgentId === agent.id;
                 const canEdit = isAgentAdmin || agent.authorId === userId;
                 const gate = resolveAgentConnectionGate(
                   readinessByAgent.get(agent.id),
@@ -363,14 +462,27 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                     className={cn(
                       "group w-full rounded-lg px-2.5 py-2 transition-colors",
                       isBlocked ? "opacity-60" : "hover:bg-accent",
-                      isSelected && "bg-accent",
+                      isHighlighted && "bg-accent",
                     )}
                   >
                     <div className="flex w-full items-center gap-2.5">
                       <button
+                        ref={(node) => {
+                          if (node) {
+                            agentOptionRefs.current.set(agent.id, node);
+                          } else {
+                            agentOptionRefs.current.delete(agent.id);
+                          }
+                        }}
+                        id={`${agentListboxId}-option-${agent.id}`}
                         type="button"
+                        role="option"
+                        aria-selected={isSelected}
                         disabled={isBlocked}
                         onClick={() => handleAgentSelect(agent.id)}
+                        onMouseMove={() => {
+                          if (!isBlocked) setHighlightedAgentId(agent.id);
+                        }}
                         className={cn(
                           "flex flex-1 items-center gap-2.5 text-left min-w-0",
                           isBlocked ? "cursor-not-allowed" : "cursor-pointer",

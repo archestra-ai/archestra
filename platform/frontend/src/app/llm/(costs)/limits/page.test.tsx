@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LimitsPage, { getLimitModels } from "./page";
 
@@ -6,6 +6,7 @@ const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockDataTableSearchParams = vi.fn(() => new URLSearchParams());
+const mockUpdateQueryParams = vi.fn();
 
 // The ?edit= dialog deep-link syncs open state to the URL through
 // useDialogUrlParam, which reads next/navigation hooks. Bare vi.mock resolves
@@ -100,7 +101,7 @@ vi.mock("@/lib/llm-proxy.query", () => ({
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => ({
     searchParams: mockDataTableSearchParams(),
-    updateQueryParams: vi.fn(),
+    updateQueryParams: mockUpdateQueryParams,
   }),
 }));
 
@@ -279,8 +280,16 @@ vi.mock("@/components/ui/label", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children }: { children: React.ReactNode }) => (
-    <button type="button">{children}</button>
+  Button: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode;
+    onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  }) => (
+    <button type="button" onClick={onClick}>
+      {children}
+    </button>
   ),
 }));
 
@@ -346,6 +355,7 @@ vi.mock("@/components/searchable-multi-select", () => ({
     </div>
   ),
 }));
+vi.mock("@/lib/entity-labels.query");
 
 describe("LimitsPage", () => {
   beforeEach(() => {
@@ -466,6 +476,24 @@ describe("LimitsPage", () => {
     const row = screen.getByTestId("data-table-row-limit-1");
     expect(row).toHaveTextContent("Rolling month");
     expect(row).toHaveTextContent("Resets Feb 15");
+  });
+
+  it("clears an active label filter with the other limit filters", () => {
+    mockDataTableSearchParams.mockReturnValue(
+      new URLSearchParams(
+        "status=safe&appliedTo=team&model=gpt-4o&labels=stage%3Aproduction",
+      ),
+    );
+
+    render(<LimitsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+
+    expect(mockUpdateQueryParams).toHaveBeenCalledWith({
+      status: null,
+      appliedTo: null,
+      model: null,
+      labels: null,
+    });
   });
 
   it("shows the next reset date for calendar monthly limits", () => {

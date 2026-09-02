@@ -4,7 +4,9 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import {
   AgentSelector,
   type AgentSelectorAgent,
@@ -73,6 +75,8 @@ export function CreateOAuthClientDialog({
   const [redirectUrisText, setRedirectUrisText] = useState("");
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   useEffect(() => {
     if (open) {
@@ -84,6 +88,7 @@ export function CreateOAuthClientDialog({
       setRedirectUrisText("");
       setScope("personal");
       setTeamIds([]);
+      setLabels([]);
     }
   }, [open, fixedClientType, defaultClientType, defaultAllowedGatewayIds]);
 
@@ -110,11 +115,13 @@ export function CreateOAuthClientDialog({
       <DialogForm
         onSubmit={async (event) => {
           event.preventDefault();
+          const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
           const shared = {
             name: name.trim(),
             grantType,
             scope,
             teams: scope === "team" ? teamIds : [],
+            labels: finalLabels,
           };
           if (isMcp) {
             await onSubmit({
@@ -218,6 +225,12 @@ export function CreateOAuthClientDialog({
             onScopeChange={setScope}
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
+          />
+
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
           />
         </DialogBody>
         <DialogStickyFooter>

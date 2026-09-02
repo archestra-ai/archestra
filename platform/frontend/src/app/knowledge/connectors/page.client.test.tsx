@@ -86,6 +86,7 @@ vi.mock("@/components/ui/tooltip", () => ({
     <div>{children}</div>
   ),
 }));
+vi.mock("@/lib/entity-labels.query");
 
 function makeConnector(overrides: Record<string, unknown>) {
   return {
@@ -99,12 +100,14 @@ function makeConnector(overrides: Record<string, unknown>) {
     lastSyncStatus: "success",
     lastSyncAt: "2026-07-13T10:00:00.000Z",
     schedule: null,
+    labels: [],
     ...overrides,
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   mockUseAllMatchingConnectors.mockReturnValue({
     data: [],
     isFetching: false,
@@ -158,6 +161,39 @@ beforeEach(() => {
 });
 
 describe("ConnectorsPage", () => {
+  it("keeps type and labels with the connector name in the compact table", async () => {
+    window.localStorage.setItem("archestra-connectors-view", "table");
+    mockUseConnectorsPaginated.mockReturnValue({
+      data: {
+        data: [
+          makeConnector({
+            name: "Regional Jira",
+            labels: [{ key: "region", value: "north" }],
+          }),
+        ],
+        pagination: { total: 1 },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    });
+
+    render(<ConnectorsPage />);
+
+    await screen.findByRole("columnheader", { name: "Connector" });
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual([
+      "",
+      "Connector",
+      "Status",
+      "Accessible to",
+      "Schedule",
+      "Actions",
+    ]);
+    expect(screen.getByRole("button", { name: "View 1 label" })).toBeVisible();
+  });
+
   it("shows who each connector is accessible to, in the shared scope badge language", () => {
     render(<ConnectorsPage />);
 
@@ -208,6 +244,33 @@ describe("ConnectorsPage", () => {
         .getAllByText(/All 3 connectors selected/i)
         .some((element) => element.getAttribute("aria-hidden") === "true"),
     ).toBe(true);
+  });
+
+  it("clears label filters and keeps select-all matching scoped to them", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=region%3Anorth&page=3") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<ConnectorsPage />);
+
+    expect(mockUseConnectorsPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: "region:north" }),
+    );
+    expect(mockUseAllMatchingConnectors).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: "region:north" }),
+      expect.any(Object),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(push).toHaveBeenCalledWith("/knowledge/connectors?page=1", {
+      scroll: false,
+    });
   });
 
   it("deleted view: rows show how long they have sat in the trash and collapse to Restore + Delete permanently", async () => {

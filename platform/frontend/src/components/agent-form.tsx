@@ -2941,13 +2941,14 @@ export function AgentForm({
               {isBuiltIn && (
                 <SettingsSection
                   title="Labels"
-                  description="Key/value pairs for grouping and filtering this agent."
+                  description="Use key-value labels to organize and filter this resource."
                 >
                   <ProfileLabels
                     ref={agentLabelsRef}
                     labels={labels}
                     onLabelsChange={setLabels}
                     showLabel={false}
+                    showDescription={false}
                   />
                 </SettingsSection>
               )}
@@ -3857,13 +3858,14 @@ export function AgentForm({
                     the end of the panel. */}
               <SettingsSection
                 title="Labels"
-                description={`Key/value pairs for grouping and filtering this ${agentTypeDisplayName[agentType] || "agent"}.`}
+                description="Use key-value labels to organize and filter this resource."
               >
                 <ProfileLabels
                   ref={agentLabelsRef}
                   labels={labels}
                   onLabelsChange={setLabels}
                   showLabel={false}
+                  showDescription={false}
                 />
               </SettingsSection>
             </SettingsSectionGroup>

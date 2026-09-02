@@ -50,7 +50,10 @@ type ConnectorsListParams = Pick<
 type ConnectorsPaginatedParams = Pick<
   ConnectorsQuery,
   "limit" | "offset" | "search" | "connectorType" | "status"
->;
+> & {
+  /** Serialized `?labels=` filter; resolved server-side. */
+  labels?: string;
+};
 
 /** One synced upstream group, as `useConnectorUserGroups` returns it. */
 export type ConnectorUserGroup =

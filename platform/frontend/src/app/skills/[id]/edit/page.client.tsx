@@ -3,6 +3,7 @@
 import { ArrowLeft, ArrowRight, Info } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,7 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
     draft: seed,
     version: skill.latestVersion,
   });
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const isDirty = isSkillDraftDirty(draft, base.draft);
 
   // Adopt a read only when there is nothing to lose and it is not older than
@@ -160,7 +162,8 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
     // The draft can move while the request is in flight, so what was sent is
     // what the new base records — anything typed meanwhile stays unsaved
     // rather than being counted as written.
-    const submitted = draft;
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
+    const submitted = { ...draft, labels: finalLabels };
     setSavingWith(intent);
     // A handled failure resolves to null and a rejection is reported by the
     // mutation's own `onError`; both leave the draft intact so the author can
@@ -275,7 +278,11 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
             </div>
             {step === "access" && (
               <fieldset disabled={isReadOnly} className="contents">
-                <SkillAccessFields draft={draft} onChange={patchDraft} />
+                <SkillAccessFields
+                  ref={labelsRef}
+                  draft={draft}
+                  onChange={patchDraft}
+                />
               </fieldset>
             )}
           </div>

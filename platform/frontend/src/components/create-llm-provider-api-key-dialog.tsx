@@ -6,8 +6,9 @@ import {
   subscriptionKindForProvider,
 } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { FormDialog } from "@/components/form-dialog";
 import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
@@ -79,6 +80,8 @@ export function CreateLlmProviderApiKeyDialog({
     llmProviderApiKey: ["admin"],
   });
   const providerCatalog = useModelProviderCatalog();
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   const form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: getDefaultFormValues({
@@ -90,6 +93,7 @@ export function CreateLlmProviderApiKeyDialog({
 
   useEffect(() => {
     if (!open) return;
+    setLabels([]);
     form.reset(
       getDefaultFormValues({
         defaultValues,
@@ -108,6 +112,7 @@ export function CreateLlmProviderApiKeyDialog({
   });
 
   const createCredential = async (values: LlmProviderApiKeyFormValues) => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     // A subscription key defaults to the subscription's own name rather than the
@@ -154,6 +159,7 @@ export function CreateLlmProviderApiKeyDialog({
         awsSessionToken: isBedrockSigV4
           ? values.awsSessionToken || undefined
           : undefined,
+        labels: finalLabels,
       });
       onOpenChange(false);
       onSuccess?.(createdKey?.id);
@@ -217,6 +223,9 @@ export function CreateLlmProviderApiKeyDialog({
             onSubscriptionCredential={handleSubscriptionCredential}
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
+            labels={reconnectKeyId ? undefined : labels}
+            onLabelsChange={reconnectKeyId ? undefined : setLabels}
+            labelsRef={reconnectKeyId ? undefined : labelsRef}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">

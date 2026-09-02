@@ -8,13 +8,8 @@ import { Globe, User, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
-import {
-  type ProfileLabel,
-  ProfileLabels,
-  type ProfileLabelsRef,
-} from "@/components/agent-labels";
-import { createdByFact } from "@/components/created-by-cell";
-import { DetailFacts } from "@/components/detail-facts";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -413,10 +408,7 @@ export function AppSettingsForm({
       onSubmit={onSubmit}
       className="flex min-h-0 flex-1 flex-col"
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
-        {/* Who to ask about this app, stated before its settings — an admin
-            opening one through oversight is the reader who most needs it. */}
-        <DetailFacts facts={[createdByFact(app.createdBy)]} />
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         {canUpdate && (
           <>
             <IdentityFields
@@ -449,8 +441,12 @@ export function AppSettingsForm({
               </div>
             </IdentityFields>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="space-y-2">
               <Label htmlFor="app-settings-slug">URL</Label>
+              <FieldDescription id="app-settings-slug-help">
+                Where this app opens. Changing it breaks links that used the old
+                URL.
+              </FieldDescription>
               <div className="flex items-center gap-1">
                 <span className="shrink-0 text-sm text-muted-foreground">
                   /a/
@@ -464,7 +460,7 @@ export function AppSettingsForm({
                   // unannounced (same wiring as components/ui/form.tsx).
                   aria-describedby={
                     form.formState.errors.slug
-                      ? "app-settings-slug-error"
+                      ? "app-settings-slug-help app-settings-slug-error"
                       : "app-settings-slug-help"
                   }
                   {...form.register("slug", {
@@ -486,18 +482,10 @@ export function AppSettingsForm({
                 >
                   {form.formState.errors.slug.message}
                 </p>
-              ) : (
-                <p
-                  id="app-settings-slug-help"
-                  className="text-xs text-muted-foreground"
-                >
-                  Where this app opens. Changing it breaks links that used the
-                  old URL.
-                </p>
-              )}
+              ) : null}
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="space-y-2">
               <Label htmlFor="app-settings-description">Description</Label>
               <Textarea
                 id="app-settings-description"
@@ -516,7 +504,35 @@ export function AppSettingsForm({
               ) : null}
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <EnvironmentSelector
+              value={environmentId}
+              onChange={setEnvironmentId}
+              resource="app"
+              helpText="The app can be assigned and call MCP tools from this environment plus the Default environment."
+            />
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Tools</h3>
+              {toolsSeeded ? (
+                <AppToolsEditor
+                  appId={app.id}
+                  environmentId={environmentId}
+                  selectedToolIds={selectedToolIds}
+                  onSelectionChange={setSelectedToolIds}
+                />
+              ) : (
+                // Unseeded selection: the checklist would misrepresent every
+                // assigned tool as unchecked, and staged edits would be
+                // dropped by the save's unseeded-diff skip.
+                <p className="text-sm text-muted-foreground">
+                  {appToolsQuery.isPending
+                    ? "Loading tools…"
+                    : "Tool assignments couldn't be loaded. Saving keeps the app's current tools."}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="app-settings-open-mode">Opens in</Label>
               {selectedOpenModeDescription ? (
                 <FieldDescription>
@@ -545,12 +561,6 @@ export function AppSettingsForm({
                 </SelectContent>
               </Select>
             </div>
-
-            <ProfileLabels
-              ref={labelsRef}
-              labels={labels}
-              onLabelsChange={setLabels}
-            />
           </>
         )}
 
@@ -654,35 +664,11 @@ export function AppSettingsForm({
         </VisibilitySelector>
 
         {canUpdate && (
-          <>
-            <EnvironmentSelector
-              value={environmentId}
-              onChange={setEnvironmentId}
-              resource="app"
-              helpText="The app can be assigned and call MCP tools from this environment plus the Default environment."
-            />
-
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Tools</h3>
-              {toolsSeeded ? (
-                <AppToolsEditor
-                  appId={app.id}
-                  environmentId={environmentId}
-                  selectedToolIds={selectedToolIds}
-                  onSelectionChange={setSelectedToolIds}
-                />
-              ) : (
-                // Unseeded selection: the checklist would misrepresent every
-                // assigned tool as unchecked, and staged edits would be
-                // dropped by the save's unseeded-diff skip.
-                <p className="text-sm text-muted-foreground">
-                  {appToolsQuery.isPending
-                    ? "Loading tools…"
-                    : "Tool assignments couldn't be loaded. Saving keeps the app's current tools."}
-                </p>
-              )}
-            </div>
-          </>
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
+          />
         )}
       </div>
     </form>

@@ -241310,6 +241310,37 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -245115,6 +245146,37 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
                   }
                 }
               }
@@ -255828,6 +255890,37 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "labels": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -256728,6 +256821,37 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
                     }
                   }
                 }
@@ -265814,6 +265938,36 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
                   }
                 }
               }
@@ -267569,6 +267723,37 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -268117,6 +268302,37 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
                     }
                   }
                 },
@@ -270794,6 +271010,37 @@
                   "awsSessionToken": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -272223,6 +272470,37 @@
                   "awsSessionToken": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
                   }
                 }
               }
@@ -275378,6 +275656,37 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -275845,6 +276154,37 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "labels": {
+                    "description": "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "valueId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
                     }
                   }
                 },
@@ -324342,6 +324682,37 @@
                           "additionalProperties": false
                         }
                       },
+                      "labels": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "keyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "valueId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "fileCount": {
                         "type": "integer",
                         "minimum": 0,
@@ -324384,6 +324755,7 @@
                       "deletedAt",
                       "teams",
                       "users",
+                      "labels",
                       "fileCount"
                     ],
                     "additionalProperties": false
@@ -342503,6 +342875,11 @@
                       "title": {
                         "type": "string"
                       },
+                      "pinnedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "deploymentName": {
                         "type": "string"
                       },
@@ -342563,6 +342940,7 @@
                       "actorId",
                       "actorUserId",
                       "title",
+                      "pinnedAt",
                       "deploymentName",
                       "backend",
                       "runtimeScope",
@@ -343228,6 +343606,11 @@
                       "title": {
                         "type": "string"
                       },
+                      "pinnedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "deploymentName": {
                         "type": "string"
                       },
@@ -343314,6 +343697,7 @@
                       "actorId",
                       "actorUserId",
                       "title",
+                      "pinnedAt",
                       "deploymentName",
                       "backend",
                       "runtimeScope",
@@ -343633,6 +344017,11 @@
                     "title": {
                       "type": "string"
                     },
+                    "pinnedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "deploymentName": {
                       "type": "string"
                     },
@@ -343719,6 +344108,7 @@
                     "actorId",
                     "actorUserId",
                     "title",
+                    "pinnedAt",
                     "deploymentName",
                     "backend",
                     "runtimeScope",
@@ -343977,7 +344367,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Rename one Background execution started by this user\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Update one Background execution started by this user\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
         "requestBody": {
           "required": true,
           "content": {
@@ -343989,11 +344379,14 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100
+                  },
+                  "pinnedAt": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
                   }
-                },
-                "required": [
-                  "title"
-                ]
+                }
               }
             }
           }
@@ -344054,6 +344447,11 @@
                     },
                     "title": {
                       "type": "string"
+                    },
+                    "pinnedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     },
                     "deploymentName": {
                       "type": "string"
@@ -344141,6 +344539,7 @@
                     "actorId",
                     "actorUserId",
                     "title",
+                    "pinnedAt",
                     "deploymentName",
                     "backend",
                     "runtimeScope",

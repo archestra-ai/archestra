@@ -44,6 +44,7 @@ vi.mock("./_parts/skill-version-history-dialog", () => ({
 vi.mock("./_parts/delete-skill-dialog", () => ({
   DeleteSkillDialog: () => null,
 }));
+vi.mock("@/lib/entity-labels.query");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -388,6 +389,26 @@ describe("SkillsPage rows", () => {
     );
   });
 
+  it("clears the active label filter", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=region%3Anorth&page=3") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<SkillsPage />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear filters" }),
+    );
+    expect(push).toHaveBeenCalledWith("/skills?page=1", { scroll: false });
+  });
+
   it("keeps the OpenAPPA source badge unqualified", () => {
     mockUseFeature.mockImplementation((name: string) => name === "plugins");
     vi.mocked(usePluginSkills).mockReturnValue({
@@ -431,7 +452,11 @@ describe("SkillsPage rows", () => {
       "aria-disabled",
       "true",
     );
-    // One description per refused control: the row's Edit and the menu's Delete.
+    expect(
+      screen.queryByRole("menuitem", { name: /Edit labels/ }),
+    ).not.toBeInTheDocument();
+    // One description per refused control: the row's Edit and the menu's
+    // Delete. Labels are edited in the canonical skill edit wizard.
     expect(screen.getAllByText(/Only this skill's author/)).toHaveLength(2);
   });
 

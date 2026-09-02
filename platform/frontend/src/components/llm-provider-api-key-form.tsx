@@ -17,8 +17,21 @@ import {
 } from "@archestra/shared";
 import { CheckCircle2, ChevronDown, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  type Ref,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -456,6 +469,9 @@ interface LlmProviderApiKeyFormProps {
   progressive?: boolean;
   /** Called when a subscription sign-in returns a credential. */
   onSubscriptionCredential?: (credential: string) => void | Promise<void>;
+  labels?: ProfileLabel[];
+  onLabelsChange?: (labels: ProfileLabel[]) => void;
+  labelsRef?: Ref<ProfileLabelsRef>;
 }
 
 export function LlmProviderApiKeyForm({
@@ -476,6 +492,9 @@ export function LlmProviderApiKeyForm({
   requiresExactSubscriptionCredential = false,
   progressive = false,
   onSubscriptionCredential,
+  labels,
+  onLabelsChange,
+  labelsRef,
 }: LlmProviderApiKeyFormProps) {
   const appName = useAppName();
   const byosEnabled = useFeature("byosEnabled");
@@ -489,6 +508,7 @@ export function LlmProviderApiKeyForm({
   const { data: teams = [] } = useTeams();
   const isEditMode = Boolean(existingKey);
   const isSubscriptionFlow = credentialMode === "subscription";
+  const hasLabelsEditor = labels !== undefined && onLabelsChange !== undefined;
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const showAdvancedSettings = !progressive || advancedSettingsOpen;
 
@@ -1581,7 +1601,7 @@ export function LlmProviderApiKeyForm({
 
         {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
 
-        {progressive && !isSubscriptionFlow && (
+        {progressive && (!isSubscriptionFlow || hasLabelsEditor) && (
           <Button
             type="button"
             variant="ghost"
@@ -1735,6 +1755,14 @@ export function LlmProviderApiKeyForm({
               Add header
             </Button>
           </div>
+        )}
+
+        {showAdvancedSettings && hasLabelsEditor && (
+          <ProfileLabels
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={onLabelsChange}
+          />
         )}
       </div>
     </div>

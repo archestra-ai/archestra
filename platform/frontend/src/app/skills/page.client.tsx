@@ -457,6 +457,7 @@ function SkillsList() {
   const hasActiveFilters =
     !!search ||
     !!sourceRepo ||
+    Boolean(labelsFilter) ||
     scopeFilter.hasActiveScopeFilters ||
     isDeletedView ||
     ((mcpSkillsEnabled || pluginSkillsEnabled) &&
@@ -483,6 +484,7 @@ function SkillsList() {
       "excludeAuthorIds",
       "status",
       "kind",
+      "labels",
     ]) {
       params.delete(key);
     }
@@ -970,6 +972,9 @@ function SkillsList() {
                               item={item}
                               appName={appName}
                             />
+                            {standalone ? (
+                              <LabelTags labels={standalone.labels} />
+                            ) : null}
                           </span>
                         }
                         description={item.skill.description}

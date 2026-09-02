@@ -1,4 +1,8 @@
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { A2ATaskStateSchema } from "./a2a-task";
@@ -228,6 +232,19 @@ export const SelectAgentExecutionSessionSchema =
       icon: z.string().nullable(),
     }),
   });
+
+export const UpdateAgentExecutionSchema = createUpdateSchema(
+  schema.agentRunsTable,
+)
+  .pick({ title: true, pinnedAt: true })
+  .extend({
+    title: z.string().trim().min(1).max(100).optional(),
+    pinnedAt: z.string().datetime().nullable().optional(),
+  })
+  .refine(
+    ({ title, pinnedAt }) => title !== undefined || pinnedAt !== undefined,
+    "At least one field must be provided",
+  );
 
 export const StartAgentExecutionResponseSchema = z.object({
   taskId: z.string().uuid(),

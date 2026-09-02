@@ -265,6 +265,7 @@ vi.mock("@/components/ui/select", () => ({
   ),
   SelectValue: () => null,
 }));
+vi.mock("@/lib/entity-labels.query");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -341,6 +342,24 @@ describe("ApiKeysPage", () => {
     render(<ApiKeysPage />);
 
     expect(screen.getAllByText("Connect")).toHaveLength(4);
+  });
+
+  it("clears an active label filter with the other table filters", () => {
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams(
+        "search=claude&provider=anthropic&labels=stage%3Aproduction",
+      ),
+      updateQueryParams: updateQueryParamsMock,
+    });
+
+    render(<ApiKeysPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+
+    expect(updateQueryParamsMock).toHaveBeenCalledWith({
+      search: null,
+      provider: null,
+      labels: null,
+    });
   });
 
   it("lets a default member open personal API-key creation", () => {

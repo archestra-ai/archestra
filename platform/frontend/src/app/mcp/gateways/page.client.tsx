@@ -47,6 +47,7 @@ import {
   FilterBar,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -801,9 +802,15 @@ function McpGateways({
                           />
                         }
                         title={
-                          <Link href={agentDetailHref("mcp_gateway", agent.id)}>
-                            {agent.name}
-                          </Link>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <Link
+                              href={agentDetailHref("mcp_gateway", agent.id)}
+                              className="truncate"
+                            >
+                              {agent.name}
+                            </Link>
+                            <LabelTags labels={agent.labels} />
+                          </span>
                         }
                         description={agent.description}
                         actions={renderGatewayActions(agent)}

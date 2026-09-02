@@ -18,6 +18,7 @@ import { EditFileDialog } from "@/app/knowledge/files/_parts/edit-file-dialog";
 import { UploadFileDialog } from "@/app/knowledge/files/_parts/upload-file-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   FilePreviewDialog,
   type PreviewableDocument,
@@ -25,8 +26,10 @@ import {
 import {
   CollectionFilters,
   FilterBar,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -39,6 +42,10 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import {
+  useKnowledgeFileLabelKeys,
+  useKnowledgeFileLabelValues,
+} from "@/lib/entity-labels.query";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -125,8 +132,16 @@ function VisibilityBadge({
 }
 
 export default function KnowledgeFilesPage() {
-  const { pageIndex, pageSize, offset, setPagination, updateQueryParams } =
-    useDataTableQueryParams();
+  const {
+    pageIndex,
+    pageSize,
+    offset,
+    setPagination,
+    searchParams,
+    updateQueryParams,
+  } = useDataTableQueryParams();
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
 
   /** null = the top level, which lists directories plus unfiled documents. */
   const [openDirectoryId, setOpenDirectoryId] = useState<string | null>(null);
@@ -154,6 +169,7 @@ export default function KnowledgeFilesPage() {
     // contents appear when you open it, so nothing is shown twice.
     directoryId: openDirectoryId ?? ROOT_DIRECTORY,
     search: search || undefined,
+    labels: labelsFilter,
   });
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -202,7 +218,11 @@ export default function KnowledgeFilesPage() {
    * different directory or changing the search drops it rather than silently
    * re-pointing "all 40 documents" at a different 40.
    */
-  const viewSignature = JSON.stringify({ openDirectoryId, search });
+  const viewSignature = JSON.stringify({
+    openDirectoryId,
+    search,
+    labelsFilter,
+  });
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === viewSignature;
   const { effectiveRowSelection, onRowSelectionChange } =
@@ -247,6 +267,7 @@ export default function KnowledgeFilesPage() {
       {
         directoryId: openDirectoryId ?? ROOT_DIRECTORY,
         search: search || undefined,
+        labels: labelsFilter,
       },
       { enabled: allMatchingSelected },
     );
@@ -300,6 +321,12 @@ export default function KnowledgeFilesPage() {
     setRowSelection({});
     setEscalatedFor(null);
   }, []);
+
+  const hasActiveFilters = Boolean(search || labelsFilter);
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    updateQueryParams({ labels: null, page: "1" });
+  }, [updateQueryParams]);
 
   const columns: ColumnDef<Row>[] = useMemo(
     () => [
@@ -361,6 +388,7 @@ export default function KnowledgeFilesPage() {
               >
                 {file.filename}
               </span>
+              <LabelTags labels={file.labels} />
             </button>
           );
         },
@@ -515,14 +543,7 @@ export default function KnowledgeFilesPage() {
         <CollectionFilters>
           <FilterBar
             leading
-            onClearFilters={
-              search
-                ? () => {
-                    setSearch("");
-                    updateQueryParams({ page: "1" });
-                  }
-                : undefined
-            }
+            onClearFilters={hasActiveFilters ? clearFilters : undefined}
           >
             {openDirectory ? (
               <Button
@@ -556,6 +577,13 @@ export default function KnowledgeFilesPage() {
               syncQueryParams={false}
               placeholder="Search documents…"
               className={filterSearchClass}
+            />
+            <EntityLabelFilter
+              useLabelKeys={useKnowledgeFileLabelKeys}
+              useLabelValues={useKnowledgeFileLabelValues}
+              className={filterControlClass({
+                active: Boolean(labelsFilter),
+              })}
             />
           </FilterBar>
         </CollectionFilters>

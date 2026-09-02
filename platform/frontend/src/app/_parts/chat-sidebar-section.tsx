@@ -206,6 +206,9 @@ export function ChatSidebarSection({
   const recentUnpinnedChats = conversations.filter(
     (c) => !c.pinnedAt && !isScheduledRunConversation(c),
   );
+  const recentUnpinnedExecutions = executionSessions.filter(
+    (execution) => !execution.pinnedAt,
+  );
 
   // /api/projects requires project:read; skip the fetch for roles without it
   // so the sidebar doesn't 403 (and toast) on every chat page.
@@ -225,6 +228,7 @@ export function ChatSidebarSection({
     chats: conversations.filter((c) => !isScheduledRunConversation(c)),
     projects: pinnedProjects,
     apps: pinnedApps,
+    executions: executionSessions,
   });
 
   useEffect(() => {
@@ -317,6 +321,13 @@ export function ChatSidebarSection({
 
   const handleTogglePin = (id: string, isPinned: boolean) => {
     pinConversationMutation.mutate({ id, pinned: !isPinned });
+  };
+
+  const handleToggleExecutionPin = (taskId: string, isPinned: boolean) => {
+    updateExecutionMutation.mutate({
+      taskId,
+      pinnedAt: isPinned ? null : new Date().toISOString(),
+    });
   };
 
   const handleChangeProject = async (
@@ -689,6 +700,7 @@ export function ChatSidebarSection({
     const isMenuOpen = openMenuId === menuKey;
     const isEditing = editingExecutionId === execution.taskId;
     const live = execution.endedAt === null;
+    const isPinned = !!execution.pinnedAt;
     return (
       <SidebarMenuSubItem key={menuKey}>
         <div className="flex w-full items-center justify-between gap-1">
@@ -752,6 +764,23 @@ export function ChatSidebarSection({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right">
+                <DropdownMenuItem
+                  onClick={() =>
+                    handleToggleExecutionPin(execution.taskId, isPinned)
+                  }
+                >
+                  {isPinned ? (
+                    <>
+                      <PinOff className="mr-2 size-4" />
+                      Unpin
+                    </>
+                  ) : (
+                    <>
+                      <Pin className="mr-2 size-4" />
+                      Pin
+                    </>
+                  )}
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
                     setEditingExecutionId(execution.taskId);
@@ -942,7 +971,7 @@ export function ChatSidebarSection({
       item,
       timestamp: item.lastMessageAt,
     })),
-    ...executionSessions.map((item) => ({
+    ...recentUnpinnedExecutions.map((item) => ({
       kind: "execution" as const,
       item,
       timestamp: item.stateChangedAt ?? item.startedAt,
@@ -954,7 +983,7 @@ export function ChatSidebarSection({
   // Executions are operational sessions, so keep every one of them visible
   // instead of counting them against the chat slots — the rows still sort
   // into the same timeline.
-  const visibleSlots = slots + executionSessions.length;
+  const visibleSlots = slots + recentUnpinnedExecutions.length;
   const showMore = recentUnpinnedChats.length > slots;
 
   // The list arrives sorted by lastMessageAt desc, so grouping the visible
@@ -984,7 +1013,9 @@ export function ChatSidebarSection({
                           ? renderConversationItem(it.item)
                           : it.type === "project"
                             ? renderProjectItem(it.item)
-                            : renderAppItem(it.item),
+                            : it.type === "app"
+                              ? renderAppItem(it.item)
+                              : renderExecutionItem(it.item),
                       )}
                     </SidebarMenuSub>
                   </SidebarMenuItem>

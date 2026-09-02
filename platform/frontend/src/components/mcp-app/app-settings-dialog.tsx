@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { LoadingState } from "@/components/loading";
 import { AppSettingsForm } from "@/components/mcp-app/app-settings-form";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -47,7 +48,15 @@ export function AppSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-w-2xl flex-col gap-0 p-0 pt-0">
         <DialogHeader className="px-4 py-4">
-          <DialogTitle>App settings</DialogTitle>
+          <DialogTitle className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 pr-5">
+            <span>App settings</span>
+            {app?.createdBy ? (
+              <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                <span>Created by</span>
+                <CreatedByCell createdBy={app.createdBy} />
+              </span>
+            ) : null}
+          </DialogTitle>
         </DialogHeader>
         {isPending ? (
           <LoadingState

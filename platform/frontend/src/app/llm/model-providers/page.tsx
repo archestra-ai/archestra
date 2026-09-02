@@ -20,10 +20,12 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
@@ -32,6 +34,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { LabelTags } from "@/components/label-tags";
 import {
   deserializeExtraHeaders,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
@@ -79,6 +82,10 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import {
+  useLlmProviderApiKeyLabelKeys,
+  useLlmProviderApiKeyLabelValues,
+} from "@/lib/entity-labels.query";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -129,6 +136,8 @@ export default function ApiKeysPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const { data: canReadLlmProviderApiKeys, isPending: permissionsPending } =
     useHasPermissions({ llmProviderApiKey: ["read"] });
   const apiKeyQueriesEnabled =
@@ -139,6 +148,7 @@ export default function ApiKeysPage() {
     });
   const { data: queriedApiKeys = [], isFetching } = useLlmProviderApiKeys({
     search: search || undefined,
+    labels: labelsFilter,
     provider:
       providerFilter === "all"
         ? undefined
@@ -221,6 +231,8 @@ export default function ApiKeysPage() {
   const editForm = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
   });
+  const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
+  const editLabelsRef = useRef<ProfileLabelsRef>(null);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
@@ -245,11 +257,13 @@ export default function ApiKeysPage() {
         // subscription keys land on the subscription tab, plain keys on API Key.
         authMethod: editingApiKey.subscriptionKind ? "subscription" : "api-key",
       });
+      setEditLabels(editingApiKey.labels ?? []);
     }
   }, [editingApiKey, editForm]);
 
   const handleEdit = editForm.handleSubmit(async (values) => {
     if (!editingApiKey) return;
+    const finalLabels = editLabelsRef.current?.saveUnsavedLabel() ?? editLabels;
     // Defense in depth behind the disabled Save button: a subscription tab on a
     // key that doesn't hold that subscription must not submit without a
     // completed sign-in — the update would privatize a shared key while
@@ -307,6 +321,7 @@ export default function ApiKeysPage() {
           awsSessionToken: sigV4Provided
             ? (values.awsSessionToken ?? undefined)
             : undefined,
+          labels: finalLabels,
         },
       });
 
@@ -451,7 +466,7 @@ export default function ApiKeysPage() {
     rows,
     getId: (row) => row.id,
     canSelect: (row) => !row.isSystem && getKeyUsage(row.id) === null,
-    filterSignature: `${search}\u0000${providerFilter}`,
+    filterSignature: `${search}\u0000${providerFilter}\u0000${labelsFilter ?? ""}`,
     matchDescription:
       search || providerFilter !== "all"
         ? "match the current filters"
@@ -491,6 +506,7 @@ export default function ApiKeysPage() {
                 Primary
               </InlineTag>
             )}
+            <LabelTags labels={row.original.labels ?? []} />
           </div>
         ),
       },
@@ -714,7 +730,18 @@ export default function ApiKeysPage() {
 
         <BulkActionsScope>
           <CollectionFilters>
-            <FilterBar>
+            <FilterBar
+              onClearFilters={
+                search || providerFilter !== "all" || labelsFilter
+                  ? () =>
+                      updateQueryParams({
+                        search: null,
+                        provider: null,
+                        labels: null,
+                      })
+                  : undefined
+              }
+            >
               <SearchInput
                 isLoading={isFetching}
                 objectNamePlural="credentials"
@@ -744,6 +771,13 @@ export default function ApiKeysPage() {
                   <LlmProviderSelectItems options={providerOptions} />
                 </SelectContent>
               </Select>
+              <EntityLabelFilter
+                useLabelKeys={useLlmProviderApiKeyLabelKeys}
+                useLabelValues={useLlmProviderApiKeyLabelValues}
+                className={filterControlClass({
+                  active: Boolean(labelsFilter),
+                })}
+              />
             </FilterBar>
           </CollectionFilters>
 
@@ -789,12 +823,15 @@ export default function ApiKeysPage() {
               isLoading={permissionsPending || isFetching}
               emptyIcon={Boxes}
               emptyMessage="No credentials configured"
-              hasActiveFilters={Boolean(search || providerFilter !== "all")}
+              hasActiveFilters={Boolean(
+                search || providerFilter !== "all" || labelsFilter,
+              )}
               filteredEmptyMessage="No LLM provider credentials match your filters"
               onClearFilters={() =>
                 updateQueryParams({
                   search: null,
                   provider: null,
+                  labels: null,
                 })
               }
             />
@@ -838,7 +875,11 @@ export default function ApiKeysPage() {
           description="Update the name, API key value, or scope"
           size="small"
           className="sm:max-w-xl"
-          isDirty={editForm.formState.isDirty}
+          isDirty={
+            editForm.formState.isDirty ||
+            JSON.stringify(editLabels) !==
+              JSON.stringify(editingApiKey?.labels ?? [])
+          }
         >
           <DialogForm
             onSubmit={handleEdit}
@@ -853,6 +894,10 @@ export default function ApiKeysPage() {
                   existingKeys={apiKeys}
                   form={editForm}
                   isPending={updateMutation.isPending}
+                  progressive
+                  labels={editLabels}
+                  onLabelsChange={setEditLabels}
+                  labelsRef={editLabelsRef}
                 />
               )}
             </DialogBody>

@@ -27,7 +27,7 @@ type KnowledgeBasesListParams = {
 };
 type KnowledgeBasesPaginatedParams = Pick<
   KnowledgeBasesQuery,
-  "limit" | "offset" | "search" | "status"
+  "limit" | "offset" | "search" | "status" | "labels"
 >;
 
 /**

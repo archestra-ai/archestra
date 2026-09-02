@@ -107,6 +107,7 @@ vi.mock("@/components/ui/tooltip", () => ({
     <div>{children}</div>
   ),
 }));
+vi.mock("@/lib/entity-labels.query");
 
 function makeConnector(overrides: Record<string, unknown>) {
   return {
@@ -161,6 +162,7 @@ beforeEach(() => {
           id: "kb-1",
           name: "Handbook",
           description: null,
+          labels: [{ key: "region", value: "north" }],
           connectors: [
             { id: "conn-1", name: "Org Connector", connectorType: "jira" },
             {
@@ -213,6 +215,7 @@ describe("KnowledgeBasesPage", () => {
     expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.getByText("documents")).toBeInTheDocument();
     expect(screen.getByText("agent")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View 1 label" })).toBeVisible();
   });
 
   it("keeps the per-connector actions the expandable sub-table used to own", async () => {
@@ -282,6 +285,33 @@ describe("KnowledgeBasesPage", () => {
         .getAllByText(/All 2 knowledge bases selected/i)
         .some((element) => element.getAttribute("aria-hidden") === "true"),
     ).toBe(true);
+  });
+
+  it("clears label filters and keeps select-all matching scoped to them", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("labels=region%3Anorth&page=3") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<KnowledgeBasesPage />);
+
+    expect(mockUseKnowledgeBasesPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: "region:north" }),
+    );
+    expect(mockUseAllMatchingKnowledgeBases).toHaveBeenCalledWith(
+      expect.objectContaining({ labels: "region:north" }),
+      expect.any(Object),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(push).toHaveBeenCalledWith("/knowledge/knowledge-bases?page=1", {
+      scroll: false,
+    });
   });
 
   it("deleted view: rows show how long they have sat in the trash and collapse to Restore + Delete permanently", async () => {

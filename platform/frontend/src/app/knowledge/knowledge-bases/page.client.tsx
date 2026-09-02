@@ -20,11 +20,14 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { LoadingState } from "@/components/loading";
 import {
   PERMANENT_DELETE_LABEL,
@@ -57,6 +60,10 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import {
+  useKnowledgeBaseLabelKeys,
+  useKnowledgeBaseLabelValues,
+} from "@/lib/entity-labels.query";
 import {
   type BulkCardSelectionProps,
   useBulkCardSelection,
@@ -117,6 +124,8 @@ function KnowledgeBasesList() {
   // The trash view; the backend gates the deleted slice on
   // `knowledgeSource:delete`, and the status filter itself is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
@@ -132,6 +141,7 @@ function KnowledgeBasesList() {
     offset,
     search: search || undefined,
     status: isDeletedView ? "deleted" : undefined,
+    labels: labelsFilter,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -199,7 +209,7 @@ function KnowledgeBasesList() {
 
   // Changing a filter invalidates an escalation rather than silently
   // re-pointing "all N" at a different N.
-  const filterSignature = `${search}|${isDeletedView}`;
+  const filterSignature = `${search}|${isDeletedView}|${labelsFilter ?? ""}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
@@ -222,6 +232,7 @@ function KnowledgeBasesList() {
       {
         search: search || undefined,
         status: isDeletedView ? "deleted" : undefined,
+        labels: labelsFilter,
       },
       { enabled: allMatchingActive },
     );
@@ -248,10 +259,10 @@ function KnowledgeBasesList() {
     [pathname, router, searchParams],
   );
 
-  const hasActiveFilters = !!search || isDeletedView;
+  const hasActiveFilters = !!search || isDeletedView || Boolean(labelsFilter);
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const key of ["search", "status"]) {
+    for (const key of ["search", "status", "labels"]) {
       params.delete(key);
     }
     params.set("page", "1");
@@ -311,7 +322,10 @@ function KnowledgeBasesList() {
         const kb = row.original;
         return (
           <div className="min-w-0">
-            <div className="truncate font-medium">{kb.name}</div>
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="truncate font-medium">{kb.name}</span>
+              <LabelTags labels={kb.labels} />
+            </div>
             {kb.description && (
               <div className="truncate text-xs text-muted-foreground">
                 {kb.description}
@@ -458,6 +472,7 @@ function KnowledgeBasesList() {
             <FilterBar
               leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+              onClearFilters={hasActiveFilters ? clearFilters : undefined}
             >
               <SearchInput
                 paramName="search"
@@ -466,6 +481,13 @@ function KnowledgeBasesList() {
               />
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
+              />
+              <EntityLabelFilter
+                useLabelKeys={useKnowledgeBaseLabelKeys}
+                useLabelValues={useKnowledgeBaseLabelValues}
+                className={filterControlClass({
+                  active: Boolean(labelsFilter),
+                })}
               />
             </FilterBar>
           </CollectionFilters>

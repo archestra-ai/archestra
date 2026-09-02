@@ -10,8 +10,13 @@ import {
   PowerOff,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
 import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -118,6 +123,8 @@ export default function ServiceAccountDetailPage({
   const bulkTokenAction = useBulkServiceAccountTokenAction();
 
   const [selectedRole, setSelectedRole] = useState("member");
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [isTokenDialogOpen, setIsTokenDialogOpen] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [keyToDelete, setKeyToDelete] = useState<ServiceAccountToken | null>(
@@ -218,13 +225,15 @@ export default function ServiceAccountDetailPage({
 
     form.reset({ name: serviceAccount.name });
     setSelectedRole(serviceAccount.role);
+    setLabels(serviceAccount.labels);
   }, [form, serviceAccount]);
 
   const watchedName = form.watch("name");
   const hasChanges =
     !!serviceAccount &&
     (watchedName !== serviceAccount.name ||
-      selectedRole !== serviceAccount.role);
+      selectedRole !== serviceAccount.role ||
+      JSON.stringify(labels) !== JSON.stringify(serviceAccount.labels));
 
   const {
     rowSelection,
@@ -368,10 +377,15 @@ export default function ServiceAccountDetailPage({
 
   const handleSave = async () => {
     if (!serviceAccount || !watchedName.trim()) return;
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
 
     await updateMutation.mutateAsync({
       id: serviceAccountId,
-      body: { name: watchedName.trim(), role: selectedRole },
+      body: {
+        name: watchedName.trim(),
+        role: selectedRole,
+        labels: finalLabels,
+      },
     });
   };
 
@@ -380,6 +394,7 @@ export default function ServiceAccountDetailPage({
 
     form.reset({ name: serviceAccount.name });
     setSelectedRole(serviceAccount.role);
+    setLabels(serviceAccount.labels);
   };
 
   const handleCreateToken = tokenForm.handleSubmit(async (values) => {
@@ -587,6 +602,7 @@ export default function ServiceAccountDetailPage({
           <SettingsBlock
             title="Account settings"
             description="The display name shown across the platform, and the role every request made with this account's keys is authorized against."
+            contentClassName="space-y-6"
           >
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -610,6 +626,11 @@ export default function ServiceAccountDetailPage({
                 />
               </div>
             </div>
+            <ProfileLabels
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            />
           </SettingsBlock>
 
           <SettingsSaveBar

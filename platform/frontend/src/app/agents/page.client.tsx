@@ -53,6 +53,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
+import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -712,9 +713,15 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                         key={agent.id}
                         icon={<AgentIcon icon={agent.icon} size={20} />}
                         title={
-                          <Link href={agentDetailHref("agent", agent.id)}>
-                            {agent.name}
-                          </Link>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <Link
+                              href={agentDetailHref("agent", agent.id)}
+                              className="truncate"
+                            >
+                              {agent.name}
+                            </Link>
+                            <LabelTags labels={agent.labels} />
+                          </span>
                         }
                         description={agent.description}
                         actions={renderAgentActions(agent)}

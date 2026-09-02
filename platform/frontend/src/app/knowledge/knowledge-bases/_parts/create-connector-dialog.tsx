@@ -11,6 +11,11 @@ import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SearchInput } from "@/components/search-input";
@@ -110,6 +115,8 @@ export function CreateConnectorDialog({
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
   const [visibility, setVisibility] = useState<ConnectorVisibility>("org-wide");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [search, setSearch] = useState("");
 
   // M-Files is in beta: deployments that haven't opted in never see the type.
@@ -192,10 +199,12 @@ export function CreateConnectorDialog({
     form.reset();
     setStep("select");
     setSelectedType(null);
+    setLabels([]);
     onBack?.();
   };
 
   const handleSubmit = async (values: CreateConnectorFormValues) => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const config = transformConfigArrayFields(values.config);
     // App-auth GitHub connectors carry their credentials in a github_app_configs
     // row referenced by the config, so no inline credentials are sent
@@ -232,6 +241,7 @@ export function CreateConnectorDialog({
         permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
       }),
       ...(knowledgeBaseId && { knowledgeBaseIds: [knowledgeBaseId] }),
+      labels: finalLabels,
     });
     if (result) {
       form.reset();
@@ -239,6 +249,7 @@ export function CreateConnectorDialog({
       setSelectedType(null);
       setVisibility("org-wide");
       setTeamIds([]);
+      setLabels([]);
       onOpenChange(false);
 
       // Hand straight over to Google rather than leaving behind a connector
@@ -259,6 +270,7 @@ export function CreateConnectorDialog({
       form.reset();
       setStep("select");
       setSelectedType(null);
+      setLabels([]);
       setVisibility("org-wide");
       setTeamIds([]);
     }
@@ -644,6 +656,11 @@ export function CreateConnectorDialog({
                       connectorType={connectorType}
                       form={form}
                       mode="create"
+                    />
+                    <ProfileLabels
+                      ref={labelsRef}
+                      labels={labels}
+                      onLabelsChange={setLabels}
                     />
                   </CollapsibleContent>
                 </Collapsible>

@@ -6,7 +6,7 @@ import {
   MCP_GATEWAY_OAUTH_SCOPE,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Copy, Pencil, Plus, RefreshCw, Tags, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -21,6 +21,7 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { EditOAuthClientDialog as EditLlmOAuthClientDialog } from "@/components/llm-oauth-client-dialogs";
 import { EditOAuthClientDialog as EditMcpOAuthClientDialog } from "@/components/mcp-oauth-client-dialogs";
 import {
@@ -172,7 +173,7 @@ function OauthClientsTable() {
     .sort((a, b) => a.client.name.localeCompare(b.client.name));
 
   const hasActiveFilters = Boolean(
-    search || typeFilter || grantTypeFilter || providerApiKeyId,
+    search || typeFilter || grantTypeFilter || providerApiKeyId || labelsFilter,
   );
   const clearFilters = useCallback(
     () =>
@@ -181,6 +182,7 @@ function OauthClientsTable() {
         type: null,
         grantType: null,
         providerApiKeyId: null,
+        labels: null,
         page: "1",
       }),
     [updateQueryParams],
@@ -224,11 +226,12 @@ function OauthClientsTable() {
       header: "Name",
       size: 140,
       cell: ({ row }) => (
-        <span className="block max-w-[140px] truncate font-medium">
-          <span>{row.original.client.name}</span>
+        <span className="flex max-w-[140px] items-center gap-2 font-medium">
+          <span className="truncate">{row.original.client.name}</span>
           {row.original.client.disabled && (
-            <span className="ml-1.5 text-muted-foreground">(disabled)</span>
+            <span className="text-muted-foreground">(disabled)</span>
           )}
+          <LabelTags labels={row.original.client.labels} />
         </span>
       ),
     },

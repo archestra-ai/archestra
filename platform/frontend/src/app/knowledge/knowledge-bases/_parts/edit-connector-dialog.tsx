@@ -6,9 +6,14 @@ import {
   type TextSearchLanguage,
 } from "@archestra/shared";
 import { ChevronDown } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -68,7 +73,9 @@ type ConnectorItem = Pick<
   | "permissionSyncIntervalSeconds"
   | "enabled"
   | "environmentId"
->;
+> & {
+  labels?: archestraApiTypes.GetConnectorsResponses["200"]["data"][number]["labels"];
+};
 
 type EditConnectorFormValues = {
   name: string;
@@ -110,6 +117,8 @@ export function EditConnectorDialog({
   const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
   const [visibility, setVisibility] = useState(connector.visibility);
   const [teamIds, setTeamIds] = useState<string[]>(connector.teamIds);
+  const [labels, setLabels] = useState<ProfileLabel[]>(connector.labels ?? []);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
@@ -131,6 +140,7 @@ export function EditConnectorDialog({
     if (open) {
       setVisibility(connector.visibility);
       setTeamIds(connector.teamIds);
+      setLabels(connector.labels ?? []);
       form.reset({
         name: connector.name,
         description: connector.description ?? "",
@@ -209,6 +219,7 @@ export function EditConnectorDialog({
   });
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     // Any single credential field can be updated alone — the backend merges
     // the submitted fields over the stored secret, so pasting only the admin
     // API key (or correcting only the email) must not be dropped just because
@@ -241,6 +252,7 @@ export function EditConnectorDialog({
             ...(values.adminApiKey && { adminApiKey: values.adminApiKey }),
           },
         }),
+        labels: finalLabels,
       },
     });
     if (result) {
@@ -506,6 +518,11 @@ export function EditConnectorDialog({
                 connectorType={connectorType}
                 form={form}
                 mode="edit"
+              />
+              <ProfileLabels
+                ref={labelsRef}
+                labels={labels}
+                onLabelsChange={setLabels}
               />
             </CollapsibleContent>
           </Collapsible>

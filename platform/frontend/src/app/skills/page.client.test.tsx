@@ -432,13 +432,12 @@ describe("SkillsPage rows", () => {
       "aria-disabled",
       "true",
     );
-    // Relabelling is an edit, so it is refused for the same reason.
     expect(
-      screen.getByRole("menuitem", { name: /Edit labels/ }),
-    ).toHaveAttribute("aria-disabled", "true");
-    // One description per refused control: the row's Edit, and the menu's
-    // Edit labels and Delete.
-    expect(screen.getAllByText(/Only this skill's author/)).toHaveLength(3);
+      screen.queryByRole("menuitem", { name: /Edit labels/ }),
+    ).not.toBeInTheDocument();
+    // One description per refused control: the row's Edit and the menu's
+    // Delete. Labels are edited in the canonical skill edit wizard.
+    expect(screen.getAllByText(/Only this skill's author/)).toHaveLength(2);
   });
 
   it("lets a skill admin edit a skill they do not own", () => {

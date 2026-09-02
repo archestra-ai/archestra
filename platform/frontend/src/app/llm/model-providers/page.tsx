@@ -20,8 +20,9 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -33,6 +34,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { LabelTags } from "@/components/label-tags";
 import {
   deserializeExtraHeaders,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
@@ -136,7 +138,6 @@ export default function ApiKeysPage() {
   const providerFilter = searchParams.get("provider") || "all";
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
-    useState<LlmProviderApiKeyResponse | null>(null);
   const { data: canReadLlmProviderApiKeys, isPending: permissionsPending } =
     useHasPermissions({ llmProviderApiKey: ["read"] });
   const apiKeyQueriesEnabled =
@@ -230,6 +231,8 @@ export default function ApiKeysPage() {
   const editForm = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
   });
+  const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
+  const editLabelsRef = useRef<ProfileLabelsRef>(null);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
@@ -254,11 +257,13 @@ export default function ApiKeysPage() {
         // subscription keys land on the subscription tab, plain keys on API Key.
         authMethod: editingApiKey.subscriptionKind ? "subscription" : "api-key",
       });
+      setEditLabels(editingApiKey.labels ?? []);
     }
   }, [editingApiKey, editForm]);
 
   const handleEdit = editForm.handleSubmit(async (values) => {
     if (!editingApiKey) return;
+    const finalLabels = editLabelsRef.current?.saveUnsavedLabel() ?? editLabels;
     // Defense in depth behind the disabled Save button: a subscription tab on a
     // key that doesn't hold that subscription must not submit without a
     // completed sign-in — the update would privatize a shared key while
@@ -316,6 +321,7 @@ export default function ApiKeysPage() {
           awsSessionToken: sigV4Provided
             ? (values.awsSessionToken ?? undefined)
             : undefined,
+          labels: finalLabels,
         },
       });
 
@@ -500,6 +506,7 @@ export default function ApiKeysPage() {
                 Primary
               </InlineTag>
             )}
+            <LabelTags labels={row.original.labels ?? []} />
           </div>
         ),
       },
@@ -854,7 +861,11 @@ export default function ApiKeysPage() {
           description="Update the name, API key value, or scope"
           size="small"
           className="sm:max-w-xl"
-          isDirty={editForm.formState.isDirty}
+          isDirty={
+            editForm.formState.isDirty ||
+            JSON.stringify(editLabels) !==
+              JSON.stringify(editingApiKey?.labels ?? [])
+          }
         >
           <DialogForm
             onSubmit={handleEdit}
@@ -869,6 +880,10 @@ export default function ApiKeysPage() {
                   existingKeys={apiKeys}
                   form={editForm}
                   isPending={updateMutation.isPending}
+                  progressive
+                  labels={editLabels}
+                  onLabelsChange={setEditLabels}
+                  labelsRef={editLabelsRef}
                 />
               )}
             </DialogBody>

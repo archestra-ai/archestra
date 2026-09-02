@@ -1,8 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
@@ -20,7 +22,9 @@ import { useUpdateKnowledgeBase } from "@/lib/knowledge/knowledge-base.query";
 type KnowledgeBaseItem = Pick<
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number],
   "id" | "name" | "description"
->;
+> & {
+  labels?: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number]["labels"];
+};
 
 interface EditKnowledgeBaseFormValues {
   name: string;
@@ -37,6 +41,10 @@ export function EditKnowledgeBaseDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const updateKnowledgeBase = useUpdateKnowledgeBase();
+  const [labels, setLabels] = useState<ProfileLabel[]>(
+    knowledgeBase.labels ?? [],
+  );
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   const form = useForm<EditKnowledgeBaseFormValues>({
     defaultValues: {
@@ -51,15 +59,18 @@ export function EditKnowledgeBaseDialog({
         name: knowledgeBase.name,
         description: knowledgeBase.description ?? "",
       });
+      setLabels(knowledgeBase.labels ?? []);
     }
   }, [open, knowledgeBase, form]);
 
   const handleSubmit = async (values: EditKnowledgeBaseFormValues) => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const result = await updateKnowledgeBase.mutateAsync({
       id: knowledgeBase.id,
       body: {
         name: values.name,
         description: values.description || null,
+        labels: finalLabels,
       },
     });
     if (result) {
@@ -112,6 +123,12 @@ export function EditKnowledgeBaseDialog({
                   <FormMessage />
                 </FormItem>
               )}
+            />
+
+            <AdvancedLabelsSection
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
             />
           </div>
 

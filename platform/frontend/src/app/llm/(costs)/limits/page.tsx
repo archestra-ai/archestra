@@ -18,7 +18,9 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AgentIcon } from "@/components/agent-icon";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { EnvironmentScopeSelect } from "@/components/environment-scope-select";
@@ -31,6 +33,7 @@ import {
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { useSelectedLabels } from "@/components/label-select";
+import { LabelTags } from "@/components/label-tags";
 import {
   CLEANUP_INTERVAL_LABELS,
   DEFAULT_LIMIT_CLEANUP_INTERVAL,
@@ -112,6 +115,7 @@ type LimitFormState = {
   cleanupInterval: LimitCleanupInterval;
   models: string[];
   isAllModels: boolean;
+  labels: ProfileLabel[];
 };
 
 const DEFAULT_FORM_STATE: LimitFormState = {
@@ -121,6 +125,7 @@ const DEFAULT_FORM_STATE: LimitFormState = {
   cleanupInterval: DEFAULT_LIMIT_CLEANUP_INTERVAL,
   models: [],
   isAllModels: true,
+  labels: [],
 };
 
 const LIMITS_ENTITY_SELECTOR_PAGE_SIZE = 100;
@@ -238,6 +243,7 @@ export default function LimitsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
     useState<LimitFormState>(DEFAULT_FORM_STATE);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   const editId = searchParams.get("edit");
   // The list is unfiltered and unpaginated, so every limit the `edit` param can
@@ -271,7 +277,7 @@ export default function LimitsPage() {
 
   const handleCreateOpen = useCallback(() => {
     closeEditDialog();
-    setFormState(DEFAULT_FORM_STATE);
+    setFormState({ ...DEFAULT_FORM_STATE, labels: [] });
     setIsCreateDialogOpen(true);
   }, [closeEditDialog]);
 
@@ -308,6 +314,7 @@ export default function LimitsPage() {
           limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
         models: isAllModels ? [] : models,
         isAllModels,
+        labels: limit.labels,
       };
     },
     [llmProxyId],
@@ -542,6 +549,7 @@ export default function LimitsPage() {
           <div className="flex min-w-0 items-center gap-2">
             {getEntityIcon(row.original)}
             <span className="truncate">{getEntityLabel(row.original)}</span>
+            <LabelTags labels={row.original.labels} />
           </div>
         ),
       },
@@ -697,6 +705,8 @@ export default function LimitsPage() {
   }
 
   async function handleSubmit() {
+    const finalLabels =
+      labelsRef.current?.saveUnsavedLabel() ?? formState.labels;
     const entityType =
       formState.entityType === "llm_proxy" ? "agent" : formState.entityType;
     const body = {
@@ -711,6 +721,7 @@ export default function LimitsPage() {
       limitValue: Number(formState.limitValue),
       cleanupInterval: formState.cleanupInterval,
       model: formState.isAllModels ? null : formState.models,
+      labels: finalLabels,
     };
 
     if (editingLimit) {
@@ -1131,6 +1142,14 @@ export default function LimitsPage() {
                 }
               />
             </div>
+
+            <AdvancedLabelsSection
+              ref={labelsRef}
+              labels={formState.labels}
+              onLabelsChange={(labels) =>
+                setFormState((current) => ({ ...current, labels }))
+              }
+            />
           </DialogBody>
           <DialogStickyFooter className="mt-0">
             <Button type="button" variant="outline" onClick={closeDialog}>

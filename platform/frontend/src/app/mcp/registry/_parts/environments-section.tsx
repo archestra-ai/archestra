@@ -2,17 +2,14 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  Info,
-  Pencil,
-  Plus,
-  Tags,
-  Trash2,
-  TriangleAlert,
-  X,
-} from "lucide-react";
+import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -357,10 +354,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                 },
                 ...(item.kind === "environment"
                   ? [
-                    ]
-                  : []),
-                ...(item.kind === "environment"
-                  ? [
                       {
                         icon: <Trash2 className="h-4 w-4" />,
                         label: `Delete ${item.name}`,
@@ -463,7 +456,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
           setEgressModeFilter("all");
         }}
       />
-
 
       {bulkDeleteOpen && (
         <DeleteConfirmDialog
@@ -640,6 +632,8 @@ function EnvironmentEditorDialog({
   >([]);
   const [registryDraft, setRegistryDraft] = useState("");
   const [registryError, setRegistryError] = useState<string | null>(null);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy) => {
     setEgressMode(policy.egressMode);
@@ -663,6 +657,7 @@ function EnvironmentEditorDialog({
       // the org query has resolved (orgLoaded), so the seed gates on it.
       const orgDefaultPolicy = defaultEnvironment?.networkPolicy ?? null;
       if (mode === "default") {
+        setLabels([]);
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
         setDescription(defaultEnvironment?.description ?? "");
@@ -680,6 +675,7 @@ function EnvironmentEditorDialog({
           defaultEnvironment?.trustedImageRegistries ?? [],
         );
       } else {
+        setLabels(environment?.labels ?? []);
         setName(environment?.name ?? "");
         setNamespace(environment?.namespace ?? "");
         setDescription(environment?.description ?? "");
@@ -787,6 +783,7 @@ function EnvironmentEditorDialog({
     trimmedNamespace !== (environment.namespace ?? "");
 
   const doSave = () => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const namespaceValue = trimmedNamespace === "" ? null : trimmedNamespace;
     const descriptionValue =
       trimmedDescription === "" ? null : trimmedDescription;
@@ -807,6 +804,7 @@ function EnvironmentEditorDialog({
           restricted,
           validationRegex: validationRegexValue,
           trustedImageRegistries: trustedImageRegistriesValue,
+          labels: finalLabels,
         },
         { onSuccess: (created) => created && onOpenChange(false) },
       );
@@ -835,6 +833,7 @@ function EnvironmentEditorDialog({
             restricted,
             validationRegex: validationRegexValue,
             trustedImageRegistries: trustedImageRegistriesValue,
+            labels: finalLabels,
           },
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
@@ -1103,6 +1102,13 @@ function EnvironmentEditorDialog({
                     </div>
                   )}
                 </div>
+              )}
+              {mode !== "default" && (
+                <ProfileLabels
+                  ref={labelsRef}
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                />
               )}
             </AccordionContent>
           </AccordionItem>

@@ -11,7 +11,6 @@ import {
   MessageSquare,
   Pencil,
   Plus,
-  Tags,
   Trash2,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -630,7 +629,6 @@ function KnowledgeBasesList() {
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
           />
-
 
           {editingItem && (
             <EditKnowledgeBaseDialog

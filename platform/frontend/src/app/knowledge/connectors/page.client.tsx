@@ -6,7 +6,7 @@ import {
   type ConnectorType,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { ArchiveRestore, Database, Pencil, Tags, Trash2 } from "lucide-react";
+import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -167,7 +167,6 @@ function ConnectorsList() {
   );
   const [permanentlyDeletingConnector, setPermanentlyDeletingConnector] =
     useState<ConnectorItem | null>(null);
-    useState<ConnectorItem | null>(null);
   const restoreConnector = useRestoreConnector();
   const permanentlyDeleteConnector = usePermanentlyDeleteConnector();
   // Resolved once here rather than inside a cell renderer, as the shared
@@ -294,30 +293,26 @@ function ConnectorsList() {
       allLabel: "Select all connectors on this page",
     }),
     {
-      id: "icon",
-      size: 40,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <ConnectorTypeIcon
-            type={row.original.connectorType}
-            className="h-5 w-5"
-          />
-        </div>
-      ),
-    },
-    {
       id: "name",
       accessorKey: "name",
       header: "Connector",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="font-medium truncate">{row.original.name}</div>
-          {row.original.description && (
-            <div className="text-xs text-muted-foreground truncate">
-              {row.original.description}
+        <div className="flex min-w-0 items-center gap-3">
+          <ConnectorTypeIcon
+            type={row.original.connectorType}
+            className="h-4 w-4 shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-medium">{row.original.name}</span>
+              <LabelTags labels={row.original.labels} />
             </div>
-          )}
+            {row.original.description && (
+              <div className="truncate text-xs text-muted-foreground">
+                {row.original.description}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
@@ -368,30 +363,26 @@ function ConnectorsList() {
   // delete) and is re-authenticated through the normal edit flow.
   const deletedColumns: ColumnDef<ConnectorItem>[] = [
     {
-      id: "icon",
-      size: 40,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <ConnectorTypeIcon
-            type={row.original.connectorType}
-            className="h-5 w-5"
-          />
-        </div>
-      ),
-    },
-    {
       id: "name",
       accessorKey: "name",
       header: "Connector",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="font-medium truncate">{row.original.name}</div>
-          {row.original.description && (
-            <div className="text-xs text-muted-foreground truncate">
-              {row.original.description}
+        <div className="flex min-w-0 items-center gap-3">
+          <ConnectorTypeIcon
+            type={row.original.connectorType}
+            className="h-4 w-4 shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-medium">{row.original.name}</span>
+              <LabelTags labels={row.original.labels} />
             </div>
-          )}
+            {row.original.description && (
+              <div className="truncate text-xs text-muted-foreground">
+                {row.original.description}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
@@ -727,7 +718,6 @@ function ConnectorsList() {
               onOpenChange={(open) => !open && closeEditDialog()}
             />
           )}
-
 
           {deletingConnectorId && (
             <DeleteConnectorDialog

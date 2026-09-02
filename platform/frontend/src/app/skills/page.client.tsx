@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Server,
   Sparkles,
-  Tags,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -971,6 +970,9 @@ function SkillsList() {
                               item={item}
                               appName={appName}
                             />
+                            {standalone ? (
+                              <LabelTags labels={standalone.labels} />
+                            ) : null}
                           </span>
                         }
                         description={item.skill.description}
@@ -1100,7 +1102,6 @@ function SkillsList() {
           onOpenChange={(open) => !open && setDeletingSkill(null)}
         />
       )}
-
 
       {permanentlyDeletingSkill && (
         <PermanentlyDeleteSkillDialog

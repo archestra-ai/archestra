@@ -11,8 +11,10 @@ import {
 import { AlertCircle, Boxes, Globe, RotateCcw, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -190,6 +192,8 @@ export function EditModelDialog({
   const [_inputModalityToAdd, _setInputModalityToAdd] = useState("");
   const [_outputModalityToAdd, _setOutputModalityToAdd] = useState("");
   const updateModel = useUpdateModel();
+  const [labels, setLabels] = useState<ProfileLabel[]>(model.labels);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   // Model catalog managers restrict models across the whole org, so the
   // picker offers every team (not just the editor's own).
@@ -296,11 +300,13 @@ export function EditModelDialog({
   useEffect(() => {
     if (open) {
       form.reset(getDefaults(model));
+      setLabels(model.labels);
       setActiveSection("availability");
     }
   }, [open, model, form]);
 
   const handleSubmit = async (values: EditModelFormValues) => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const inputPrice = values.customPricePerMillionInput.trim() || null;
     const outputPrice = values.customPricePerMillionOutput.trim() || null;
     const cacheReadPrice = values.customPricePerMillionCacheRead.trim() || null;
@@ -321,6 +327,7 @@ export function EditModelDialog({
       customContextLength: parseCustomTokenLimit(values.customContextLength),
       customOutputLength: parseCustomTokenLimit(values.customOutputLength),
       ignored: values.ignored,
+      labels: finalLabels,
       // Both lists always go, so switching between Teams and Users revokes
       // what the previous choice left behind instead of stranding it.
       teamIds: values.accessScope === "team" ? values.teamIds : [],
@@ -547,6 +554,11 @@ export function EditModelDialog({
                 <FormMessage />
               </FormItem>
             )}
+          />
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
           />
         </div>
       </DialogSection>

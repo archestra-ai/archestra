@@ -32,6 +32,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { useSelectedLabels } from "@/components/label-select";
+import { LabelTags } from "@/components/label-tags";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import {
@@ -259,7 +260,10 @@ export default function ModelsPage() {
           const isLatestAlias = isOpenRouterLatestAlias(provider, modelId);
           return (
             <div className="min-w-0 space-y-2">
-              <span className="font-mono text-sm">{modelId}</span>
+              <span className="flex items-center gap-2 font-mono text-sm">
+                <span className="truncate">{modelId}</span>
+                <LabelTags labels={row.original.labels} />
+              </span>
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 {isFree && <FreeModelBadge />}
                 {isLatestAlias && <LatestModelBadge />}
@@ -696,7 +700,8 @@ export default function ModelsPage() {
             search ||
               apiKeyFilter !== "all" ||
               modelTypeFilter !== "all" ||
-              (canFilterFreeModels && freeOnly),
+              (canFilterFreeModels && freeOnly) ||
+              Boolean(selectedLabels),
           )}
           filteredEmptyMessage="No models match your filters"
           onClearFilters={() => {
@@ -741,7 +746,6 @@ export default function ModelsPage() {
           }}
         />
       )}
-
     </PageLayout>
   );
 }

@@ -162,6 +162,7 @@ beforeEach(() => {
           id: "kb-1",
           name: "Handbook",
           description: null,
+          labels: [{ key: "region", value: "north" }],
           connectors: [
             { id: "conn-1", name: "Org Connector", connectorType: "jira" },
             {
@@ -214,6 +215,7 @@ describe("KnowledgeBasesPage", () => {
     expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.getByText("documents")).toBeInTheDocument();
     expect(screen.getByText("agent")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View 1 label" })).toBeVisible();
   });
 
   it("keeps the per-connector actions the expandable sub-table used to own", async () => {

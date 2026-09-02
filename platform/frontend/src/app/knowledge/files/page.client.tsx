@@ -30,6 +30,7 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -371,6 +372,7 @@ export default function KnowledgeFilesPage() {
               >
                 {file.filename}
               </span>
+              <LabelTags labels={file.labels} />
             </button>
           );
         },

@@ -3,6 +3,8 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import {
   formatExpiration,
   getDefaultVirtualKeyScope,
@@ -10,8 +12,7 @@ import {
   type VirtualKeyScope,
   VirtualKeyVisibilityField,
 } from "@/components/create-virtual-key-dialog";
-import { createdByFact } from "@/components/created-by-cell";
-import { DetailFacts } from "@/components/detail-facts";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import {
@@ -33,7 +34,6 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { useUpdateVirtualApiKey } from "@/lib/virtual-api-keys.query";
-import { type ProfileLabel, ProfileLabels } from "@/components/agent-labels";
 
 export type EditableVirtualKey =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
@@ -71,6 +71,7 @@ export function EditVirtualKeyDialog({
     {},
   );
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   useEffect(() => {
     if (!virtualKey) return;
@@ -97,12 +98,14 @@ export function EditVirtualKeyDialog({
       scope: initialScope,
       teamIds: [...initialTeamIds].sort(),
       providerApiKeyIds: initialProviderApiKeyIds,
+      labels: virtualKey.labels,
     };
   }, [virtualKey]);
 
   const isPassthrough = virtualKey?.keyType === "passthrough";
   const handleUpdate = useCallback(async () => {
     if (!virtualKey || !name.trim()) return;
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const result = await updateMutation.mutateAsync({
       id: virtualKey.id,
       data: isPassthrough
@@ -110,7 +113,7 @@ export function EditVirtualKeyDialog({
             name: name.trim(),
             keyType: "passthrough",
             expiresAt: expiresAt ?? undefined,
-            labels,
+            labels: finalLabels,
           }
         : {
             name: name.trim(),
@@ -119,7 +122,7 @@ export function EditVirtualKeyDialog({
             scope,
             teams: scope === "team" ? teamIds : [],
             providerApiKeys: providerApiKeyMapToArray(providerApiKeyIds),
-            labels,
+            labels: finalLabels,
           },
     });
     if (result) onOpenChange(false);
@@ -152,6 +155,7 @@ export function EditVirtualKeyDialog({
       scope,
       teamIds: [...teamIds].sort(),
       providerApiKeyIds,
+      labels,
     });
 
   return (
@@ -159,9 +163,19 @@ export function EditVirtualKeyDialog({
       open
       onOpenChange={onOpenChange}
       title={
-        isPassthrough
-          ? "Edit Passthrough Virtual Key"
-          : "Edit Standard Virtual Key"
+        <span className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 pr-5">
+          <span>
+            {isPassthrough
+              ? "Edit Passthrough Virtual Key"
+              : "Edit Standard Virtual Key"}
+          </span>
+          {virtualKey.createdBy && (
+            <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+              <span>Created by</span>
+              <CreatedByCell createdBy={virtualKey.createdBy} />
+            </span>
+          )}
+        </span>
       }
       description={
         isPassthrough
@@ -173,9 +187,6 @@ export function EditVirtualKeyDialog({
     >
       <DialogForm onSubmit={handleUpdate}>
         <DialogBody className="space-y-4">
-          {/* Provenance before the editable fields: who to ask before you
-              change somebody else's credential. */}
-          <DetailFacts facts={[createdByFact(virtualKey.createdBy)]} />
           <div className="space-y-2">
             <Label htmlFor="edit-virtual-key-name">Name</Label>
             <Input
@@ -218,7 +229,11 @@ export function EditVirtualKeyDialog({
               />
             </>
           )}
-          <ProfileLabels labels={labels} onLabelsChange={setLabels} />
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
+          />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           <DialogCancelButton>Cancel</DialogCancelButton>

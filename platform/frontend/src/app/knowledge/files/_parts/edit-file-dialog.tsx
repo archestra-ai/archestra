@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FileVisibilitySelector,
   type KnowledgeFileVisibility,
 } from "@/app/knowledge/files/_parts/file-visibility-selector";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
@@ -41,6 +43,8 @@ export function EditFileDialog({
   const [visibility, setVisibility] =
     useState<KnowledgeFileVisibility>("org-wide");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
 
   const updateFile = useUpdateKnowledgeFile();
 
@@ -52,6 +56,7 @@ export function EditFileDialog({
     setDirectoryId(file.directoryId ?? ROOT_VALUE);
     setVisibility(file.visibility as KnowledgeFileVisibility);
     setTeamIds(file.teamIds ?? []);
+    setLabels(file.labels);
   }, [open, file]);
 
   const canSubmit =
@@ -61,6 +66,7 @@ export function EditFileDialog({
 
   const handleSubmit = () => {
     if (!file) return;
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     updateFile.mutate(
       {
         fileId: file.id,
@@ -69,6 +75,7 @@ export function EditFileDialog({
           directoryId: directoryId === ROOT_VALUE ? null : directoryId,
           visibility,
           teamIds: visibility === "team-scoped" ? teamIds : [],
+          labels: finalLabels,
         },
       },
       { onSuccess: () => onOpenChange(false) },
@@ -115,6 +122,12 @@ export function EditFileDialog({
           onVisibilityChange={setVisibility}
           teamIds={teamIds}
           onTeamIdsChange={setTeamIds}
+        />
+
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
         />
       </div>
 

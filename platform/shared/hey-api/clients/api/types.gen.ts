@@ -64787,6 +64787,12 @@ export type UploadKnowledgeFileData = {
         mimeType: string;
         content: string;
         directoryId?: string | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;

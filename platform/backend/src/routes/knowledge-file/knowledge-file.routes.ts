@@ -160,6 +160,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           /** Base64, matching how chat attachments already arrive. */
           content: z.string().min(1),
           directoryId: z.string().uuid().nullable().default(null),
+          labels: z.array(LabelWithDetailsSchema).default([]),
         }),
         response: constructResponseSchema(KbFileSchema),
       },
@@ -231,6 +232,10 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw error;
       }
 
+      if (body.labels.length > 0) {
+        await KbFileLabelModel.syncLabels(file.id, body.labels);
+      }
+
       const {
         data: _data,
         objectKey: _objectKey,
@@ -243,7 +248,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         createdBy: await CreatedByModel.resolveOne(uploadedBy),
         knowledgeBases: [],
         teamIds: body.teamIds,
-        labels: [],
+        labels: await KbFileLabelModel.getLabelsFor(file.id),
       };
     },
   );

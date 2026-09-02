@@ -25,9 +25,14 @@ export function LabelTags({ labels }: LabelTagsProps) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="inline-flex">
+          <button
+            type="button"
+            className="inline-flex shrink-0"
+            aria-label={`View ${labels.length} ${labels.length === 1 ? "label" : "labels"}`}
+            onClick={(event) => event.stopPropagation()}
+          >
             <Tag className="h-4 w-4 text-muted-foreground" />
-          </div>
+          </button>
         </TooltipTrigger>
         <TooltipContent>
           <div className="flex flex-wrap gap-1 max-w-xs">

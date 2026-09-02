@@ -1,5 +1,3 @@
-import { vi } from "vitest";
-
 /**
  * Stubs for every label hook, so a page test can render a list page without
  * standing up a QueryClient just to satisfy the label editor.
@@ -11,7 +9,6 @@ import { vi } from "vitest";
 
 const noKeys = () => ({ data: [] as string[] });
 const noValues = () => ({ data: [] as string[] });
-const noSave = () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) });
 
 export const useConnectorLabelKeys = noKeys;
 export const useEnvironmentLabelKeys = noKeys;
@@ -40,4 +37,3 @@ export const usePluginLabelValues = noValues;
 export const useServiceAccountLabelValues = noValues;
 export const useSkillLabelValues = noValues;
 export const useVirtualApiKeyLabelValues = noValues;
-

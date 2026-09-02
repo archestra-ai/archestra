@@ -100,12 +100,14 @@ function makeConnector(overrides: Record<string, unknown>) {
     lastSyncStatus: "success",
     lastSyncAt: "2026-07-13T10:00:00.000Z",
     schedule: null,
+    labels: [],
     ...overrides,
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   mockUseAllMatchingConnectors.mockReturnValue({
     data: [],
     isFetching: false,
@@ -159,6 +161,39 @@ beforeEach(() => {
 });
 
 describe("ConnectorsPage", () => {
+  it("keeps type and labels with the connector name in the compact table", async () => {
+    window.localStorage.setItem("archestra-connectors-view", "table");
+    mockUseConnectorsPaginated.mockReturnValue({
+      data: {
+        data: [
+          makeConnector({
+            name: "Regional Jira",
+            labels: [{ key: "region", value: "north" }],
+          }),
+        ],
+        pagination: { total: 1 },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    });
+
+    render(<ConnectorsPage />);
+
+    await screen.findByRole("columnheader", { name: "Connector" });
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual([
+      "",
+      "Connector",
+      "Status",
+      "Accessible to",
+      "Schedule",
+      "Actions",
+    ]);
+    expect(screen.getByRole("button", { name: "View 1 label" })).toBeVisible();
+  });
+
   it("shows who each connector is accessible to, in the shared scope badge language", () => {
     render(<ConnectorsPage />);
 

@@ -1,12 +1,13 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Bot, Plus, Power, PowerOff, Tags, Trash2 } from "lucide-react";
+import { Bot, Plus, Power, PowerOff, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { type ProfileLabel, ProfileLabels } from "@/components/agent-labels";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -128,6 +129,7 @@ export default function ServiceAccountsSettingsPage() {
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newLabels, setNewLabels] = useState<ProfileLabel[]>([]);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
     null,
   );
@@ -213,10 +215,6 @@ export default function ServiceAccountsSettingsPage() {
         actions={[
           ...(canUpdateServiceAccounts
             ? [
-              ]
-            : []),
-          ...(canUpdateServiceAccounts
-            ? [
                 {
                   icon: account.disabled ? (
                     <Power className="h-4 w-4" />
@@ -266,13 +264,16 @@ export default function ServiceAccountsSettingsPage() {
         header: "Account",
         size: 160,
         cell: ({ row }) => (
-          <Link
-            className="block truncate font-medium hover:underline"
-            href={`/settings/service-accounts/${row.original.id}`}
-            title={row.original.name}
-          >
-            {row.original.name}
-          </Link>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link
+              className="truncate font-medium hover:underline"
+              href={`/settings/service-accounts/${row.original.id}`}
+              title={row.original.name}
+            >
+              {row.original.name}
+            </Link>
+            <LabelTags labels={row.original.labels} />
+          </div>
         ),
       },
       {
@@ -334,10 +335,11 @@ export default function ServiceAccountsSettingsPage() {
   };
 
   const handleSubmit = form.handleSubmit(async (values) => {
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? newLabels;
     const account = await createMutation.mutateAsync({
       name: values.name.trim(),
       role: values.role,
-      labels: newLabels,
+      labels: finalLabels,
     });
     if (!account) return;
 
@@ -631,7 +633,11 @@ export default function ServiceAccountsSettingsPage() {
                 The role this service account will use for API requests.
               </FieldDescription>
             </div>
-            <ProfileLabels labels={newLabels} onLabelsChange={setNewLabels} />
+            <AdvancedLabelsSection
+              ref={labelsRef}
+              labels={newLabels}
+              onLabelsChange={setNewLabels}
+            />
           </DialogBody>
           <DialogStickyFooter>
             <Button type="button" variant="outline" onClick={closeDialog}>
@@ -643,7 +649,6 @@ export default function ServiceAccountsSettingsPage() {
           </DialogStickyFooter>
         </DialogForm>
       </FormDialog>
-
 
       <DeleteConfirmDialog
         open={!!accountToDelete}

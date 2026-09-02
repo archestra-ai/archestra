@@ -2,9 +2,9 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
+import type { ProfileLabel } from "@/components/agent-labels";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import type { SkillDetail } from "./github-sync-panel";
-import type { ProfileLabel } from "@/components/agent-labels";
 
 export interface ResourceFile {
   path: string;
@@ -81,7 +81,7 @@ export function skillDraftFromSkill(skill: SkillDetail): SkillDraft {
     teamIds: skill.teams.map((team) => team.id),
     userIds: skill.users.map((user) => user.id),
     environmentIds: skill.environments.map((environment) => environment.id),
-    labels: skill.labels,
+    labels: skill.labels ?? [],
   };
 }
 

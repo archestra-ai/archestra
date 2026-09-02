@@ -103,12 +103,17 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       provider: "anthropic",
       apiKey: "sk-test",
       baseUrl: undefined,
+      inferenceBaseUrl: undefined,
       extraHeaders: undefined,
       scope: "personal",
       teamId: undefined,
       isPrimary: false,
       vaultSecretPath: undefined,
       vaultSecretKey: undefined,
+      awsAccessKeyId: undefined,
+      awsSecretAccessKey: undefined,
+      awsSessionToken: undefined,
+      labels: [],
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSuccess).toHaveBeenCalledWith("created-key-id");

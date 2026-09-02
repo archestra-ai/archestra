@@ -9,7 +9,6 @@ import {
   PackagePlus,
   Pencil,
   Plus,
-  Tags,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -828,13 +827,21 @@ function PluginsList() {
                         key={plugin.id}
                         icon={<PluginSourceIcon plugin={plugin} />}
                         title={
-                          canViewPluginDetails ? (
-                            <Link href={pluginDetailHref(plugin.id)}>
-                              {plugin.displayName}
-                            </Link>
-                          ) : (
-                            <span>{plugin.displayName}</span>
-                          )
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            {canViewPluginDetails ? (
+                              <Link
+                                href={pluginDetailHref(plugin.id)}
+                                className="truncate"
+                              >
+                                {plugin.displayName}
+                              </Link>
+                            ) : (
+                              <span className="truncate">
+                                {plugin.displayName}
+                              </span>
+                            )}
+                            <LabelTags labels={plugin.labels ?? []} />
+                          </span>
                         }
                         description={plugin.description}
                         actions={renderPluginActions(plugin)}

@@ -18,7 +18,7 @@ export function SignOutWithIdpLogout() {
     performSignOut();
   }, []);
 
-  return <LoadingState label="Signing out…" variant="page" />;
+  return <LoadingState label="Signing out…" variant="fill" />;
 }
 
 async function performSignOut() {

@@ -81,6 +81,47 @@ test.describe("loading states", () => {
     }
   });
 
+  test("the sign-in page holds its loading indicator in one place", async ({
+    page,
+  }) => {
+    // The auth surface stacks two gates: the session check above the shell,
+    // and the route's own Suspense boundary inside it. They used to draw
+    // full-area loaders with different geometry — the second derived its
+    // height from `100dvh - 12rem`, chrome the auth pages do not have — so the
+    // indicator jumped up the screen partway through a reload. Both now centre
+    // in the box the layout actually gives them.
+    await page.addInitScript(() => {
+      const centres: number[] = [];
+      (window as unknown as { __centres: number[] }).__centres = centres;
+      const sample = () => {
+        for (const element of document.querySelectorAll("output")) {
+          const indicator = element.querySelector(".animate-spin");
+          if (!indicator) continue;
+          const box = element.getBoundingClientRect();
+          if (box.height < 200) continue; // full-area loaders only
+          centres.push(Math.round(box.y + box.height / 2));
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+
+    await page.goto("/auth/sign-in");
+    await expect(page.getByRole("main")).toBeVisible();
+
+    const centres = await page.evaluate(
+      () => (window as unknown as { __centres: number[] }).__centres,
+    );
+
+    // Two or more samples means the handover between the gates was caught, and
+    // that is the moment the indicator used to jump ~55px up the screen. One
+    // sample means the page resolved inside a frame and there was no handover
+    // to see; either way it must never have drawn a loader in two places.
+    const spread =
+      centres.length > 1 ? Math.max(...centres) - Math.min(...centres) : 0;
+    expect(spread).toBeLessThanOrEqual(16);
+  });
+
   test("an empty result is only reported once the list has actually loaded", async ({
     page,
     goToPage,

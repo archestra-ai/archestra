@@ -74,8 +74,12 @@ describe("route families", () => {
   it("points every edit deep link at the detail page's own sections", () => {
     // Editing means the configuration, never wherever the page opens — a
     // gateway opens on Connect, which configures nothing.
+    // A gateway configures in one Settings tab, so every step resolves there.
     expect(agentConfigureHref("mcp_gateway", "g1")).toBe(
-      "/mcp/gateways/g1?section=general",
+      "/mcp/gateways/g1?section=settings",
+    );
+    expect(agentConfigureHref("mcp_gateway", "g1", "tools")).toBe(
+      "/mcp/gateways/g1?section=settings",
     );
     expect(agentConfigureHref("agent", "a 1", "tools")).toBe(
       "/agents/a%201?section=tools",
@@ -114,13 +118,13 @@ describe("resolveLegacyAgentDialogRedirect", () => {
         "mcp_gateway",
         new URLSearchParams("edit=g1"),
       ),
-    ).toBe("/mcp/gateways/g1?section=general");
+    ).toBe("/mcp/gateways/g1?section=settings");
     expect(
       resolveLegacyAgentDialogRedirect(
         "mcp_gateway",
         new URLSearchParams("edit=g1&openTools=true"),
       ),
-    ).toBe("/mcp/gateways/g1?section=tools&openTools=true");
+    ).toBe("/mcp/gateways/g1?section=settings&openTools=true");
   });
 
   it("forwards ?view=<id> to the detail page", () => {

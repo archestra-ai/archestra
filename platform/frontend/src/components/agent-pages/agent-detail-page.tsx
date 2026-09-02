@@ -19,7 +19,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConvertToSkillDialog } from "@/app/agents/convert-to-skill-dialog";
 import { AgentBadge } from "@/components/agent-badge";
-import { AgentForm } from "@/components/agent-form";
+import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
@@ -72,7 +72,7 @@ import { AgentConnectContent } from "./agent-connect-content";
 import { AgentExecutions } from "./agent-executions";
 import {
   AGENT_PAGE_CONFIGS,
-  AGENT_SECTION_FORM_GROUP,
+  AGENT_SECTION_FORM_GROUPS,
   type AgentDetailSection,
   type AgentPageKind,
   agentConfigureHref,
@@ -287,14 +287,25 @@ function AgentDetails({
   // A gateway exists to be connected to, so that is where it opens and what
   // its tab bar leads with. An agent opens on its own configuration.
   const connectFirst = kind === "mcp_gateway" && showConnect;
+  // A gateway configures in one tab: it has no messaging channels and a short
+  // Advanced, so three tabs made the reader choose between them before they
+  // could change anything. An agent keeps them apart — its configuration is
+  // long enough that one tab would be a wall.
+  const oneSettingsTab = kind === "mcp_gateway";
   const sections: AgentDetailSection[] = [
     ...(connectFirst ? (["connect"] as const) : []),
-    "general",
-    ...(steps.some((step) => step.id === "tools") ? (["tools"] as const) : []),
-    ...(hasMessagingChannels ? (["messaging"] as const) : []),
-    ...(steps.some((step) => step.id === "advanced")
-      ? (["advanced"] as const)
-      : []),
+    ...(oneSettingsTab
+      ? (["settings"] as const)
+      : [
+          "general" as const,
+          ...(steps.some((step) => step.id === "tools")
+            ? (["tools"] as const)
+            : []),
+          ...(hasMessagingChannels ? (["messaging"] as const) : []),
+          ...(steps.some((step) => step.id === "advanced")
+            ? (["advanced"] as const)
+            : []),
+        ]),
     ...(showConnect && !connectFirst ? (["connect"] as const) : []),
     ...(hasBackgroundExecution ? (["executions"] as const) : []),
   ];
@@ -302,12 +313,12 @@ function AgentDetails({
   const section = resolveAgentDetailSection(sections, sectionParam);
   // Which form group is on screen, if any. Connect and Executions are not the
   // form's, so they answer undefined and it is not mounted at all.
-  const activeFormGroup =
-    section in AGENT_SECTION_FORM_GROUP
-      ? AGENT_SECTION_FORM_GROUP[
-          section as keyof typeof AGENT_SECTION_FORM_GROUP
+  const activeFormGroups: readonly AgentFormSection[] =
+    section in AGENT_SECTION_FORM_GROUPS
+      ? AGENT_SECTION_FORM_GROUPS[
+          section as keyof typeof AGENT_SECTION_FORM_GROUPS
         ]
-      : undefined;
+      : [];
 
   // A `?section=` this record has none of (a gateway sent to
   // `?section=executions`, or a typo) silently resolves to the first one.
@@ -354,7 +365,7 @@ function AgentDetails({
   // picker open on the tools tab. "All" gateways hide the tool editor (there
   // is nothing to pick), so only Custom ones get the auto-open.
   const openToolsCombobox =
-    section === "tools" &&
+    (section === "tools" || section === "settings") &&
     searchParams.get("openTools") === "true" &&
     !agent.accessAllTools;
 
@@ -581,16 +592,16 @@ function AgentDetails({
               )
             )}
 
-            {activeFormGroup && (
+            {activeFormGroups.length > 0 && (
               <AgentForm
                 // A fresh mount per agent and per section: the form seeds
                 // several sets from per-agent reads and would otherwise carry
                 // one section's pending state into the next.
-                key={`${agent.id}:${activeFormGroup}`}
+                key={`${agent.id}:${section}`}
                 agent={agent}
                 agentType={formAgentType}
                 defaultIconType={config.defaultIconType}
-                sections={[activeFormGroup]}
+                sections={activeFormGroups}
                 readOnly={!canEdit}
                 openToolsCombobox={openToolsCombobox}
                 onDirtyChange={setIsDirty}
@@ -771,6 +782,7 @@ function sectionLabel(
 }
 
 const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
+  settings: "Settings",
   general: "General",
   tools: "Tools & Knowledge",
   messaging: "Messaging Channels",

@@ -202,7 +202,7 @@ describe("GatewayServersSummary", () => {
     // same tab. The section is named because a gateway's bare route is its
     // Connect page, which configures nothing.
     const link = screen.getByRole("link", { name: /Edit on gateway/ });
-    expect(link).toHaveAttribute("href", "/mcp/gateways/g1?section=general");
+    expect(link).toHaveAttribute("href", "/mcp/gateways/g1?section=settings");
     expect(link).not.toHaveAttribute("target");
   });
 });

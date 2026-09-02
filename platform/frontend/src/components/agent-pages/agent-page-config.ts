@@ -112,6 +112,7 @@ export type AgentDetailSection =
   | "tools"
   | "messaging"
   | "advanced"
+  | "settings"
   | "connect"
   | "executions";
 
@@ -120,12 +121,23 @@ export type AgentDetailSection =
  * `general` is the form's `configuration` group under the name the sidebar
  * gives it.
  */
-export const AGENT_SECTION_FORM_GROUP = {
-  general: "configuration",
-  tools: "tools",
-  messaging: "messaging",
-  advanced: "advanced",
-} as const satisfies Partial<Record<AgentDetailSection, AgentFormSection>>;
+/**
+ * The form groups a page section mounts.
+ *
+ * `settings` is a gateway's single configuration tab: it mounts three groups at
+ * once, which is all merging them amounts to — the form renders every group it
+ * is given. An agent keeps the groups on separate tabs, where its longer
+ * configuration has room to breathe.
+ */
+export const AGENT_SECTION_FORM_GROUPS = {
+  general: ["configuration"],
+  tools: ["tools"],
+  messaging: ["messaging"],
+  advanced: ["advanced"],
+  settings: ["configuration", "tools", "advanced"],
+} as const satisfies Partial<
+  Record<AgentDetailSection, readonly AgentFormSection[]>
+>;
 
 /**
  * Where a bare detail URL lands, which is the record's first section.
@@ -164,11 +176,20 @@ export function agentConfigureHref(
 ): string {
   // "Edit this record" means its configuration, never wherever the page
   // happens to open — a gateway opens on Connect, which configures nothing.
-  return agentDetailHref(
-    kind,
-    id,
-    step ? SECTION_FOR_SETUP_STEP[step] : "general",
-  );
+  //
+  // A gateway holds that configuration in one Settings tab, so the three steps
+  // the wizard walks separately all resolve there. Sending it to `?section=tools`
+  // would name a section it does not have, and the page would quietly correct
+  // the URL back to Connect.
+  const section = step ? SECTION_FOR_SETUP_STEP[step] : "general";
+  if (kind === "mcp_gateway") {
+    return agentDetailHref(
+      kind,
+      id,
+      section === "messaging" ? section : "settings",
+    );
+  }
+  return agentDetailHref(kind, id, section);
 }
 
 /** The section a `?section=` value names, or the first when it names none. */
@@ -261,7 +282,13 @@ export function resolveLegacyAgentDialogRedirect(
       editId,
       openTools ? "tools" : undefined,
     );
-    return withCarried(openTools ? `${href}&openTools=true` : href);
+    // `&` only works if the href already carries a query, which is not
+    // guaranteed: a section that is the record's default carries no param.
+    return withCarried(
+      openTools
+        ? `${href}${href.includes("?") ? "&" : "?"}openTools=true`
+        : href,
+    );
   }
   const viewId = searchParams.get("view");
   if (viewId) return withCarried(agentDetailHref(kind, viewId));

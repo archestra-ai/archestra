@@ -62,7 +62,7 @@ export function TerminalPlayback({ content }: { content: string }) {
           return;
         }
         if (!rendered) {
-          terminal.write(contentRef.current);
+          terminal.write(withHiddenCursor(contentRef.current));
           renderedContentRef.current = contentRef.current;
           terminalRef.current = terminal;
           rendered = true;
@@ -108,10 +108,10 @@ export function TerminalPlayback({ content }: { content: string }) {
 
     const rendered = renderedContentRef.current;
     if (content.startsWith(rendered)) {
-      terminal.write(content.slice(rendered.length));
+      terminal.write(withHiddenCursor(content.slice(rendered.length)));
     } else {
       terminal.reset();
-      terminal.write(content);
+      terminal.write(withHiddenCursor(content));
     }
     renderedContentRef.current = content;
   }, [content]);
@@ -125,4 +125,12 @@ export function TerminalPlayback({ content }: { content: string }) {
       />
     </div>
   );
+}
+
+// ===================== internals =====================
+
+const HIDE_CURSOR_SEQUENCE = "\u001b[?25l";
+
+function withHiddenCursor(content: string): string {
+  return `${content}${HIDE_CURSOR_SEQUENCE}`;
 }

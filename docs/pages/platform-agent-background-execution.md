@@ -354,6 +354,17 @@ appear under **Pinned** in the conversation search palette. The same menu stops
 an active execution or deletes a finished one. Stopping removes the deployment
 and keeps the output produced before cancellation.
 
+## Share an Execution
+
+Share an execution the same way you share a conversation. From the execution's
+**Share** button, choose who can see it — your whole organization, specific
+teams, or named users. Recipients get a read-only view of the execution: its
+details and its terminal output, both live and retained.
+
+Sharing never grants terminal input. Attaching to the live shell runs commands
+under your own credentials, so it stays limited to you — the person who started
+the run.
+
 ## View Executions from an Agent
 
 An Agent with Background execution configured has an **Executions** tab. Use it to:

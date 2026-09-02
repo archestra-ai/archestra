@@ -350,7 +350,7 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("states the creator on the General section and nowhere else", () => {
+  it("states the creator in the header", () => {
     mockAgent({
       ...baseAgent,
       createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
@@ -361,29 +361,16 @@ describe("AgentDetailPage", () => {
     expect(screen.getByText("Ada Lovelace")).toBeVisible();
   });
 
-  it("keeps the creator off the other sections, which repeat the record", () => {
+  it("keeps stating the creator on every section, being a fact of the record", () => {
+    // It used to sit inside the General section's body and vanish the moment
+    // you opened Tools & Knowledge, which made who-made-this look like a
+    // property of the section rather than of the record.
     mockSection("tools");
     mockAgent({
       ...baseAgent,
       createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
-
-    expect(screen.queryByText("Created by")).toBeNull();
-  });
-
-  it("states the creator on a gateway's Settings section, which is its General", () => {
-    // A gateway folds its editable sections into one Settings tab, so there
-    // is no `general` to key this on. The fact follows the form group that
-    // section mounts, not the section's name — keying it by name dropped the
-    // creator from gateways entirely.
-    mockSection("settings");
-    mockAgent({
-      ...baseAgent,
-      agentType: "mcp_gateway",
-      createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
-    });
-    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
     expect(screen.getByText("Created by")).toBeVisible();
     expect(screen.getByText("Ada Lovelace")).toBeVisible();
@@ -396,6 +383,19 @@ describe("AgentDetailPage", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.queryByText("Created by")).toBeNull();
+  });
+
+  it("omits the creator when the record has none recorded", () => {
+    // The header used to keep the label and put an em dash where the name
+    // goes, which reads as a name that failed to load rather than as a record
+    // nobody is recorded as having made — one created before the platform
+    // tracked it, created by the platform itself, or whose author's account
+    // has since been deleted.
+    mockAgent({ ...baseAgent, createdBy: null });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByText("Created by")).toBeNull();
+    expect(screen.queryByText("—")).toBeNull();
   });
 
   it("names delegated task history Executions and gives it a section", () => {

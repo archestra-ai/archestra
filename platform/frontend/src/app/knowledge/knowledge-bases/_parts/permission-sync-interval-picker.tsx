@@ -52,6 +52,10 @@ export function PermissionSyncIntervalPicker({
       render={({ field }) => (
         <FormItem>
           <FormLabel>Permissions Sync Frequency</FormLabel>
+          <FormDescription>
+            Pick how often to sync document permissions with your{" "}
+            {connectorTypeLabel} instance
+          </FormDescription>
           <Select
             value={String(field.value ?? "")}
             onValueChange={(value) => field.onChange(Number(value))}
@@ -69,10 +73,6 @@ export function PermissionSyncIntervalPicker({
               ))}
             </SelectContent>
           </Select>
-          <FormDescription>
-            Pick how often to sync document permissions with your{" "}
-            {connectorTypeLabel} instance
-          </FormDescription>
         </FormItem>
       )}
     />

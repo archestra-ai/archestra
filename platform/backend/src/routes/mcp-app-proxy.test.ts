@@ -7,6 +7,7 @@ import {
   MCP_APPS_EXTENSION_ID,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
+  TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
   TOOL_READ_FILE_RAW_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
@@ -981,6 +982,12 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     // model can't invoke it; the data store stays model-visible.
     const llm = tools.find((t) => t.name === "archestra__llm_complete");
     expect(llm?._meta?.ui?.visibility).toEqual(["app"]);
+    const executions = tools.find(
+      (t) =>
+        t.name ===
+        getArchestraToolFullName(TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME),
+    );
+    expect(executions?._meta?.ui?.visibility).toEqual(["app"]);
     const dataGet = tools.find((t) => t.name === "archestra__app_data_get");
     expect(dataGet).toBeDefined();
     expect(dataGet?._meta?.ui?.visibility).not.toEqual(["app"]);

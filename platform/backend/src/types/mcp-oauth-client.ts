@@ -3,6 +3,7 @@ import {
   ResourceVisibilityScopeSchema,
 } from "@archestra/shared";
 import { z } from "zod";
+import { LabelWithDetailsSchema } from "./label";
 
 export const MCP_OAUTH_CLIENT_METADATA_TYPE = "mcp_oauth_client";
 
@@ -57,6 +58,7 @@ export const McpOauthClientSchema = z.object({
   /** The author, in the shape shared by every major object. */
   createdBy: CreatedByNullableSchema,
   teams: z.array(McpOauthClientTeamInfoSchema),
+  labels: z.array(LabelWithDetailsSchema),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

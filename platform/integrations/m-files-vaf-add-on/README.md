@@ -23,18 +23,23 @@ The public documentation is the [M-Files VAF Add On section](../../docs/pages/pl
 
 ## Build
 
-A pre-built `archestra-m-files-vaf-add-on.mfappx` is published as its own
-`m-files-vaf-add-on-v<version>` release by
-`.github/workflows/build-m-files-vaf-add-on.yml` whenever a change to this
-directory reaches `main` (platform releases are immutable once published, so
-the package cannot be attached to them; a source change therefore requires a
-`<Version>` bump in the `.csproj`, which the workflow's pull-request build
-enforces). The build is a
-plain `dotnet build -c Release` of this project on a Windows runner, using
-the official M-Files VAF project packaging (the MSBuild target below zips
-the build output into the `.mfappx`, exactly as the `MFiles.ProjectTemplates`
-template does) with all M-Files assemblies coming from the MIT-licensed
-`MFiles.VAF` NuGet package.
+Every platform image compiles this project into
+`archestra-m-files-vaf-add-on-<version>.mfappx` (plus a stable-named copy)
+in the `vaf-add-on-builder` stage of `platform/Dockerfile` and serves it
+from the M-Files connector form — the package a deployment distributes is
+always built from the same source as the platform running it. A pre-built
+package is additionally published as its own `m-files-vaf-add-on-v<version>`
+release by `.github/workflows/build-m-files-vaf-add-on.yml` whenever a
+change to this directory reaches `main` (platform releases are immutable
+once published, so the package cannot be attached to them; a source change
+therefore requires a `<Version>` bump in the `.csproj`, which the workflow's
+pull-request build enforces) — the fallback for deployments running outside
+the image. Both builds are a plain `dotnet build -c Release` of this project
+(any OS works; the output is framework-neutral IL), using the official
+M-Files VAF project packaging (the MSBuild target below zips the build
+output into the `.mfappx`, exactly as the `MFiles.ProjectTemplates` template
+does) with all M-Files assemblies coming from the MIT-licensed `MFiles.VAF`
+NuGet package.
 
 The guided path for operators is `install-m-files-vaf-add-on.ps1`, served by the
 platform at `/scripts/install-m-files-vaf-add-on.ps1` and linked from the M-Files

@@ -48,13 +48,13 @@ export function SamlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Provider ID</FormLabel>
-                  <FormControl>
-                    <Input placeholder="my-company-idp" {...field} />
-                  </FormControl>
                   <FormDescription>
                     Unique identifier for this identity provider. Used in
                     callback URLs.
                   </FormDescription>
+                  <FormControl>
+                    <Input placeholder="my-company-idp" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -67,12 +67,12 @@ export function SamlConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Issuer</FormLabel>
-                <FormControl>
-                  <Input placeholder="https://idp.company.com" {...field} />
-                </FormControl>
                 <FormDescription>
                   The issuer URL of your identity provider.
                 </FormDescription>
+                <FormControl>
+                  <Input placeholder="https://idp.company.com" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -93,15 +93,15 @@ export function SamlConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>SAML Issuer / Entity ID</FormLabel>
+                <FormDescription>
+                  The Entity ID of your SAML Identity Provider.
+                </FormDescription>
                 <FormControl>
                   <Input
                     placeholder="https://idp.company.com/saml/metadata"
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  The Entity ID of your SAML Identity Provider.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -113,16 +113,16 @@ export function SamlConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>SSO Entry Point URL</FormLabel>
+                <FormDescription>
+                  The Single Sign-On URL where users are redirected to
+                  authenticate.
+                </FormDescription>
                 <FormControl>
                   <Input
                     placeholder="https://idp.company.com/saml/sso"
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  The Single Sign-On URL where users are redirected to
-                  authenticate.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -134,6 +134,10 @@ export function SamlConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>IdP Certificate</FormLabel>
+                <FormDescription>
+                  The X.509 certificate from your Identity Provider for
+                  signature verification.
+                </FormDescription>
                 <FormControl>
                   <Textarea
                     placeholder="-----BEGIN CERTIFICATE-----&#10;MIIDdDCCAlygAwIBAgIGAXOvL...&#10;-----END CERTIFICATE-----"
@@ -141,10 +145,6 @@ export function SamlConfigForm({
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  The X.509 certificate from your Identity Provider for
-                  signature verification.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -156,6 +156,11 @@ export function SamlConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>IdP Metadata XML (Recommended)</FormLabel>
+                <FormDescription>
+                  The full IdP metadata XML from your Identity Provider. This is
+                  the recommended way to configure SAML and includes all
+                  necessary endpoints and certificates.
+                </FormDescription>
                 <FormControl>
                   <Textarea
                     placeholder="<?xml version='1.0'?>&#10;<md:EntityDescriptor>...</md:EntityDescriptor>"
@@ -163,11 +168,6 @@ export function SamlConfigForm({
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  The full IdP metadata XML from your Identity Provider. This is
-                  the recommended way to configure SAML and includes all
-                  necessary endpoints and certificates.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -179,16 +179,16 @@ export function SamlConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Callback URL (ACS URL)</FormLabel>
+                <FormDescription>
+                  The Assertion Consumer Service URL where SAML responses are
+                  sent.
+                </FormDescription>
                 <FormControl>
                   <Input
                     placeholder="https://your-app.com/api/auth/sso/callback/provider-id"
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  The Assertion Consumer Service URL where SAML responses are
-                  sent.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -200,12 +200,12 @@ export function SamlConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Audience (Optional)</FormLabel>
-                <FormControl>
-                  <Input placeholder="https://your-app.com" {...field} />
-                </FormControl>
                 <FormDescription>
                   Expected audience value in SAML assertions.
                 </FormDescription>
+                <FormControl>
+                  <Input placeholder="https://your-app.com" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -224,12 +224,12 @@ export function SamlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>SP Entity ID</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://your-app.com" {...field} />
-                  </FormControl>
                   <FormDescription>
                     Your application's Entity ID for SAML.
                   </FormDescription>
+                  <FormControl>
+                    <Input placeholder="https://your-app.com" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -241,6 +241,9 @@ export function SamlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>SP Metadata XML (Optional)</FormLabel>
+                  <FormDescription>
+                    Your Service Provider metadata XML document.
+                  </FormDescription>
                   <FormControl>
                     <Textarea
                       placeholder="<?xml version='1.0'?>&#10;<EntityDescriptor>...</EntityDescriptor>"
@@ -248,9 +251,6 @@ export function SamlConfigForm({
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    Your Service Provider metadata XML document.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -270,15 +270,15 @@ export function SamlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>User ID Attribute</FormLabel>
+                  <FormDescription>
+                    The SAML attribute that contains the unique user identifier.
+                  </FormDescription>
                   <FormControl>
                     <Input
                       placeholder="urn:oid:0.9.2342.19200300.100.1.1"
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    The SAML attribute that contains the unique user identifier.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -290,15 +290,15 @@ export function SamlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Email Attribute</FormLabel>
+                  <FormDescription>
+                    The SAML attribute that contains the user's email address.
+                  </FormDescription>
                   <FormControl>
                     <Input
                       placeholder="urn:oid:0.9.2342.19200300.100.1.3"
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    The SAML attribute that contains the user's email address.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -310,15 +310,15 @@ export function SamlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Display Name Attribute</FormLabel>
+                  <FormDescription>
+                    The SAML attribute that contains the user's display name.
+                  </FormDescription>
                   <FormControl>
                     <Input
                       placeholder="urn:oid:2.16.840.1.113730.3.1.241"
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    The SAML attribute that contains the user's display name.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -330,12 +330,12 @@ export function SamlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>First Name Attribute (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="urn:oid:2.5.4.42" {...field} />
-                  </FormControl>
                   <FormDescription>
                     The SAML attribute that contains the user's first name.
                   </FormDescription>
+                  <FormControl>
+                    <Input placeholder="urn:oid:2.5.4.42" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -347,12 +347,12 @@ export function SamlConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Last Name Attribute (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="urn:oid:2.5.4.4" {...field} />
-                  </FormControl>
                   <FormDescription>
                     The SAML attribute that contains the user's last name.
                   </FormDescription>
+                  <FormControl>
+                    <Input placeholder="urn:oid:2.5.4.4" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

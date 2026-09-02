@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -275,9 +276,7 @@ function ElicitationFieldInput({
         </p>
       ) : null}
       {field.schema.description ? (
-        <p className="text-xs text-muted-foreground">
-          {field.schema.description}
-        </p>
+        <FieldDescription>{field.schema.description}</FieldDescription>
       ) : null}
     </div>
   );

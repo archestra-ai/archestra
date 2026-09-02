@@ -33,6 +33,11 @@ vi.mock("@/components/resource-scope-filter", () => ({
   useScopeFilterParams: () => ({ hasActiveScopeFilters: false }),
 }));
 vi.mock("@/components/search-input", () => ({ SearchInput: () => null }));
+// The label filter runs its own `useQuery` for keys and values, which needs a
+// QueryClientProvider this file deliberately does not stand up.
+vi.mock("@/components/entity-label-filter", () => ({
+  EntityLabelFilter: () => null,
+}));
 vi.mock("./_parts/skill-version-history-dialog", () => ({
   SkillVersionHistoryDialog: () => null,
 }));

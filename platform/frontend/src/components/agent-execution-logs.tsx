@@ -5,12 +5,13 @@ import type {
   AgentRunLogsErrorMessage,
   AgentRunLogsMessage,
 } from "@archestra/shared";
+import { FileX2, TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   DeploymentLogPanel,
   useDeploymentLogAutoScroll,
 } from "@/components/deployment-console";
-import { plainTerminalTranscript } from "@/components/terminal-transcript";
+import { TerminalPlayback } from "@/components/terminal-playback";
 import type { AgentExecution } from "@/lib/agent-background-execution.query";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -82,15 +83,22 @@ export function AgentExecutionLogs({
   return (
     <DeploymentLogPanel
       title={title}
-      content={plainTerminalTranscript(content)}
+      content={content}
+      contentRenderer={(terminalContent) => (
+        <TerminalPlayback content={terminalContent} />
+      )}
       error={error}
       scrollAreaRef={scrollAreaRef}
       showScrollToBottom={showScrollToBottom}
       onScrollToBottom={scrollToBottom}
+      emptyIcon={execution.endedAt ? FileX2 : TerminalSquare}
       emptyMessage={
+        execution.endedAt ? "No output recorded" : "Waiting for output"
+      }
+      emptyHint={
         execution.endedAt
-          ? "No output was recorded for this execution."
-          : "Waiting for output…"
+          ? "This execution ended without writing anything to its log."
+          : "Output appears here as the Agent writes it."
       }
       status={
         isStreaming ? (

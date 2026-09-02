@@ -1,5 +1,6 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import { ArrowDown } from "lucide-react";
 import {
   type ReactNode,
@@ -177,6 +178,8 @@ export function DeploymentLogPanel({
   error,
   placeholder,
   emptyMessage,
+  emptyHint,
+  emptyIcon,
   status,
   scrollAreaRef,
   showScrollToBottom = false,
@@ -185,6 +188,7 @@ export function DeploymentLogPanel({
   className,
   contentTestId,
   errorTestId,
+  contentRenderer,
 }: {
   title?: string;
   detail?: string | null;
@@ -192,6 +196,8 @@ export function DeploymentLogPanel({
   error?: string | null;
   placeholder?: ReactNode;
   emptyMessage?: string;
+  emptyHint?: string;
+  emptyIcon?: LucideIcon;
   status?: ReactNode;
   scrollAreaRef?: Ref<HTMLDivElement>;
   showScrollToBottom?: boolean;
@@ -200,6 +206,7 @@ export function DeploymentLogPanel({
   className?: string;
   contentTestId?: string;
   errorTestId?: string;
+  contentRenderer?: (content: string) => ReactNode;
 }) {
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col gap-2", className)}>
@@ -240,9 +247,12 @@ export function DeploymentLogPanel({
         error={error}
         placeholder={placeholder}
         emptyMessage={emptyMessage}
+        emptyHint={emptyHint}
+        emptyIcon={emptyIcon}
         status={status}
         contentTestId={contentTestId}
         errorTestId={errorTestId}
+        contentRenderer={contentRenderer}
       />
     </div>
   );

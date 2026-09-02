@@ -2,6 +2,7 @@ import type { EnvironmentDefaultableResource } from "@archestra/shared";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
 import {
+  EnvironmentLabelModel,
   EnvironmentModel,
   EnvironmentResourceDefaultModel,
   OrganizationModel,
@@ -58,10 +59,11 @@ function teardownEnvironmentEngine(environment: Environment): void {
 
 export async function listEnvironments(
   organizationId: string,
+  labels?: Record<string, string[]>,
 ): Promise<EnvironmentList> {
   const [environments, defaultAssignedCatalogCount, resourceDefaults] =
     await Promise.all([
-      EnvironmentModel.listForOrganization(organizationId),
+      EnvironmentModel.listForOrganization(organizationId, labels),
       EnvironmentModel.countDefaultAssigned(organizationId),
       EnvironmentResourceDefaultModel.getForOrganization(organizationId),
     ]);
@@ -157,6 +159,10 @@ export async function createEnvironment(params: {
     trustedImageRegistries: data.trustedImageRegistries ?? null,
   });
 
+  if (data.labels?.length) {
+    await EnvironmentLabelModel.syncLabels(created.id, data.labels);
+  }
+
   reconcileEnvironmentEngine(created);
   return created;
 }
@@ -188,6 +194,13 @@ export async function updateEnvironment(params: {
   if (!updated) {
     throw new ApiError(404, "Environment not found");
   }
+
+  // Only touch labels when the caller sent them, so an update that omits the
+  // field leaves existing labels alone.
+  if (data.labels !== undefined) {
+    await EnvironmentLabelModel.syncLabels(id, data.labels);
+  }
+
   reconcileEnvironmentEngine(updated);
   return updated;
 }

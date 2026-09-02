@@ -37,6 +37,10 @@ export function AsanaConfigFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Workspace GID</FormLabel>
+              <FormDescription>
+                Your Asana workspace GID. Find it in the URL when viewing your
+                workspace in Asana.
+              </FormDescription>
               <FormControl>
                 <Input
                   placeholder="1234567890"
@@ -44,10 +48,6 @@ export function AsanaConfigFields({
                   value={field.value ?? ""}
                 />
               </FormControl>
-              <FormDescription>
-                Your Asana workspace GID. Find it in the URL when viewing your
-                workspace in Asana.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -60,6 +60,10 @@ export function AsanaConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Project GIDs (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of project GIDs to sync. Leave blank to sync
+              all projects in the workspace.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="1234567890, 9876543210"
@@ -67,10 +71,6 @@ export function AsanaConfigFields({
                 value={field.value ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of project GIDs to sync. Leave blank to sync
-              all projects in the workspace.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -82,6 +82,9 @@ export function AsanaConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Tags to Skip (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of tag names to exclude.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="internal, draft"
@@ -89,9 +92,6 @@ export function AsanaConfigFields({
                 value={field.value ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of tag names to exclude.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

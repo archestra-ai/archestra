@@ -61,6 +61,7 @@ const uiTestMatch = [
   "**/chat.spec.ts",
   "**/context-window.spec.ts",
   "**/connection.spec.ts",
+  "**/cost-chart-legend-mobile.spec.ts",
   "**/credentials-with-vault.ee.spec.ts",
   "**/dynamic-credentials.spec.ts",
   "**/identity-providers.ee.spec.ts",

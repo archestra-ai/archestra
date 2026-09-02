@@ -42,10 +42,9 @@ const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
 ];
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
-  source: "Import from a GitHub marketplace or start from a blank template.",
-  content:
-    "Author the native hook configuration and any payload files the plugin needs.",
-  access: "Choose who can discover and install the plugin.",
+  source: "Import from GitHub, or start blank.",
+  content: "Add the files this plugin installs.",
+  access: "Choose who can discover this plugin.",
 };
 
 const INITIAL_FILES: PluginFileDraft[] = [
@@ -189,13 +188,13 @@ function NewPluginWizard() {
                 <CatalogSourceCard
                   icon={<Github className="size-5" />}
                   title="Custom GitHub URL"
-                  description="Paste any repository with a plugin marketplace manifest."
+                  description="Paste a GitHub marketplace URL."
                   onClick={openImport}
                 />
                 <CatalogSourceCard
                   icon={<FileText className="size-5" />}
                   title="Blank template"
-                  description="Author native plugin files from scratch."
+                  description="Write the plugin files here."
                   onClick={() => setStep("content")}
                 />
               </div>

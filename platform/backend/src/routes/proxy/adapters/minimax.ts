@@ -1093,7 +1093,7 @@ async function convertToolResultsToToon(
 
   const result = messages.map((message) => {
     if (message.role === "tool") {
-      logger.info(
+      logger.debug(
         {
           toolCallId: message.tool_call_id,
           contentType: typeof message.content,

@@ -50,6 +50,11 @@ export function TextSearchLanguagePicker({
       render={({ field }) => (
         <FormItem>
           <FormLabel>Keyword Search Language</FormLabel>
+          <FormDescription>
+            Pick the language this source is written in, so keyword search
+            matches different forms of the same word. Choose Simple for code or
+            a mixed-language source. Applies on the next sync.
+          </FormDescription>
           <Select onValueChange={field.onChange} value={field.value}>
             <FormControl>
               <SelectTrigger className="w-full">
@@ -64,11 +69,6 @@ export function TextSearchLanguagePicker({
               ))}
             </SelectContent>
           </Select>
-          <FormDescription>
-            Pick the language this source is written in, so keyword search
-            matches different forms of the same word. Choose Simple for code or
-            a mixed-language source. Applies on the next sync.
-          </FormDescription>
           <FormMessage />
         </FormItem>
       )}

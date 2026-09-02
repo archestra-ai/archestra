@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 
@@ -76,6 +76,57 @@ class McpServerUserModel {
       .where(eq(schema.mcpServerUsersTable.mcpServerId, mcpServerId));
 
     return result;
+  }
+
+  /**
+   * Batched form of {@link getUserDetailsForMcpServer}, keyed by server id.
+   *
+   * Listing endpoints need this relation for every server they return. Joining
+   * it into the server query instead multiplies the result by the number of
+   * assignees per server, so the caller pays for each server's full row once
+   * per assigned user; one grouped query over the junction table costs the
+   * same regardless of how many servers are listed.
+   */
+  static async getUserDetailsForMcpServers(mcpServerIds: string[]): Promise<
+    Map<
+      string,
+      Array<{
+        userId: string;
+        email: string;
+        createdAt: Date;
+      }>
+    >
+  > {
+    const byServer = new Map<
+      string,
+      Array<{ userId: string; email: string; createdAt: Date }>
+    >();
+    if (mcpServerIds.length === 0) return byServer;
+
+    const rows = await db
+      .select({
+        mcpServerId: schema.mcpServerUsersTable.mcpServerId,
+        userId: schema.mcpServerUsersTable.userId,
+        email: schema.usersTable.email,
+        createdAt: schema.mcpServerUsersTable.createdAt,
+      })
+      .from(schema.mcpServerUsersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.mcpServerUsersTable.userId, schema.usersTable.id),
+      )
+      .where(inArray(schema.mcpServerUsersTable.mcpServerId, mcpServerIds));
+
+    for (const { mcpServerId, ...user } of rows) {
+      const existing = byServer.get(mcpServerId);
+      if (existing) {
+        existing.push(user);
+      } else {
+        byServer.set(mcpServerId, [user]);
+      }
+    }
+
+    return byServer;
   }
 
   /**

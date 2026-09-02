@@ -406,6 +406,51 @@ export type McpDeploymentStatusEntry = {
 };
 
 // Agent run attach + logs, server -> client
+
+/**
+ * Where an attach has got to before the terminal is live.
+ *
+ * Attaching is not instant: the run's task is marked working as soon as the
+ * workload is accepted, so a browser can ask for the terminal while the pod is
+ * still being scheduled or its image pulled. These are the waits the backend
+ * already performs, named so the UI can say which one is happening instead of
+ * showing an unqualified "Connecting…" for what can be minutes.
+ *
+ * Ordered: a client may treat every earlier phase as complete.
+ */
+export const AGENT_RUN_ATTACH_PHASES = [
+  /** The workload is accepted but no pod carries it yet. */
+  "queued",
+  /** A pod exists and Kubernetes is placing it on a node. */
+  "scheduling",
+  /** The node is preparing the container, usually pulling its image. */
+  "pulling",
+  /** The container runs; its agent session is still coming up. */
+  "starting",
+  /** The session exists and the terminal stream is being opened. */
+  "attaching",
+] as const;
+
+export type AgentRunAttachPhase = (typeof AGENT_RUN_ATTACH_PHASES)[number];
+
+export type AgentRunAttachProgressMessage = {
+  type: "agent_run_attach_progress";
+  payload: {
+    runId: string;
+    phase: AgentRunAttachPhase;
+    /** Short phrase naming the wait, e.g. "Pulling the agent image". */
+    message: string;
+    /**
+     * The runtime's own explanation when it has one — an unschedulable pod's
+     * reason, a failing image pull. This is the part that turns a stuck run
+     * from a hang into something the person watching can act on.
+     */
+    detail?: string | null;
+    /** Named once a pod carries the run, for operators reading logs. */
+    resourceName?: string | null;
+  };
+};
+
 export type AgentRunAttachStartedMessage = {
   type: "agent_run_attach_started";
   payload: { runId: string; command: string; resourceName: string };
@@ -529,6 +574,7 @@ export type ServerWebSocketMessage =
   | McpExecOutputMessage
   | McpExecErrorMessage
   | McpExecClosedMessage
+  | AgentRunAttachProgressMessage
   | AgentRunAttachStartedMessage
   | AgentRunAttachOutputMessage
   | AgentRunAttachErrorMessage

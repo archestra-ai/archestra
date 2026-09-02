@@ -14,11 +14,11 @@ import {
   lt,
   // SPDX-SnippetEnd
   ne,
+  notInArray,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
@@ -32,6 +32,7 @@ import { computeSecretStorageType } from "@/secrets-manager/utils";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertMcpServer,
+  InternalMcpCatalogServerType,
   McpServer,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -50,9 +51,6 @@ import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
 import { toolUiResourceUriSql } from "./tool";
-
-// Alias for users table to avoid conflict with the owner LEFT JOIN
-const assignedUsersTable = alias(schema.usersTable, "assigned_users");
 
 // Run-time install precedence for an external app (mcp-apps.md FR-31): the
 // caller's own personal install wins, then a team install, then an org install.
@@ -505,9 +503,24 @@ class McpServerModel {
     organizationId?: string,
     environmentId?: string | null,
     isPredefinedAdmin?: boolean,
+    /**
+     * Narrowing applied in SQL. Callers used to filter the returned array
+     * instead, which made a request for one catalog's installs cost the same
+     * as listing every install in the organization — the whole list was
+     * loaded, decorated with its assigned users and agents, and then thrown
+     * away.
+     */
+    filters?: {
+      catalogId?: string;
+      excludeServerTypes?: InternalMcpCatalogServerType[];
+    },
   ): Promise<McpServer[]> {
-    // Single query with LEFT JOINs for all related data including assigned users,
-    // eliminating the consecutive DB query for user details.
+    // One row per server: the joins below are all many-to-one, so the result
+    // set stays the size of the server list. Assigned users are deliberately
+    // NOT joined here — that relation is one-to-many, and joining it made the
+    // query return (servers x assigned users) rows, re-fetching every server's
+    // full payload once per assignee only to discard the duplicates in JS.
+    // They are batch-loaded in a single follow-up query instead.
     let query = db
       .select({
         server: schema.mcpServersTable,
@@ -516,9 +529,6 @@ class McpServerModel {
         teamName: schema.teamsTable.name,
         secretIsVault: schema.secretsTable.isVault,
         secretIsByosVault: schema.secretsTable.isByosVault,
-        assignedUserId: schema.mcpServerUsersTable.userId,
-        assignedUserEmail: assignedUsersTable.email,
-        assignedUserCreatedAt: schema.mcpServerUsersTable.createdAt,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
@@ -537,20 +547,25 @@ class McpServerModel {
         schema.secretsTable,
         eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
       )
-      .leftJoin(
-        schema.mcpServerUsersTable,
-        eq(schema.mcpServersTable.id, schema.mcpServerUsersTable.mcpServerId),
-      )
-      .leftJoin(
-        assignedUsersTable,
-        eq(schema.mcpServerUsersTable.userId, assignedUsersTable.id),
-      )
       .$dynamic();
 
     const conditions: SQL[] = [
       // Hide soft-deleted installs from every listing path, admin included.
       notDeleted(schema.mcpServersTable),
     ];
+
+    if (filters?.catalogId) {
+      conditions.push(eq(schema.mcpServersTable.catalogId, filters.catalogId));
+    }
+
+    if (filters?.excludeServerTypes?.length) {
+      conditions.push(
+        notInArray(
+          schema.mcpServersTable.serverType,
+          filters.excludeServerTypes,
+        ),
+      );
+    }
 
     if (organizationId) {
       const catalogBelongsToOrganization = or(
@@ -600,54 +615,48 @@ class McpServerModel {
 
     const results = await query;
 
-    // Aggregate rows by server (LEFT JOIN on assigned users creates duplicates)
+    // One row per server now, so this is a straight map rather than a dedupe.
     const serversMap = new Map<string, McpServer>();
     for (const row of results) {
-      if (!serversMap.has(row.server.id)) {
-        const teamDetails = row.server.teamId
-          ? {
-              teamId: row.server.teamId,
-              name: row.teamName || "",
-              createdAt: row.server.createdAt,
-            }
-          : null;
+      const teamDetails = row.server.teamId
+        ? {
+            teamId: row.server.teamId,
+            name: row.teamName || "",
+            createdAt: row.server.createdAt,
+          }
+        : null;
 
-        const secretStorageType = computeSecretStorageType(
-          row.server.secretId,
-          row.secretIsVault,
-          row.secretIsByosVault,
-        );
+      const secretStorageType = computeSecretStorageType(
+        row.server.secretId,
+        row.secretIsVault,
+        row.secretIsByosVault,
+      );
 
-        serversMap.set(row.server.id, {
-          ...row.server,
-          ownerEmail: row.ownerEmail,
-          catalogName: row.catalogName,
-          users: [],
-          userDetails: [],
-          teamDetails,
-          secretStorageType,
-        });
-      }
+      serversMap.set(row.server.id, {
+        ...row.server,
+        ownerEmail: row.ownerEmail,
+        catalogName: row.catalogName,
+        users: [],
+        userDetails: [],
+        teamDetails,
+        secretStorageType,
+      });
+    }
 
-      // Append assigned user if present (may be null from LEFT JOIN)
-      if (row.assignedUserId) {
-        const server = serversMap.get(row.server.id);
-        if (server && !server.users?.includes(row.assignedUserId)) {
-          server.users?.push(row.assignedUserId);
-          server.userDetails?.push({
-            userId: row.assignedUserId,
-            email: row.assignedUserEmail ?? "",
-            createdAt: row.assignedUserCreatedAt ?? new Date(),
-          });
-        }
-      }
+    const serverIds = [...serversMap.keys()];
+    const [assignedUsersByServer, assignedAgentsByServer] = await Promise.all([
+      McpServerUserModel.getUserDetailsForMcpServers(serverIds),
+      AgentToolModel.getAssignedAgentDetailsForMcpServers(serverIds),
+    ]);
+
+    for (const [serverId, assigned] of assignedUsersByServer) {
+      const server = serversMap.get(serverId);
+      if (!server) continue;
+      server.users = assigned.map((user) => user.userId);
+      server.userDetails = assigned;
     }
 
     const servers = Array.from(serversMap.values());
-    const assignedAgentsByServer =
-      await AgentToolModel.getAssignedAgentDetailsForMcpServers([
-        ...serversMap.keys(),
-      ]);
     // Auto-mode agents (implicit access to all tools) are deliberately NOT
     // decorated here: the set is org-wide and identical for every server, so
     // embedding it repeated the whole roster once per row. It is served once

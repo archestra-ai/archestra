@@ -355,6 +355,38 @@ describe("plugin routes", () => {
     });
   });
 
+  test("names the creator on the read and keeps naming them after an update", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins",
+      payload: createPayload(),
+    });
+    const id = created.json().id;
+    // Name and email both, not just an id: the field exists so somebody can be
+    // contacted, and the caller cannot resolve an id it has no roster for.
+    const creator = {
+      id: ctx.user.id,
+      name: ctx.user.name || null,
+      email: ctx.user.email || null,
+    };
+    expect(created.json().createdBy).toEqual(creator);
+
+    const detail = await ctx.app.inject({
+      method: "GET",
+      url: `/api/plugins/${id}`,
+    });
+    expect(detail.json().createdBy).toEqual(creator);
+
+    // The detail page seeds its cache from the update response, so a shape that
+    // dropped the creator there would blank the fact until the next refetch.
+    const updated = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${id}`,
+      payload: { displayName: "Renamed" },
+    });
+    expect(updated.json().createdBy).toEqual(creator);
+  });
+
   test("rejects GitHub source settings for manual plugins and non-GitHub URLs", async () => {
     const manual = await ctx.app.inject({
       method: "POST",

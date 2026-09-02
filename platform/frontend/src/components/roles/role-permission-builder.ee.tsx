@@ -14,6 +14,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -367,9 +368,9 @@ export function RolePermissionBuilder({
                                 )}
                               </Label>
                               {resourceDescriptions[resource] && (
-                                <p className="text-xs text-muted-foreground mt-1">
+                                <FieldDescription className="mt-1">
                                   {resourceDescriptions[resource]}
-                                </p>
+                                </FieldDescription>
                               )}
                             </div>
                           </div>

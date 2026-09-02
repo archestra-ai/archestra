@@ -1,7 +1,7 @@
-import { MAX_BULK_IDS, RouteId } from "@archestra/shared";
+import { MAX_BULK_IDS, parseLabelsParam, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { LimitModel } from "@/models";
+import { LimitLabelModel, LimitModel } from "@/models";
 import {
   ApiError,
   CreateLimitSchema,
@@ -15,6 +15,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { BulkOutcomeSchema, runBulk } from "./bulk-route";
+import { registerEntityLabelRoutes } from "./entity-labels";
 
 const BulkDeleteLimitsBodySchema = z.object({
   ids: z
@@ -25,6 +26,15 @@ const BulkDeleteLimitsBodySchema = z.object({
 });
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/limits",
+    tag: "Limits",
+    entityNamePlural: "limits",
+    model: LimitLabelModel,
+    keysOperationId: RouteId.GetLimitLabelKeys,
+    valuesOperationId: RouteId.GetLimitLabelValues,
+  });
+
   fastify.get(
     "/api/limits",
     {
@@ -37,12 +47,18 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           entityType: LimitEntityTypeSchema.optional(),
           entityId: z.string().optional(),
           limitType: LimitTypeSchema.optional(),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }),
         response: constructResponseSchema(z.array(LimitWithUsageSchema)),
       },
     },
     async (
-      { query: { entityType, entityId, limitType }, organizationId },
+      { query: { entityType, entityId, limitType, labels }, organizationId },
       reply,
     ) => {
       // Cleanup limits if needed before fetching
@@ -58,6 +74,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         entityId,
         limitType,
         organizationId,
+        parseLabelsParam(labels),
       );
 
       // Add per-model usage breakdown for token_cost limits

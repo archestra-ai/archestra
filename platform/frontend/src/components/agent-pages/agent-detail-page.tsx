@@ -23,9 +23,8 @@ import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
-import { createdByFact } from "@/components/created-by-cell";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { DetailFacts } from "@/components/detail-facts";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -504,6 +503,32 @@ function AgentDetails({
         // what the page cannot: chatting with the record, and the actions
         // that act on it as a whole.
         <div className="flex shrink-0 items-center gap-2">
+          {/* Who to ask about this record. Like a project, and unlike a skill
+              or a registry item, this page has no facts row to put it in — it
+              is the record's configuration, top to bottom — so the creator
+              sits in the header beside the actions rather than in a card of
+              its own above the first field. One fact does not make a panel:
+              the box read as a container waiting for content that never came.
+              A built-in belongs to nobody, so it is absent there rather than
+              present-but-empty, which would read as missing data.
+
+              The same goes for a record with no creator recorded — one made
+              before the platform tracked it, made by the platform itself, or
+              whose author's account has since been deleted. The label used to
+              stay and carry an em dash, which read as a name that had failed
+              to load rather than as a question with no answer. */}
+          {!isBuiltIn && agent.createdBy && (
+            // Dropped on phones, where the header has no room to spare beside
+            // the title and the actions that act on the record.
+            <p className="mr-1 hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
+              {/* Labelled, unlike the project header's bare name: the sidebar
+                  shows the signed-in user's own avatar and name, so a second
+                  avatar alone in the header reads as "you" or as an assignee
+                  rather than as who made this. */}
+              <span className="shrink-0">Created by</span>
+              <CreatedByCell createdBy={agent.createdBy} />
+            </p>
+          )}
           {chatAction.visible && chatAction.href && (
             <Button variant="outline" asChild>
               <Link href={chatAction.href}>
@@ -592,18 +617,6 @@ function AgentDetails({
                   </AlertDescription>
                 </Alert>
               )
-            )}
-
-            {/* Who to ask about this record, stated before its settings. A
-                built-in belongs to nobody, so the fact is absent there rather
-                than present-but-empty, which would read as missing data.
-
-                Keyed to the section that mounts the `configuration` group
-                rather than to `general` by name: a gateway's editable
-                sections are folded into one `settings` tab, which has no
-                `general` to hang this on. */}
-            {activeFormGroups.includes("configuration") && !isBuiltIn && (
-              <DetailFacts facts={[createdByFact(agent.createdBy)]} />
             )}
 
             {activeFormGroups.length > 0 && (

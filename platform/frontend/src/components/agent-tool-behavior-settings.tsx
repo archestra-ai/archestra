@@ -6,6 +6,7 @@ import { PackageSearch, Unplug } from "lucide-react";
 
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SettingIcon } from "@/components/setting-icon";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -84,7 +85,7 @@ export function AgentToolBehaviorSettings({
           <Label htmlFor="load-tools-when-needed">
             Progressive tool loading
           </Label>
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             {/* Says what the setting buys before how it works: the mechanism
                 was three clauses long and the reason it exists was in none
                 of them. */}
@@ -107,7 +108,7 @@ export function AgentToolBehaviorSettings({
             >
               Learn more
             </ExternalDocsLink>
-          </p>
+          </FieldDescription>
         </div>
         <Switch
           id="load-tools-when-needed"
@@ -132,7 +133,7 @@ export function AgentToolBehaviorSettings({
               names the choice, and the menu spells out what each one does.
               Repeating the chosen option's whole sentence here said the same
               thing three times in one row. */}
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             When to ask a user to connect credentials.{" "}
             {locked && <>All mode always asks when a tool needs it. </>}
             <ExternalDocsLink
@@ -142,7 +143,7 @@ export function AgentToolBehaviorSettings({
             >
               Learn more
             </ExternalDocsLink>
-          </p>
+          </FieldDescription>
         </div>
         <Select
           value={missingCredentialBehavior}

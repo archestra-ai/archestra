@@ -48,6 +48,21 @@ describe("Agent execution terminal transport", () => {
     expect(websocketMock.connect).not.toHaveBeenCalled();
     expect(websocketMock.send).toHaveBeenCalledOnce();
   });
+
+  it("shows structured startup progress before the backend reports a phase", () => {
+    websocketMock.isConnected.mockReturnValue(false);
+    websocketMock.onConnectionChange.mockReturnValue(vi.fn());
+    const sessionHandlers = handlers();
+
+    createAgentExecutionTransport("task-1").open(sessionHandlers);
+
+    expect(sessionHandlers.onProgress).toHaveBeenCalledWith({
+      phase: "queued",
+      message: "Preparing the execution environment",
+      detail: null,
+      resourceName: null,
+    });
+  });
 });
 
 function handlers() {
@@ -56,5 +71,6 @@ function handlers() {
     onOutput: vi.fn(),
     onError: vi.fn(),
     onClosed: vi.fn(),
+    onProgress: vi.fn(),
   };
 }

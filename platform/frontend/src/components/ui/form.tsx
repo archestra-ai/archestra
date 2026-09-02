@@ -12,6 +12,7 @@ import {
   useFormContext,
   useFormState,
 } from "react-hook-form";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -122,14 +123,13 @@ function FormControl({ ...props }: React.ComponentProps<typeof Slot>) {
   );
 }
 
-function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
+function FormDescription({ ...props }: React.ComponentProps<"p">) {
   const { formDescriptionId } = useFormField();
 
   return (
-    <p
+    <FieldDescription
       data-slot="form-description"
       id={formDescriptionId}
-      className={cn("text-muted-foreground text-sm", className)}
       {...props}
     />
   );

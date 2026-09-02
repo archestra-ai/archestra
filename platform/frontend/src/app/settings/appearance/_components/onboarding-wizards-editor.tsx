@@ -4,6 +4,7 @@ import { Pencil, Plus, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { OnboardingWizardDialog } from "@/components/chat/onboarding-wizard-dialog";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
@@ -110,11 +111,11 @@ export function OnboardingWizardEditor({
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <Label>Onboarding</Label>
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             Optional step-by-step onboarding dialog shown next to the chat links
             on the new chat page. Pages can include optional images and markdown
             content.
-          </p>
+          </FieldDescription>
         </div>
         <Button
           type="button"
@@ -144,10 +145,10 @@ export function OnboardingWizardEditor({
     <div className="space-y-3">
       <div className="space-y-1">
         <Label>Onboarding</Label>
-        <p className="text-xs text-muted-foreground">
+        <FieldDescription>
           Optional step-by-step onboarding dialog shown next to the chat links
           on the new chat page.
-        </p>
+        </FieldDescription>
       </div>
 
       <div className="rounded-lg border p-4 space-y-4">

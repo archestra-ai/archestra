@@ -28,9 +28,17 @@ function buildOrgFilters(params: {
   organizationId: string;
   search?: string;
   status?: "active" | "deleted";
+  /**
+   * Knowledge base ids matching the caller's `?labels=` filter, resolved once
+   * by the route so the list and count queries agree without resolving twice.
+   */
+  labelFilteredIds?: string[];
 }) {
   const normalizedSearch = params.search?.trim();
   return [
+    ...(params.labelFilteredIds !== undefined
+      ? [inArray(schema.knowledgeBasesTable.id, params.labelFilteredIds)]
+      : []),
     params.status === "deleted"
       ? isNotNull(schema.knowledgeBasesTable.deletedAt)
       : notDeleted(schema.knowledgeBasesTable),
@@ -56,6 +64,8 @@ class KnowledgeBaseModel {
     offset?: number;
     search?: string;
     status?: "active" | "deleted";
+    /** Knowledge base ids matching a `?labels=` filter; omit when not filtering. */
+    labelFilteredIds?: string[];
   }): Promise<KnowledgeBase[]> {
     const filters = buildOrgFilters(params);
 
@@ -276,6 +286,8 @@ class KnowledgeBaseModel {
     organizationId: string;
     search?: string;
     status?: "active" | "deleted";
+    /** Knowledge base ids matching a `?labels=` filter; omit when not filtering. */
+    labelFilteredIds?: string[];
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })

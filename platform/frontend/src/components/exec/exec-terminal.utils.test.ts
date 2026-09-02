@@ -14,6 +14,12 @@ describe("isUsableTerminalDimensions", () => {
     ).toBe(false);
   });
 
+  it("rejects a transiently tiny grid while a terminal panel is laying out", () => {
+    expect(isUsableTerminalDimensions({ cols: 1, rows: 1 })).toBe(false);
+    expect(isUsableTerminalDimensions({ cols: 19, rows: 24 })).toBe(false);
+    expect(isUsableTerminalDimensions({ cols: 80, rows: 4 })).toBe(false);
+  });
+
   it("accepts positive integer terminal dimensions", () => {
     expect(isUsableTerminalDimensions({ cols: 120, rows: 40 })).toBe(true);
   });

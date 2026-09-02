@@ -21,11 +21,11 @@ import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-as
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import type { Agent, AgentScope, ToolExposureMode } from "@/types";
 import {
-  AgentLabelWithDetailsSchema,
   AgentScopeSchema,
   AgentToolAssignmentInputSchema,
   ApiError,
   InsertAgentSchemaBase,
+  LabelWithDetailsSchema,
   SuggestedPromptInputSchema,
   ToolExposureModeSchema,
   UuidIdSchema,
@@ -46,7 +46,7 @@ import type { ArchestraContext } from "./types";
 
 // === Shared schemas ===
 
-export const LabelInputSchema = AgentLabelWithDetailsSchema.pick({
+export const LabelInputSchema = LabelWithDetailsSchema.pick({
   key: true,
   value: true,
 })

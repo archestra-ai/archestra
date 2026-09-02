@@ -6,14 +6,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { type ProfileLabel, ProfileLabels } from "@/components/agent-labels";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { LabelTags } from "@/components/label-tags";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RoleFilterSelect } from "@/components/role-filter-select";
@@ -38,12 +42,17 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import {
+  useServiceAccountLabelKeys,
+  useServiceAccountLabelValues,
+} from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -101,13 +110,16 @@ export default function ServiceAccountsSettingsPage() {
   const { data: canDeleteServiceAccounts } = useHasPermissions({
     serviceAccount: ["delete"],
   });
+  // Label filtering is server-side, so the value rides the query rather than
+  // narrowing the already-fetched list in the browser.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const {
     data: serviceAccounts = [],
     isPending,
     isFetching,
     isLoadingError: isServiceAccountsLoadError,
     refetch: refetchServiceAccounts,
-  } = useServiceAccounts();
+  } = useServiceAccounts({ labels: labelsFilter });
   const createMutation = useCreateServiceAccount();
   const deleteMutation = useDeleteServiceAccount();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -115,6 +127,7 @@ export default function ServiceAccountsSettingsPage() {
   const bulkSetDisabled = useBulkSetServiceAccountsDisabled();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newLabels, setNewLabels] = useState<ProfileLabel[]>([]);
   const [accountToDelete, setAccountToDelete] = useState<ServiceAccount | null>(
     null,
   );
@@ -122,7 +135,10 @@ export default function ServiceAccountsSettingsPage() {
   const roleFilter = searchParams.get("role") || ALL;
   const statusFilter = searchParams.get("status") || ALL;
   const hasActiveFilters =
-    search.trim().length > 0 || roleFilter !== ALL || statusFilter !== ALL;
+    search.trim().length > 0 ||
+    roleFilter !== ALL ||
+    statusFilter !== ALL ||
+    Boolean(labelsFilter);
 
   const form = useForm<ServiceAccountFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
@@ -310,12 +326,14 @@ export default function ServiceAccountsSettingsPage() {
   const closeDialog = () => {
     setIsCreateDialogOpen(false);
     form.reset(DEFAULT_FORM_VALUES);
+    setNewLabels([]);
   };
 
   const handleSubmit = form.handleSubmit(async (values) => {
     const account = await createMutation.mutateAsync({
       name: values.name.trim(),
       role: values.role,
+      labels: newLabels,
     });
     if (!account) return;
 
@@ -398,6 +416,13 @@ export default function ServiceAccountsSettingsPage() {
                       })),
                     ]}
                   />
+                  <EntityLabelFilter
+                    useLabelKeys={useServiceAccountLabelKeys}
+                    useLabelValues={useServiceAccountLabelValues}
+                    className={filterControlClass({
+                      active: Boolean(labelsFilter),
+                    })}
+                  />
                 </FilterBar>
               </CollectionFilters>
               {isServiceAccountsLoadError ? (
@@ -459,12 +484,15 @@ export default function ServiceAccountsSettingsPage() {
                             key={account.id}
                             icon={<Bot className="h-5 w-5" />}
                             title={
-                              <Link
-                                className="hover:underline"
-                                href={`/settings/service-accounts/${account.id}`}
-                              >
-                                {account.name}
-                              </Link>
+                              <span className="flex items-center gap-1.5">
+                                <Link
+                                  className="hover:underline"
+                                  href={`/settings/service-accounts/${account.id}`}
+                                >
+                                  {account.name}
+                                </Link>
+                                <LabelTags labels={account.labels} />
+                              </span>
                             }
                             description={formatRoleName(account.role)}
                             actions={renderRowActions(account)}
@@ -577,14 +605,14 @@ export default function ServiceAccountsSettingsPage() {
           <DialogBody className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="service-account-name">Display name</Label>
+              <FieldDescription>
+                The display name for this service account.
+              </FieldDescription>
               <Input
                 id="service-account-name"
                 {...form.register("name", { required: true })}
                 placeholder="Automation service account"
               />
-              <p className="text-xs text-muted-foreground">
-                The display name for this service account.
-              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="service-account-role">Role</Label>
@@ -595,10 +623,11 @@ export default function ServiceAccountsSettingsPage() {
                 placeholder="Select a role"
                 className="w-full"
               />
-              <p className="text-xs text-muted-foreground">
+              <FieldDescription>
                 The role this service account will use for API requests.
-              </p>
+              </FieldDescription>
             </div>
+            <ProfileLabels labels={newLabels} onLabelsChange={setNewLabels} />
           </DialogBody>
           <DialogStickyFooter>
             <Button type="button" variant="outline" onClick={closeDialog}>

@@ -110,6 +110,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ExpandableText } from "@/components/ui/expandable-text";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -2905,10 +2906,10 @@ export function AgentForm({
                           >
                             Auto-configure on tool discovery
                           </Label>
-                          <p className="text-sm text-muted-foreground">
+                          <FieldDescription>
                             Automatically analyze and configure security
                             policies when tools are discovered
-                          </p>
+                          </FieldDescription>
                         </div>
                         <Switch
                           id="auto-configure-on-tool-discovery"
@@ -3712,11 +3713,11 @@ export function AgentForm({
                         >
                           Treat context as sensitive from the start of chat
                         </Label>
-                        <p className="text-sm text-muted-foreground">
+                        <FieldDescription>
                           When enabled, the context is always considered
                           sensitive. Only tools allowed to run in sensitive
                           context will be permitted.
-                        </p>
+                        </FieldDescription>
                       </div>
                       <Switch
                         id="consider-context-untrusted"
@@ -3736,10 +3737,10 @@ export function AgentForm({
                 >
                   <div className="space-y-2">
                     <Label>Custom Header Passthrough</Label>
-                    <p className="text-sm text-muted-foreground">
+                    <FieldDescription>
                       Client request headers to pass through to downstream MCP
                       servers. Case-insensitive.
-                    </p>
+                    </FieldDescription>
                     <div className="flex flex-wrap gap-1.5">
                       {passthroughHeaders.map((header) => (
                         <Badge
@@ -3811,7 +3812,7 @@ export function AgentForm({
                         ? "Identity Provider (JWKS)"
                         : "Identity Provider (Enterprise/JWKS)"}
                     </Label>
-                    <p className="text-sm text-muted-foreground">
+                    <FieldDescription>
                       {agentType === "agent"
                         ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
                         : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
@@ -3827,7 +3828,7 @@ export function AgentForm({
                           </ExternalDocsLink>
                         </>
                       ) : null}
-                    </p>
+                    </FieldDescription>
                     <Select
                       value={identityProviderId ?? "none"}
                       onValueChange={(value) =>

@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { copyToClipboard } from "@/lib/clipboard";
 import { isUsableTerminalDimensions } from "./exec-terminal.utils";
+import {
+  type ExecSessionProgress,
+  ExecTerminalProgress,
+} from "./exec-terminal-progress";
 
 type ConnectionStatus =
   | "idle"
@@ -24,6 +28,14 @@ export type ExecSessionHandlers = {
   onOutput: (data: string) => void;
   onError: (message: string) => void;
   onClosed: (reason: string | null) => void;
+  /**
+   * A wait the session is still in, before it is live.
+   *
+   * Optional because not every transport can see inside its own startup: one
+   * attaching to a pod that is already running has nothing to report, and gets
+   * the plain connecting state instead.
+   */
+  onProgress?: (progress: ExecSessionProgress) => void;
 };
 
 /**
@@ -62,8 +74,13 @@ interface ExecTerminalProps {
   title?: string;
   /** Heading for the copyable equivalent command, when the session reports one. */
   manualCommandTitle?: string;
+  /** Whether to render the equivalent command below the terminal. */
+  showManualCommand?: boolean;
   /** Copy shown while the owning resource settles after its pty closes. */
   disconnectedLabel?: string;
+  /** Whether a closed PTY should add a status banner above its retained frame. */
+  showDisconnectedStatus?: boolean;
+  onCommandChange?: (command: string | null) => void;
   onClosed?: () => void;
 }
 
@@ -73,7 +90,10 @@ export function ExecTerminal({
   isActive,
   title = "Interactive Shell",
   manualCommandTitle = "Manual Command",
+  showManualCommand = true,
   disconnectedLabel = "Session terminated",
+  showDisconnectedStatus = true,
+  onCommandChange,
   onClosed,
 }: ExecTerminalProps) {
   // Read through a ref so a new transport object on every render cannot
@@ -82,12 +102,20 @@ export function ExecTerminal({
   transportRef.current = transport;
   const onClosedRef = useRef(onClosed);
   onClosedRef.current = onClosed;
+  const onCommandChangeRef = useRef(onCommandChange);
+  onCommandChangeRef.current = onCommandChange;
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstanceRef = useRef<import("@xterm/xterm").Terminal | null>(
     null,
   );
   const fitAddonRef = useRef<import("@xterm/addon-fit").FitAddon | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
+  const [progress, setProgress] = useState<ExecSessionProgress | null>(null);
+  /**
+   * When the current attach began. Reset per attempt so a reconnect's elapsed
+   * counter starts from that attempt, not from when the page was opened.
+   */
+  const [connectingSince, setConnectingSince] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [closedReason, setClosedReason] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
@@ -153,72 +181,103 @@ export function ExecTerminal({
         }
       });
 
-      // Fit after a short delay to ensure container is measured
-      requestAnimationFrame(() => {
-        if (!disposed) {
-          try {
-            fitAddon.fit();
-          } catch {
-            // Container may not be visible yet
-          }
-        }
-      });
-
       terminalInstanceRef.current = terminal;
       fitAddonRef.current = fitAddon;
       initializedRef.current = true;
 
-      setStatus("connecting");
-      setErrorMessage(null);
+      let closeSession: (() => void) | undefined;
+      let layoutReady = false;
 
-      const closeSession = transportRef.current.open({
-        onStarted: (startedCommand) => {
-          if (disposed) return;
-          setStatus("connected");
-          setCommand(startedCommand);
-          const dims = fitAddon.proposeDimensions();
-          if (isUsableTerminalDimensions(dims)) {
-            transportRef.current.sendResize(dims.cols, dims.rows);
-          }
-        },
-        onOutput: (data) => {
-          if (disposed) return;
-          terminal.write(data);
-        },
-        onError: (message) => {
-          if (disposed) return;
-          setStatus("error");
-          setErrorMessage(message);
-        },
-        onClosed: (reason) => {
-          if (disposed) return;
-          setClosedReason(reason);
-          setStatus("disconnected");
-          onClosedRef.current?.();
-        },
-      });
+      const fitAndOpenSession = () => {
+        if (disposed || closeSession) return;
+        const dims = fitAddon.proposeDimensions();
+        if (!layoutReady || !isUsableTerminalDimensions(dims)) return;
+        try {
+          fitAddon.fit();
+        } catch {
+          return;
+        }
+
+        setStatus("connecting");
+        setProgress(null);
+        setConnectingSince(Date.now());
+        setErrorMessage(null);
+
+        // Do not subscribe until the terminal has a real grid. Otherwise the
+        // first tmux frame can arrive at a transient 1-column tab width and
+        // remain scrambled in scrollback after the panel finishes laying out.
+        closeSession = transportRef.current.open({
+          onProgress: (sessionProgress) => {
+            if (disposed) return;
+            setProgress(sessionProgress);
+          },
+          onStarted: (startedCommand) => {
+            if (disposed) return;
+            setStatus("connected");
+            setProgress(null);
+            setCommand(startedCommand);
+            onCommandChangeRef.current?.(startedCommand);
+            const startedDims = fitAddon.proposeDimensions();
+            if (isUsableTerminalDimensions(startedDims)) {
+              transportRef.current.sendResize(
+                startedDims.cols,
+                startedDims.rows,
+              );
+            }
+          },
+          onOutput: (data) => {
+            if (disposed) return;
+            terminal.write(data);
+          },
+          onError: (message) => {
+            if (disposed) return;
+            setStatus("error");
+            setErrorMessage(message);
+          },
+          onClosed: (reason) => {
+            if (disposed) return;
+            setClosedReason(reason);
+            setStatus("disconnected");
+            onClosedRef.current?.();
+          },
+        });
+      };
 
       terminal.onData((data) => {
-        transportRef.current.sendInput(data);
+        const input = withoutMouseHoverReports(data);
+        if (input) transportRef.current.sendInput(input);
       });
 
       // Resize observer
       const resizeObserver = new ResizeObserver(() => {
         if (disposed) return;
+        const dims = fitAddon.proposeDimensions();
+        if (!isUsableTerminalDimensions(dims)) return;
         try {
           fitAddon.fit();
         } catch {
           // Ignore fit errors during transitions
         }
+        fitAndOpenSession();
       });
 
       if (terminalRef.current) {
         resizeObserver.observe(terminalRef.current);
       }
 
+      // Two frames let Radix tabs and the responsive grid settle before the
+      // first PTY frame is allowed in. ResizeObserver remains the fallback for
+      // a panel that becomes visible later.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          layoutReady = true;
+          fitAndOpenSession();
+        });
+      });
+
       return () => {
         resizeObserver.disconnect();
-        closeSession();
+        closeSession?.();
       };
     };
 
@@ -262,12 +321,19 @@ export function ExecTerminal({
           <h3 className="text-sm font-semibold flex-shrink-0">{title}</h3>
         )}
         <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
-          {status === "connecting" && (
-            <div className="flex items-center justify-center p-4 text-slate-400 text-sm font-mono">
-              {statusText}
-            </div>
-          )}
-          {(status === "error" || status === "disconnected") && (
+          {status === "connecting" &&
+            (progress ? (
+              <ExecTerminalProgress
+                progress={progress}
+                startedAt={connectingSince}
+              />
+            ) : (
+              <div className="flex items-center justify-center p-4 text-slate-400 text-sm font-mono">
+                {statusText}
+              </div>
+            ))}
+          {(status === "error" ||
+            (status === "disconnected" && showDisconnectedStatus)) && (
             <div
               className={`flex items-center justify-center p-4 text-sm font-mono ${status === "error" ? "text-red-400" : "text-yellow-400"}`}
             >
@@ -295,7 +361,7 @@ export function ExecTerminal({
         </div>
       </div>
 
-      {command && (
+      {showManualCommand && command && (
         <div className="flex flex-col gap-2 flex-shrink-0">
           <h3 className="text-sm font-semibold">{manualCommandTitle}</h3>
           <div className="relative">
@@ -320,3 +386,21 @@ export function ExecTerminal({
     </div>
   );
 }
+
+// A TUI can ask the outer terminal for all mouse motion (DECSET 1003). tmux
+// forwards those SGR reports to the pane, but some Claude Code render states
+// stop consuming no-button hover events and insert them into the prompt as
+// visible `^[[<35;...M` text. Hover has no useful terminal action, so drop only
+// motion reports whose low button bits mean "no button". Clicks, button drags,
+// wheel events, and ordinary keyboard input continue to the remote PTY.
+function withoutMouseHoverReports(data: string): string {
+  return data.replace(SGR_MOUSE_REPORT_PATTERN, (report, encodedButton) => {
+    const button = Number(encodedButton);
+    const isMotion = (button & 32) !== 0;
+    const hasNoButton = (button & 3) === 3;
+    return isMotion && hasNoButton ? "" : report;
+  });
+}
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ESC begins every SGR mouse report.
+const SGR_MOUSE_REPORT_PATTERN = /\x1b\[<(\d+);\d+;\d+[Mm]/g;

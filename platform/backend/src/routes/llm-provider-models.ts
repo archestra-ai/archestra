@@ -25,6 +25,7 @@ import logger from "@/logging";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
+  ModelLabelModel,
   ModelModel,
   type ModelSyncState,
   ModelTeamModel,
@@ -41,6 +42,7 @@ import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
   constructResponseSchema,
+  type LabelWithDetails,
   type LinkedApiKey,
   type LlmProviderApiKeyWithScopeInfo,
   type Model,
@@ -52,6 +54,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { BulkIdsSchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import { registerEntityLabelRoutes } from "./entity-labels";
 
 const DEFAULT_LAZY_MODEL_SYNC_TTL_MS = TimeInMs.Day;
 const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
@@ -108,6 +111,15 @@ const LlmModelSchema = z.object({
 });
 
 const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/llm-provider-models",
+    tag: "LLM Models",
+    entityNamePlural: "models",
+    model: ModelLabelModel,
+    keysOperationId: RouteId.GetLlmProviderModelLabelKeys,
+    valuesOperationId: RouteId.GetLlmProviderModelLabelValues,
+  });
+
   fastify.get(
     "/api/llm-models/available",
     {
@@ -363,10 +375,12 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...modelsWithApiKeys.map((item) => item.model.id),
         ...unlinkedLlmProxyModels.map((model) => model.id),
       ];
-      const [teamsByModelId, usersByModelId] = await Promise.all([
-        ModelTeamModel.getTeamDetailsForModels(enrichedModelIds),
-        ModelUserModel.getUserDetailsForModels(enrichedModelIds),
-      ]);
+      const [teamsByModelId, usersByModelId, labelsByModelId] =
+        await Promise.all([
+          ModelTeamModel.getTeamDetailsForModels(enrichedModelIds),
+          ModelUserModel.getUserDetailsForModels(enrichedModelIds),
+          ModelLabelModel.getLabelsForMany(enrichedModelIds),
+        ]);
 
       const response = [
         ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) =>
@@ -376,6 +390,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKeys,
             teams: teamsByModelId.get(model.id) ?? [],
             users: usersByModelId.get(model.id) ?? [],
+            labels: labelsByModelId.get(model.id) ?? [],
           }),
         ),
         ...unlinkedLlmProxyModels.map((model) =>
@@ -385,6 +400,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiKeys: [],
             teams: teamsByModelId.get(model.id) ?? [],
             users: usersByModelId.get(model.id) ?? [],
+            labels: labelsByModelId.get(model.id) ?? [],
           }),
         ),
       ];
@@ -888,8 +904,9 @@ function toModelWithApiKeysResponse(params: {
   apiKeys: LinkedApiKey[];
   teams: ModelTeamDetail[];
   users: Array<{ id: string; name: string; email: string }>;
+  labels: LabelWithDetails[];
 }) {
-  const { model, isBest, apiKeys, teams, users } = params;
+  const { model, isBest, apiKeys, teams, users, labels } = params;
   const capabilities = ModelModel.toCapabilities(model);
   return {
     ...model,
@@ -897,6 +914,7 @@ function toModelWithApiKeysResponse(params: {
     apiKeys,
     teams,
     users,
+    labels,
     // The spread above carries the architectural `contextLength`, which stays
     // the ceiling for `num_ctx` validation. Displaying it would over-promise
     // when Ollama enforces a smaller window, so the resolved one rides along.

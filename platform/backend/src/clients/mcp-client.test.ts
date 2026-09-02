@@ -126,9 +126,14 @@ const {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-/** The wake response budget the mocked runtime reports, in ms. */
-const { WAKE_RESPONSE_BUDGET_TEST_MS } = vi.hoisted(() => ({
-  WAKE_RESPONSE_BUDGET_TEST_MS: 50,
+/**
+ * The wake response budget the mocked runtime reports, in ms. A mutable
+ * holder rather than a const: the default 50 ms is deliberately below the
+ * funnel's retry beat so wake failures surface immediately, and the tests of
+ * the within-budget retry raise it per test (reset in beforeEach).
+ */
+const { WAKE_BUDGET } = vi.hoisted(() => ({
+  WAKE_BUDGET: { ms: 50 },
 }));
 // SPDX-SnippetEnd
 
@@ -214,7 +219,7 @@ vi.mock("@/k8s/mcp-server-runtime", () => {
       }),
     // Short enough to keep the test fast; the production value is derived from
     // the tool-call timeout and is exercised in hibernation.ee.test.ts.
-    wakeResponseBudgetMs: () => WAKE_RESPONSE_BUDGET_TEST_MS,
+    wakeResponseBudgetMs: () => WAKE_BUDGET.ms,
     // SPDX-SnippetEnd
   };
 });
@@ -287,6 +292,7 @@ describe("McpClient", () => {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     mockEnsureAwake.mockReset();
     mockEnsureAwake.mockResolvedValue(undefined);
+    WAKE_BUDGET.ms = 50;
     mockIsDeploymentDormant.mockReset();
     mockIsDeploymentDormant.mockReturnValue(false);
     mockRunIfDeploymentServing.mockReset();
@@ -2496,6 +2502,141 @@ describe("McpClient", () => {
         // The failed wake short-circuits before any transport work.
         expect(mockUsesStreamableHttp).not.toHaveBeenCalled();
         expect(mockConnect).not.toHaveBeenCalled();
+      });
+
+      test("a wake that loses a retryable race is re-entered within the reply budget and the call completes", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        // Enough budget for the funnel's retry beat; the first attempt loses
+        // the mid-transition race the way a wake superseded by a concurrent
+        // hibernation transition does, and the second finds the server up.
+        WAKE_BUDGET.ms = 5_000;
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake
+          .mockRejectedValueOnce(
+            new McpServerWakeError("local-streamable-http-server", {
+              detail:
+                "its wake was superseded by a concurrent transition (the deployment is now waking)",
+            }),
+          )
+          .mockResolvedValue(undefined);
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "served after the race" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_race_retry",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        // The race never reaches the caller: the funnel re-entered the wake
+        // and the call went through to the tool.
+        expect(result.isError).toBe(false);
+        expect(result.content).toEqual([
+          { type: "text", text: "served after the race" },
+        ]);
+        expect(mockEnsureAwake).toHaveBeenCalledTimes(2);
+      });
+
+      test("with too little budget left for another attempt, the race's own retryable reason is the answer", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        // Default 50 ms budget: below the retry beat, so the funnel must not
+        // spin — it answers with the race's own reason, still retryable.
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake.mockRejectedValue(
+          new McpServerWakeError("local-streamable-http-server", {
+            detail:
+              "its wake was superseded by a concurrent transition (the deployment is now waking)",
+          }),
+        );
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_race_exhausted",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain("retry shortly");
+        expect(result.error).not.toContain("retrying will not help");
+        expect(mockEnsureAwake).toHaveBeenCalledTimes(1);
+        expect(mockConnect).not.toHaveBeenCalled();
+      });
+
+      test("a stop during the between-attempts pause persists the cancelled marker, not a wake failure", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        WAKE_BUDGET.ms = 30_000;
+        const controller = new AbortController();
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        // The first attempt loses a retryable race; the abort lands while the
+        // funnel is pausing before its next attempt, so the pause — not a
+        // second wake or the budget — must end the wait.
+        mockEnsureAwake.mockImplementationOnce(async () => {
+          queueMicrotask(() => controller.abort());
+          throw new McpServerWakeError("local-streamable-http-server");
+        });
+
+        await expect(
+          mcpClient.executeToolCallForOwner(
+            {
+              id: "call_stop_between_wake_attempts",
+              name: "local-streamable-http-server__test_tool",
+              arguments: {},
+            },
+            agentOwner(agentId),
+            undefined,
+            { abortSignal: controller.signal },
+          ),
+        ).rejects.toThrow();
+
+        expect(mockEnsureAwake).toHaveBeenCalledTimes(1);
+        const [logged] = await db
+          .select()
+          .from(schema.mcpToolCallsTable)
+          .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+        expect(logged).toBeDefined();
+        const loggedResult = logged.toolResult as {
+          isError?: boolean;
+          _meta?: { archestraError?: { type?: string } };
+        };
+        expect(loggedResult.isError).toBe(false);
+        expect(loggedResult._meta?.archestraError?.type).toBe("cancelled");
       });
 
       test("a terminally broken deployment surfaces as a do-not-retry error naming the fix", async () => {

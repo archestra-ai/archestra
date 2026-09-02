@@ -29,6 +29,10 @@ export function OutlineConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Collection IDs (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of Outline collection IDs to sync. Leave
+              blank to sync all published documents the API key has access to.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="abc123, def456"
@@ -36,10 +40,6 @@ export function OutlineConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of Outline collection IDs to sync. Leave
-              blank to sync all published documents the API key has access to.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

@@ -1,3 +1,4 @@
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -15,15 +16,7 @@ export function ServiceAccountField({
   return (
     <div className="space-y-2">
       <Label htmlFor="service-account">Service Account</Label>
-      <Input
-        id="service-account"
-        placeholder="e.g., archestra-platform-mcp-k8s-operator"
-        className="font-mono"
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || undefined)}
-        disabled={disabled}
-      />
-      <p className="text-xs text-muted-foreground">
+      <FieldDescription>
         Kubernetes service account name for the MCP server pod. Required for MCP
         servers that need access to the Kubernetes API.
         <br />
@@ -32,7 +25,15 @@ export function ServiceAccountField({
           {`kubectl get sa -n <namespace>`}
         </code>{" "}
         {`where <namespace> is MCP server namespace.`}
-      </p>
+      </FieldDescription>
+      <Input
+        id="service-account"
+        placeholder="e.g., archestra-platform-mcp-k8s-operator"
+        className="font-mono"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        disabled={disabled}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-08-31
+lastUpdated: 2026-09-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -315,6 +315,15 @@ Practical starting point for worker autoscaling:
 - `archestra.ingress.enabled` - Enable or disable ingress creation (default: false)
 - `archestra.ingress.annotations` - Annotations for ingress controller and load balancer behavior
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
+- `archestra.ingress.routeBackendApisDirectly` - Route `/v1` and `/v2` to the backend port on hosts that serve the UI (default: true)
+
+`/v1` and `/v2` have no frontend route — the frontend only forwards them to the backend. `/v1` carries the LLM proxy and the MCP gateway, `/v2` carries A2A. That is all of your agents' traffic: completions with large request bodies held open for the length of a response, and tool calls. Forwarding it runs it on the same process that answers the dashboard's API calls, so the UI slows down while an agent is working. The chart routes both prefixes to the backend port for you.
+
+A host that declares its own `/v1` or `/v2` path keeps it. So does a host that never routes to the frontend port. Set `routeBackendApisDirectly: false` to turn the behavior off. It does not apply when you supply a complete `spec`, which replaces the generated rules.
+
+Everything else stays on the frontend, including `/api/auth` — that one is a real frontend route.
+
+This applies to hosts declared under `hosts:`. If you supply a complete `spec`, manage your own Ingress, or route traffic at a load balancer outside the cluster, apply the same split yourself — see [Routing the LLM Proxy Away From the Frontend](#routing-the-llm-proxy-away-from-the-frontend).
 
 **GKE BackendConfig Settings** (Google Cloud only):
 
@@ -422,6 +431,8 @@ archestra:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       # Configure timeout via Traefik IngressRoute or Middleware
 ```
+
+Whichever controller you use, also route `/v1` and `/v2` to the backend port — see [Routing the LLM Proxy Away From the Frontend](#routing-the-llm-proxy-away-from-the-frontend).
 
 #### Scaling & High Availability Configuration
 
@@ -570,6 +581,52 @@ The [Knowledge Base](/docs/platform-knowledge) enterprise feature requires the [
 **Self-managed PostgreSQL:** Install the pgvector package for your distribution (e.g., `apt install postgresql-17-pgvector`) and ensure the database user has `CREATE` privilege on the database, or grant `SUPERUSER` to allow extension creation.
 
 If pgvector is not installed or the database user lacks permissions, the Knowledge Base migration will fail. This does not affect other Archestra features.
+
+#### Routing the LLM Proxy Away From the Frontend
+
+Send `/v1` and `/v2` to the backend port (9000), and everything else to the frontend port (3000).
+
+Both prefixes are backend APIs. Neither has a frontend route — the frontend receives them only to forward them on.
+
+`/v1` is the LLM proxy and the MCP gateway. `/v2` is A2A. Together they are the traffic your agents make: completions whose request bodies are large and stay open for the length of a response, and MCP tool calls, which include a poll that runs about once a second per connected client. None of it comes from a browser.
+
+Routed through the frontend port, that traffic runs on the same single-threaded process that answers the dashboard's own API calls, so the UI gets slow while an agent is working.
+
+Keep `/` on the frontend. `/api/auth` is a real frontend route and must stay there, so route the two specific prefixes rather than all of `/api`.
+
+If you use the chart's `archestra.ingress.hosts`, this is already done for you — see [Ingress Settings](#service-deployment--ingress-configuration). You need to apply it yourself when you supply a complete `archestra.ingress.spec`, manage your own Ingress, or terminate traffic at a load balancer or gateway outside the cluster.
+
+For an Ingress you manage yourself:
+
+```yaml
+rules:
+  - host: archestra.example.com
+    http:
+      paths:
+        - path: /v1
+          pathType: Prefix
+          backend:
+            service:
+              name: archestra-platform
+              port:
+                number: 9000
+        - path: /v2
+          pathType: Prefix
+          backend:
+            service:
+              name: archestra-platform
+              port:
+                number: 9000
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: archestra-platform
+              port:
+                number: 3000
+```
+
+The same rule applies to any other routing layer — an ALB listener rule, an nginx `location` block, a Traefik router, or a service mesh route. Match `/v1` and `/v2` to port 9000 and leave the default to 3000.
 
 #### SSRF Protection
 
@@ -1415,6 +1472,9 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
 - The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
+- **`ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS`** - How long, in milliseconds, a tool call is held open while the MCP server behind it wakes from idle hibernation, before being answered with a retryable "still starting, retry shortly" result.
+  - Default: `30000` (30 seconds)
+  - Independent of the tool-call timeout above: that timeout governs the dispatched call and only starts counting once the woken server has accepted it. Keep this value below your clients' own request timeouts, or a client aborts the call first and sees a transport error instead of the retryable answer.
 - **`ARCHESTRA_MCP_SKILLS_ENABLED`** - Beta gate for both directions of the draft MCP Skills extension (SEP-2640): publishing local Skills through gateways and projecting Skills discovered from installed MCP servers.
   - Default: unset (falls back to `ARCHESTRA_BETA`)
   - An explicit `false` keeps both directions off even when the master beta switch is enabled.
@@ -1734,12 +1794,16 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `90` (seconds)
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF`** - Development override for where the Archestra VAF Add On install script gets the add-on.
-  - Default: unset (the script uses the pre-built package of the newest `m-files-vaf-add-on-v*` release)
+  - Default: unset (the script uses the package compiled into the platform image; outside the image it falls back to the newest `m-files-vaf-add-on-v*` release)
   - Set a git ref of `archestra-ai/archestra` (a pushed commit SHA, branch, or tag) to have the script install that ref's CI-built package, or compile from that ref's source when no CI build exists. The special value `local` uses the backend checkout's HEAD commit. Leave unset in production.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN`** - GitHub token used to fetch the source ref's CI-built add-on package.
   - Default: unset
   - GitHub requires authentication for Actions artifact downloads, even on public repositories. Only read when the source-ref override is set; without a token the install script compiles the add-on from source. The backend proxies the package — the token never reaches clients.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR`** - Directory with the VAF Add On package compiled into the platform image.
+  - Default: `/app/mfiles-vaf-add-on` (where the image puts it)
+  - The backend serves the install script and the connector form's download from this directory. Deployments running outside the image have no such directory and fall back to the source-ref override or the newest add-on release. There is no reason to change this in a standard deployment.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS`** - How long a document may sit un-embedded before the recovery sweep re-enqueues it.
   - Default: `900` (15 minutes)

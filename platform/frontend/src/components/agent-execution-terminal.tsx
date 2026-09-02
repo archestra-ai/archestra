@@ -4,6 +4,7 @@ import type {
   AgentRunAttachClosedMessage,
   AgentRunAttachErrorMessage,
   AgentRunAttachOutputMessage,
+  AgentRunAttachProgressMessage,
   AgentRunAttachStartedMessage,
 } from "@archestra/shared";
 import { useMemo } from "react";
@@ -18,11 +19,17 @@ export function AgentExecutionTerminal({
   taskId,
   active,
   title,
+  showManualCommand,
+  showDisconnectedStatus,
+  onCommandChange,
   onClosed,
 }: {
   taskId: string;
   active: boolean;
   title?: string;
+  showManualCommand?: boolean;
+  showDisconnectedStatus?: boolean;
+  onCommandChange?: (command: string | null) => void;
   onClosed?: () => void;
 }) {
   const transport = useMemo<ExecSessionTransport>(
@@ -37,6 +44,9 @@ export function AgentExecutionTerminal({
       isActive={active}
       title={title}
       disconnectedLabel="Execution finishing…"
+      showManualCommand={showManualCommand}
+      showDisconnectedStatus={showDisconnectedStatus}
+      onCommandChange={onCommandChange}
       onClosed={onClosed}
     />
   );
@@ -47,12 +57,34 @@ export function createAgentExecutionTransport(
 ): ExecSessionTransport {
   return {
     open: (handlers) => {
+      // An Agent attach always has a known first wait. Seed the shared progress
+      // panel immediately so neither execution surface flashes the generic
+      // "Connecting..." placeholder before the backend reports a finer phase.
+      handlers.onProgress?.({
+        phase: "queued",
+        message: "Preparing the execution environment",
+        detail: null,
+        resourceName: null,
+      });
       const subscriptions = [
         websocketService.subscribe(
           "agent_run_attach_started",
           (message: AgentRunAttachStartedMessage) => {
             if (message.payload.runId === taskId) {
               handlers.onStarted(message.payload.command);
+            }
+          },
+        ),
+        websocketService.subscribe(
+          "agent_run_attach_progress",
+          (message: AgentRunAttachProgressMessage) => {
+            if (message.payload.runId === taskId) {
+              handlers.onProgress?.({
+                phase: message.payload.phase,
+                message: message.payload.message,
+                detail: message.payload.detail ?? null,
+                resourceName: message.payload.resourceName ?? null,
+              });
             }
           },
         ),

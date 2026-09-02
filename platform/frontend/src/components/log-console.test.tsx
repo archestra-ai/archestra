@@ -20,4 +20,41 @@ describe("LogConsole", () => {
     rerender(<LogConsole content={null} emptyMessage="Nothing here" />);
     expect(screen.getByText("Nothing here")).toBeInTheDocument();
   });
+
+  /**
+   * An empty console is a large dark panel. One line of mono text in its top
+   * corner reads as a rendering failure, so the empty state says what happened
+   * and why, together, in the middle of the space it is explaining.
+   */
+  it("explains an empty console rather than stranding a single line", () => {
+    render(
+      <LogConsole
+        content={null}
+        emptyMessage="No output recorded"
+        emptyHint="This execution ended without writing anything to its log."
+      />,
+    );
+
+    expect(screen.getByText("No output recorded")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This execution ended without writing anything to its log.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lets a caller's own placeholder replace the empty state", () => {
+    render(
+      <LogConsole
+        content={null}
+        emptyMessage="No output recorded"
+        emptyHint="Should not be shown"
+        placeholder={<span>Connecting to pod logs…</span>}
+      />,
+    );
+
+    expect(screen.getByText("Connecting to pod logs…")).toBeInTheDocument();
+    expect(screen.queryByText("No output recorded")).not.toBeInTheDocument();
+    expect(screen.queryByText("Should not be shown")).not.toBeInTheDocument();
+  });
 });

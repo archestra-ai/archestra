@@ -3,6 +3,7 @@
 import { Plus, X } from "lucide-react";
 import { useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -57,10 +58,10 @@ export function ChatPlaceholdersEditor({
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <Label>Chat Placeholders</Label>
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             Custom placeholder texts for the chat input. Max 20 entries, 80
             chars each.
-          </p>
+          </FieldDescription>
         </div>
         {placeholders.length < 20 && (
           <Button

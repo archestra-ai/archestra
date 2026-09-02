@@ -30,6 +30,10 @@ export function SharePointConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Drive IDs (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of document library (drive) IDs to sync.
+              Leave blank to sync all document libraries in the site.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="b!abc123, b!def456"
@@ -37,10 +41,6 @@ export function SharePointConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of document library (drive) IDs to sync.
-              Leave blank to sync all document libraries in the site.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -52,6 +52,9 @@ export function SharePointConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Folder Path (optional)</FormLabel>
+            <FormDescription>
+              Restrict sync to a specific folder path within each drive.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="General/Documents/Engineering"
@@ -59,9 +62,6 @@ export function SharePointConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Restrict sync to a specific folder path within each drive.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

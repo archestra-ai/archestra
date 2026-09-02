@@ -21,6 +21,7 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppSessionRecorderRuntimeHooks } from "@/components/app-session-recording/use-app-session-recorder";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
+import { normalizeMcpAppExternalUrl } from "@/components/mcp-app/external-link";
 import { McpAppAuthBanner } from "@/components/mcp-app/mcp-app-auth-banner";
 import { Button } from "@/components/ui/button";
 import {
@@ -370,13 +371,8 @@ export const McpAppRuntime = function McpAppRuntime({
     };
 
     appBridge.onopenlink = async ({ url }) => {
-      try {
-        const parsed = new URL(url);
-        if (!["http:", "https:"].includes(parsed.protocol)) return {};
-        window.open(url, "_blank", "noopener,noreferrer");
-      } catch {
-        // malformed URL — ignore
-      }
+      const safeUrl = normalizeMcpAppExternalUrl(url);
+      if (safeUrl) window.open(safeUrl, "_blank", "noopener,noreferrer");
       return {};
     };
 

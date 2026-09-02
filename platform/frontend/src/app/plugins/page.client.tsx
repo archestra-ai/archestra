@@ -97,7 +97,7 @@ import {
 import { PluginSourceIcon } from "./_parts/plugin-source-icon";
 
 const PLUGINS_DESCRIPTION =
-  "Plugins ship native hook configurations and companion scripts to connected coding agents, stored verbatim and approved per content hash.";
+  "Plugins install client-native files on developer machines.";
 
 export default function PluginsPage() {
   return (
@@ -948,7 +948,7 @@ function PluginsList() {
           title="Delete plugins"
           description={`Delete ${bulkSelection.selected.length} ${
             bulkSelection.selected.length === 1 ? "plugin" : "plugins"
-          }? Their payload files and client delivery will be removed.`}
+          }? Installed copies stay on developer machines.`}
           isPending={bulkDelete.isPending}
           confirmLabel="Delete plugins"
           onConfirm={async () => {
@@ -975,7 +975,7 @@ function PluginsEmptyState() {
       className="min-h-[60vh]"
       icon={Braces}
       title="No plugins yet."
-      description="A plugin packages a client's native hooks file and its companion scripts. The platform stores the payload verbatim and delivers it to connected coding agents."
+      description="Create a plugin for Claude Code, Codex, Copilot CLI, or Cursor."
       action={
         <PermissionButton permissions={{ plugin: ["create", "admin"] }} asChild>
           <Link href="/plugins/new">
@@ -1009,7 +1009,7 @@ function DeletePluginDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete plugin?"
-      description={`Delete "${plugin.displayName}"? It disappears from future marketplace revisions. This does not uninstall code already present on developer machines; remove that plugin locally through the client or startup guard.`}
+      description={`Delete "${plugin.displayName}"? Installed copies stay on developer machines until you uninstall them.`}
       isPending={deletePlugin.isPending}
       onConfirm={handleDelete}
     />

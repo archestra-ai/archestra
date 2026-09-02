@@ -98,7 +98,7 @@ export function DefaultCredentialsWarning({
               DocsPage.PlatformDeployment,
               "authentication--security",
             )}
-            className="inline-flex items-center underline"
+            className="underline"
             showIcon={false}
           >
             Set ENV
@@ -110,7 +110,7 @@ export function DefaultCredentialsWarning({
               <span>{" or "}</span>
               <a
                 href="/account?highlight=change-password"
-                className="inline-flex items-center underline"
+                className="underline"
               >
                 Change
               </a>

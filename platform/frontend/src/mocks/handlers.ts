@@ -100,7 +100,39 @@ function deleteJson(
   );
 }
 
+/**
+ * Every entity that carries key/value labels serves the same two lookup
+ * endpoints behind its filter chrome, and the filter mounts as soon as the
+ * list page renders. Registered from one list rather than per entity so that
+ * labelling a new entity cannot silently leak a request past MSW.
+ */
+const LABELLED_ENTITY_PATHS = [
+  "/api/agents",
+  "/api/apps",
+  "/api/environments",
+  "/api/internal_mcp_catalog",
+  "/api/knowledge-base-connectors",
+  "/api/knowledge-bases",
+  "/api/knowledge-files",
+  "/api/limits",
+  "/api/llm-oauth-clients",
+  "/api/llm-provider-api-keys",
+  "/api/llm-provider-models",
+  "/api/llm-virtual-keys",
+  "/api/mcp-oauth-clients",
+  "/api/plugins",
+  "/api/service-accounts",
+  "/api/skills",
+  "/api/teams",
+];
+
 export const handlers: HttpHandler[] = [
+  // Label lookups for every labelled entity (see LABELLED_ENTITY_PATHS).
+  // First in the array so no entity-specific pattern can shadow them.
+  ...LABELLED_ENTITY_PATHS.flatMap((entity) => [
+    ...getJson(`${entity}/labels/keys`, []),
+    ...getJson(`${entity}/labels/values`, []),
+  ]),
   ...getJson("/api/auth/get-session", sessionSeed),
   ...getJson("/api/auth/default-credentials-status", { enabled: false }),
   ...getJson("/api/auth/organization/list", []),
@@ -198,7 +230,6 @@ export const handlers: HttpHandler[] = [
   // per-catalog fan-out). Ahead of the `:catalogId` patterns below so a literal
   // "tools" segment can never be read as a catalog id.
   ...getJson("/api/internal_mcp_catalog/tools", []),
-  ...getJson("/api/internal_mcp_catalog/labels/keys", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
   ...getJson("/api/mcp_server", installedServersSeed),
   // Org-wide auto-mode roster; per-test seeds override when a test needs
@@ -241,8 +272,6 @@ export const handlers: HttpHandler[] = [
   // Agents
   ...getJson("/api/agents", agentsSeed),
   ...getJson("/api/agents/all", []),
-  ...getJson("/api/agents/labels/keys", []),
-  ...getJson("/api/agents/labels/values", []),
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),

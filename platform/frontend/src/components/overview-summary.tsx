@@ -2,10 +2,18 @@
 
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { type DetailFact, DetailFacts } from "@/components/detail-facts";
+import {
+  type DetailFact,
+  DetailFacts,
+  type MaybeDetailFact,
+  presentFacts,
+} from "@/components/detail-facts";
 
 /** One key configuration value of the record, as `label` over `value`. */
 export type OverviewFact = DetailFact;
+
+/** An {@link OverviewFact} the record may have nothing to state, then dropped. */
+export type MaybeOverviewFact = MaybeDetailFact;
 
 /**
  * The Overview of a detail page: the record's key configuration on one row,
@@ -25,7 +33,7 @@ export function OverviewSummary({
   configLabel = "Configuration",
 }: {
   headingId: string;
-  facts: OverviewFact[];
+  facts: MaybeOverviewFact[];
   /**
    * The record's full configuration — the header's Edit destination. Omitted
    * for a reader who may not open it, so the section never offers a link that
@@ -34,7 +42,10 @@ export function OverviewSummary({
   configHref?: string;
   configLabel?: string;
 }) {
-  if (facts.length === 0 && !configHref) return null;
+  // Counted after the absent facts fall out: an Overview whose every fact
+  // turned out to have nothing to say is a heading over an empty box.
+  const present = presentFacts(facts);
+  if (present.length === 0 && !configHref) return null;
 
   return (
     <section aria-labelledby={headingId} className="space-y-3">
@@ -57,7 +68,7 @@ export function OverviewSummary({
       </div>
       {/* One row, wrapping rather than scrolling: a narrow window gets two
           short rows instead of a value cut off at the edge. */}
-      <DetailFacts facts={facts} className="rounded-lg border bg-card p-4" />
+      <DetailFacts facts={present} className="rounded-lg border bg-card p-4" />
     </section>
   );
 }

@@ -5,6 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 
 /**
  * Entity types that can have limits applied
@@ -63,11 +64,13 @@ export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   limitType: LimitTypeSchema,
   model: z.array(z.string()).nullable().optional(),
   cleanupInterval: LimitCleanupIntervalSchema.optional(),
-}).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+})
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({ labels: z.array(LabelWithDetailsSchema).optional() });
 
 /**
  * Refined types for better type safety and validation
@@ -76,45 +79,47 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-}).refine(
-  (data) => {
-    // Validation: mcp_server_calls requires mcpServerName and should not have model
-    if (data.limitType === "mcp_server_calls") {
-      if (!data.mcpServerName) {
-        return false;
+})
+  .extend({ labels: z.array(LabelWithDetailsSchema).optional() })
+  .refine(
+    (data) => {
+      // Validation: mcp_server_calls requires mcpServerName and should not have model
+      if (data.limitType === "mcp_server_calls") {
+        if (!data.mcpServerName) {
+          return false;
+        }
+        if (data.model) {
+          return false;
+        }
       }
-      if (data.model) {
-        return false;
+      // Validation: tool_calls requires both mcpServerName and toolName and should not have model
+      if (data.limitType === "tool_calls") {
+        if (!data.mcpServerName || !data.toolName) {
+          return false;
+        }
+        if (data.model) {
+          return false;
+        }
       }
-    }
-    // Validation: tool_calls requires both mcpServerName and toolName and should not have model
-    if (data.limitType === "tool_calls") {
-      if (!data.mcpServerName || !data.toolName) {
-        return false;
+      // Validation: token_cost should not have mcp or tool specificity
+      if (data.limitType === "token_cost") {
+        if (data.mcpServerName || data.toolName) {
+          return false;
+        }
+        if (
+          !data.model ||
+          !Array.isArray(data.model) ||
+          data.model.length === 0
+        ) {
+          data.model = null;
+        }
       }
-      if (data.model) {
-        return false;
-      }
-    }
-    // Validation: token_cost should not have mcp or tool specificity
-    if (data.limitType === "token_cost") {
-      if (data.mcpServerName || data.toolName) {
-        return false;
-      }
-      if (
-        !data.model ||
-        !Array.isArray(data.model) ||
-        data.model.length === 0
-      ) {
-        data.model = null;
-      }
-    }
-    return true;
-  },
-  {
-    message: "Invalid limit configuration for the specified limit type",
-  },
-);
+      return true;
+    },
+    {
+      message: "Invalid limit configuration for the specified limit type",
+    },
+  );
 
 /**
  * Exported types
@@ -149,6 +154,7 @@ export interface ModelUsageBreakdown {
  * Limit with per-model usage breakdown
  */
 export const LimitWithUsageSchema = SelectLimitSchema.extend({
+  labels: z.array(LabelWithDetailsSchema),
   modelUsage: z
     .array(
       z.object({

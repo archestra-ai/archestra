@@ -29,6 +29,40 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          {{- /*
+            A host that serves the UI gets the backend's own API prefixes routed
+            straight to the backend port, unless it already routes them itself.
+            Neither prefix has a Next.js route — the frontend only forwards
+            them. /v1 is the LLM proxy AND the MCP gateway, /v2 is A2A, so
+            between them they carry every request an agent makes: completions
+            whose bodies are multi-megabyte and stay open for the length of a
+            response, plus tool calls and their once-a-second poll. Sending that
+            through the frontend port puts it on the single-threaded Node
+            process that also answers the dashboard's API calls, so the UI slows
+            down while an agent is working. Everything else, /api/auth included,
+            stays on the frontend: that one IS a real app route.
+          */}}
+          {{- $frontendPaths := list }}
+          {{- $ownsBackendApis := false }}
+          {{- range .paths }}
+            {{- if eq (int .port) 3000 }}
+              {{- $frontendPaths = append $frontendPaths .path }}
+            {{- end }}
+            {{- if or (hasPrefix "/v1" .path) (hasPrefix "/v2" .path) }}
+              {{- $ownsBackendApis = true }}
+            {{- end }}
+          {{- end }}
+          {{- if and $.Values.archestra.ingress.routeBackendApisDirectly (gt (len $frontendPaths) 0) (not $ownsBackendApis) }}
+          {{- range $prefix := (list "/v1" "/v2") }}
+          - path: {{ $prefix }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "archestra-platform.fullname" $ }}
+                port:
+                  number: 9000
+          {{- end }}
+          {{- end }}
           {{- range .paths }}
           - path: {{ .path }}
             {{- if .pathType }}

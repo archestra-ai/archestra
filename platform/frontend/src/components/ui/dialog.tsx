@@ -70,6 +70,7 @@ function DialogContent({
   overlayClassName,
   onOpenAutoFocus,
   onCloseAutoFocus,
+  onScroll,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
@@ -81,6 +82,21 @@ function DialogContent({
   // on close (it suppresses its own fallback), and keyboard focus drops to
   // <body>. Capture the opener ourselves and restore it (WCAG 2.4.3).
   const returnFocusRef = React.useRef<HTMLElement | null>(null);
+  // `overflow-hidden` below makes this element a scrollport on purpose, and a
+  // scrollport with no scrollbar can still be scrolled *programmatically*:
+  // `scrollIntoView()` on anything in the body — a field the browser focuses,
+  // validation jumping to the first error, an in-page anchor — walks every
+  // scrollable ancestor and drags this one along too. That slides the header
+  // out of view and strands the sticky footer mid-dialog above a band of dead
+  // space, and with no scrollbar nothing can put it back. The body has its own
+  // scroll container; that is the one that should move, so pin this at the
+  // origin.
+  const pinToOrigin = (event: React.UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget;
+    if (el.scrollTop !== 0) el.scrollTop = 0;
+    if (el.scrollLeft !== 0) el.scrollLeft = 0;
+    onScroll?.(event);
+  };
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay className={overlayClassName} />
@@ -104,6 +120,7 @@ function DialogContent({
             opener.focus();
           }
         }}
+        onScroll={pinToOrigin}
         className={cn(
           // Please keep this class when updating dialog component
           // `overflow-hidden` is load-bearing: it makes DialogContent the

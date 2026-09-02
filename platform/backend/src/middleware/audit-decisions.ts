@@ -712,6 +712,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived BM25 corpus statistics; rebuilt from kb_chunks by a periodic task, never edited by a user",
   },
+  kbBm25CorpusFingerprintTable: {
+    audited: false,
+    reason:
+      "records what kb_chunks looked like at the last BM25 statistics rebuild; written by that periodic task, never edited by a user",
+  },
   kbContainerAclsTable: {
     audited: false,
     reason:

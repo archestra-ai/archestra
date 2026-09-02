@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-29
+lastUpdated: 2026-09-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -97,7 +97,7 @@ Step 1 of search ranking. Passages that contain the question's words are scored 
 
 Each field shows the deployment default until you change it; setting it back to the default returns it to following that default. The defaults come from `ARCHESTRA_KNOWLEDGE_BASE_BM25_K1` and `_B` — see [Deployment](/docs/platform-deployment#knowledge-base-configuration).
 
-BM25 scores from statistics that Archestra rebuilds in the background — right after startup, then hourly. The statistics cover the whole deployment, not one organization. Until the first build, keyword matches rank with PostgreSQL's built-in full-text ranking. The Keyword ranking section shows where this stands: ready, still building — with when the next update runs — updating right now, nothing indexed yet, or the last update failed.
+BM25 scores from statistics that Archestra builds in the background, right after startup. It then checks hourly and rebuilds only when documents have been added or removed since the last pass. The statistics cover the whole deployment, not one organization. Until the first build, keyword matches rank with PostgreSQL's built-in full-text ranking. The Keyword ranking section shows where this stands: ready, still building — with when the next update runs — updating right now, nothing indexed yet, or the last update failed.
 
 #### Reranking
 

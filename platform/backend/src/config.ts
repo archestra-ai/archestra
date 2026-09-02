@@ -3625,6 +3625,25 @@ const config = {
       60,
       86_400,
     ),
+    /**
+     * How long the statistics may stand before a rebuild runs unconditionally.
+     *
+     * Each tick compares the corpus against the stored fingerprint and skips
+     * the rebuild when nothing moved, which is what keeps an idle corpus from
+     * paying a full `ts_stat` walk every hour. The fingerprint is row count
+     * plus newest `created_at`, so it cannot see an in-place edit of `content`
+     * — that regenerates `search_vector` while leaving both alone. This bounds
+     * how long such an edit can go unnoticed.
+     *
+     * Set well above the refresh interval: below it, every tick rebuilds and
+     * the skip guard buys nothing.
+     */
+    bm25StatsMaxStalenessSeconds: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_MAX_STALENESS_SECONDS,
+      24 * 60 * 60,
+      60,
+      30 * 24 * 60 * 60,
+    ),
     // Liveness lease for connector sync runs. The owning worker renews the
     // lease every `heartbeatInterval`; a run whose lease is not renewed within
     // `leaseTtl` is treated as orphaned and reclaimed. TTL must be several times

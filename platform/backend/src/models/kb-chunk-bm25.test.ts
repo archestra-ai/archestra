@@ -1,5 +1,6 @@
 import { BM25_B_DEFAULT, BM25_K1_DEFAULT } from "@archestra/shared";
 import { eq, sql } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import type { AclEntry, InsertKbDocument } from "@/types";
@@ -75,7 +76,7 @@ describe("KbChunkModel BM25 ranking", () => {
       },
     ]);
 
-    return { connectorId: connector.id };
+    return { connectorId: connector.id, documentId: doc.id };
   }
 
   test("ranks a focused chunk above a longer chunk that repeats the query terms", async ({
@@ -294,6 +295,10 @@ describe("KbChunkModel BM25 ranking", () => {
     });
 
     const first = await KbChunkModel.refreshBm25Stats();
+    // Drop the fingerprint so the second call actually rebuilds. Left in
+    // place it would skip, which is a different property — pinned separately
+    // in "skips the rebuild when the corpus has not changed".
+    await db.delete(schema.kbBm25CorpusFingerprintTable);
     const second = await KbChunkModel.refreshBm25Stats();
 
     // DELETE + INSERT, not INSERT: a second pass over an unchanged corpus must
@@ -318,6 +323,146 @@ describe("KbChunkModel BM25 ranking", () => {
       limit: 1,
     });
     expect(top?.chunkIndex).toBe(0);
+  });
+
+  /**
+   * The rebuild is a full `ts_stat` walk of every `search_vector`, and it runs
+   * on a timer rather than on the ingestion path. Left unconditional it pays
+   * that walk on every tick whether or not the corpus moved. These pin the
+   * guard that makes the cost proportional to change instead of to elapsed
+   * time — and, just as importantly, that it still rebuilds when it should.
+   */
+  describe("corpus-change skip guard", () => {
+    async function readTermCount(): Promise<number> {
+      const [row] = await db
+        .select({ terms: sql<number>`count(*)::int` })
+        .from(schema.kbBm25TermStatsTable);
+      return row?.terms ?? 0;
+    }
+
+    test("skips the rebuild when the corpus has not changed", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { connectorId } = await seedCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+
+      const built = await KbChunkModel.refreshBm25Stats();
+      expect(built.skipped).toBe(false);
+      const termsAfterBuild = await readTermCount();
+      expect(termsAfterBuild).toBeGreaterThan(0);
+
+      const second = await KbChunkModel.refreshBm25Stats();
+
+      expect(second.skipped).toBe(true);
+      // A skip must leave the previous statistics standing. Returning early
+      // after the DELETE would empty the term table and silently drop every
+      // query back to the ts_rank fallback.
+      expect(await readTermCount()).toBe(termsAfterBuild);
+      expect(await KbChunkModel.hasBm25Stats(["english"], [connectorId])).toBe(
+        true,
+      );
+    });
+
+    test("rebuilds after a chunk is added", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { documentId } = await seedCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+
+      await KbChunkModel.refreshBm25Stats();
+      expect((await KbChunkModel.refreshBm25Stats()).skipped).toBe(true);
+
+      await KbChunkModel.insertMany([
+        {
+          documentId,
+          content: "helmchart rollback procedure",
+          chunkIndex: 2,
+          acl: ACL,
+        },
+      ]);
+
+      const rebuilt = await KbChunkModel.refreshBm25Stats();
+
+      expect(rebuilt.skipped).toBe(false);
+      // The new chunk's terms have to reach the statistics, not merely trigger
+      // a pass: a guard that rebuilt from a stale snapshot would still report
+      // skipped=false while leaving the term absent.
+      const [term] = await db
+        .select({ df: schema.kbBm25TermStatsTable.df })
+        .from(schema.kbBm25TermStatsTable)
+        .where(eq(schema.kbBm25TermStatsTable.term, "helmchart"));
+      expect(term?.df).toBe(1);
+    });
+
+    test("rebuilds when a deletion and an insertion leave the count unchanged", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { documentId } = await seedCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+
+      await KbChunkModel.refreshBm25Stats();
+      expect((await KbChunkModel.refreshBm25Stats()).skipped).toBe(true);
+
+      // Swap one chunk for another. The row count lands back where it started,
+      // so a count-only fingerprint would see nothing; the newest `created_at`
+      // is what moves. This is the case that makes the watermark load-bearing.
+      await db
+        .delete(schema.kbChunksTable)
+        .where(eq(schema.kbChunksTable.chunkIndex, 1));
+      await KbChunkModel.insertMany([
+        {
+          documentId,
+          content: "sidecar eviction backoff",
+          chunkIndex: 1,
+          acl: ACL,
+        },
+      ]);
+
+      expect((await KbChunkModel.refreshBm25Stats()).skipped).toBe(false);
+    });
+
+    test("rebuilds once the statistics pass the staleness ceiling", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      await seedCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+
+      await KbChunkModel.refreshBm25Stats();
+      expect((await KbChunkModel.refreshBm25Stats()).skipped).toBe(true);
+
+      // An in-place edit of `content` regenerates `search_vector` without
+      // moving the row count or `created_at`, and `kb_chunks` carries no
+      // `updated_at` to catch it by. Backdating the fingerprint stands in for
+      // that blind spot: past the ceiling the rebuild must run regardless of
+      // what the fingerprint says.
+      await db.update(schema.kbBm25CorpusFingerprintTable).set({
+        refreshedAt: new Date(
+          Date.now() - (config.kb.bm25StatsMaxStalenessSeconds + 60) * 1_000,
+        ),
+      });
+
+      expect((await KbChunkModel.refreshBm25Stats()).skipped).toBe(false);
+    });
   });
 
   test("finds a term first indexed after the last statistics rebuild", async ({

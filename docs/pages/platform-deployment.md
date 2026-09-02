@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-01
+lastUpdated: 2026-09-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1825,9 +1825,13 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `2000`
   - BM25 ranks, it does not index. The existing full-text index finds the candidates and this caps how many of them get scored. Cost grows roughly in step with the cap. A query matching more chunks than the cap can only reorder what `ts_rank` surfaced first, so raise this if broad queries matter more than latency.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_INTERVAL_SECONDS`** - How often the BM25 corpus statistics are rebuilt.
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_INTERVAL_SECONDS`** - How often Archestra checks whether the BM25 corpus statistics need rebuilding.
   - Default: `3600`
-  - The first rebuild runs right after startup; until it has finished, keyword matches are ranked with PostgreSQL's built-in `ts_rank`. The refresh reads every chunk, so its cost grows with the corpus. It never blocks ingestion. Statistics that lag the corpus shift scores slightly rather than making them wrong, so a long interval is safe on a large deployment.
+  - The first rebuild runs right after startup; until it has finished, keyword matches are ranked with PostgreSQL's built-in `ts_rank`. Each later tick compares the corpus against the last rebuild and skips the work when no chunk was added or removed. A rebuild reads every chunk, so its cost grows with the corpus; the check does not. Neither blocks ingestion. Statistics that lag the corpus shift scores slightly rather than making them wrong, so a long interval is safe on a large deployment.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_MAX_STALENESS_SECONDS`** - How long the BM25 statistics may stand before a rebuild runs unconditionally.
+  - Default: `86400` (24 hours), from `60` to `2592000`
+  - Ticks skip the rebuild by comparing the number of chunks and the newest chunk's timestamp against the last pass. That comparison sees every added and removed chunk, but not an edit that rewrites an existing chunk's text in place. This setting bounds how long such an edit can go unnoticed. Set it well above the refresh interval: below that, every tick rebuilds and the check buys nothing.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_BM25_STATS_REFRESH_TIMEOUT_MS`** - How long one statistics rebuild may run before PostgreSQL cancels it.
   - Default: `900000` (15 minutes), from `30000` to `21600000`

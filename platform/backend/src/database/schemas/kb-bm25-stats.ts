@@ -4,6 +4,7 @@ import {
   pgTable,
   primaryKey,
   text,
+  timestamp,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -70,3 +71,46 @@ export const kbBm25CorpusStatsTable = pgTable("kb_bm25_corpus_stats", {
   nDocs: bigint("n_docs", { mode: "number" }).notNull(),
   avgDl: numeric("avg_dl").notNull(),
 });
+
+/**
+ * What the corpus looked like when the statistics above were last built.
+ *
+ * The rebuild is a full `ts_stat` walk of every `search_vector`, and its cost
+ * grows with the corpus — measured at 24.6 seconds against 123,382 chunks,
+ * writing and deleting the whole term table on each pass. Running it on a
+ * timer alone means paying that whether or not anything changed. Comparing the
+ * corpus against this row first costs one aggregate over the heap (measured at
+ * 116 ms, a ~212x ratio) and lets an unchanged corpus skip the walk entirely.
+ *
+ * One row, keyed by `SINGLETON_ID`. The statistics are rebuilt all-or-nothing
+ * across every language, so a per-language fingerprint would buy no extra
+ * precision: any change anywhere rebuilds everything.
+ *
+ * `nChunks` and `newestChunkAt` together catch every change that adds or
+ * removes rows, including an equal-count swap, which moves the watermark even
+ * though the count lands back where it started. They do NOT catch an in-place
+ * `UPDATE` of `content`: that regenerates `search_vector` while leaving both
+ * the count and `created_at` alone, and `kb_chunks` has no `updated_at` to
+ * notice it by. `refreshedAt` bounds that blind spot — past the configured
+ * maximum staleness the rebuild runs regardless of the fingerprint.
+ */
+export const kbBm25CorpusFingerprintTable = pgTable(
+  "kb_bm25_corpus_fingerprint",
+  {
+    id: text("id").primaryKey(),
+    nChunks: bigint("n_chunks", { mode: "number" }).notNull(),
+    /** Null when the corpus is empty: `max()` over no rows returns NULL. */
+    newestChunkAt: timestamp("newest_chunk_at", { mode: "date" }),
+    refreshedAt: timestamp("refreshed_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+/**
+ * Primary key of the single `kb_bm25_corpus_fingerprint` row.
+ *
+ * A fixed key rather than an auto-generated one so the rebuild can upsert onto
+ * it (`ON CONFLICT (id) DO UPDATE`) without first reading the table.
+ */
+export const KB_BM25_CORPUS_FINGERPRINT_SINGLETON_ID = "global";

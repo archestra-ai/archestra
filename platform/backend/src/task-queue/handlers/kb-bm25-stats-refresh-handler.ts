@@ -14,13 +14,27 @@ import { KbChunkModel } from "@/models";
  * a refresh left 99.2% of top-10 results unchanged. That is why maintenance
  * lives here on a timer instead of on the ingestion write path, and why a
  * failed pass is logged and retried rather than escalated.
+ *
+ * Most ticks do no work: the model compares the corpus against the fingerprint
+ * left by the last rebuild and returns early when nothing has changed. The two
+ * outcomes are logged separately so a deployment that never rebuilds is
+ * visibly skipping rather than silently failing.
  */
 export async function handleKbBm25StatsRefresh(): Promise<void> {
   const startedAt = Date.now();
-  const { languages, terms } = await KbChunkModel.refreshBm25Stats();
+  const { languages, terms, skipped } = await KbChunkModel.refreshBm25Stats();
+  const durationMs = Date.now() - startedAt;
+
+  if (skipped) {
+    logger.info(
+      { durationMs },
+      "[KbBm25StatsRefresh] Corpus unchanged since the last rebuild, skipped",
+    );
+    return;
+  }
 
   logger.info(
-    { languages, terms, durationMs: Date.now() - startedAt },
+    { languages, terms, durationMs },
     "[KbBm25StatsRefresh] Rebuilt knowledge-base BM25 corpus statistics",
   );
 }

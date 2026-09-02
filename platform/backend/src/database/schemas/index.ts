@@ -120,6 +120,7 @@ export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
 export {
+  kbBm25CorpusFingerprintTable,
   kbBm25CorpusStatsTable,
   kbBm25TermStatsTable,
 } from "./kb-bm25-stats";

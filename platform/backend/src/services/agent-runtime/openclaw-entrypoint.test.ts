@@ -20,9 +20,20 @@ const ENTRYPOINT = path.resolve(
 
 describe("OpenClaw image entrypoint", () => {
   test.each([
-    ["openai_chat", "openai-completions"],
-    ["openai_responses", "openai-responses"],
-  ])("configures the %s transport as %s", async (protocol, expectedApi) => {
+    {
+      protocol: "openai_chat",
+      expectedApi: "openai-completions",
+      baseUrl: "http://host.orb.internal:9000/v1/model-router/test",
+      expectedBaseUrl: "http://[fd00::123]:9000/v1/model-router/test",
+    },
+    {
+      protocol: "openai_responses",
+      expectedApi: "openai-responses",
+      baseUrl: "http://localhost:9000/v1/model-router/test",
+      expectedBaseUrl: "http://localhost:9000/v1/model-router/test",
+    },
+  ])("configures the $protocol transport as $expectedApi", async (testCase) => {
+    const { protocol, expectedApi, baseUrl, expectedBaseUrl } = testCase;
     const root = await mkdtemp(path.join(tmpdir(), "archestra-openclaw-"));
     try {
       const bin = path.join(root, "bin");
@@ -37,6 +48,14 @@ describe("OpenClaw image entrypoint", () => {
         `#!/bin/sh
 cp "$PWD/SOUL.md" "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-soul.md"
 printf 'OpenClaw test response\\n'
+`,
+      );
+      await writeExecutable(
+        path.join(bin, "getent"),
+        `#!/bin/sh
+if [ "$1" = "ahostsv6" ] && [ "$2" = "host.orb.internal" ]; then
+  printf 'fd00::123 STREAM host.orb.internal\n'
+fi
 `,
       );
       const attentionCommand = path.join(bin, "attention");
@@ -62,7 +81,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
         ARCHESTRA_AGENT_ATTENTION_COMMAND: attentionCommand,
         OPENAI_API_KEY: "test-key",
-        OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
+        OPENAI_BASE_URL: baseUrl,
       };
       await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
@@ -73,6 +92,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         await readFile(path.join(runtime, "openclaw.json"), "utf8"),
       );
       expect(config.models.providers.archestra.api).toBe(expectedApi);
+      expect(config.models.providers.archestra.baseUrl).toBe(expectedBaseUrl);
       expect(config.logging).toEqual({
         level: "error",
         consoleLevel: "silent",
@@ -119,7 +139,9 @@ plugin.register({ on(name, handler) { handlers[name] = handler; } });
   await handlers.before_agent_run({});
   await handlers.before_tool_call({ toolName: "ask_user" });
   await handlers.after_tool_call({ toolName: "ask_user" });
-  await handlers.agent_end({});
+  await handlers.agent_end({ success: true });
+  await handlers.before_agent_run({});
+  await handlers.agent_end({ success: false, error: "network error" });
   await handlers.session_end({});
 })();`,
             path.join(config.plugins.load.paths[0], "index.cjs"),
@@ -134,7 +156,7 @@ plugin.register({ on(name, handler) { handlers[name] = handler; } });
         expect(
           await readFile(path.join(runtime, "attention-calls"), "utf8"),
         ).toBe(
-          "clear\nset Input requested\nclear\nset Waiting for input\nclear\n",
+          "clear\nset Input requested\nclear\nset Waiting for input\nclear\nclear\nclear\n",
         );
       }
     } finally {

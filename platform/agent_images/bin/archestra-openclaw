@@ -12,20 +12,25 @@ esac
 
 resolve_docker_desktop_url() {
   local url="$1"
+  local hostname
   local ipv6
 
-  if [[ "${url}" != http://host.internal:* ]]; then
-    printf '%s\n' "${url}"
-    return
-  fi
+  case "${url}" in
+    http://host.internal:*) hostname="host.internal" ;;
+    http://host.orb.internal:*) hostname="host.orb.internal" ;;
+    *)
+      printf '%s\n' "${url}"
+      return
+      ;;
+  esac
 
-  ipv6="$(getent ahostsv6 host.internal 2>/dev/null | awk 'NR == 1 { print $1 }')"
+  ipv6="$(getent ahostsv6 "${hostname}" 2>/dev/null | awk 'NR == 1 { print $1 }')"
   if [[ -z "${ipv6}" ]]; then
     printf '%s\n' "${url}"
     return
   fi
 
-  printf '%s\n' "${url/\/\/host.internal/\/\/\[${ipv6}\]}"
+  printf '%s\n' "${url/\/\/${hostname}/\/\/\[${ipv6}\]}"
 }
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
@@ -70,8 +75,11 @@ module.exports = {
     api.on("after_tool_call", async (event) => {
       if (event.toolName === "ask_user") await update("clear");
     });
-    api.on("agent_end", async () => {
-      if (process.env.ARCHESTRA_AGENT_RUNTIME_MODE === "interactive") {
+    api.on("agent_end", async (event) => {
+      if (
+        event.success &&
+        process.env.ARCHESTRA_AGENT_RUNTIME_MODE === "interactive"
+      ) {
         await update("set", "Waiting for input");
       } else {
         await update("clear");

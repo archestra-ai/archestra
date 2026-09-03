@@ -19,7 +19,7 @@ const ENTRYPOINT = path.resolve(
 );
 
 describe("Hermes image entrypoint", () => {
-  test("uses native Hermes hooks to report input attention", async () => {
+  test("uses a native Hermes plugin to report input attention", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-hermes-"));
     try {
       const bin = path.join(root, "bin");
@@ -68,43 +68,15 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       const config = JSON.parse(
         await readFile(path.join(runtime, "hermes", "config.yaml"), "utf8"),
       );
-      expect(config.hooks_auto_accept).toBe(true);
-      expect(config.hooks.pre_tool_call[0].matcher).toBe("^clarify$");
-      const command = config.hooks.pre_tool_call[0].command;
-
-      await runHook({
-        command,
-        payload: { hook_event_name: "pre_tool_call", tool_name: "clarify" },
-        env,
-      });
-      await runHook({
-        command,
-        payload: { hook_event_name: "post_tool_call", tool_name: "clarify" },
-        env,
-      });
-      await runHook({
-        command,
-        payload: { hook_event_name: "pre_approval_request" },
-        env,
-      });
-      await runHook({
-        command,
-        payload: { hook_event_name: "post_approval_response" },
-        env,
-      });
-      await runHook({
-        command,
-        payload: { hook_event_name: "pre_llm_call" },
-        env,
-      });
-      await runHook({
-        command,
-        payload: {
-          hook_event_name: "on_session_end",
-          extra: { completed: true },
-        },
-        env,
-      });
+      expect(config.plugins.enabled).toEqual(["archestra-attention"]);
+      const plugin = path.join(
+        runtime,
+        "hermes",
+        "plugins",
+        "archestra-attention",
+        "__init__.py",
+      );
+      await runPluginCallbacks({ plugin, env });
 
       expect(
         await readFile(path.join(runtime, "attention-calls"), "utf8"),
@@ -113,7 +85,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       );
       expect(
         await readFile(path.join(runtime, "captured-args"), "utf8"),
-      ).toContain("--accept-hooks");
+      ).not.toContain("--accept-hooks");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -125,19 +97,32 @@ async function writeExecutable(file: string, contents: string): Promise<void> {
   await chmod(file, 0o755);
 }
 
-async function runHook(params: {
-  command: string;
-  payload: Record<string, unknown>;
+async function runPluginCallbacks(params: {
+  plugin: string;
   env: NodeJS.ProcessEnv;
 }): Promise<void> {
-  await execFileAsync(
-    "bash",
-    ["-c", 'printf "%s" "$HOOK_PAYLOAD" | exec "$1"', "_", params.command],
-    {
-      env: {
-        ...params.env,
-        HOOK_PAYLOAD: JSON.stringify(params.payload),
-      },
-    },
-  );
+  const harness = `
+import importlib.util
+import sys
+
+spec = importlib.util.spec_from_file_location("archestra_attention", sys.argv[1])
+plugin = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plugin)
+
+callbacks = {}
+class Context:
+    def register_hook(self, name, callback):
+        callbacks[name] = callback
+
+plugin.register(Context())
+callbacks["pre_tool_call"](tool_name="clarify")
+callbacks["post_tool_call"](tool_name="clarify")
+callbacks["pre_approval_request"]()
+callbacks["post_approval_response"]()
+callbacks["pre_llm_call"]()
+callbacks["on_session_end"](completed=True)
+`;
+  await execFileAsync("python3", ["-c", harness, params.plugin], {
+    env: params.env,
+  });
 }

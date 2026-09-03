@@ -9,7 +9,6 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AgentExecutionLogs } from "@/components/agent-execution-logs";
@@ -18,6 +17,7 @@ import { AgentExecutionTerminal } from "@/components/agent-execution-terminal";
 import { AgentIcon } from "@/components/agent-icon";
 import { ShareAgentExecutionDialog } from "@/components/chat/share-agent-execution-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExecTerminalStatus } from "@/components/exec/exec-terminal-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,10 +58,11 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
     // of the loader's progress steps.
     return (
       <main className="flex h-full min-h-0 flex-col bg-background p-4 md:p-6">
-        <div className="flex flex-1 items-center justify-center rounded-md border bg-slate-950 p-6">
-          <output className="max-w-sm text-center text-sm font-medium text-slate-100">
-            Only the person who started this run can attach to it.
-          </output>
+        <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border bg-slate-950">
+          <ExecTerminalStatus
+            title="Terminal unavailable"
+            detail="Only the person who started this run can attach to it."
+          />
         </div>
       </main>
     );
@@ -175,10 +176,13 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
         ) : execution ? (
           <>
             {live && (
-              <TerminalNotice>
-                Only the person who started this run can attach to it. You're
-                viewing its terminal output in read-only mode.
-              </TerminalNotice>
+              <div className="shrink-0 overflow-hidden rounded-md border bg-slate-950">
+                <ExecTerminalStatus
+                  title="Read-only terminal"
+                  detail="Only the person who started this run can attach to it. You're viewing its terminal output in read-only mode."
+                  compact
+                />
+              </div>
             )}
             <AgentExecutionLogs execution={execution} />
           </>
@@ -239,18 +243,5 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
         </div>
       </StandardDialog>
     </main>
-  );
-}
-
-/**
- * An info line styled like the terminal box's own error/status messages
- * (`rounded-md border bg-slate-950`, red monospace) so access notices read as
- * part of the terminal surface instead of a mismatched page-level card.
- */
-function TerminalNotice({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex shrink-0 items-center justify-center rounded-md border bg-slate-950 p-4 text-center font-mono text-sm text-red-400">
-      {children}
-    </div>
   );
 }

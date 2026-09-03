@@ -216,7 +216,58 @@ describe("ExecTerminal", () => {
 
     render(<ExecTerminal sessionKey="task-3" transport={transport} isActive />);
 
-    expect(await screen.findByText("Connecting...")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Connecting to the terminal",
+    );
+  });
+
+  it("explains a failed attach as an accessible terminal error", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onError(
+          "Timed out waiting for the Agent pod to accept a terminal",
+        );
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal sessionKey="task-error" transport={transport} isActive />,
+    );
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Unable to open the terminal")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Timed out waiting for the Agent pod to accept a terminal",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("separates a closed session's summary from its reason", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onClosed("The pod stopped responding");
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal
+        sessionKey="task-closed"
+        transport={transport}
+        isActive
+        disconnectedLabel="Execution finished"
+      />,
+    );
+
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("Execution finished")).toBeInTheDocument();
+    expect(screen.getByText("The pod stopped responding")).toBeInTheDocument();
   });
 
   it("drops the startup progress once the session is live", async () => {

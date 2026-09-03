@@ -4,6 +4,8 @@ import {
   ADMIN_ROLE_NAME,
   archestraApiSdk,
   type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +23,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -389,6 +392,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           readOnlyDetails={!canEditDetails}
           memberChanges={memberChanges}
           onMemberChangesChange={setMemberChanges}
+          onGoToExternalGroups={() => setActiveSection("external-groups")}
         />
       )}
       {activeSection === "token" && mode === "edit" && (
@@ -422,6 +426,7 @@ function TeamSection(props: {
   readOnlyDetails: boolean;
   memberChanges: StagedMemberChanges;
   onMemberChangesChange: (changes: StagedMemberChanges) => void;
+  onGoToExternalGroups: () => void;
 }) {
   return (
     <div className="space-y-6">
@@ -478,6 +483,40 @@ function TeamSection(props: {
 
           <div className="space-y-4">
             <h3 className="text-sm font-medium">Members</h3>
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-xs">
+              <p>
+                <span className="font-medium">Optional</span> — only for adding
+                members by hand.{" "}
+                <button
+                  type="button"
+                  onClick={props.onGoToExternalGroups}
+                  className="text-primary hover:underline"
+                >
+                  External Group Sync
+                </button>{" "}
+                syncs membership and{" "}
+                <ExternalDocsLink
+                  href={getDocsUrl(DocsPage.PlatformSsoRoleMapping)}
+                >
+                  Role Mapping
+                </ExternalDocsLink>{" "}
+                in your OIDC provider syncs roles — never this setting.
+              </p>
+              <div className="space-y-1 text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">
+                    Able to edit team
+                  </span>{" "}
+                  — rename it, manage members, rotate its token. This team only.
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">
+                    Not able to edit team
+                  </span>{" "}
+                  — the default, and what sync assigns.
+                </p>
+              </div>
+            </div>
             <MembersSection
               open={props.open}
               team={props.team}
@@ -651,7 +690,7 @@ function MembersSection({
             {memberRows.map((row) => (
               <div
                 key={row.userId}
-                className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
+                className="grid grid-cols-[minmax(0,1fr)_210px_40px] items-center gap-3 rounded-lg border p-3"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -678,8 +717,12 @@ function MembersSection({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
-                    <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
+                    <SelectItem value={ADMIN_ROLE_NAME}>
+                      Able to edit team
+                    </SelectItem>
+                    <SelectItem value={MEMBER_ROLE_NAME}>
+                      Not able to edit team
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Button

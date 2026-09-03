@@ -316,9 +316,11 @@ describe("ConversationSearchPalette", () => {
           taskId: "task-1",
           title: "Nightly report run",
           state: "TASK_STATE_WORKING",
-          startedAt: new Date().toISOString(),
+          startedAt: new Date(Date.now() - 30 * 60_000).toISOString(),
           stateChangedAt: new Date().toISOString(),
           endedAt: null,
+          hardDeadlineAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+          lastModelActivityAt: new Date(Date.now() - 20 * 60_000).toISOString(),
           projectId: "project-1",
           projectName: "Release work",
         },
@@ -329,8 +331,8 @@ describe("ConversationSearchPalette", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
 
     expect(screen.getByText("Nightly report run")).toBeInTheDocument();
-    // The row carries the same state-colored run mark as the sidebar.
-    expect(screen.getByLabelText("Run running")).toBeInTheDocument();
+    // The row carries the same liveness-aware run mark as the sidebar.
+    expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Open project Release work" }),
     );

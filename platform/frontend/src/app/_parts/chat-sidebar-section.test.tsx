@@ -423,10 +423,12 @@ describe("ChatSidebarSection", () => {
         backend: "kubernetes",
         runtimeScope: "archestra-dev",
         virtualApiKeyId: null,
-        startedAt: "2026-07-16T10:00:00Z",
+        startedAt: new Date(Date.now() - 30 * 60_000).toISOString(),
         endedAt: null,
         state: "TASK_STATE_WORKING",
         stateChangedAt: "2026-07-16T10:00:00Z",
+        hardDeadlineAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        lastModelActivityAt: new Date(Date.now() - 20 * 60_000).toISOString(),
         statusReason: null,
         prompt: "Add the export command",
         agent: { id: "agent-1", name: "Codex", icon: null },
@@ -436,7 +438,7 @@ describe("ChatSidebarSection", () => {
     render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     expect(screen.getByText("Add export command")).toBeInTheDocument();
-    expect(screen.getByLabelText("Run running")).toBeInTheDocument();
+    expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
     expect(screen.getByLabelText("Run actions")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Add export command"));
     expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/task-1");

@@ -577,7 +577,14 @@ export function ConversationSearchPalette({
       }}
       className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full"
     >
-      <RunStateIcon state={run.state} className="h-4 w-4" />
+      <RunStateIcon
+        state={run.state}
+        startedAt={run.startedAt}
+        endedAt={run.endedAt}
+        hardDeadlineAt={run.hardDeadlineAt}
+        lastModelActivityAt={run.lastModelActivityAt}
+        className="size-4"
+      />
       <span className="text-sm flex-1 min-w-0 truncate leading-snug">
         {run.title}
       </span>

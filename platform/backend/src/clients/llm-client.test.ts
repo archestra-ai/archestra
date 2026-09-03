@@ -59,6 +59,27 @@ vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mockCreateAnthropic,
 }));
 
+const capturedCreateAmazonBedrockOptions = vi.hoisted(() => ({
+  apiKey: undefined as string | undefined,
+  accessKeyId: undefined as string | undefined,
+  baseURL: undefined as string | undefined,
+}));
+vi.mock("@ai-sdk/amazon-bedrock", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@ai-sdk/amazon-bedrock")>();
+  return {
+    ...actual,
+    createAmazonBedrock: (
+      options: Parameters<typeof actual.createAmazonBedrock>[0],
+    ) => {
+      capturedCreateAmazonBedrockOptions.apiKey = options?.apiKey;
+      capturedCreateAmazonBedrockOptions.accessKeyId = options?.accessKeyId;
+      capturedCreateAmazonBedrockOptions.baseURL = options?.baseURL;
+      return actual.createAmazonBedrock(options);
+    },
+  };
+});
+
 // Capture the fetch option passed to createOpenAI for azure fetchWithVersion tests
 const capturedCreateOpenAIOptions = vi.hoisted(() => ({
   fetch: undefined as typeof globalThis.fetch | undefined,
@@ -131,6 +152,7 @@ vi.mock("ollama-ai-provider-v2", async (importOriginal) => {
   };
 });
 
+import { encodeBedrockSigV4Marker } from "@/clients/bedrock-credentials";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import type { ConfiguredParameters } from "@/types/model";
 import {
@@ -185,6 +207,26 @@ describe("createDirectLLMModel", () => {
       baseUrl: null,
     });
     expect(model).toBeDefined();
+  });
+
+  test("decodes Bedrock SigV4 credentials on the direct provider path", () => {
+    const marker = encodeBedrockSigV4Marker({
+      accessKeyId: "test-access-key",
+      secretAccessKey: "test-secret-key",
+      sessionToken: "test-session-token",
+    });
+
+    createDirectLLMModel({
+      provider: "bedrock",
+      apiKey: marker,
+      modelName: "amazon.nova-lite-v1:0",
+      baseUrl: null,
+    });
+
+    expect(capturedCreateAmazonBedrockOptions).toMatchObject({
+      apiKey: undefined,
+      accessKeyId: "test-access-key",
+    });
   });
 
   it("creates a model for cerebras provider", () => {
@@ -1166,6 +1208,28 @@ describe("createDirectLLMModel", () => {
 });
 
 describe("createLLMModel", () => {
+  test("forwards Bedrock SigV4 credentials through the local proxy as a bearer marker", () => {
+    const marker = encodeBedrockSigV4Marker({
+      accessKeyId: "test-access-key",
+      secretAccessKey: "test-secret-key",
+      sessionToken: "test-session-token",
+    });
+
+    createLLMModel({
+      provider: "bedrock",
+      apiKey: marker,
+      agentId: "agent-1",
+      modelName: "amazon.nova-lite-v1:0",
+      baseUrl: null,
+    });
+
+    expect(capturedCreateAmazonBedrockOptions).toMatchObject({
+      apiKey: marker,
+      accessKeyId: undefined,
+      baseURL: expect.stringContaining("/v1/bedrock/agent-1"),
+    });
+  });
+
   test("uses an explicit keyless Azure conversation key and forwards its inference URL to the proxy", async ({
     makeOrganization,
     makeUser,

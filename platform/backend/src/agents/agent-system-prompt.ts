@@ -7,6 +7,7 @@ import {
   parseFullToolName,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
@@ -642,6 +643,9 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
   const listAppsName = archestraMcpBranding.getToolName(
     TOOL_LIST_APPS_SHORT_NAME,
   );
+  const listAppVersionsName = archestraMcpBranding.getToolName(
+    TOOL_LIST_APP_VERSIONS_SHORT_NAME,
+  );
   const restoreAppVersionName = archestraMcpBranding.getToolName(
     TOOL_RESTORE_APP_VERSION_SHORT_NAME,
   );
@@ -654,5 +658,5 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
 
 When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`. Open with the tool call itself — no lead-in sentence first.
 
-When the user asks to roll an app back or restore an existing historical version, call \`${runToolName}\` with \`tool_name: "${listAppsName}"\` to resolve the app id and current version when needed, then call it with \`tool_name: "${restoreAppVersionName}"\`. Pass that tool \`appId\`, the requested \`version\`, and the current \`latestVersion\` as \`baseVersion\`. Never call \`read_app\` or reproduce historical HTML through \`edit_app\` for a rollback.`;
+When the user asks to roll an app back or restore an existing historical version, call \`${runToolName}\` with \`tool_name: "${listAppsName}"\` to resolve the app id when needed. If the user did not provide an exact version number, call it with \`tool_name: "${listAppVersionsName}"\` to list the available versions without reading their HTML. Then call it with \`tool_name: "${restoreAppVersionName}"\`, passing \`appId\`, the selected \`version\`, and the current \`latestVersion\` as \`baseVersion\`. Never call \`read_app\` or reproduce historical HTML through \`edit_app\` for a rollback.`;
 }

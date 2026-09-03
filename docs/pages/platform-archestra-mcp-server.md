@@ -2656,6 +2656,7 @@ Required RBAC permission: `file:manage`
 | `scaffold_app` | Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. | `app:create` |
 | `refine_app` | Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. | `app:update` |
 | `list_apps` | List apps visible to the caller, optionally filtered by name or labels — use it to find an app's id. | `app:read` |
+| `list_app_versions` | List the immutable versions of an app, newest first, without returning their HTML. | `app:read` |
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
 | `restore_app_version` | Restore a historical app version directly on the server as a new head version. | `app:update` |
@@ -2779,6 +2780,27 @@ Required RBAC permission: `app:read`
 | `apps[].labels[].key` | `string` | Yes | The label key. |
 | `apps[].labels[].value` | `string` | Yes | The label value. |
 | `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
+
+#### list_app_versions
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `appId` | `string` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+| `versions` | `object[]` | Yes |  |
+| `versions[].version` | `number` | Yes |  |
+| `versions[].createdAt` | `string` | Yes |  |
+| `versions[].current` | `boolean` | Yes |  |
 
 #### render_app
 

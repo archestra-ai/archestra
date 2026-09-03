@@ -2,6 +2,7 @@ import {
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
+  TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
@@ -325,6 +326,18 @@ const AppSummaryOutputSchema = z.object({
     .describe(
       "Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app.",
     ),
+});
+
+const ListAppVersionsOutputSchema = z.object({
+  appId: z.string(),
+  latestVersion: z.number(),
+  versions: z.array(
+    z.object({
+      version: z.number(),
+      createdAt: z.string(),
+      current: z.boolean(),
+    }),
+  ),
 });
 
 const ReadAppOutputSchema = z.object({
@@ -872,6 +885,37 @@ const registry = defineArchestraTools([
             value: label.value,
           })),
         })),
+      };
+      return structuredSuccessResult(
+        structured,
+        fencedBlock(JSON.stringify(structured, null, 2), "json"),
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_LIST_APP_VERSIONS_SHORT_NAME,
+    title: "List App Versions",
+    description:
+      "List the immutable versions of an app, newest first, without returning their HTML. Use this before restore_app_version when the user did not provide an exact version number; the result identifies the current version and makes 'previous version' unambiguous.",
+    schema: GetAppSchema,
+    outputSchema: ListAppVersionsOutputSchema,
+    async handler({ args, context }) {
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({ ...auth, appId: args.appId });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
+      const versions = (await AppVersionModel.listSummariesForApp(app.id)).map(
+        (version) => ({
+          version: version.version,
+          createdAt: version.createdAt.toISOString(),
+          current: version.version === app.latestVersion,
+        }),
+      );
+      const structured = {
+        appId: app.id,
+        latestVersion: app.latestVersion,
+        versions,
       };
       return structuredSuccessResult(
         structured,

@@ -12,6 +12,7 @@ import {
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_EDIT_MCP_CONFIG_SHORT_NAME,
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
+  TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
@@ -173,6 +174,29 @@ describe("app tool execution", () => {
       context,
     );
     expect(structured(edited).latestVersion).toBe(2);
+
+    const listed = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_LIST_APP_VERSIONS_SHORT_NAME),
+      { appId },
+      context,
+    );
+    expect(structured(listed)).toEqual({
+      appId,
+      latestVersion: 2,
+      versions: [
+        {
+          version: 2,
+          createdAt: expect.any(String),
+          current: true,
+        },
+        {
+          version: 1,
+          createdAt: expect.any(String),
+          current: false,
+        },
+      ],
+    });
+    expect(JSON.stringify(listed)).not.toContain(original?.html);
 
     const restored = await executeArchestraTool(
       getArchestraToolFullName(TOOL_RESTORE_APP_VERSION_SHORT_NAME),

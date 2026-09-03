@@ -4,6 +4,7 @@ import {
   type ArchestraToolShortName,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
@@ -518,6 +519,7 @@ describe("buildAgentSystemPrompt", () => {
     const user = await makeUser();
     const scaffoldAppName = brand(TOOL_SCAFFOLD_APP_SHORT_NAME);
     const listAppsName = brand(TOOL_LIST_APPS_SHORT_NAME);
+    const listAppVersionsName = brand(TOOL_LIST_APP_VERSIONS_SHORT_NAME);
     const restoreAppVersionName = brand(TOOL_RESTORE_APP_VERSION_SHORT_NAME);
 
     const searchAgent = await makeAgent({
@@ -539,6 +541,7 @@ describe("buildAgentSystemPrompt", () => {
     });
     expect(searchPrompt).toContain(scaffoldAppName);
     expect(searchPrompt).toContain(listAppsName);
+    expect(searchPrompt).toContain(listAppVersionsName);
     expect(searchPrompt).toContain(restoreAppVersionName);
     expect(searchPrompt).toContain(
       "Never call `read_app` or reproduce historical HTML through `edit_app` for a rollback.",

@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { useMemo } from "react";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
@@ -88,21 +89,37 @@ export function useAppAccessContext(): AppAccessContext {
   });
   const { data: session } = useSession();
 
-  return {
-    isAdmin: !!isAdmin,
-    isTeamAdmin: !!isTeamAdmin,
-    canUpdate: !!canUpdate,
-    canDelete: !!canDelete,
-    currentUserId: session?.user?.id,
-    userTeamIds: new Set((userTeams ?? []).map((team) => team.id)),
-    isPending:
-      isAdminPending ||
-      isTeamAdminPending ||
-      isUpdatePending ||
-      isDeletePending ||
-      isTeamsPermissionPending ||
+  return useMemo(
+    () => ({
+      isAdmin: !!isAdmin,
+      isTeamAdmin: !!isTeamAdmin,
+      canUpdate: !!canUpdate,
+      canDelete: !!canDelete,
+      currentUserId: session?.user?.id,
+      userTeamIds: new Set((userTeams ?? []).map((team) => team.id)),
+      isPending:
+        isAdminPending ||
+        isTeamAdminPending ||
+        isUpdatePending ||
+        isDeletePending ||
+        isTeamsPermissionPending ||
+        isTeamsLoading,
+    }),
+    [
+      canDelete,
+      canUpdate,
+      isAdmin,
+      isAdminPending,
+      isDeletePending,
+      isTeamAdmin,
+      isTeamAdminPending,
       isTeamsLoading,
-  };
+      isTeamsPermissionPending,
+      isUpdatePending,
+      session?.user?.id,
+      userTeams,
+    ],
+  );
 }
 
 export function useAppAccess(

@@ -1,9 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import {
   type AppAccessContext,
   appActionDisabledReason,
   computeAppAccess,
+  useAppAccessContext,
 } from "./use-app-access";
+
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/teams/team.query");
 
 const baseContext: AppAccessContext = {
   isAdmin: false,
@@ -91,5 +98,33 @@ describe("appActionDisabledReason", () => {
     expect(
       appActionDisabledReason({ app: orgApp, access, action: "update" }),
     ).toBeUndefined();
+  });
+});
+
+describe("useAppAccessContext", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "me" } },
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [{ id: "my-team", name: "My team" }],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useMyTeams>);
+  });
+
+  it("keeps collection access facts stable when their query data has not changed", () => {
+    const { result, rerender } = renderHook(() => useAppAccessContext());
+    const initialContext = result.current;
+    const initialTeamIds = result.current.userTeamIds;
+
+    rerender();
+
+    expect(result.current).toBe(initialContext);
+    expect(result.current.userTeamIds).toBe(initialTeamIds);
   });
 });

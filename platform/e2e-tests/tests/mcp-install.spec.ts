@@ -26,6 +26,10 @@ test.describe("MCP Install", () => {
     adminPage,
     extractCookieHeaders,
   }) => {
+    // Tool discovery allows up to 120 seconds; leave room for the catalog and
+    // Kubernetes setup that happens before that readiness window begins.
+    test.setTimeout(180_000);
+
     const CONTEXT7_CATALOG_ITEM_NAME = "context7";
 
     await deleteCatalogItem(

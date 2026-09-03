@@ -14,9 +14,11 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 const mockRouterPush = vi.fn();
-const { mockUpdateExecutionMutate } = vi.hoisted(() => ({
-  mockUpdateExecutionMutate: vi.fn(),
-}));
+const { mockUpdateExecutionMutate, mockUpdateExecutionMutateAsync } =
+  vi.hoisted(() => ({
+    mockUpdateExecutionMutate: vi.fn(),
+    mockUpdateExecutionMutateAsync: vi.fn().mockResolvedValue(undefined),
+  }));
 
 // Mutable holder so the status-indicator matrix can vary the viewed route, the
 // per-conversation session status, and the unread set per test (object props
@@ -93,7 +95,7 @@ vi.mock("@/lib/agent-background-execution.query", () => ({
   }),
   useUpdateAgentExecution: () => ({
     mutate: mockUpdateExecutionMutate,
-    mutateAsync: vi.fn(),
+    mutateAsync: mockUpdateExecutionMutateAsync,
   }),
   useCancelAgentExecution: () => ({
     mutateAsync: vi.fn(),
@@ -148,7 +150,24 @@ vi.mock("@/components/agent-icon", () => ({
 }));
 
 vi.mock("@/app/_parts/conversation-project-actions", () => ({
-  ConversationProjectActions: () => null,
+  ConversationProjectActions: ({
+    projectId,
+    projects,
+    onProjectChange,
+  }: {
+    projectId: string | null;
+    projects: Array<{ id: string; name: string }>;
+    onProjectChange: (projectId: string | null) => Promise<void>;
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        void onProjectChange(projectId ? null : (projects[0]?.id ?? null))
+      }
+    >
+      {projectId ? "Remove from project" : "Add to project"}
+    </button>
+  ),
 }));
 
 // Pinned apps render their icon through this component: an owned app's own
@@ -434,6 +453,55 @@ describe("ChatSidebarSection", () => {
     expect(mockUpdateExecutionMutate).toHaveBeenCalledWith({
       taskId: "task-1",
       pinnedAt: new Date().toISOString(),
+    });
+  });
+
+  it("moves an execution into and out of a project from its sidebar menu", () => {
+    mockProjects = [
+      {
+        id: "project-1",
+        name: "Release work",
+        icon: null,
+        pinnedAt: null,
+      },
+    ];
+    mockExecutions = [
+      {
+        id: "run-1",
+        taskId: "task-1",
+        title: "Project execution",
+        projectId: null,
+        projectName: null,
+        pinnedAt: null,
+        startedAt: "2026-07-16T10:00:00Z",
+        endedAt: null,
+        state: "TASK_STATE_WORKING",
+        stateChangedAt: "2026-07-16T10:00:00Z",
+      },
+    ];
+
+    const { rerender } = render(<ChatSidebarSection fadeIn={fadeIn} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add to project" }));
+    expect(mockUpdateExecutionMutateAsync).toHaveBeenCalledWith({
+      taskId: "task-1",
+      projectId: "project-1",
+    });
+
+    mockExecutions = [
+      {
+        ...mockExecutions[0],
+        projectId: "project-1",
+        projectName: "Release work",
+      },
+    ];
+    rerender(<ChatSidebarSection fadeIn={fadeIn} />);
+    expect(screen.getByText("Release work")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove from project" }),
+    );
+    expect(mockUpdateExecutionMutateAsync).toHaveBeenLastCalledWith({
+      taskId: "task-1",
+      projectId: null,
     });
   });
 

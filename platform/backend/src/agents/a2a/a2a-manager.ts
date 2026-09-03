@@ -158,6 +158,8 @@ interface A2AManagerConfig {
  */
 export interface A2ASystemParams {
   sessionId?: string;
+  /** Project assigned by an interactive Chat execution launcher. */
+  projectId?: string;
   source?: InteractionSource;
   routeCategory?: RouteCategory;
   completionTarget?: AgentRunCompletionTarget;
@@ -603,6 +605,7 @@ export class A2AManager {
                 agentId,
                 actor,
                 organizationId: actor.organizationId,
+                projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
                 task: executedTurnText,
                 modelId: agent.modelId,

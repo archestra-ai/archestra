@@ -70,7 +70,9 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
   const live = !execution || execution.endedAt === null;
   const preserveLiveTerminal = isOwner && liveTerminalTaskId === taskId;
   const showLiveTerminal =
-    (!execution && query.isPending) || (isOwner && live) || preserveLiveTerminal;
+    (!execution && query.isPending) ||
+    (isOwner && live) ||
+    preserveLiveTerminal;
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background">

@@ -216,6 +216,22 @@ class AgentRunModel {
     return session ?? null;
   }
 
+  /** Execution sessions assigned to one project, newest first. */
+  static async listForProject(params: {
+    projectId: string;
+    organizationId: string;
+    actorUserId?: string;
+  }): Promise<AgentExecutionSession[]> {
+    const rows = await AgentRunModel.selectExecutionSessionsWhere([
+      eq(schema.agentRunsTable.projectId, params.projectId),
+      eq(schema.agentRunsTable.organizationId, params.organizationId),
+      ...(params.actorUserId
+        ? [eq(schema.agentRunsTable.actorUserId, params.actorUserId)]
+        : []),
+    ]);
+    return await AgentRunModel.addExecutionPrompts(rows);
+  }
+
   static async updateTitleIfCurrent(params: {
     taskId: string;
     expectedTitle: string;
@@ -240,10 +256,15 @@ class AgentRunModel {
     organizationId: string;
     title?: string;
     pinnedAt?: Date | null;
+    projectId?: string | null;
   }): Promise<AgentExecutionSession | null> {
     const updated = await db
       .update(schema.agentRunsTable)
-      .set({ title: params.title, pinnedAt: params.pinnedAt })
+      .set({
+        title: params.title,
+        pinnedAt: params.pinnedAt,
+        projectId: params.projectId,
+      })
       .where(
         and(
           eq(schema.agentRunsTable.taskId, params.taskId),
@@ -369,6 +390,8 @@ class AgentRunModel {
           name: schema.agentsTable.name,
           icon: schema.agentsTable.icon,
         },
+        projectName: schema.projectsTable.name,
+        projectIcon: schema.projectsTable.icon,
       })
       .from(schema.agentRunsTable)
       .innerJoin(
@@ -378,6 +401,10 @@ class AgentRunModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.projectsTable,
+        eq(schema.agentRunsTable.projectId, schema.projectsTable.id),
       )
       .where(and(...conditions))
       .orderBy(desc(schema.agentRunsTable.startedAt));

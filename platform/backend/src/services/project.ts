@@ -9,6 +9,7 @@ import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentRunModel,
   AgentTeamModel,
   ConversationModel,
   ConversationNotOwnedError,
@@ -28,6 +29,7 @@ import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
   AgentScope,
+  GetAgentExecutionResponse,
   LabelWithDetails,
   Project,
   ProjectConversationItem,
@@ -53,7 +55,7 @@ type ProjectShareAudience = {
 };
 
 /**
- * Projects: named collections of chats that own a set of result files
+ * Projects: named collections of chats and execution sessions that own a set of result files
  * (`files.project_id`). Mutations are owner-only; access to the project (and so
  * its files) is governed by the project share (see ProjectShareModel).
  */
@@ -1041,7 +1043,7 @@ class ProjectService {
     // part of admin oversight), so a `project:admin` viewing a foreign project
     // still cannot list its chats (requireReadable already excludes them).
     const project = await this.requireReadable(params);
-    const canReadAllChats = await this.callerCanReadAllChats(params);
+    const canReadAllChats = await this.callerCanReadAllProjectSessions(params);
     // Without `project:read-all`, scope the query to the caller's own chats in
     // SQL rather than fetching every project chat and filtering in memory.
     const rows = await ProjectModel.listConversations(
@@ -1051,6 +1053,24 @@ class ProjectService {
     return rows.map((row) => ({
       ...row,
       readOnly: row.authorUserId !== params.userId,
+    }));
+  }
+
+  async listExecutions(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<GetAgentExecutionResponse[]> {
+    const project = await this.requireReadable(params);
+    const canReadAll = await this.callerCanReadAllProjectSessions(params);
+    const rows = await AgentRunModel.listForProject({
+      projectId: project.id,
+      organizationId: params.organizationId,
+      actorUserId: canReadAll ? undefined : params.userId,
+    });
+    return rows.map((row) => ({
+      ...row,
+      viewerRole: row.actorUserId === params.userId ? "owner" : "shared",
     }));
   }
 
@@ -1347,7 +1367,7 @@ class ProjectService {
     );
   }
 
-  private async callerCanReadAllChats(params: {
+  private async callerCanReadAllProjectSessions(params: {
     organizationId: string;
     userId: string;
   }): Promise<boolean> {

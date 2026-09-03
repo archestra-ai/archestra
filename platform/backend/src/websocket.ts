@@ -22,6 +22,8 @@ import {
   AgentRunModel,
   AgentRunShareModel,
   McpServerModel,
+  ProjectModel,
+  ProjectShareModel,
   UserModel,
 } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
@@ -764,12 +766,16 @@ class WebSocketService {
 
   /**
    * Who may stream a run's logs read-only: anyone who could control it, plus
-   * anyone a share grants access to. Interactive attach stays owner-only (see
+   * anyone an execution share or project grants access to. Interactive attach stays owner-only (see
    * {@link handleSubscribeAgentRunAttach}) — a share never lends the owner's
    * live credentials, only a view of the output.
    */
   private async mayViewSessionLogs(
-    session: { actorUserId: string | null; taskId: string },
+    session: {
+      actorUserId: string | null;
+      taskId: string;
+      projectId: string | null;
+    },
     clientContext: WebSocketClientContext,
   ): Promise<boolean> {
     if (await this.mayControlSession(session, clientContext)) return true;
@@ -778,7 +784,26 @@ class WebSocketService {
       organizationId: clientContext.organizationId,
       userId: clientContext.userId,
     });
-    return share !== null;
+    if (share) return true;
+    if (!session.projectId) return false;
+
+    const project = await ProjectModel.findById(session.projectId);
+    if (
+      !project ||
+      !(await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: clientContext.userId,
+        organizationId: clientContext.organizationId,
+      }))
+    ) {
+      return false;
+    }
+    return userHasPermission(
+      clientContext.userId,
+      clientContext.organizationId,
+      "project",
+      "read-all",
+    );
   }
 
   private async handleSubscribeMcpExec(

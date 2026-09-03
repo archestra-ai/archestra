@@ -8,7 +8,7 @@ lastUpdated: 2026-09-02
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A project is a shared workspace for your chats, files, instructions, and scheduled tasks. Everything saved in a project is available to everyone in it. Projects are private until you share them with teams or the whole organization.
+A project is a shared workspace for your chats, Background execution sessions, files, instructions, and scheduled tasks. Projects are private until you share them with teams or the whole organization.
 
 ![A project with its chats, files, and monthly schedule](/docs/automated_screenshots/platform-projects_project-overview.webp)
 
@@ -17,6 +17,8 @@ A project is a shared workspace for your chats, files, instructions, and schedul
 Start a project from the Projects page, or turn an existing chat into one with **Create project** in the chat's menu — the chat and its files move right in.
 
 Use **Change project** to move a chat into an existing project. Use **Remove from project** to make it a regular chat again.
+
+Selecting a Background-enabled Agent in the project composer starts an execution directly in that project. Its session appears on the project page alongside the project's chats. You can also open an execution's sidebar menu and use **Change project** or **Remove from project** to organize an existing session.
 
 ![Chat sidebar menu with the Create project action](/docs/automated_screenshots/platform-projects_create-from-chat.webp)
 
@@ -54,4 +56,4 @@ A finance person approves incoming invoices against the company's vendor list. A
 
 ![Sharing the project with the Finance team](/docs/automated_screenshots/platform-projects_sharing-dialog.webp)
 
-Everyone with access to a shared project can start their own chats and work with its files. You can share with any team you belong to — admins can share with any team in the organization. Reading other members' chats takes a separate permission that admins have by default. Sharing with the whole organization — and deleting or unsharing an org-wide project — takes its own permission, which custom roles can withhold. Deleting a project keeps its chats as ordinary conversations and hides its files and scheduled tasks; a project administrator switches the status filter to **Deleted** to open the trash and restore one, bringing them back. A global admin can also delete a project from the trash for good, with **Delete permanently**. That destroys its files and scheduled tasks, and nothing brings them back — the chats still stay. See [Access Control](./platform-access-control) for permissions.
+Everyone with access to a shared project can start their own chats and execution sessions and work with its files. You can share with any team you belong to — admins can share with any team in the organization. Reading other members' chats or execution sessions takes a separate permission that admins have by default. Other members' execution sessions are always read-only: you can follow their terminal output, but only the person who started a run can attach to its shell. Sharing with the whole organization — and deleting or unsharing an org-wide project — takes its own permission, which custom roles can withhold. Deleting a project keeps its chats and execution sessions as unassigned items and hides its files and scheduled tasks; a project administrator switches the status filter to **Deleted** to open the trash and restore one, bringing them back. A global admin can also delete a project from the trash for good, with **Delete permanently**. That destroys its files and scheduled tasks, and nothing brings them back — the chats and execution sessions still stay. See [Access Control](./platform-access-control) for permissions.

@@ -87061,6 +87061,118 @@ export type GetProjectConversationsResponses = {
 
 export type GetProjectConversationsResponse = GetProjectConversationsResponses[keyof GetProjectConversationsResponses];
 
+export type GetProjectExecutionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/executions';
+};
+
+export type GetProjectExecutionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetProjectExecutionsError = GetProjectExecutionsErrors[keyof GetProjectExecutionsErrors];
+
+export type GetProjectExecutionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        taskId: string;
+        agentId: string;
+        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorId: string;
+        actorUserId: string | null;
+        title: string;
+        pinnedAt: string | null;
+        projectId: string | null;
+        deploymentName: string;
+        backend: 'kubernetes';
+        runtimeScope: string;
+        virtualApiKeyId: string | null;
+        startedAt: string;
+        endedAt: string | null;
+        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+        statusReason: string | null;
+        stateChangedAt: string | null;
+        prompt: string;
+        agent: {
+            id: string;
+            name: string;
+            icon: string | null;
+        };
+        projectName: string | null;
+        projectIcon: string | null;
+        viewerRole: 'owner' | 'shared';
+    }>;
+};
+
+export type GetProjectExecutionsResponse = GetProjectExecutionsResponses[keyof GetProjectExecutionsResponses];
+
 export type UnpinProjectData = {
     body?: never;
     path: {
@@ -88397,6 +88509,7 @@ export type GetAgentExecutionsResponses = {
         actorUserId: string | null;
         title: string;
         pinnedAt: string | null;
+        projectId: string | null;
         deploymentName: string;
         backend: 'kubernetes';
         runtimeScope: string;
@@ -88414,6 +88527,7 @@ export type GetAgentExecutionsResponse = GetAgentExecutionsResponses[keyof GetAg
 export type StartAgentExecutionData = {
     body: {
         message: string;
+        projectId?: string;
         attachments?: Array<{
             name: string;
             contentType: string;
@@ -88502,6 +88616,7 @@ export type StartAgentExecutionResponses = {
         agentId: string;
         agentName: string;
         prompt: string;
+        projectId: string | null;
         createdAt: string;
     };
 };
@@ -88594,6 +88709,7 @@ export type GetMyAgentExecutionsResponses = {
         actorUserId: string | null;
         title: string;
         pinnedAt: string | null;
+        projectId: string | null;
         deploymentName: string;
         backend: 'kubernetes';
         runtimeScope: string;
@@ -88609,6 +88725,8 @@ export type GetMyAgentExecutionsResponses = {
             name: string;
             icon: string | null;
         };
+        projectName: string | null;
+        projectIcon: string | null;
     }>;
 };
 
@@ -88787,6 +88905,7 @@ export type GetMyAgentExecutionResponses = {
         actorUserId: string | null;
         title: string;
         pinnedAt: string | null;
+        projectId: string | null;
         deploymentName: string;
         backend: 'kubernetes';
         runtimeScope: string;
@@ -88802,6 +88921,8 @@ export type GetMyAgentExecutionResponses = {
             name: string;
             icon: string | null;
         };
+        projectName: string | null;
+        projectIcon: string | null;
         viewerRole: 'owner' | 'shared';
     };
 };
@@ -88812,6 +88933,7 @@ export type UpdateAgentExecutionData = {
     body: {
         title?: string;
         pinnedAt?: string | null;
+        projectId?: string | null;
     };
     path: {
         taskId: string;
@@ -88899,6 +89021,7 @@ export type UpdateAgentExecutionResponses = {
         actorUserId: string | null;
         title: string;
         pinnedAt: string | null;
+        projectId: string | null;
         deploymentName: string;
         backend: 'kubernetes';
         runtimeScope: string;
@@ -88914,6 +89037,8 @@ export type UpdateAgentExecutionResponses = {
             name: string;
             icon: string | null;
         };
+        projectName: string | null;
+        projectIcon: string | null;
     };
 };
 

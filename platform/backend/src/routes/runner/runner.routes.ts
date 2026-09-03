@@ -13,6 +13,8 @@ import {
   AgentRunModel,
   AgentRunShareModel,
   MemberModel,
+  ProjectModel,
+  ProjectShareModel,
   TeamModel,
 } from "@/models";
 import {
@@ -238,6 +240,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
           message: z.string().trim().min(1).max(100_000),
+          projectId: z.string().uuid().optional(),
           attachments: z
             .array(
               z
@@ -279,6 +282,13 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
     async (request, reply) => {
       const { agent, deployment } =
         await requireReadableDeploymentWithAgent(request);
+      if (request.body.projectId) {
+        await requireReadableProject({
+          projectId: request.body.projectId,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+      }
       const preflight = await preflightAgentDeploymentCredentials({
         deployment,
         organizationId: request.organizationId,
@@ -313,6 +323,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         systemParams: {
           sessionId: crypto.randomUUID(),
           source: "chat",
+          projectId: request.body.projectId,
           backgroundExecutionMode: "interactive",
         },
       });
@@ -322,6 +333,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: agent.id,
         state: task.state,
         attachmentCount: request.body.attachments?.length ?? 0,
+        projectId: request.body.projectId ?? null,
       };
       return reply.send({
         taskId: task.id,
@@ -329,6 +341,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: agent.id,
         agentName: agent.name,
         prompt: request.body.message,
+        projectId: request.body.projectId ?? null,
         createdAt: task.createdAt,
       });
     },
@@ -382,17 +395,25 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
       // them access. Attaching interactively stays owner-only (enforced in the
       // WebSocket attach handler) because attach runs under the owner's
       // credentials; a share only unlocks the log stream.
-      const share = await AgentRunShareModel.findAccessibleByTaskId({
+      const shared = await AgentRunModel.findSessionByTaskId({
         taskId: request.params.taskId,
         organizationId: request.organizationId,
-        userId: request.user.id,
       });
-      if (share) {
-        const shared = await AgentRunModel.findSessionByTaskId({
-          taskId: request.params.taskId,
-          organizationId: request.organizationId,
-        });
-        if (shared) {
+      if (shared) {
+        const explicitlyShared =
+          await AgentRunShareModel.findAccessibleByTaskId({
+            taskId: request.params.taskId,
+            organizationId: request.organizationId,
+            userId: request.user.id,
+          });
+        const sharedThroughProject = shared.projectId
+          ? await mayReadProjectSession({
+              projectId: shared.projectId,
+              organizationId: request.organizationId,
+              userId: request.user.id,
+            })
+          : false;
+        if (explicitlyShared || sharedThroughProject) {
           return reply.send({ ...shared, viewerRole: "shared" as const });
         }
       }
@@ -421,7 +442,15 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: execution.agentId,
         title: execution.title,
         pinnedAt: execution.pinnedAt,
+        projectId: execution.projectId,
       };
+      if (request.body.projectId) {
+        await requireReadableProject({
+          projectId: request.body.projectId,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+      }
       const updated = await AgentRunModel.updateForActor({
         taskId: execution.taskId,
         actorUserId: request.user.id,
@@ -433,6 +462,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
             : request.body.pinnedAt === null
               ? null
               : new Date(request.body.pinnedAt),
+        projectId: request.body.projectId,
       });
       if (!updated) throw new ApiError(404, "Execution not found");
       request.auditAfter = {
@@ -440,6 +470,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: updated.agentId,
         title: updated.title,
         pinnedAt: updated.pinnedAt,
+        projectId: updated.projectId,
       };
       return reply.send(updated);
     },
@@ -694,6 +725,49 @@ async function requireOwnedExecution(request: OwnedExecutionRequest) {
   });
   if (!execution) throw new ApiError(404, "Execution not found");
   return execution;
+}
+
+async function requireReadableProject(params: {
+  projectId: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const project = await ProjectModel.findById(params.projectId);
+  if (
+    !project ||
+    !(await ProjectShareModel.userCanAccessProject({
+      project,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    }))
+  ) {
+    throw new ApiError(404, "Project not found");
+  }
+  return project;
+}
+
+async function mayReadProjectSession(params: {
+  projectId: string;
+  organizationId: string;
+  userId: string;
+}): Promise<boolean> {
+  const project = await ProjectModel.findById(params.projectId);
+  if (
+    !project ||
+    !(await ProjectShareModel.userCanAccessProject({
+      project,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    }))
+  ) {
+    return false;
+  }
+  return userHasPermission(
+    params.userId,
+    params.organizationId,
+    "project",
+    "read-all",
+  );
 }
 
 async function requireReadableDeployment(

@@ -836,6 +836,7 @@ export const RouteId = {
   RestoreProject: "restoreProject",
   PermanentlyDeleteProject: "permanentlyDeleteProject",
   GetProjectConversations: "getProjectConversations",
+  GetProjectExecutions: "getProjectExecutions",
   GetProjectFiles: "getProjectFiles",
   UploadProjectFiles: "uploadProjectFiles",
   GetProjectInstructions: "getProjectInstructions",

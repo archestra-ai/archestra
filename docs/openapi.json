@@ -332997,7 +332997,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Get all label keys used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "Get all label keys used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -333255,7 +333255,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Get all label values used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "Get all label values used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -333988,7 +333988,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -334936,7 +334936,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -337764,7 +337764,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own chats inside them",
+        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -338084,7 +338084,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own chats inside them",
+        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own sessions inside them",
         "requestBody": {
           "required": true,
           "content": {
@@ -338399,7 +338399,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -338971,7 +338971,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All chats in a project the caller can read. Chats authored by others require `project:read-all`; without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "All chats in a project the caller can read. Chats authored by others require `project:read-all`; without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -339298,13 +339298,452 @@
         }
       }
     },
+    "/api/projects/{id}/executions": {
+      "get": {
+        "operationId": "getProjectExecutions",
+        "tags": [
+          "Projects"
+        ],
+        "description": "All execution sessions in a project the caller can read. Sessions started by others require `project:read-all`; all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`project:read`: View projects and your own sessions inside them",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "taskId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "agentId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "actorKind": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "team",
+                          "organization",
+                          "system"
+                        ]
+                      },
+                      "actorId": {
+                        "type": "string"
+                      },
+                      "actorUserId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "pinnedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "projectId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "deploymentName": {
+                        "type": "string"
+                      },
+                      "backend": {
+                        "type": "string",
+                        "enum": [
+                          "kubernetes"
+                        ]
+                      },
+                      "runtimeScope": {
+                        "type": "string"
+                      },
+                      "virtualApiKeyId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "startedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "endedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "TASK_STATE_UNSPECIFIED",
+                          "TASK_STATE_SUBMITTED",
+                          "TASK_STATE_WORKING",
+                          "TASK_STATE_COMPLETED",
+                          "TASK_STATE_FAILED",
+                          "TASK_STATE_CANCELED",
+                          "TASK_STATE_INPUT_REQUIRED",
+                          "TASK_STATE_REJECTED",
+                          "TASK_STATE_AUTH_REQUIRED"
+                        ]
+                      },
+                      "statusReason": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "stateChangedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "prompt": {
+                        "type": "string"
+                      },
+                      "agent": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "icon"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "projectName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "projectIcon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "viewerRole": {
+                        "type": "string",
+                        "enum": [
+                          "owner",
+                          "shared"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "organizationId",
+                      "taskId",
+                      "agentId",
+                      "actorKind",
+                      "actorId",
+                      "actorUserId",
+                      "title",
+                      "pinnedAt",
+                      "projectId",
+                      "deploymentName",
+                      "backend",
+                      "runtimeScope",
+                      "virtualApiKeyId",
+                      "startedAt",
+                      "endedAt",
+                      "state",
+                      "statusReason",
+                      "stateChangedAt",
+                      "prompt",
+                      "agent",
+                      "projectName",
+                      "projectIcon",
+                      "viewerRole"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read",
+            "project:read"
+          ]
+        }
+      }
+    },
     "/api/projects/{id}/pin": {
       "put": {
         "operationId": "pinProject",
         "tags": [
           "Projects"
         ],
-        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -339581,7 +340020,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -343566,6 +344005,12 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "projectId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "deploymentName": {
                         "type": "string"
                       },
@@ -343627,6 +344072,7 @@
                       "actorUserId",
                       "title",
                       "pinnedAt",
+                      "projectId",
                       "deploymentName",
                       "backend",
                       "runtimeScope",
@@ -343897,6 +344343,11 @@
                     "minLength": 1,
                     "maxLength": 100000
                   },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "attachments": {
                     "maxItems": 20,
                     "type": "array",
@@ -343983,6 +344434,12 @@
                     "prompt": {
                       "type": "string"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -343994,6 +344451,7 @@
                     "agentId",
                     "agentName",
                     "prompt",
+                    "projectId",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -344297,6 +344755,12 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "projectId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "deploymentName": {
                         "type": "string"
                       },
@@ -344372,6 +344836,14 @@
                           "icon"
                         ],
                         "additionalProperties": false
+                      },
+                      "projectName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "projectIcon": {
+                        "nullable": true,
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -344384,6 +344856,7 @@
                       "actorUserId",
                       "title",
                       "pinnedAt",
+                      "projectId",
                       "deploymentName",
                       "backend",
                       "runtimeScope",
@@ -344394,7 +344867,9 @@
                       "statusReason",
                       "stateChangedAt",
                       "prompt",
-                      "agent"
+                      "agent",
+                      "projectName",
+                      "projectIcon"
                     ],
                     "additionalProperties": false
                   }
@@ -344708,6 +345183,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "deploymentName": {
                       "type": "string"
                     },
@@ -344784,6 +345265,14 @@
                       ],
                       "additionalProperties": false
                     },
+                    "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "viewerRole": {
                       "type": "string",
                       "enum": [
@@ -344802,6 +345291,7 @@
                     "actorUserId",
                     "title",
                     "pinnedAt",
+                    "projectId",
                     "deploymentName",
                     "backend",
                     "runtimeScope",
@@ -344813,6 +345303,8 @@
                     "stateChangedAt",
                     "prompt",
                     "agent",
+                    "projectName",
+                    "projectIcon",
                     "viewerRole"
                   ],
                   "additionalProperties": false
@@ -345079,6 +345571,12 @@
                     "type": "string",
                     "format": "date-time",
                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  "projectId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 }
               }
@@ -345146,6 +345644,12 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "deploymentName": {
                       "type": "string"
@@ -345222,6 +345726,14 @@
                         "icon"
                       ],
                       "additionalProperties": false
+                    },
+                    "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -345234,6 +345746,7 @@
                     "actorUserId",
                     "title",
                     "pinnedAt",
+                    "projectId",
                     "deploymentName",
                     "backend",
                     "runtimeScope",
@@ -345244,7 +345757,9 @@
                     "statusReason",
                     "stateChangedAt",
                     "prompt",
-                    "agent"
+                    "agent",
+                    "projectName",
+                    "projectIcon"
                   ],
                   "additionalProperties": false
                 }

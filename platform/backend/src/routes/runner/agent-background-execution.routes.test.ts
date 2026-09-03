@@ -13,6 +13,7 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { projectService } from "@/services/project";
 import { createExecutionCredentialDefinition } from "@/services/runners/execution-credentials";
 import {
   cancelDetachedAgentTask,
@@ -212,6 +213,12 @@ describe("Agent Background execution routes", () => {
       payload: { value: "personal-value" },
     });
     const task = await createTask(agent.id);
+    const project = await projectService.create({
+      organizationId,
+      userId: user.id,
+      name: "Execution project",
+      description: null,
+    });
     vi.mocked(startDetachedAgentTask).mockResolvedValue(task);
 
     const response = await app.inject({
@@ -219,6 +226,7 @@ describe("Agent Background execution routes", () => {
       url: `/api/agents/${agent.id}/executions`,
       payload: {
         message: "Implement the requested change.",
+        projectId: project.id,
         systemParams: expect.objectContaining({
           source: "chat",
           backgroundExecutionMode: "interactive",
@@ -239,6 +247,7 @@ describe("Agent Background execution routes", () => {
       agentId: agent.id,
       agentName: agent.name,
       prompt: "Implement the requested change.",
+      projectId: project.id,
       state: "TASK_STATE_SUBMITTED",
     });
     expect(startDetachedAgentTask).toHaveBeenCalledWith(
@@ -250,6 +259,7 @@ describe("Agent Background execution routes", () => {
         },
         agentId: agent.id,
         message: "Implement the requested change.",
+        systemParams: expect.objectContaining({ projectId: project.id }),
         attachments: [
           {
             name: "requirements.txt",
@@ -282,12 +292,34 @@ describe("Agent Background execution routes", () => {
         agentId: agent.id,
         state: "TASK_STATE_SUBMITTED",
         attachmentCount: 1,
+        projectId: project.id,
       },
     });
     expect(JSON.stringify(audit)).not.toContain(
       "Implement the requested change",
     );
     expect(JSON.stringify(audit)).not.toContain("requirements.txt");
+  });
+
+  test("does not start an execution inside a project the caller cannot read", async ({
+    makeUser,
+  }) => {
+    const otherUser = await makeUser();
+    const project = await projectService.create({
+      organizationId,
+      userId: otherUser.id,
+      name: "Private project",
+      description: null,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/executions`,
+      payload: { message: "Do not start", projectId: project.id },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(startDetachedAgentTask).not.toHaveBeenCalled();
   });
 
   test("lists only the current user's execution sessions with their prompt", async ({
@@ -456,6 +488,34 @@ describe("Agent Background execution routes", () => {
     expect(renamed.statusCode).toBe(200);
     expect(renamed.json().title).toBe("Concise session title");
 
+    const project = await projectService.create({
+      organizationId,
+      userId: user.id,
+      name: "Moved execution",
+      description: null,
+    });
+    const moved = await app.inject({
+      method: "PATCH",
+      url: `/api/agent-executions/${task.id}`,
+      payload: { projectId: project.id },
+    });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json()).toMatchObject({
+      projectId: project.id,
+      projectName: project.name,
+    });
+
+    const removed = await app.inject({
+      method: "PATCH",
+      url: `/api/agent-executions/${task.id}`,
+      payload: { projectId: null },
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json()).toMatchObject({
+      projectId: null,
+      projectName: null,
+    });
+
     const pinnedAt = new Date("2026-08-31T18:00:00.000Z").toISOString();
     const pinned = await app.inject({
       method: "PATCH",
@@ -516,6 +576,16 @@ describe("Agent Background execution routes", () => {
           action: "agentExecution.updated",
           before: expect.objectContaining({ pinnedAt: null }),
           after: expect.objectContaining({ pinnedAt }),
+        }),
+        expect.objectContaining({
+          action: "agentExecution.updated",
+          before: expect.objectContaining({ projectId: null }),
+          after: expect.objectContaining({ projectId: project.id }),
+        }),
+        expect.objectContaining({
+          action: "agentExecution.updated",
+          before: expect.objectContaining({ projectId: project.id }),
+          after: expect.objectContaining({ projectId: null }),
         }),
         expect.objectContaining({
           action: "agentExecution.updated",
@@ -671,7 +741,7 @@ describe("Agent Background execution routes", () => {
 
   test("reports the initiating user as the owner viewer of their execution", async () => {
     const task = await createTask(agent.id);
-    await createRun(task.id, user.id);
+    await createRun({ taskId: task.id, actorUserId: user.id });
 
     const response = await app.inject({
       method: "GET",
@@ -684,12 +754,59 @@ describe("Agent Background execution routes", () => {
     );
   });
 
+  test("opens an execution read-only through a shared project for a read-all member", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const project = await projectService.create({
+      organizationId,
+      userId: user.id,
+      name: "Shared project execution",
+      description: null,
+    });
+    await projectService.setShare({
+      id: project.id,
+      organizationId,
+      userId: user.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    const task = await createTask(agent.id);
+    await createRun({
+      taskId: task.id,
+      actorUserId: user.id,
+      projectId: project.id,
+    });
+
+    const role = await makeCustomRole(organizationId, {
+      permission: { project: ["read", "read-all"] },
+    });
+    const reader = await makeUser();
+    await makeMember(reader.id, organizationId, { role: role.role });
+    user = reader;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agent-executions/${task.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        taskId: task.id,
+        projectId: project.id,
+        viewerRole: "shared",
+      }),
+    );
+  });
+
   test("opens an organization-shared execution read-only for a colleague and 404s without a share", async ({
     makeAdmin,
     makeMember,
   }) => {
     const task = await createTask(agent.id);
-    await createRun(task.id, user.id);
+    await createRun({ taskId: task.id, actorUserId: user.id });
     const owner = user;
 
     const colleague = await makeAdmin();
@@ -755,7 +872,7 @@ describe("Agent Background execution routes", () => {
     makeTeamMember,
   }) => {
     const task = await createTask(agent.id);
-    await createRun(task.id, user.id);
+    await createRun({ taskId: task.id, actorUserId: user.id });
     const owner = user;
 
     const team = await makeTeam(organizationId, owner.id);
@@ -798,7 +915,7 @@ describe("Agent Background execution routes", () => {
     makeMember,
   }) => {
     const task = await createTask(agent.id);
-    await createRun(task.id, user.id);
+    await createRun({ taskId: task.id, actorUserId: user.id });
 
     const invited = await makeAdmin();
     await makeMember(invited.id, organizationId, { role: "member" });
@@ -832,7 +949,7 @@ describe("Agent Background execution routes", () => {
     makeMember,
   }) => {
     const task = await createTask(agent.id);
-    await createRun(task.id, user.id);
+    await createRun({ taskId: task.id, actorUserId: user.id });
     const owner = user;
 
     await app.inject({
@@ -908,15 +1025,20 @@ describe("Agent Background execution routes", () => {
     });
   }
 
-  async function createRun(taskId: string, actorUserId: string) {
+  async function createRun(params: {
+    taskId: string;
+    actorUserId: string;
+    projectId?: string;
+  }) {
     return await AgentRunModel.create({
       organizationId,
-      taskId,
+      taskId: params.taskId,
       agentId: agent.id,
       actorKind: "user",
-      actorId: actorUserId,
-      actorUserId,
-      deploymentName: `agent-run-${taskId}`,
+      actorId: params.actorUserId,
+      actorUserId: params.actorUserId,
+      projectId: params.projectId,
+      deploymentName: `agent-run-${params.taskId}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,

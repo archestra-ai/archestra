@@ -345,6 +345,18 @@ export function ChatSidebarSection({
     }
   };
 
+  const handleChangeExecutionProject = async (
+    taskId: string,
+    projectId: string | null,
+  ) => {
+    try {
+      await updateExecutionMutation.mutateAsync({ taskId, projectId });
+      setOpenMenuId(null);
+    } catch {
+      // Error is handled by the mutation's onError callback.
+    }
+  };
+
   const handleSelectProject = (id: string) => {
     if (isMobile) {
       setOpenMobile(false);
@@ -742,6 +754,20 @@ export function ChatSidebarSection({
                   showTooltip={false}
                 />
               </span>
+              {execution.projectName && (
+                <span className="ml-1 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {execution.projectIcon ? (
+                    <AgentIcon
+                      icon={execution.projectIcon}
+                      fallbackType="project"
+                      size={10}
+                    />
+                  ) : (
+                    <Folder className="size-2.5 shrink-0" />
+                  )}
+                  <span className="truncate">{execution.projectName}</span>
+                </span>
+              )}
             </SidebarMenuButton>
           )}
           {!isEditing && (
@@ -790,6 +816,16 @@ export function ChatSidebarSection({
                   <Pencil className="mr-2 size-4" />
                   Rename
                 </DropdownMenuItem>
+                {canReadProjects === true && (
+                  <ConversationProjectActions
+                    projectId={execution.projectId}
+                    projects={projectsData ?? []}
+                    isPending={updateExecutionMutation.isPending}
+                    onProjectChange={(projectId) =>
+                      handleChangeExecutionProject(execution.taskId, projectId)
+                    }
+                  />
+                )}
                 {live ? (
                   <DropdownMenuItem
                     onClick={() => setStopExecutionId(execution.taskId)}

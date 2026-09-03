@@ -95,21 +95,27 @@ export function useStartAgentExecution() {
       agentId,
       message,
       files,
+      projectId,
     }: {
       agentId: string;
       message: string;
       files?: FileUIPart[];
+      projectId?: string;
     }) => {
       const attachments = files?.map(executionAttachmentFromFile);
       const { data, error } = await startAgentExecution({
         path: { id: agentId },
-        body: { message, attachments },
+        body: { message, attachments, projectId },
       });
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+      ]);
+    },
   });
 }
 
@@ -144,6 +150,7 @@ export function useUpdateAgentExecution() {
       taskId: string;
       title?: string;
       pinnedAt?: string | null;
+      projectId?: string | null;
     }) => {
       const { data, error } = await updateAgentExecution({
         path: { taskId },
@@ -160,6 +167,7 @@ export function useUpdateAgentExecution() {
         queryClient.invalidateQueries({
           queryKey: ["agent-executions", "mine"],
         }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
       ]);
     },
   });
@@ -173,8 +181,12 @@ export function useDeleteAgentExecution() {
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+      ]);
+    },
   });
 }
 

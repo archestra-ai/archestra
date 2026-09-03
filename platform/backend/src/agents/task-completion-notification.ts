@@ -58,7 +58,7 @@ function conciseOutput(output: string): string {
         trimmed.length > 0 &&
         !trimmed.startsWith("[tool]") &&
         trimmed !== "[waiting for direction]" &&
-        !trimmed.startsWith("Background execution run for ") &&
+        !trimmed.startsWith("Agent Runtime run for ") &&
         !trimmed.startsWith("Model ") &&
         !trimmed.endsWith(" tools available.") &&
         !trimmed.startsWith("Type into this session to steer")

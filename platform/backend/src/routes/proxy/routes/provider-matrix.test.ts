@@ -2403,7 +2403,7 @@ describe("LLM proxy provider matrix", () => {
         },
       );
 
-      test("stores execution IDs on interactions", async ({ makeAgent }) => {
+      test("stores run IDs on interactions", async ({ makeAgent }) => {
         const agent = await makeAgent({
           name: `${config.providerName} execution`,
         });
@@ -2419,13 +2419,13 @@ describe("LLM proxy provider matrix", () => {
         });
         await setupRoute(agent);
 
-        const executionId = randomUUID();
+        const runId = randomUUID();
         const response = await app.inject({
           method: "POST",
           url: config.endpoint(agent.id),
           headers: {
             ...config.headers(),
-            "x-archestra-execution-id": executionId,
+            "x-archestra-run-id": runId,
           },
           payload: config.requestBuilder.buildTextRequest({
             model: config.model,
@@ -2438,9 +2438,7 @@ describe("LLM proxy provider matrix", () => {
         const interactions =
           await InteractionModel.getAllInteractionsForProfile(agent.id);
         expect(
-          interactions.some(
-            (interaction) => interaction.executionId === executionId,
-          ),
+          interactions.some((interaction) => interaction.runId === runId),
         ).toBe(true);
       });
 

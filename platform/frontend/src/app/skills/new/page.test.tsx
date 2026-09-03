@@ -145,7 +145,7 @@ describe("NewSkillPage catalog gating", () => {
 });
 
 describe("NewSkillPage wizard", () => {
-  it("walks source → content → access and lands on the created skill", async () => {
+  it("fills one page — content and access together — and lands on the created skill", async () => {
     mockOrganization(true);
     renderPage();
     const user = userEvent.setup();
@@ -165,8 +165,8 @@ describe("NewSkillPage wizard", () => {
       screen.getByLabelText("Description"),
       "Verify a release before shipping.",
     );
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-
+    // Access is the end of the same page, not a step after it — the same
+    // shape the skill's own page uses once it exists.
     expect(screen.getByTestId("skill-access-fields")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create skill" }));
 
@@ -182,17 +182,17 @@ describe("NewSkillPage wizard", () => {
     expect(routerPush).toHaveBeenCalledWith("/skills/skill-new");
   });
 
-  it("does not continue past content until the manifest names the skill", async () => {
+  it("does not create a skill until the manifest names it", async () => {
     mockOrganization(false);
     renderPage();
     const user = userEvent.setup();
 
     const editor = screen.getByRole("textbox", { name: "File contents" });
     await user.clear(editor);
-    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
   });
 
-  it("goes back to the source step from the content step", async () => {
+  it("goes back to the source step from the form", async () => {
     mockOrganization(true);
     renderPage();
     const user = userEvent.setup();

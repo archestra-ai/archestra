@@ -145,13 +145,22 @@ describe("McpGatewayLogsPage filters", () => {
     );
   });
 
-  it("filters by MCP server with a searchable icon-and-name picker", async () => {
+  it("distinguishes MCP server installations by owner instead of installation id", async () => {
     vi.mocked(useMcpServers).mockReturnValue({
       data: [
         {
-          name: "document-search-deployment",
+          name: "document-search-installation-a1b2c3",
           catalogName: "Document Search",
           catalogId: "document-search-catalog",
+          scope: "personal",
+          ownerEmail: "first.owner@example.com",
+        },
+        {
+          name: "document-search-installation-d4e5f6",
+          catalogName: "Document Search",
+          catalogId: "document-search-catalog",
+          scope: "personal",
+          ownerEmail: "second.owner@example.com",
         },
       ],
     } as unknown as ReturnType<typeof useMcpServers>);
@@ -171,13 +180,47 @@ describe("McpGatewayLogsPage filters", () => {
       screen.getByRole("combobox", { name: "Filter by MCP server" }),
     );
     expect(screen.getByPlaceholderText("Search MCP servers…")).toBeVisible();
-    expect(screen.getByText("📚")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /Document Search/ }));
+    expect(screen.getAllByText("📚")).toHaveLength(2);
+    expect(screen.getByText("first.owner@example.com")).toBeVisible();
+    expect(screen.getByText("second.owner@example.com")).toBeVisible();
+    expect(
+      screen.queryByText("document-search-installation-a1b2c3"),
+    ).toBeNull();
+    await user.click(
+      screen.getByRole("button", {
+        name: /Document Search.*first\.owner@example\.com/,
+      }),
+    );
 
     expect(push).toHaveBeenCalledWith(
-      expect.stringContaining("mcpServerName=document-search-deployment"),
+      expect.stringContaining(
+        "mcpServerName=document-search-installation-a1b2c3",
+      ),
       expect.anything(),
     );
+  });
+
+  it("uses the installation scope when an MCP server owner is unavailable", async () => {
+    vi.mocked(useMcpServers).mockReturnValue({
+      data: [
+        {
+          name: "shared-search-installation",
+          catalogName: "Document Search",
+          catalogId: "document-search-catalog",
+          scope: "org",
+          ownerEmail: null,
+        },
+      ],
+    } as unknown as ReturnType<typeof useMcpServers>);
+    const user = userEvent.setup();
+    render(<McpGatewayLogsPage />);
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Filter by MCP server" }),
+    );
+
+    expect(screen.getByText("Organization installation")).toBeVisible();
+    expect(screen.queryByText("shared-search-installation")).toBeNull();
   });
 
   it("presents the call context without separate method, server, and arguments columns", () => {

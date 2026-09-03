@@ -26,6 +26,7 @@ import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
+import { resourceOwnerLabel } from "@/lib/agent-owner-label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
@@ -234,12 +235,20 @@ function McpToolCallsTable({
         const installed = installedByName.get(serverName);
         const display = serverDisplayByName.get(serverName);
         const displayName = display?.name ?? serverName;
-        const secondaryLabel =
-          displayName !== serverName
-            ? serverName
-            : installed
-              ? undefined
-              : "From logs";
+        const secondaryLabel = installed
+          ? resourceOwnerLabel(
+              {
+                scope: installed.scope,
+                ownerEmail: installed.ownerEmail,
+                teamName: installed.teamDetails?.name,
+              },
+              {
+                personalFallback: "Owner unavailable",
+                teamFallback: "Team installation",
+                organization: "Organization installation",
+              },
+            )
+          : "From logs";
         const icon = (
           <span
             key={serverName}
@@ -255,7 +264,7 @@ function McpToolCallsTable({
         return {
           value: serverName,
           label: displayName,
-          searchText: `${displayName} ${serverName}`,
+          searchText: `${displayName} ${secondaryLabel} ${serverName}`,
           content: (
             <span className="flex min-w-0 items-center gap-2">
               {icon}

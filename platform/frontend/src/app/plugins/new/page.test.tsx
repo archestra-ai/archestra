@@ -462,7 +462,7 @@ describe("NewPluginPage", () => {
     expect(screen.getByText(/5 of 101 selected/)).toBeVisible();
   });
 
-  it("walks the blank template through content to access", async () => {
+  it("fills one page — content and access together — from the blank template", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -480,21 +480,22 @@ describe("NewPluginPage", () => {
       screen.queryByRole("switch", { name: /Enabled/ }),
     ).not.toBeInTheDocument();
 
-    const continueButton = screen.getByRole("button", { name: /Continue/ });
+    // Access is the end of the same page, not a step after it — the same
+    // shape the plugin's own page uses once it exists.
+    expect(screen.getByTestId("plugin-scope-selector")).toBeVisible();
+
+    const create = screen.getByRole("button", { name: /Create plugin/ });
     const contentCard = displayName.closest(".rounded-lg.border");
     if (!contentCard) throw new Error("Plugin content card not rendered");
     expect(
       within(contentCard as HTMLElement).queryByRole("button", {
-        name: /Continue/,
+        name: /Create plugin/,
       }),
     ).not.toBeInTheDocument();
-    expect(continueButton).toBeDisabled();
+    // An unnamed plugin is not creatable, whatever else is filled in.
+    expect(create).toBeDisabled();
 
-    await user.type(screen.getByLabelText("Display name"), "Session guard");
-    expect(continueButton).toBeEnabled();
-    await user.click(continueButton);
-
-    expect(screen.getByTestId("plugin-scope-selector")).toBeVisible();
-    expect(screen.getByRole("button", { name: /Create plugin/ })).toBeVisible();
+    await user.type(displayName, "Session guard");
+    expect(create).toBeEnabled();
   });
 });

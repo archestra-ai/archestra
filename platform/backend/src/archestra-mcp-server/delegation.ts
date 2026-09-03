@@ -19,7 +19,7 @@ import {
   ToolModel,
 } from "@/models";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
-import { resolveAgentDeployment } from "@/services/runners/pod-execution";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import type { Agent } from "@/types";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -183,13 +183,13 @@ export async function handleDelegation(
     return target.error;
   }
 
-  // Background execution is a capability of the target Agent, not a separate
+  // Agent Runtime is a capability of the target Agent, not a separate
   // invocation syntax. The ordinary agent__* delegation tool therefore turns
-  // into a detached durable task whenever that target has a deployment. A
+  // into a detached durable task whenever that target has a runtime. A
   // direct conversation with the same Agent never enters this path and stays
   // in the foreground loop.
   const targetAgent = await AgentModel.findById(target.id);
-  if (targetAgent && resolveAgentDeployment(targetAgent)) {
+  if (targetAgent && resolveAgentRuntime(targetAgent)) {
     logger.info(
       {
         agentId,

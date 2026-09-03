@@ -3105,9 +3105,9 @@ describe("InteractionModel", () => {
     });
   });
 
-  describe("existsByExecutionId", () => {
+  describe("existsByRunId", () => {
     test("returns false when no interaction has the execution id", async () => {
-      const exists = await InteractionModel.existsByExecutionId(
+      const exists = await InteractionModel.existsByRunId(
         "non-existent-exec-id",
       );
       expect(exists).toBe(false);
@@ -3116,7 +3116,7 @@ describe("InteractionModel", () => {
     test("returns true when an interaction has the execution id", async () => {
       await InteractionModel.create({
         profileId,
-        executionId: "test-exec-123",
+        runId: "test-exec-123",
         request: {
           model: "gpt-4",
           messages: [{ role: "user", content: "Hello" }],
@@ -3131,15 +3131,14 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const exists =
-        await InteractionModel.existsByExecutionId("test-exec-123");
+      const exists = await InteractionModel.existsByRunId("test-exec-123");
       expect(exists).toBe(true);
     });
 
     test("returns true when multiple interactions share the execution id", async () => {
       await InteractionModel.create({
         profileId,
-        executionId: "shared-exec-id",
+        runId: "shared-exec-id",
         request: {
           model: "gpt-4",
           messages: [{ role: "user", content: "First" }],
@@ -3156,7 +3155,7 @@ describe("InteractionModel", () => {
 
       await InteractionModel.create({
         profileId,
-        executionId: "shared-exec-id",
+        runId: "shared-exec-id",
         request: {
           model: "gpt-4",
           messages: [{ role: "user", content: "Second" }],
@@ -3171,8 +3170,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const exists =
-        await InteractionModel.existsByExecutionId("shared-exec-id");
+      const exists = await InteractionModel.existsByRunId("shared-exec-id");
       expect(exists).toBe(true);
     });
   });

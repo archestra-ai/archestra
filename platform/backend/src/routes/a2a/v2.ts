@@ -40,7 +40,7 @@ import {
   resolveTokenOrganizationId,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway/utils";
-import { resolveAgentDeployment } from "@/services/runners/pod-execution";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 
@@ -987,7 +987,7 @@ class A2AV2Router {
     const actor = await this.resolveActor(agentId, token);
     const { func, schema } = this.getRouteForMethod(
       method,
-      Boolean(resolveAgentDeployment(agent)),
+      Boolean(resolveAgentRuntime(agent)),
     );
 
     // Throws ZodError if request schema is invalid. Handlers receive the
@@ -1070,7 +1070,7 @@ class A2AV2Router {
     });
   }
 
-  private getRouteForMethod(method: string, usesBackgroundExecution = false) {
+  private getRouteForMethod(method: string, usesAgentRuntime = false) {
     const mapper: Record<string, { func: A2ARouteFunc; schema: z.ZodSchema }> =
       {
         SendMessage: {
@@ -1082,8 +1082,7 @@ class A2AV2Router {
               // `return_immediately` (A2A v1.0): hand back the task the
               // moment it exists and run detached; the default (blocking)
               // keeps the pre-existing await-the-answer behavior.
-              ...(usesBackgroundExecution ||
-              request.configuration?.returnImmediately
+              ...(usesAgentRuntime || request.configuration?.returnImmediately
                 ? {
                     taskRun: {
                       createTask: true,

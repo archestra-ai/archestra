@@ -266,7 +266,7 @@ const rawArchestraTokenCache =
 export async function createAgentServer(params: {
   agentId: string;
   tokenAuth?: TokenAuthContext;
-  executionId?: string;
+  runId?: string;
   /**
    * Answers the client supplied on an MRTR retry, keyed as they were issued.
    * Absent on a first attempt, which is what makes the gateway elicit.
@@ -279,7 +279,7 @@ export async function createAgentServer(params: {
     round?: number;
   };
 }): Promise<{ server: McpServer; agent: AgentInfo }> {
-  const { agentId, tokenAuth, executionId, mrtr } = params;
+  const { agentId, tokenAuth, runId, mrtr } = params;
   const mrtrEnabled = mrtr?.enabled === true;
 
   /**
@@ -569,7 +569,7 @@ export async function createAgentServer(params: {
         // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
         toolResult: { tools: toolsList } as any,
         userId: tokenAuth?.userId ?? null,
-        executionId: executionId ?? null,
+        runId: runId ?? null,
         authMethod: deriveAuthMethod(tokenAuth) ?? null,
       });
       logger.info(
@@ -858,7 +858,7 @@ export async function createAgentServer(params: {
               },
               toolResult: blockedResult,
               userId: tokenAuth?.userId ?? null,
-              executionId: executionId ?? null,
+              runId: runId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
             });
           } catch (dbError) {
@@ -968,7 +968,7 @@ export async function createAgentServer(params: {
               },
               toolResult: archestraResult,
               userId: tokenAuth?.userId ?? null,
-              executionId: executionId ?? null,
+              runId: runId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
             });
           } catch (dbError) {

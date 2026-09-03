@@ -28,11 +28,11 @@ resolve_docker_desktop_url() {
   printf '%s\n' "${url/\/\/host.internal/\/\/\[${ipv6}\]}"
 }
 
-runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 config_file="${runtime_dir}/openclaw.json"
 task_file="${runtime_dir}/task.md"
-model="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
-runtime_instructions="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}"
+model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
+runtime_instructions="${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
 export OPENCLAW_STATE_DIR="${runtime_dir}/openclaw-state"
 export OPENCLAW_CONFIG_PATH="${config_file}"
 mkdir -p "${OPENCLAW_STATE_DIR}"
@@ -89,7 +89,7 @@ openclaw_mcp_url="$(resolve_docker_desktop_url "${ARCHESTRA_MCP_GATEWAY_URL:?}")
 jq -n \
   --arg base_url "${openclaw_base_url}" \
   --arg model "${model}" \
-  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
   --arg mcp_url "${openclaw_mcp_url}" \
   --arg api "${openclaw_api}" \
   --arg workspace "${PWD}" \
@@ -103,7 +103,7 @@ jq -n \
           apiKey:env.OPENAI_API_KEY,
           api:$api,
           headers:{
-            "X-Archestra-Execution-Id":$task_id,
+            "X-Archestra-Run-Id":$task_id,
             "X-Archestra-Session-Id":$task_id
           },
           models:[{id:$model,name:$model}]
@@ -122,7 +122,7 @@ jq -n \
           transport:"streamable-http",
           headers:{
             Authorization:"Bearer ${ARCHESTRA_MCP_GATEWAY_TOKEN}",
-            "X-Archestra-Execution-Id":$task_id,
+            "X-Archestra-Run-Id":$task_id,
             "X-Archestra-Session-Id":$task_id
           }
         }
@@ -133,14 +133,14 @@ chmod 0600 "${config_file}"
 if [[ -n "${runtime_instructions}" && "${soul_created}" != true ]]; then
   printf '%s\n\n# Delegated task\n\n%s\n' \
     "${runtime_instructions}" \
-    "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+    "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 else
-  printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+  printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 fi
 
-session_key="agent:main:${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+session_key="agent:main:${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
 
-case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
     set +e
     openclaw tui \
@@ -165,7 +165,7 @@ case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
     fi
     ;;
   *)
-    echo "archestra: unknown Background execution mode" >&2
+    echo "archestra: unknown Agent Runtime mode" >&2
     exit 78
     ;;
 esac

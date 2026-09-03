@@ -63,7 +63,7 @@ describe("watchTaskCompletion", () => {
         actorKind: "user",
         actorId: user.id,
         actorUserId: user.id,
-        deploymentName: `runner-${task.id}`,
+        workloadName: `runner-${task.id}`,
         backend: "kubernetes",
         runtimeScope: "archestra-dev",
         completionTarget: target,

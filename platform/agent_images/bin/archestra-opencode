@@ -6,13 +6,13 @@ if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
   exit 78
 fi
 
-runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 config_file="${runtime_dir}/opencode.json"
 instructions_file="${runtime_dir}/opencode-instructions.md"
 task_file="${runtime_dir}/task.md"
-model="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
-context_length="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH:-32768}"
-output_length="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH:-8192}"
+model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
+context_length="${ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH:-32768}"
+output_length="${ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH:-8192}"
 
 mkdir -p "${runtime_dir}/config" "${runtime_dir}/data" "${runtime_dir}/cache" "${runtime_dir}/state"
 export XDG_CONFIG_HOME="${runtime_dir}/config"
@@ -25,14 +25,14 @@ export OPENCODE_DISABLE_AUTOUPDATE=1
 export OPENCODE_DISABLE_PROJECT_CONFIG=1
 export OPENCODE_PURE=1
 
-printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}" > "${instructions_file}"
-printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" > "${instructions_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 
 jq -n \
   --arg model "${model}" \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg api_key '{env:OPENAI_API_KEY}' \
-  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg mcp_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg instructions_file "${instructions_file}" \
@@ -51,7 +51,7 @@ jq -n \
         baseURL:$base_url,
         apiKey:$api_key,
         headers:{
-          "X-Archestra-Execution-Id":$task_id,
+          "X-Archestra-Run-Id":$task_id,
           "X-Archestra-Session-Id":$task_id
         }
       },
@@ -68,14 +68,14 @@ jq -n \
       oauth:false,
       headers:{
         Authorization:("Bearer " + $mcp_token),
-        "X-Archestra-Execution-Id":$task_id,
+        "X-Archestra-Run-Id":$task_id,
         "X-Archestra-Session-Id":$task_id
       }
     }}
   }' > "${config_file}"
 chmod 0600 "${config_file}" "${instructions_file}" "${task_file}"
 
-case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
     exec opencode \
       --pure \
@@ -91,7 +91,7 @@ case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
       -- "$(cat "${task_file}")"
     ;;
   *)
-    echo "archestra: unknown Background execution mode" >&2
+    echo "archestra: unknown Agent Runtime mode" >&2
     exit 78
     ;;
 esac

@@ -1239,6 +1239,180 @@ describe("OAuth routes", () => {
     expect(requestBody.get("resource")).toBe("https://mcp.example.com");
   });
 
+  test("uses the dynamically registered client authentication method when refreshing", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Basic Auth Refresh MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Basic Auth Refresh MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        client_id: "",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read"],
+        default_scopes: ["read"],
+        supports_resource_metadata: false,
+      },
+    });
+
+    const registrationEndpoint = "https://auth.example.com/register";
+    const tokenEndpoint = "https://auth.example.com/token";
+    const expectedAuthorization = `Basic ${Buffer.from(
+      "registered-client:registered-secret",
+    ).toString("base64")}`;
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === registrationEndpoint) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({
+              client_id: "registered-client",
+              client_secret: "registered-secret",
+              token_endpoint_auth_method: "client_secret_basic",
+            }),
+          };
+        }
+
+        if (url === tokenEndpoint) {
+          const body = init?.body as URLSearchParams;
+          const grantType = body.get("grant_type");
+          const authorization = new Headers(init?.headers).get("authorization");
+
+          // The authorization-code exchange succeeds with the legacy POST
+          // credentials, reproducing a connection that only breaks once its
+          // short-lived access token needs refreshing.
+          const authenticated =
+            authorization === expectedAuthorization ||
+            (grantType === "authorization_code" &&
+              body.get("client_id") === "registered-client" &&
+              body.get("client_secret") === "registered-secret");
+          if (!authenticated) {
+            return {
+              ok: false,
+              status: 401,
+              text: async () => JSON.stringify({ error: "invalid_client" }),
+            };
+          }
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              access_token:
+                grantType === "refresh_token"
+                  ? "refreshed-access-token"
+                  : "initial-access-token",
+              refresh_token: "refresh-token",
+              expires_in: 3600,
+            }),
+            text: async () =>
+              JSON.stringify({
+                access_token: "refreshed-access-token",
+                refresh_token: "refresh-token",
+                expires_in: 3600,
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            authorization_endpoint: "https://auth.example.com/authorize",
+            token_endpoint: tokenEndpoint,
+            registration_endpoint: registrationEndpoint,
+            token_endpoint_auth_methods_supported: [
+              "client_secret_basic",
+              "client_secret_post",
+            ],
+          }),
+        };
+      },
+    ) as Mock;
+    globalThis.fetch = fetchMock;
+
+    const initiateResponse = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: { catalogId: catalog.id },
+    });
+    expect(initiateResponse.statusCode, initiateResponse.body).toBe(200);
+    const registrationRequest = fetchMock.mock.calls.find(
+      ([input]) => String(input) === registrationEndpoint,
+    );
+    expect(JSON.parse(String(registrationRequest?.[1]?.body))).toMatchObject({
+      token_endpoint_auth_method: "client_secret_basic",
+    });
+
+    const state = initiateResponse.json().state;
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS keyv_cache (
+        key text PRIMARY KEY,
+        value text NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES (
+        ${`keyv:${CacheKey.OAuthState}-${state}`},
+        ${JSON.stringify({
+          value: {
+            catalogId: catalog.id,
+            codeVerifier: "test-code-verifier",
+            clientId: "registered-client",
+            clientSecret: "registered-secret",
+            registrationResult: {
+              client_id: "registered-client",
+              client_secret: "registered-secret",
+              token_endpoint_auth_method: "client_secret_basic",
+            },
+          },
+          expires: Date.now() + 60_000,
+        })}
+      )
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `);
+
+    const callbackResponse = await app.inject({
+      method: "POST",
+      url: OAUTH_CALLBACK_PATH,
+      payload: {
+        code: "authorization-code",
+        state,
+      },
+    });
+    expect(callbackResponse.statusCode, callbackResponse.body).toBe(200);
+    const storedSecret = await secretManager().getSecret(
+      callbackResponse.json().secretId,
+    );
+    expect(storedSecret?.secret).toMatchObject({
+      token_endpoint_auth_method: "client_secret_basic",
+    });
+
+    await expect(
+      refreshOAuthToken(callbackResponse.json().secretId, catalog.id),
+    ).resolves.toEqual({ ok: true });
+
+    const refreshRequest = fetchMock.mock.calls.find(([, init]) => {
+      const body = init?.body;
+      return (
+        body instanceof URLSearchParams &&
+        body.get("grant_type") === "refresh_token"
+      );
+    });
+    expect(new Headers(refreshRequest?.[1]?.headers).get("authorization")).toBe(
+      expectedAuthorization,
+    );
+    expect(
+      (refreshRequest?.[1]?.body as URLSearchParams).has("client_secret"),
+    ).toBe(false);
+  });
+
   test("returns a terminal failure when the refreshed token cannot be persisted", async ({
     makeInternalMcpCatalog,
   }) => {

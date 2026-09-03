@@ -1,11 +1,17 @@
 name: Trigger Website Deploy
 
+# Dispatches the website repo's "Deploy to Vercel" GitHub Actions workflow,
+# which deploys production via the Vercel CLI. We can NOT use a Vercel deploy
+# hook here: deploy hooks create Git-integration deployments, and Vercel
+# blocks those whenever the website's head commit author is not a Vercel team
+# member (archestra-ai/website#659).
+
 on:
   workflow_call:
     secrets:
-      WEBSITE_VERCEL_DEPLOY_HOOK_URL:
+      WEBSITE_DEPLOY_GITHUB_TOKEN:
         required: true
-        description: Vercel deploy hook URL for the website
+        description: GitHub token with actions:write on archestra-ai/website
   workflow_dispatch:
 
 permissions: {}
@@ -19,8 +25,10 @@ jobs:
     name: Trigger Website Vercel Deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Vercel Deploy Hook
+      - name: Dispatch website deploy workflow
         env:
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
+          GH_TOKEN: ${{ secrets.WEBSITE_DEPLOY_GITHUB_TOKEN }}
         run: |
-          curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL"
+          gh workflow run deploy-to-vercel.yml \
+            --repo archestra-ai/website \
+            --ref main

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 
@@ -50,6 +51,15 @@ describe("RunStateIcon", () => {
       />,
     );
     expect(screen.getByLabelText("Run waiting for input")).toBeInTheDocument();
+  });
+
+  it("explains the compact status on hover", async () => {
+    const user = userEvent.setup();
+    render(<RunStateIcon state="TASK_STATE_WORKING" />);
+
+    await user.hover(screen.getByLabelText("Run active"));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Run active");
   });
 
   it("prioritizes an overdue hard deadline while cleanup is pending", () => {

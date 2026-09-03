@@ -1,15 +1,10 @@
-import {
-  AlertTriangle,
-  CircleCheck,
-  CircleStop,
-  CircleX,
-  KeyRound,
-  Loader2,
-  type LucideIcon,
-  MessageCircleQuestion,
-  TerminalSquare,
-} from "lucide-react";
+import type { SVGProps } from "react";
 import { hasNoRecentModelActivity } from "@/components/agent-run-liveness";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { AgentRunSession } from "@/lib/agent-runtime.query";
 import { cn } from "@/lib/utils";
 
@@ -34,19 +29,25 @@ export function RunStateIcon({
     hardDeadlineAt,
     lastModelActivityAt,
   });
-  const Icon = visual.icon;
+
   return (
-    <span title={visual.label} className="inline-flex shrink-0">
-      <Icon
-        aria-label={visual.label}
-        className={cn(
-          "shrink-0",
-          visual.spinning && "animate-spin motion-reduce:animate-none",
-          visual.colorClassName,
-          className,
-        )}
-      />
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <RunTerminalIcon
+          label={visual.label}
+          indicator={visual.indicator}
+          className={cn(
+            "shrink-0",
+            visual.pulsing && "animate-pulse motion-reduce:animate-none",
+            visual.colorClassName,
+            className,
+          )}
+        />
+      </TooltipTrigger>
+      <TooltipContent sideOffset={5}>
+        <span>{visual.label}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -67,34 +68,29 @@ function runStateVisual({
   endedAt,
   hardDeadlineAt,
   lastModelActivityAt,
-}: Omit<RunStateIconProps, "className">): {
-  label: string;
-  colorClassName: string;
-  icon: LucideIcon;
-  spinning: boolean;
-} {
+}: Omit<RunStateIconProps, "className">): RunStateVisual {
   if (state === "TASK_STATE_FAILED" || state === "TASK_STATE_REJECTED") {
     return {
       label: "Run failed",
       colorClassName: "text-destructive",
-      icon: CircleX,
-      spinning: false,
+      indicator: "failure",
+      pulsing: false,
     };
   }
   if (state === "TASK_STATE_COMPLETED") {
     return {
       label: "Run completed",
       colorClassName: "text-muted-foreground",
-      icon: CircleCheck,
-      spinning: false,
+      indicator: "check",
+      pulsing: false,
     };
   }
   if (state === "TASK_STATE_CANCELED") {
     return {
       label: "Run canceled",
       colorClassName: "text-muted-foreground",
-      icon: CircleStop,
-      spinning: false,
+      indicator: "cancel",
+      pulsing: false,
     };
   }
   if (
@@ -104,8 +100,8 @@ function runStateVisual({
     return {
       label: "Run waiting for input",
       colorClassName: "text-amber-500",
-      icon: MessageCircleQuestion,
-      spinning: false,
+      indicator: "question",
+      pulsing: false,
     };
   }
   if (
@@ -115,8 +111,8 @@ function runStateVisual({
     return {
       label: "Run authentication required",
       colorClassName: "text-amber-500",
-      icon: KeyRound,
-      spinning: false,
+      indicator: "lock",
+      pulsing: false,
     };
   }
   if (
@@ -127,8 +123,8 @@ function runStateVisual({
     return {
       label: "Run cleanup pending",
       colorClassName: "text-amber-500",
-      icon: AlertTriangle,
-      spinning: false,
+      indicator: "warning",
+      pulsing: false,
     };
   }
   if (
@@ -144,8 +140,8 @@ function runStateVisual({
     return {
       label: "Run may be stalled",
       colorClassName: "text-amber-500",
-      icon: AlertTriangle,
-      spinning: false,
+      indicator: "warning",
+      pulsing: false,
     };
   }
 
@@ -154,22 +150,104 @@ function runStateVisual({
       return {
         label: "Run starting",
         colorClassName: "text-amber-500",
-        icon: Loader2,
-        spinning: true,
+        indicator: "pending",
+        pulsing: true,
       };
     case "TASK_STATE_WORKING":
       return {
         label: "Run active",
         colorClassName: "text-emerald-500",
-        icon: TerminalSquare,
-        spinning: false,
+        indicator: "prompt",
+        pulsing: false,
       };
     default:
       return {
         label: "Run finished",
         colorClassName: "text-muted-foreground",
-        icon: TerminalSquare,
-        spinning: false,
+        indicator: "prompt",
+        pulsing: false,
       };
   }
+}
+
+type RunTerminalIndicator =
+  | "cancel"
+  | "check"
+  | "failure"
+  | "lock"
+  | "pending"
+  | "prompt"
+  | "question"
+  | "warning";
+
+interface RunStateVisual {
+  label: string;
+  colorClassName: string;
+  indicator: RunTerminalIndicator;
+  pulsing: boolean;
+}
+
+function RunTerminalIcon({
+  indicator,
+  label,
+  ...props
+}: SVGProps<SVGSVGElement> & {
+  indicator: RunTerminalIndicator;
+  label: string;
+}) {
+  return (
+    <svg
+      aria-label={label}
+      fill="none"
+      role="img"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      {...props}
+    >
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <path d="M3 8.5h18" opacity="0.65" />
+      {indicator === "prompt" && (
+        <>
+          <path d="m7.5 11.25 2.25 2-2.25 2" />
+          <path d="M12 15.25h4.5" />
+        </>
+      )}
+      {indicator === "pending" && (
+        <>
+          <circle cx="9" cy="14" r="0.7" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="14" r="0.7" fill="currentColor" stroke="none" />
+          <circle cx="15" cy="14" r="0.7" fill="currentColor" stroke="none" />
+        </>
+      )}
+      {indicator === "warning" && (
+        <>
+          <path d="M12 11v3" />
+          <path d="M12 16.5h.01" />
+        </>
+      )}
+      {indicator === "question" && (
+        <>
+          <path d="M10.25 12a1.85 1.85 0 1 1 2.5 1.75c-.5.23-.75.58-.75 1" />
+          <path d="M12 16.5h.01" />
+        </>
+      )}
+      {indicator === "lock" && (
+        <>
+          <rect x="9" y="12.25" width="6" height="4.5" rx="1" />
+          <path d="M10.5 12.25V11a1.5 1.5 0 0 1 3 0v1.25" />
+        </>
+      )}
+      {indicator === "check" && <path d="m8.5 13.75 2.25 2 4.75-4.75" />}
+      {indicator === "cancel" && <path d="M8.5 14h7" />}
+      {indicator === "failure" && (
+        <>
+          <path d="m9.5 11.5 5 5" />
+          <path d="m14.5 11.5-5 5" />
+        </>
+      )}
+    </svg>
+  );
 }

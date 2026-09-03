@@ -24,6 +24,7 @@ const terminalState = vi.hoisted(() => ({
     showManualCommand?: boolean;
     showDisconnectedStatus?: boolean;
     onCommandChange?: (command: string | null) => void;
+    onError?: () => void;
   } | null,
 }));
 
@@ -135,6 +136,18 @@ describe("AgentRunChatSession", () => {
       showManualCommand: false,
       showDisconnectedStatus: false,
     });
+  });
+
+  it("refreshes run state when completion wins the terminal attach race", () => {
+    queryState.value.data = run({
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+    });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+    act(() => terminalState.props?.onError?.());
+
+    expect(queryState.value.refetch).toHaveBeenCalledOnce();
   });
 
   it("moves agent and terminal details into the run actions menu", async () => {

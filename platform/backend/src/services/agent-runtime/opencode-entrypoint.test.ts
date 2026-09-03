@@ -20,7 +20,7 @@ const ENTRYPOINT = path.resolve(
 
 describe("OpenCode image entrypoint", () => {
   test.each([
-    ["one_shot", ["run", "--pure", "--auto"]],
+    ["one_shot", ["--auto", "--model"]],
     ["interactive", ["--pure", "--auto"]],
   ] as const)("configures and starts %s run", async (mode, prefix) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-opencode-"));
@@ -37,10 +37,40 @@ describe("OpenCode image entrypoint", () => {
         `#!/bin/sh
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
 env > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-env"
+if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
+  plugin_path="$(jq -r '.plugin[0] | sub("^file://"; "")' "$OPENCODE_CONFIG")"
+  PLUGIN_PATH="$plugin_path" node --input-type=module <<'JS'
+const plugin = await import("file://" + process.env.PLUGIN_PATH);
+const { access } = await import("node:fs/promises");
+const hooks = await plugin.ArchestraCompletion({
+  client: {
+    session: {
+      get: async ({ path }) => ({
+        data: path.id === "subagent-session" ? { id: path.id, parentID: "session-1" } : { id: path.id },
+      }),
+      messages: async () => ({
+        data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "OpenCode finished the task." }] }],
+      }),
+    },
+  },
+  directory: process.cwd(),
+});
+await hooks.event({ event: { type: "session.idle", properties: { sessionID: "subagent-session" } } });
+try {
+  await access(process.env.ARCHESTRA_AGENT_RUNTIME_DIR + "/turn-complete");
+  throw new Error("subagent completion settled the run");
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
+await hooks.event({ event: { type: "session.idle", properties: { sessionID: "session-1" } } });
+JS
+  trap 'exit 0' TERM
+  while :; do sleep 1; done
+fi
 `,
       );
 
-      await execFileAsync("bash", [ENTRYPOINT], {
+      const result = await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
         env: {
           ...process.env,
@@ -102,6 +132,15 @@ env > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-env"
           },
         },
       });
+      if (mode === "one_shot") {
+        expect(config.plugin).toEqual([
+          `file://${runtime}/opencode-completion.js`,
+        ]);
+        expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
+        expect(result.stdout).toContain("OpenCode finished the task.");
+      } else {
+        expect(config.plugin).toBeUndefined();
+      }
       expect(
         await readFile(path.join(runtime, "opencode-instructions.md"), "utf8"),
       ).toBe("Follow the configured Agent instructions.\n");
@@ -119,6 +158,9 @@ env > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-env"
       );
       expect(capturedEnv).toContain("OPENCODE_DISABLE_PROJECT_CONFIG=1");
       expect(capturedEnv).toContain(`OPENCODE_CONFIG=${runtime}/opencode.json`);
+      expect(capturedEnv.includes("OPENCODE_PURE=1")).toBe(
+        mode === "interactive",
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

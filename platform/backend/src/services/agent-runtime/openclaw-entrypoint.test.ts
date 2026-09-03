@@ -36,11 +36,44 @@ describe("OpenClaw image entrypoint", () => {
         path.join(bin, "openclaw"),
         `#!/bin/sh
 cp "$PWD/SOUL.md" "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-soul.md"
-printf 'OpenClaw test response\\n'
+printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
+plugin_dir="$(jq -r '.plugins.load.paths[0]' "$OPENCLAW_CONFIG_PATH")"
+PLUGIN_PATH="$plugin_dir/index.mjs" node --input-type=module <<'JS'
+const plugin = await import("file://" + process.env.PLUGIN_PATH);
+const { access } = await import("node:fs/promises");
+let agentEnd;
+plugin.default.register({
+  on(name, handler) {
+    if (name === "agent_end") agentEnd = handler;
+  },
+});
+await agentEnd(
+  {
+    success: true,
+    messages: [{ role: "assistant", content: [{ type: "text", text: "Ignore this subagent answer." }] }],
+  },
+  { sessionKey: "agent:main:subagent-session" },
+);
+try {
+  await access(process.env.ARCHESTRA_AGENT_RUNTIME_DIR + "/turn-complete");
+  throw new Error("subagent completion settled the run");
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
+await agentEnd(
+  {
+    success: true,
+    messages: [{ role: "assistant", content: [{ type: "text", text: "OpenClaw finished the task." }] }],
+  },
+  { sessionKey: "agent:main:12345678-abcd-4000-8000-123456789abc" },
+);
+JS
+trap 'exit 0' TERM
+while :; do sleep 1; done
 `,
       );
 
-      await execFileAsync("bash", [ENTRYPOINT], {
+      const result = await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
         env: {
           ...process.env,
@@ -70,6 +103,23 @@ printf 'OpenClaw test response\\n'
         consoleLevel: "silent",
       });
       expect(config.agents.defaults.skipBootstrap).toBe(true);
+      expect(config.plugins).toEqual({
+        allow: ["archestra-completion"],
+        load: { paths: [`${runtime}/openclaw-completion`] },
+        entries: {
+          "archestra-completion": {
+            enabled: true,
+            hooks: { allowConversationAccess: true },
+          },
+        },
+      });
+      const args = (await readFile(path.join(runtime, "captured-args"), "utf8"))
+        .trim()
+        .split("\n");
+      expect(args[0]).toBe("tui");
+      expect(args).not.toContain("agent");
+      expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
+      expect(result.stdout).toContain("OpenClaw finished the task.");
       expect(
         await readFile(path.join(runtime, "captured-soul.md"), "utf8"),
       ).toContain("Follow the configured Agent instructions.");

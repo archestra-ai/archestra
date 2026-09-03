@@ -1,5 +1,6 @@
 import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { forwardRef } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LOCKED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
@@ -216,24 +217,28 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       Submit {status ?? "unset"}
     </button>
   ),
-  PromptInputTextarea: ({
-    placeholder,
-    onKeyDown,
-    disabled,
-    "data-testid": testId,
-  }: {
-    placeholder?: string;
-    onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
-    disabled?: boolean;
-    "data-testid"?: string;
-  }) => (
-    <textarea
-      data-testid={testId}
-      disabled={disabled}
-      onKeyDown={onKeyDown}
-      placeholder={placeholder}
-    />
-  ),
+  PromptInputTextarea: forwardRef<
+    HTMLTextAreaElement,
+    {
+      placeholder?: string;
+      onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+      disabled?: boolean;
+      "data-testid"?: string;
+    }
+  >(function MockPromptInputTextarea(
+    { placeholder, onKeyDown, disabled, "data-testid": testId },
+    ref,
+  ) {
+    return (
+      <textarea
+        ref={ref}
+        data-testid={testId}
+        disabled={disabled}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+      />
+    );
+  }),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
   ),
@@ -265,6 +270,23 @@ vi.mock("@/components/chat/chat-tools-display", () => ({
 
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: () => <div data-testid="model-selector" />,
+}));
+
+vi.mock("@/components/chat/initial-agent-selector", () => ({
+  InitialAgentSelector: ({
+    onAgentChange,
+  }: {
+    onAgentChange: (agentId: string) => void;
+  }) => (
+    <button
+      type="button"
+      onKeyDown={(event) => {
+        if (event.key === "Enter") onAgentChange("agent-2");
+      }}
+    >
+      Select agent
+    </button>
+  ),
 }));
 
 // The Apps Hackathon recorder cluster is a self-contained feature with its own
@@ -405,6 +427,43 @@ describe("ArchestraPromptInput", () => {
     mockToolbarState.isNarrow = false;
     mockConversationState.conversation = null;
     localStorage.clear();
+  });
+
+  it("returns keyboard focus to the prompt after selecting an agent", () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions) =>
+          ({
+            data: "chatAgentPicker" in permissions,
+            isPending: false,
+            isLoading: false,
+          }) as ReturnType<typeof useHasPermissions>,
+      );
+      const onAgentChange = vi.fn();
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          selectorAgentId="agent-1"
+          onAgentChange={onAgentChange}
+        />,
+      );
+
+      const agentSelector = screen.getByRole("button", {
+        name: "Select agent",
+      });
+      agentSelector.focus();
+      fireEvent.keyDown(agentSelector, { key: "Enter" });
+
+      expect(onAgentChange).toHaveBeenCalledWith("agent-2");
+      expect(agentSelector).toHaveFocus();
+
+      act(() => vi.advanceTimersByTime(100));
+
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("turns the composer into a focused run launcher", () => {

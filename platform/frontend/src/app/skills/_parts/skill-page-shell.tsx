@@ -39,7 +39,7 @@ export function SkillPageLoading() {
       backLink={<SkillBackLink href="/skills" label="Skills" />}
       maxWidth="wizard"
     >
-      null
+      {null}
     </PageLayout>
   );
 }

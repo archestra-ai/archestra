@@ -114,7 +114,7 @@ function ProjectDetail() {
   if (isPending) {
     return (
       <PageLayout title="Project" description="">
-        null
+        {null}
       </PageLayout>
     );
   }

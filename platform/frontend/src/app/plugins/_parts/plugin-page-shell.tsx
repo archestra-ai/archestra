@@ -39,7 +39,7 @@ export function PluginPageLoading() {
       backLink={<PluginBackLink href="/plugins" label="Plugins" />}
       maxWidth="wizard"
     >
-      null
+      {null}
     </PageLayout>
   );
 }

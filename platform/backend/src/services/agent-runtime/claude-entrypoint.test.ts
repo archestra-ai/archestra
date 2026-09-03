@@ -41,7 +41,26 @@ printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
       await writeExecutable(
         path.join(bin, "tmux"),
         `#!/bin/sh
+if [ "$1" = "show-option" ]; then
+  [ -f "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-state" ] \
+    && cat "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-state"
+  exit 0
+fi
 printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-tmux"
+case "$*" in
+  *"@archestra_attention 1"*)
+    printf '1\n' > "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-state"
+    ;;
+  *"@archestra_attention 0"*)
+    printf '0\n' > "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-state"
+    ;;
+esac
+`,
+      );
+      await writeExecutable(
+        path.join(bin, "curl"),
+        `#!/bin/sh
+printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-curl"
 `,
       );
 
@@ -92,6 +111,13 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-tmux"
         "set-option -t %3 @archestra_attention_label Waiting for input",
       );
       expect(tmuxCalls).toContain("set-option -t %3 @archestra_attention 0");
+      const statusCalls = await readFile(
+        path.join(runtime, "captured-curl"),
+        "utf8",
+      );
+      expect(statusCalls).toContain("/runtime-status");
+      expect(statusCalls).toContain('"attentionState":"input_required"');
+      expect(statusCalls).toContain('"attentionState":null');
       expect(
         (await readFile(path.join(runtime, "captured-args"), "utf8"))
           .trim()

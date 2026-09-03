@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
  */
 export function RunStateIcon({
   state,
+  attentionState,
   startedAt,
   endedAt,
   hardDeadlineAt,
@@ -27,6 +28,7 @@ export function RunStateIcon({
 }: RunStateIconProps) {
   const visual = runStateVisual({
     state,
+    attentionState,
     startedAt,
     endedAt,
     hardDeadlineAt,
@@ -50,6 +52,7 @@ export function RunStateIcon({
 
 interface RunStateIconProps {
   state: AgentRunSession["state"];
+  attentionState?: AgentRunSession["attentionState"];
   startedAt?: AgentRunSession["startedAt"];
   endedAt?: AgentRunSession["endedAt"];
   hardDeadlineAt?: AgentRunSession["hardDeadlineAt"];
@@ -59,6 +62,7 @@ interface RunStateIconProps {
 
 function runStateVisual({
   state,
+  attentionState,
   startedAt,
   endedAt,
   hardDeadlineAt,
@@ -93,7 +97,10 @@ function runStateVisual({
       spinning: false,
     };
   }
-  if (state === "TASK_STATE_INPUT_REQUIRED") {
+  if (
+    attentionState === "input_required" ||
+    state === "TASK_STATE_INPUT_REQUIRED"
+  ) {
     return {
       label: "Run waiting for input",
       colorClassName: "text-amber-500",
@@ -101,7 +108,10 @@ function runStateVisual({
       spinning: false,
     };
   }
-  if (state === "TASK_STATE_AUTH_REQUIRED") {
+  if (
+    attentionState === "auth_required" ||
+    state === "TASK_STATE_AUTH_REQUIRED"
+  ) {
     return {
       label: "Run authentication required",
       colorClassName: "text-amber-500",

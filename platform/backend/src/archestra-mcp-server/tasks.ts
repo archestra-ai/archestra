@@ -28,7 +28,10 @@ import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
-import { AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE } from "@/types";
+import {
+  AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
+  AgentRunAttentionStateSchema,
+} from "@/types";
 import {
   catchError,
   defineArchestraTool,
@@ -227,6 +230,9 @@ const ListAgentRunsOutputSchema = z.object({
         .string()
         .nullable()
         .describe("Most recent model request attributed to this run."),
+      attention_state: AgentRunAttentionStateSchema.nullable().describe(
+        "Native runtime signal that the live process needs user attention.",
+      ),
       agent: z.object({
         id: z.string().uuid(),
         name: z.string(),
@@ -431,6 +437,7 @@ const registry = defineArchestraTools([
           hard_deadline_at: row.hardDeadlineAt.toISOString(),
           last_model_activity_at:
             row.lastModelActivityAt?.toISOString() ?? null,
+          attention_state: row.attentionState,
           agent: {
             id: row.agentId,
             name: row.agentName,

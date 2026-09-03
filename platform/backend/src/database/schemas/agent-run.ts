@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   AgentRunActorKind,
+  AgentRunAttentionState,
   AgentRunCompletionTarget,
   AgentRuntimeBackend,
 } from "@/types/agent-runtime";
@@ -63,6 +64,8 @@ const agentRunsTable = pgTable(
     runtimeScope: text("runtime_scope").notNull(),
     /** Frozen Kubernetes Job lifetime so the UI shows the actual deadline. */
     activeDeadlineSeconds: integer("active_deadline_seconds"),
+    /** Native-client signal that the live process needs a person's attention. */
+    attentionState: text("attention_state").$type<AgentRunAttentionState>(),
     /** Revoked when the session ends; a live key outliving its runtime keeps billing. */
     virtualApiKeyId: uuid("virtual_api_key_id").references(
       () => virtualApiKeysTable.id,

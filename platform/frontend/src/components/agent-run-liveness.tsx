@@ -11,7 +11,12 @@ export function AgentRunLiveness({
 }: {
   run: Pick<
     AgentRun,
-    "endedAt" | "hardDeadlineAt" | "lastModelActivityAt" | "startedAt" | "state"
+    | "attentionState"
+    | "endedAt"
+    | "hardDeadlineAt"
+    | "lastModelActivityAt"
+    | "startedAt"
+    | "state"
   >;
   className?: string;
 }) {
@@ -77,7 +82,12 @@ export function hasNoRecentModelActivity(
 function getLivenessPresentation(
   run: Pick<
     AgentRun,
-    "endedAt" | "hardDeadlineAt" | "lastModelActivityAt" | "startedAt" | "state"
+    | "attentionState"
+    | "endedAt"
+    | "hardDeadlineAt"
+    | "lastModelActivityAt"
+    | "startedAt"
+    | "state"
   >,
   now: number,
 ): {
@@ -99,7 +109,10 @@ function getLivenessPresentation(
   }
 
   const deadlineLabel = `Hard stop in ${formatDuration(deadlineAt - now)}`;
-  if (run.state === "TASK_STATE_INPUT_REQUIRED") {
+  if (
+    run.attentionState === "input_required" ||
+    run.state === "TASK_STATE_INPUT_REQUIRED"
+  ) {
     return {
       title: "Waiting for input",
       detail: "The agent reported that it needs a response to continue.",
@@ -108,7 +121,10 @@ function getLivenessPresentation(
       needsAttention: true,
     };
   }
-  if (run.state === "TASK_STATE_AUTH_REQUIRED") {
+  if (
+    run.attentionState === "auth_required" ||
+    run.state === "TASK_STATE_AUTH_REQUIRED"
+  ) {
     return {
       title: "Authentication required",
       detail: "The agent reported that credentials are needed to continue.",

@@ -188,6 +188,7 @@ describe("A2AManager full task mode", () => {
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       activeDeadlineSeconds: null,
+      attentionState: null,
       virtualApiKeyId: null,
       completionTarget: null,
       completionNotificationClaimedAt: null,

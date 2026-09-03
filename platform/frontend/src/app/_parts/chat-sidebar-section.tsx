@@ -732,6 +732,7 @@ export function ChatSidebarSection({
               <span className="flex min-w-0 flex-1 items-center gap-2">
                 <RunStateIcon
                   state={run.state}
+                  attentionState={run.attentionState}
                   startedAt={run.startedAt}
                   endedAt={run.endedAt}
                   hardDeadlineAt={run.hardDeadlineAt}

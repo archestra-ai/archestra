@@ -33,7 +33,6 @@ describe("RunStateIcon", () => {
   });
 
   it.each([
-    ["TASK_STATE_INPUT_REQUIRED", "Run waiting for input"],
     ["TASK_STATE_AUTH_REQUIRED", "Run authentication required"],
     ["TASK_STATE_COMPLETED", "Run completed"],
     ["TASK_STATE_FAILED", "Run failed"],
@@ -41,6 +40,16 @@ describe("RunStateIcon", () => {
   ] as const)("maps %s to %s", (state, label) => {
     render(<RunStateIcon state={state} />);
     expect(screen.getByLabelText(label)).toBeInTheDocument();
+  });
+
+  it("uses the native runtime attention signal without changing task lifecycle", () => {
+    render(
+      <RunStateIcon
+        state="TASK_STATE_WORKING"
+        attentionState="input_required"
+      />,
+    );
+    expect(screen.getByLabelText("Run waiting for input")).toBeInTheDocument();
   });
 
   it("prioritizes an overdue hard deadline while cleanup is pending", () => {

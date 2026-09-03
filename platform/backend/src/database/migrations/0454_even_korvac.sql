@@ -1,0 +1,1 @@
+ALTER TABLE "agent_runs" ADD COLUMN "attention_state" text;

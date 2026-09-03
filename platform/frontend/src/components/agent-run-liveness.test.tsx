@@ -116,6 +116,7 @@ function activeRun(
   > = {},
 ) {
   return {
+    attentionState: null,
     endedAt: null,
     hardDeadlineAt: "2026-09-06T12:00:00.000Z",
     lastModelActivityAt: "2026-09-03T11:58:00.000Z",

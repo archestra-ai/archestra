@@ -46,6 +46,23 @@ class AgentRunModel {
     return run ?? null;
   }
 
+  static async updateAttentionState(params: {
+    taskId: string;
+    attentionState: AgentRunRecord["attentionState"];
+  }): Promise<boolean> {
+    const updated = await db
+      .update(schema.agentRunsTable)
+      .set({ attentionState: params.attentionState })
+      .where(
+        and(
+          eq(schema.agentRunsTable.taskId, params.taskId),
+          isNull(schema.agentRunsTable.endedAt),
+        ),
+      )
+      .returning({ id: schema.agentRunsTable.id });
+    return updated.length > 0;
+  }
+
   /** Sessions whose pod should still exist, across every organization. */
   static async listOpen(): Promise<AgentRunRecord[]> {
     return db
@@ -133,6 +150,7 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
+        attentionState: schema.agentRunsTable.attentionState,
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
         agentIcon: schema.agentsTable.icon,
@@ -316,7 +334,7 @@ class AgentRunModel {
   static async close(params: { id: string; logs?: string }): Promise<boolean> {
     const closed = await db
       .update(schema.agentRunsTable)
-      .set({ endedAt: new Date(), logs: params.logs })
+      .set({ endedAt: new Date(), logs: params.logs, attentionState: null })
       .where(
         and(
           eq(schema.agentRunsTable.id, params.id),

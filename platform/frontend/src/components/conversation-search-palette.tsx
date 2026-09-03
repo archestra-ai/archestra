@@ -579,6 +579,7 @@ export function ConversationSearchPalette({
     >
       <RunStateIcon
         state={run.state}
+        attentionState={run.attentionState}
         startedAt={run.startedAt}
         endedAt={run.endedAt}
         hardDeadlineAt={run.hardDeadlineAt}

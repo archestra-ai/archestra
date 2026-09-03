@@ -27,6 +27,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
+import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
@@ -160,6 +161,7 @@ function PluginsList() {
 
   const {
     data: plugins,
+    isPending,
     isFetching,
     isLoadingError,
     refetch,
@@ -608,6 +610,17 @@ function PluginsList() {
     );
   }
 
+  /**
+   * Nothing has come back yet, so the page cannot tell whether it is about to
+   * show a list or an empty state. Rendering the list branch meanwhile puts
+   * the filter bar, the table and the "Add new plugin" button on screen and
+   * then replaces the lot with the empty state — see the same guard on the
+   * skills page, where that swap measured ~250ms.
+   *
+   * `isPending` is paired with `isFetching` so a disabled query, which stays
+   * pending indefinitely, cannot hold this true.
+   */
+  const isInitialPluginsLoad = isPending && isFetching;
   const showEmptyState =
     !isFetching && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
 
@@ -617,7 +630,8 @@ function PluginsList() {
         title="Plugins"
         description={PLUGINS_DESCRIPTION}
         actionButton={
-          !showEmptyState && (
+          !showEmptyState &&
+          !isInitialPluginsLoad && (
             <PermissionButton
               permissions={{ plugin: ["create", "admin"] }}
               asChild
@@ -631,7 +645,9 @@ function PluginsList() {
         }
       >
         <TableCardView storageKey="archestra-plugins-view" defaultMode="table">
-          {showEmptyState ? (
+          {isInitialPluginsLoad ? (
+            <LoadingState label="Loading plugins…" variant="page" />
+          ) : showEmptyState ? (
             <PluginsEmptyState />
           ) : (
             <>

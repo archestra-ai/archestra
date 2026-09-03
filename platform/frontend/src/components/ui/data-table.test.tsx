@@ -87,6 +87,40 @@ describe("DataTable page index clamping", () => {
     // table does say it is working, rather than sitting there blank.
     expect(screen.queryByText("No results")).toBeNull();
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    // ...and it says so in the body too. A blank box under a full set of
+    // headers reads as a table that loaded and came back empty, which is the
+    // state the empty state then arrives on top of.
+    expect(
+      container.querySelectorAll('tbody [data-slot="skeleton"]').length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("swaps its placeholder rows for the empty state once the fetch settles", () => {
+    const { container, rerender } = render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        isLoading
+        emptyMessage="No results"
+      />,
+    );
+
+    expect(
+      container.querySelectorAll('tbody [data-slot="skeleton"]').length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("No results")).toBeNull();
+
+    rerender(
+      <DataTable columns={columns} data={[]} emptyMessage="No results" />,
+    );
+
+    // Exactly one of the two is ever on screen, so the empty result is
+    // announced once rather than arriving on top of a table that looked like
+    // it had already loaded.
+    expect(
+      container.querySelectorAll('tbody [data-slot="skeleton"]'),
+    ).toHaveLength(0);
+    expect(screen.getByText("No results")).toBeVisible();
   });
 
   it("reports an empty result only once the fetch has settled", () => {

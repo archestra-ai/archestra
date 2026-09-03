@@ -322,7 +322,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     [focusTextarea, onAgentChange],
   );
 
-  const handleModelSelectorOpenChange = useCallback(
+  const handleSelectorOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
         focusTextarea();
@@ -693,13 +693,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   agentLlmApiKeyId={agentLlmApiKeyId}
                   suppressAutoSelect={agentRequiresPerUserConnect}
                   connectRequestToken={subscriptionConnectRequest}
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      setTimeout(() => {
-                        textareaRef.current?.focus();
-                      }, 100);
-                    }
-                  }}
+                  onOpenChange={handleSelectorOpenChange}
                 />
               )}
               {subscriptionConnectRequired && onSubscriptionConnect && (
@@ -717,7 +711,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 <ModelSelector
                   selectedModel={selectedModel}
                   onModelChange={onModelChange}
-                  onOpenChange={handleModelSelectorOpenChange}
+                  onOpenChange={handleSelectorOpenChange}
                   apiKeyId={
                     conversationId
                       ? currentConversationChatApiKeyId

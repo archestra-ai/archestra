@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ServiceLogoPicker } from "./service-logo-picker";
@@ -35,7 +36,7 @@ describe("ServiceLogoPicker", () => {
       }),
     );
 
-    render(<ServiceLogoPicker onSelect={onSelect} />);
+    renderPicker(onSelect);
 
     expect(fetchMock).toHaveBeenCalledWith("/api/service-icons?limit=120", {
       signal: expect.any(AbortSignal),
@@ -49,8 +50,19 @@ describe("ServiceLogoPicker", () => {
   it("shows a useful fallback when the catalog cannot be loaded", async () => {
     fetchMock.mockRejectedValue(new Error("network unavailable"));
 
-    render(<ServiceLogoPicker onSelect={vi.fn()} />);
+    renderPicker(vi.fn());
 
     expect(await screen.findByText("Could not load logos")).toBeVisible();
   });
 });
+
+function renderPicker(onSelect: (dataUrl: string) => void) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ServiceLogoPicker onSelect={onSelect} />
+    </QueryClientProvider>,
+  );
+}

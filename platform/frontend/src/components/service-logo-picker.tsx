@@ -5,82 +5,29 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useServiceIcons } from "./service-logo-picker.hook";
 import { iconToDataUrl, type ServiceIcon } from "./service-logo-picker.utils";
-
-const PAGE_SIZE = 120;
-
-interface ServiceIconsResponse {
-  data: ServiceIcon[];
-  total: number;
-}
 
 interface ServiceLogoPickerProps {
   onSelect: (dataUrl: string) => void;
 }
 
 export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
-  const [icons, setIcons] = useState<ServiceIcon[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const requestVersionRef = useRef(0);
-
-  useEffect(() => {
-    const requestVersion = ++requestVersionRef.current;
-    const abortController = new AbortController();
-    const searchParams = new URLSearchParams({ limit: String(PAGE_SIZE) });
-    if (deferredQuery.trim()) {
-      searchParams.set("q", deferredQuery.trim());
-    }
-
-    setLoading(true);
-    setLoadingMore(false);
-    setLoadFailed(false);
-    setLoadMoreFailed(false);
-
-    fetch(`/api/service-icons?${searchParams}`, {
-      signal: abortController.signal,
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to load service icons");
-        }
-        return response.json() as Promise<ServiceIconsResponse>;
-      })
-      .then((result) => {
-        if (requestVersion !== requestVersionRef.current) return;
-        setIcons(result.data);
-        setTotal(result.total);
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-        if (requestVersion === requestVersionRef.current) {
-          setLoadFailed(true);
-        }
-      })
-      .finally(() => {
-        if (
-          !abortController.signal.aborted &&
-          requestVersion === requestVersionRef.current
-        ) {
-          setLoading(false);
-        }
-      });
-
-    return () => abortController.abort();
-  }, [deferredQuery]);
+  const serviceIconsQuery = useServiceIcons(deferredQuery);
+  const icons = useMemo(
+    () => serviceIconsQuery.data?.pages.flatMap((page) => page.data) ?? [],
+    [serviceIconsQuery.data],
+  );
+  const total = serviceIconsQuery.data?.pages[0]?.total ?? 0;
 
   // Reset scroll when search changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally trigger on deferredQuery change
@@ -100,43 +47,16 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
       const el = e.currentTarget;
       const nearBottom =
         el.scrollTop + el.clientHeight >= el.scrollHeight - 100;
-      if (!nearBottom || loadingMore || icons.length >= total) return;
-
-      const searchParams = new URLSearchParams({
-        limit: String(PAGE_SIZE),
-        offset: String(icons.length),
-      });
-      if (deferredQuery.trim()) {
-        searchParams.set("q", deferredQuery.trim());
+      if (
+        !nearBottom ||
+        serviceIconsQuery.isFetchingNextPage ||
+        !serviceIconsQuery.hasNextPage
+      ) {
+        return;
       }
-
-      setLoadingMore(true);
-      setLoadMoreFailed(false);
-      const requestVersion = requestVersionRef.current;
-      fetch(`/api/service-icons?${searchParams}`)
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error("Failed to load more service icons");
-          }
-          return response.json() as Promise<ServiceIconsResponse>;
-        })
-        .then((result) => {
-          if (requestVersion !== requestVersionRef.current) return;
-          setIcons((current) => [...current, ...result.data]);
-          setTotal(result.total);
-        })
-        .catch(() => {
-          if (requestVersion === requestVersionRef.current) {
-            setLoadMoreFailed(true);
-          }
-        })
-        .finally(() => {
-          if (requestVersion === requestVersionRef.current) {
-            setLoadingMore(false);
-          }
-        });
+      void serviceIconsQuery.fetchNextPage();
     },
-    [deferredQuery, icons.length, loadingMore, total],
+    [serviceIconsQuery],
   );
 
   return (
@@ -159,11 +79,11 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
         style={{ height: 280 }}
         onScroll={handleScroll}
       >
-        {loading ? (
+        {serviceIconsQuery.isPending ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
             <span>Loading logos...</span>
           </div>
-        ) : loadFailed ? (
+        ) : serviceIconsQuery.isError && icons.length === 0 ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
             <span>Could not load logos</span>
           </div>
@@ -227,9 +147,9 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
             </div>
             {icons.length < total && (
               <p className="text-xs text-muted-foreground text-center py-2">
-                {loadingMore
+                {serviceIconsQuery.isFetchingNextPage
                   ? "Loading more..."
-                  : loadMoreFailed
+                  : serviceIconsQuery.isFetchNextPageError
                     ? "Could not load more logos"
                     : `Scroll for more (${total - icons.length} remaining)`}
               </p>

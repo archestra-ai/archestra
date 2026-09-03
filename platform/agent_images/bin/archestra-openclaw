@@ -31,11 +31,84 @@ resolve_docker_desktop_url() {
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 config_file="${runtime_dir}/openclaw.json"
 task_file="${runtime_dir}/task.md"
+attention_plugin_dir="${runtime_dir}/openclaw-attention"
+attention_plugin="${attention_plugin_dir}/index.cjs"
 model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
 runtime_instructions="${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
 export OPENCLAW_STATE_DIR="${runtime_dir}/openclaw-state"
 export OPENCLAW_CONFIG_PATH="${config_file}"
-mkdir -p "${OPENCLAW_STATE_DIR}"
+mkdir -p "${OPENCLAW_STATE_DIR}" "${attention_plugin_dir}"
+
+# OpenClaw exposes typed lifecycle hooks to local plugins. The plugin is loaded
+# from this generated, runtime-owned path and only reports state transitions.
+cat > "${attention_plugin}" <<'PLUGIN'
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+
+const execFileAsync = promisify(execFile);
+
+async function update(...args) {
+  try {
+    const command = process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention";
+    await execFileAsync(command, args, { timeout: 2500 });
+  } catch {
+    // Attention reporting is best-effort and must never interrupt a run.
+  }
+}
+
+module.exports = {
+  id: "archestra-runtime-attention",
+  name: "Archestra runtime attention",
+  description: "Reports when this agent run is waiting for input.",
+  register(api) {
+    api.on("before_agent_run", async () => {
+      await update("clear");
+    });
+    api.on("before_tool_call", async (event) => {
+      if (event.toolName === "ask_user") await update("set", "Input requested");
+    });
+    api.on("after_tool_call", async (event) => {
+      if (event.toolName === "ask_user") await update("clear");
+    });
+    api.on("agent_end", async () => {
+      if (process.env.ARCHESTRA_AGENT_RUNTIME_MODE === "interactive") {
+        await update("set", "Waiting for input");
+      } else {
+        await update("clear");
+      }
+    });
+    api.on("session_end", async () => {
+      await update("clear");
+    });
+  },
+};
+PLUGIN
+chmod 0600 "${attention_plugin}"
+cat > "${attention_plugin_dir}/openclaw.plugin.json" <<'MANIFEST'
+{
+  "id": "archestra-runtime-attention",
+  "name": "Archestra runtime attention",
+  "description": "Reports when this agent run is waiting for input.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
+MANIFEST
+cat > "${attention_plugin_dir}/package.json" <<'PACKAGE'
+{
+  "name": "archestra-runtime-attention",
+  "private": true,
+  "type": "commonjs",
+  "openclaw": {
+    "extensions": ["./index.cjs"]
+  }
+}
+PACKAGE
+chmod 0600 \
+  "${attention_plugin_dir}/openclaw.plugin.json" \
+  "${attention_plugin_dir}/package.json"
 
 # OpenClaw deliberately owns its generated system prompt. Its supported
 # extension point is the workspace bootstrap files, so expose the Agent's
@@ -93,8 +166,21 @@ jq -n \
   --arg mcp_url "${openclaw_mcp_url}" \
   --arg api "${openclaw_api}" \
   --arg workspace "${PWD}" \
+  --arg attention_plugin_dir "${attention_plugin_dir}" \
   '{
     logging:{level:"error",consoleLevel:"silent"},
+    plugins:{
+      enabled:true,
+      bundledDiscovery:"allowlist",
+      allow:["archestra-runtime-attention"],
+      load:{paths:[$attention_plugin_dir]},
+      entries:{
+        "archestra-runtime-attention":{
+          enabled:true,
+          hooks:{allowConversationAccess:true,timeoutMs:3000}
+        }
+      }
+    },
     models:{
       mode:"replace",
       providers:{

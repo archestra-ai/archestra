@@ -17,6 +17,10 @@ const ENTRYPOINT = path.resolve(
   import.meta.dirname,
   "../../../../agent_images/bin/archestra-claude-code",
 );
+const ATTENTION_ENTRYPOINT = path.resolve(
+  import.meta.dirname,
+  "../../../../agent_images/bin/archestra-agent-attention",
+);
 
 describe("Claude Code image entrypoint", () => {
   test("uses native Claude hooks to report and clear input attention", async () => {
@@ -76,6 +80,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-curl"
         ARCHESTRA_AGENT_RUNTIME_MODE: "interactive",
         ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
+        ARCHESTRA_AGENT_ATTENTION_COMMAND: ATTENTION_ENTRYPOINT,
       };
       await execFileAsync("bash", [ENTRYPOINT], { cwd: workspace, env });
 

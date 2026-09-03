@@ -9,6 +9,38 @@ fi
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 export HERMES_HOME="${runtime_dir}/hermes"
 mkdir -p "${HERMES_HOME}"
+attention_hook="${runtime_dir}/hermes-attention-hook.sh"
+cat > "${attention_hook}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+payload="$(cat)"
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+tool="$(jq -r '.tool_name // empty' <<<"${payload}")"
+completed="$(jq -r '.extra.completed // false' <<<"${payload}")"
+attention_command="${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}"
+
+case "${event}:${tool}" in
+  pre_tool_call:clarify)
+    "${attention_command}" set "Input requested"
+    ;;
+  pre_approval_request:*)
+    "${attention_command}" set "Permission needed"
+    ;;
+  on_session_end:*)
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "interactive" && "${completed}" == "true" ]]; then
+      "${attention_command}" set "Waiting for input"
+    else
+      "${attention_command}" clear
+    fi
+    ;;
+  *)
+    "${attention_command}" clear
+    ;;
+esac
+
+printf '{}\n'
+HOOK
+chmod 0700 "${attention_hook}"
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" \
@@ -16,6 +48,7 @@ jq -n \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg gateway_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg system_prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" \
+  --arg attention_hook "${attention_hook}" \
   '{
     providers:{archestra:{
       name:"Archestra",
@@ -25,6 +58,16 @@ jq -n \
       transport:"openai_chat"
     }},
     agent:{system_prompt:$system_prompt},
+    hooks_auto_accept:true,
+    hooks:{
+      on_session_start:[{command:$attention_hook,timeout:3}],
+      pre_llm_call:[{command:$attention_hook,timeout:3}],
+      pre_tool_call:[{command:$attention_hook,matcher:"^clarify$",timeout:3}],
+      post_tool_call:[{command:$attention_hook,matcher:"^clarify$",timeout:3}],
+      pre_approval_request:[{command:$attention_hook,timeout:3}],
+      post_approval_response:[{command:$attention_hook,timeout:3}],
+      on_session_end:[{command:$attention_hook,timeout:3}]
+    },
     model:{
       max_tokens:16384,
       context_length:1047576,

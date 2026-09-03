@@ -44,6 +44,9 @@ image receives the task, exits when it is finished, and lets Archestra settle
 the durable task and deliver its result. This is selected by the invocation
 surface, not by a user-facing Agent setting.
 
+Maintained runtime images report when their client needs input or permission.
+Archestra also marks a run as stalled when its terminal stops changing.
+
 This lets a coordinator Agent stay responsive in a messaging channel while a specialist Agent handles durable work in its own container. It also lets a user start and supervise the same specialist directly from Chat without inventing a separate Agent or permission model.
 
 ## Runtime Backend

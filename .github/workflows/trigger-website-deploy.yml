@@ -9,9 +9,12 @@ name: Trigger Website Deploy
 on:
   workflow_call:
     secrets:
-      WEBSITE_DEPLOY_GITHUB_TOKEN:
+      ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID:
         required: true
-        description: GitHub token with actions:write on archestra-ai/website
+        description: App ID for the Archestra Website Deploy GitHub App
+      ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY:
+        required: true
+        description: Private key for the Archestra Website Deploy GitHub App
   workflow_dispatch:
 
 permissions: {}
@@ -25,9 +28,19 @@ jobs:
     name: Trigger Website Vercel Deploy
     runs-on: ubuntu-latest
     steps:
+      - name: Generate website deployment token
+        id: generate-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}
+          owner: archestra-ai
+          repositories: website
+          permission-actions: write
+
       - name: Dispatch website deploy workflow
         env:
-          GH_TOKEN: ${{ secrets.WEBSITE_DEPLOY_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           gh workflow run deploy-to-vercel.yml \
             --repo archestra-ai/website \

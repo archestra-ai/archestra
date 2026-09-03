@@ -7,7 +7,16 @@ import {
   userHasPermission,
 } from "@/auth";
 import config from "@/config";
-import { A2ATaskModel, AgentModel, AgentRunModel, TeamModel } from "@/models";
+import {
+  A2ATaskModel,
+  AgentModel,
+  AgentRunModel,
+  AgentRunShareModel,
+  MemberModel,
+  ProjectModel,
+  ProjectShareModel,
+  TeamModel,
+} from "@/models";
 import {
   isAnyRunnerBackendEnabled,
   resolveRunnerBackend,
@@ -25,11 +34,14 @@ import {
 import {
   type Agent,
   type AgentDeployment,
+  AgentRunShareVisibilitySchema,
   ApiError,
   constructResponseSchema,
+  GetAgentExecutionResponseSchema,
   MissingAgentDeploymentCredentialSchema,
   SelectAgentExecutionSchema,
   SelectAgentExecutionSessionSchema,
+  SelectAgentRunShareWithTargetsSchema,
   StartAgentExecutionResponseSchema,
   UpdateAgentExecutionSchema,
 } from "@/types";
@@ -228,6 +240,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
           message: z.string().trim().min(1).max(100_000),
+          projectId: z.string().uuid().optional(),
           attachments: z
             .array(
               z
@@ -269,6 +282,13 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
     async (request, reply) => {
       const { agent, deployment } =
         await requireReadableDeploymentWithAgent(request);
+      if (request.body.projectId) {
+        await requireReadableProject({
+          projectId: request.body.projectId,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+      }
       const preflight = await preflightAgentDeploymentCredentials({
         deployment,
         organizationId: request.organizationId,
@@ -303,6 +323,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         systemParams: {
           sessionId: crypto.randomUUID(),
           source: "chat",
+          projectId: request.body.projectId,
           backgroundExecutionMode: "interactive",
         },
       });
@@ -312,6 +333,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: agent.id,
         state: task.state,
         attachmentCount: request.body.attachments?.length ?? 0,
+        projectId: request.body.projectId ?? null,
       };
       return reply.send({
         taskId: task.id,
@@ -319,6 +341,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: agent.id,
         agentName: agent.name,
         prompt: request.body.message,
+        projectId: request.body.projectId ?? null,
         createdAt: task.createdAt,
       });
     },
@@ -351,20 +374,51 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.GetMyAgentExecution,
-        description: "Get one Background execution started by this user",
+        description:
+          "Get one Background execution the user started or was granted access to",
         tags: ["Agents"],
         params: z.object({ taskId: z.string().uuid() }),
-        response: constructResponseSchema(SelectAgentExecutionSessionSchema),
+        response: constructResponseSchema(GetAgentExecutionResponseSchema),
       },
     },
     async (request, reply) => {
-      const execution = await AgentRunModel.findForActorByTaskId({
+      const owned = await AgentRunModel.findForActorByTaskId({
         taskId: request.params.taskId,
         actorUserId: request.user.id,
         organizationId: request.organizationId,
       });
-      if (!execution) throw new ApiError(404, "Execution not found");
-      return reply.send(execution);
+      if (owned) {
+        return reply.send({ ...owned, viewerRole: "owner" as const });
+      }
+
+      // Non-owners may still open the execution read-only when a share grants
+      // them access. Attaching interactively stays owner-only (enforced in the
+      // WebSocket attach handler) because attach runs under the owner's
+      // credentials; a share only unlocks the log stream.
+      const shared = await AgentRunModel.findSessionByTaskId({
+        taskId: request.params.taskId,
+        organizationId: request.organizationId,
+      });
+      if (shared) {
+        const explicitlyShared =
+          await AgentRunShareModel.findAccessibleByTaskId({
+            taskId: request.params.taskId,
+            organizationId: request.organizationId,
+            userId: request.user.id,
+          });
+        const sharedThroughProject = shared.projectId
+          ? await mayReadProjectSession({
+              projectId: shared.projectId,
+              organizationId: request.organizationId,
+              userId: request.user.id,
+            })
+          : false;
+        if (explicitlyShared || sharedThroughProject) {
+          return reply.send({ ...shared, viewerRole: "shared" as const });
+        }
+      }
+
+      throw new ApiError(404, "Execution not found");
     },
   );
 
@@ -388,7 +442,15 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: execution.agentId,
         title: execution.title,
         pinnedAt: execution.pinnedAt,
+        projectId: execution.projectId,
       };
+      if (request.body.projectId) {
+        await requireReadableProject({
+          projectId: request.body.projectId,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+      }
       const updated = await AgentRunModel.updateForActor({
         taskId: execution.taskId,
         actorUserId: request.user.id,
@@ -400,6 +462,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
             : request.body.pinnedAt === null
               ? null
               : new Date(request.body.pinnedAt),
+        projectId: request.body.projectId,
       });
       if (!updated) throw new ApiError(404, "Execution not found");
       request.auditAfter = {
@@ -407,6 +470,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: updated.agentId,
         title: updated.title,
         pinnedAt: updated.pinnedAt,
+        projectId: updated.projectId,
       };
       return reply.send(updated);
     },
@@ -490,6 +554,151 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
       return reply.send({ deleted: true as const });
     },
   );
+
+  fastify.get(
+    "/api/agent-executions/:taskId/share",
+    {
+      schema: {
+        operationId: RouteId.GetAgentExecutionShare,
+        description: "Get share status for a Background execution",
+        tags: ["Agents"],
+        params: z.object({ taskId: z.string().uuid() }),
+        response: constructResponseSchema(
+          SelectAgentRunShareWithTargetsSchema.nullable(),
+        ),
+      },
+    },
+    async (request, reply) => {
+      // Only the owner may read or change share settings.
+      await requireOwnedExecution(request);
+      const share = await AgentRunShareModel.findByTaskId({
+        taskId: request.params.taskId,
+        organizationId: request.organizationId,
+      });
+      return reply.send(share);
+    },
+  );
+
+  fastify.put(
+    "/api/agent-executions/:taskId/share",
+    {
+      schema: {
+        operationId: RouteId.ShareAgentExecution,
+        description:
+          "Share a Background execution with your organization, specific teams, or specific users",
+        tags: ["Agents"],
+        params: z.object({ taskId: z.string().uuid() }),
+        body: z
+          .object({
+            visibility: AgentRunShareVisibilitySchema,
+            teamIds: z.array(z.string()).optional(),
+            userIds: z.array(z.string()).optional(),
+          })
+          .superRefine((value, ctx) => {
+            if (
+              value.visibility === "team" &&
+              (value.teamIds ?? []).length === 0
+            ) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Select at least one team",
+                path: ["teamIds"],
+              });
+            }
+
+            if (
+              value.visibility === "user" &&
+              (value.userIds ?? []).length === 0
+            ) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Select at least one user",
+                path: ["userIds"],
+              });
+            }
+          }),
+        response: constructResponseSchema(SelectAgentRunShareWithTargetsSchema),
+      },
+    },
+    async (request, reply) => {
+      const execution = await requireOwnedExecution(request);
+      request.auditResourceId = { value: execution.taskId };
+      request.auditBefore = await AgentRunShareModel.findByTaskId({
+        taskId: execution.taskId,
+        organizationId: request.organizationId,
+      });
+
+      const teamIds = Array.from(new Set(request.body.teamIds ?? []));
+      const userIds = Array.from(new Set(request.body.userIds ?? []));
+
+      if (request.body.visibility === "team") {
+        const teams = await TeamModel.findByIds(teamIds);
+        const validTeamIds = new Set(
+          teams
+            .filter((team) => team.organizationId === request.organizationId)
+            .map((team) => team.id),
+        );
+        if (validTeamIds.size !== teamIds.length) {
+          throw new ApiError(400, "One or more selected teams are invalid");
+        }
+      }
+
+      if (request.body.visibility === "user") {
+        const validUserIds = new Set(
+          await MemberModel.findUserIdsInOrganization({
+            organizationId: request.organizationId,
+            userIds,
+          }),
+        );
+        if (validUserIds.size !== userIds.length) {
+          throw new ApiError(400, "One or more selected users are invalid");
+        }
+      }
+
+      const share = await AgentRunShareModel.upsert({
+        taskId: execution.taskId,
+        organizationId: request.organizationId,
+        createdByUserId: request.user.id,
+        visibility: request.body.visibility,
+        teamIds: request.body.visibility === "team" ? teamIds : [],
+        userIds: request.body.visibility === "user" ? userIds : [],
+      });
+      request.auditAfter = share;
+      return reply.send(share);
+    },
+  );
+
+  fastify.delete(
+    "/api/agent-executions/:taskId/share",
+    {
+      schema: {
+        operationId: RouteId.UnshareAgentExecution,
+        description: "Revoke sharing of a Background execution",
+        tags: ["Agents"],
+        params: z.object({ taskId: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const execution = await requireOwnedExecution(request);
+      request.auditResourceId = { value: execution.taskId };
+      request.auditBefore = await AgentRunShareModel.findByTaskId({
+        taskId: execution.taskId,
+        organizationId: request.organizationId,
+      });
+
+      const deleted = await AgentRunShareModel.delete({
+        taskId: execution.taskId,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      if (!deleted) {
+        throw new ApiError(404, "Share not found");
+      }
+      request.auditAfter = { success: true };
+      return reply.send({ success: true });
+    },
+  );
 };
 
 export default agentBackgroundExecutionRoutes;
@@ -516,6 +725,49 @@ async function requireOwnedExecution(request: OwnedExecutionRequest) {
   });
   if (!execution) throw new ApiError(404, "Execution not found");
   return execution;
+}
+
+async function requireReadableProject(params: {
+  projectId: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const project = await ProjectModel.findById(params.projectId);
+  if (
+    !project ||
+    !(await ProjectShareModel.userCanAccessProject({
+      project,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    }))
+  ) {
+    throw new ApiError(404, "Project not found");
+  }
+  return project;
+}
+
+async function mayReadProjectSession(params: {
+  projectId: string;
+  organizationId: string;
+  userId: string;
+}): Promise<boolean> {
+  const project = await ProjectModel.findById(params.projectId);
+  if (
+    !project ||
+    !(await ProjectShareModel.userCanAccessProject({
+      project,
+      userId: params.userId,
+      organizationId: params.organizationId,
+    }))
+  ) {
+    return false;
+  }
+  return userHasPermission(
+    params.userId,
+    params.organizationId,
+    "project",
+    "read-all",
+  );
 }
 
 async function requireReadableDeployment(

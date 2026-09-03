@@ -14,6 +14,7 @@ import type {
 } from "@/types/runner";
 import a2aTasksTable from "./a2a-task";
 import agentsTable from "./agent";
+import projectsTable from "./project";
 import usersTable from "./user";
 import virtualApiKeysTable from "./virtual-api-key";
 
@@ -49,6 +50,10 @@ const agentRunsTable = pgTable(
     title: text("title").notNull().default("Execution"),
     /** Personal sidebar pin; the run is already owned by one initiating user. */
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
+    /** Project this session belongs to. It becomes ordinary work when detached. */
+    projectId: uuid("project_id").references(() => projectsTable.id, {
+      onDelete: "set null",
+    }),
     /** Frozen at creation so a rename can never orphan the workload. */
     deploymentName: text("deployment_name").notNull(),
     /** Frozen because a restart must re-adopt through the original backend. */
@@ -82,6 +87,7 @@ const agentRunsTable = pgTable(
     index("agent_runs_organization_id_idx").on(table.organizationId),
     index("agent_runs_actor_user_id_idx").on(table.actorUserId),
     index("agent_runs_actor_idx").on(table.actorKind, table.actorId),
+    index("agent_runs_project_id_idx").on(table.projectId),
   ],
 );
 

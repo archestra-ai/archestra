@@ -31,6 +31,7 @@ the future without changing Agents, delegation, or the Executions UI.
 Invocation is explicit and surface-specific:
 
 - **Archestra Chat uses execution mode for a Background-enabled Agent.** Selecting that Agent from the composer or choosing **Chat** on its detail page changes the composer into an execution launcher. The first message starts the isolated deployment and opens its live terminal.
+- **Projects use the same execution launcher.** Selecting a Background-enabled Agent in a project's composer starts the execution inside that project, where it stays grouped with the project's work.
 - **Ordinary messaging-channel messages stay in the foreground.** A channel Agent uses the normal Archestra Agent loop unless it delegates a durable task to a Background-enabled Agent.
 - **A2A and email select the configured runtime.** An A2A `SendMessage` or incoming email addressed directly to a Background-enabled Agent creates a durable task in its deployment. The same calls use the foreground loop when the Agent has no Background execution configuration.
 - **Delegation selects the configured runtime.** When another Agent delegates to this Agent, Archestra starts a durable task in the Agent's deployment if Background execution is configured. Without it, the delegation uses the foreground Agent loop.
@@ -353,6 +354,25 @@ stay in the shared **Pinned** section with chats, projects, and apps. They also
 appear under **Pinned** in the conversation search palette. The same menu stops
 an active execution or deletes a finished one. Stopping removes the deployment
 and keeps the output produced before cancellation.
+
+## Organize Executions in Projects
+
+Start an execution from a project's composer to place it in that project immediately. The project page lists its execution sessions separately from chats so you can reopen live and completed work from one place.
+
+To organize an existing session, open its sidebar menu and choose **Change project**. Choose **Remove from project** to make it unassigned again. Moving a session does not stop it or change its output.
+
+Project access follows the same rules for chats and execution sessions. You always see sessions you started. Reading another member's project session requires the project's read-all permission and gives you a read-only view; only the person who started the run can attach to its live shell.
+
+## Share an Execution
+
+Share an execution the same way you share a conversation. From the execution's
+**Share** button, choose who can see it — your whole organization, specific
+teams, or named users. Recipients get a read-only view of the execution: its
+details and its terminal output, both live and retained.
+
+Sharing never grants terminal input. Attaching to the live shell runs commands
+under your own credentials, so it stays limited to you — the person who started
+the run.
 
 ## View Executions from an Agent
 

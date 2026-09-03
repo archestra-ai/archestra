@@ -18,7 +18,14 @@ import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
-import { AgentRunModel, McpServerModel, UserModel } from "@/models";
+import {
+  AgentRunModel,
+  AgentRunShareModel,
+  McpServerModel,
+  ProjectModel,
+  ProjectShareModel,
+  UserModel,
+} from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { resolveRunnerBackend } from "@/services/runners/backends";
@@ -668,7 +675,7 @@ class WebSocketService {
       });
       return;
     }
-    if (!(await this.mayControlSession(session, clientContext))) {
+    if (!(await this.mayViewSessionLogs(session, clientContext))) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
         payload: {
@@ -754,6 +761,48 @@ class WebSocketService {
       clientContext.organizationId,
       "agent",
       "admin",
+    );
+  }
+
+  /**
+   * Who may stream a run's logs read-only: anyone who could control it, plus
+   * anyone an execution share or project grants access to. Interactive attach stays owner-only (see
+   * {@link handleSubscribeAgentRunAttach}) — a share never lends the owner's
+   * live credentials, only a view of the output.
+   */
+  private async mayViewSessionLogs(
+    session: {
+      actorUserId: string | null;
+      taskId: string;
+      projectId: string | null;
+    },
+    clientContext: WebSocketClientContext,
+  ): Promise<boolean> {
+    if (await this.mayControlSession(session, clientContext)) return true;
+    const share = await AgentRunShareModel.findAccessibleByTaskId({
+      taskId: session.taskId,
+      organizationId: clientContext.organizationId,
+      userId: clientContext.userId,
+    });
+    if (share) return true;
+    if (!session.projectId) return false;
+
+    const project = await ProjectModel.findById(session.projectId);
+    if (
+      !project ||
+      !(await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: clientContext.userId,
+        organizationId: clientContext.organizationId,
+      }))
+    ) {
+      return false;
+    }
+    return userHasPermission(
+      clientContext.userId,
+      clientContext.organizationId,
+      "project",
+      "read-all",
     );
   }
 

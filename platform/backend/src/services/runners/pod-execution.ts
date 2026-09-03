@@ -46,6 +46,7 @@ async function startBackgroundSession(params: {
   agentId: string;
   actor: A2AActor;
   organizationId: string;
+  projectId?: string | null;
   completionTarget?: AgentRunCompletionTarget;
   task?: string | null;
   executionMode: "interactive" | "one_shot";
@@ -99,6 +100,7 @@ async function startBackgroundSession(params: {
     actorId: params.actor.id,
     actorUserId: params.actor.kind === "user" ? params.actor.id : null,
     title: placeholderTitle,
+    projectId: params.projectId,
     deploymentName: spec.frozenName,
     backend: backend.name,
     runtimeScope,
@@ -192,6 +194,7 @@ export async function runTaskInBackground(params: {
   agentId: string;
   actor: A2AActor;
   organizationId: string;
+  projectId?: string | null;
   completionTarget?: AgentRunCompletionTarget;
   task?: string | null;
   executionMode: "interactive" | "one_shot";

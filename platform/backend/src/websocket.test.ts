@@ -16,8 +16,14 @@ import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentRunShareModel,
+} from "@/models";
 import AgentModel from "@/models/agent";
+import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import websocketService from "@/websocket";
 
@@ -345,6 +351,187 @@ describe("websocket Agent run authorization and cleanup", () => {
       }),
     );
     expect(service.agentRunLogsSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("streams retained logs to a viewer the run is shared with", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(viewer.id, organization.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      deploymentName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    await AgentRunModel.close({
+      id: run.id,
+      logs: "checked repository\nopened pull request\n",
+    });
+    // The owner shares the run organization-wide.
+    await AgentRunShareModel.upsert({
+      taskId: task.id,
+      organizationId: organization.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: viewer.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: task.id, lines: 100 },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify({
+        type: "agent_run_logs",
+        payload: {
+          runId: task.id,
+          logs: "checked repository\nopened pull request\n",
+        },
+      }),
+    );
+    expect(ws.send).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify({
+        type: "agent_run_logs_ended",
+        payload: { runId: task.id },
+      }),
+    );
+  });
+
+  test("streams retained logs through a shared project to a read-all member", async ({
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    const role = await makeCustomRole(organization.id, {
+      permission: { project: ["read", "read-all"] },
+    });
+    const viewer = await makeUser();
+    await makeMember(viewer.id, organization.id, { role: role.role });
+    const project = await projectService.create({
+      organizationId: organization.id,
+      userId: owner.id,
+      name: "Shared execution project",
+      description: null,
+    });
+    await projectService.setShare({
+      id: project.id,
+      organizationId: organization.id,
+      userId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      projectId: project.id,
+      deploymentName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    await AgentRunModel.close({ id: run.id, logs: "project result\n" });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: viewer.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: task.id, lines: 100 },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify({
+        type: "agent_run_logs",
+        payload: { runId: task.id, logs: "project result\n" },
+      }),
+    );
+    expect(ws.send).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify({
+        type: "agent_run_logs_ended",
+        payload: { runId: task.id },
+      }),
+    );
   });
 
   test("returns retained logs after an Agent execution pod is removed", async ({

@@ -43,6 +43,17 @@ vi.mock("@/components/agent-execution-logs", () => ({
   AgentExecutionLogs: () => <div>Retained execution output</div>,
 }));
 
+const shareDialogState = vi.hoisted(() => ({ open: false }));
+
+// The share dialog owns its own data hooks and tests, so stub it to a marker
+// that just reflects its open state — enough to prove the menu item opens it.
+vi.mock("@/components/chat/share-agent-execution-dialog", () => ({
+  ShareAgentExecutionDialog: ({ open }: { open: boolean }) => {
+    shareDialogState.open = open;
+    return open ? <div>Share execution dialog</div> : null;
+  },
+}));
+
 import { BackgroundExecutionChatSession } from "./page.client";
 
 describe("BackgroundExecutionChatSession", () => {
@@ -50,6 +61,7 @@ describe("BackgroundExecutionChatSession", () => {
     cancelState.isPending = false;
     cancelState.mutate.mockReset();
     terminalState.props = null;
+    shareDialogState.open = false;
     queryState.value = {
       data: undefined,
       isPending: false,
@@ -88,20 +100,20 @@ describe("BackgroundExecutionChatSession", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("explains when the requested execution cannot be found", () => {
+  it("centers only the access notice, in the loader's placement, when the execution cannot be opened", () => {
     queryState.value.isError = true;
     queryState.value.error = new Error("Execution not found");
 
     render(<BackgroundExecutionChatSession taskId="task-1" />);
 
+    // Rendered as a status line (like the attach loader), not a red error card.
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Only the person who started this run can attach to it.",
+    );
+    // The old full-page error card is gone.
     expect(
-      screen.getByText("Couldn't load this execution"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "This execution no longer exists, or you no longer have access to it.",
-      ),
-    ).toBeInTheDocument();
+      screen.queryByText("Couldn't load this execution"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the shared live terminal once the execution is running", () => {
@@ -152,6 +164,29 @@ describe("BackgroundExecutionChatSession", () => {
     expect(screen.getByText("kubectl exec example")).toBeInTheDocument();
   });
 
+  it("exposes Share from the actions menu instead of a separate button", async () => {
+    const user = userEvent.setup();
+    queryState.value.data = execution({
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+    });
+
+    render(<BackgroundExecutionChatSession taskId="task-1" />);
+
+    // No standalone Share button in the header anymore.
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "More execution actions" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Share" }));
+
+    // Selecting it opens the share dialog.
+    expect(screen.getByText("Share execution dialog")).toBeInTheDocument();
+  });
+
   it("restores retained output after the execution has ended", () => {
     queryState.value.data = execution({
       state: "TASK_STATE_COMPLETED",
@@ -189,15 +224,65 @@ describe("BackgroundExecutionChatSession", () => {
     ).not.toBeInTheDocument();
     expect(terminalState.props?.title).toBe("Output");
   });
+
+  it("gives a shared viewer read-only output without owner controls on a live run", () => {
+    queryState.value.data = execution({
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+      viewerRole: "shared",
+    });
+
+    render(<BackgroundExecutionChatSession taskId="task-1" />);
+
+    // Read-only log stream instead of the interactive terminal.
+    expect(screen.getByText("Retained execution output")).toBeInTheDocument();
+    expect(screen.queryByText("Live terminal task-1")).not.toBeInTheDocument();
+    // While the run is live, the shared viewer is told why the terminal is read-only.
+    expect(
+      screen.getByText(/viewing its terminal output in read-only mode/i),
+    ).toBeInTheDocument();
+    // None of the owner-only controls are rendered.
+    expect(
+      screen.queryByRole("button", { name: "Stop" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "More execution actions" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a shared viewer retained output for an ended run without owner controls", () => {
+    queryState.value.data = execution({
+      state: "TASK_STATE_COMPLETED",
+      endedAt: "2026-08-28T18:00:00.000Z",
+      viewerRole: "shared",
+    });
+
+    render(<BackgroundExecutionChatSession taskId="task-1" />);
+
+    expect(screen.getByText("Retained execution output")).toBeInTheDocument();
+    // No live terminal to contrast, so no read-only banner once the run has ended.
+    expect(screen.queryByText(/read-only mode/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 function execution(overrides: Record<string, unknown>) {
   return {
     taskId: "task-1",
+    title: "Nightly dependency audit",
     deploymentName: "agent-task-1",
     prompt: "Implement the small feature",
     state: "TASK_STATE_SUBMITTED",
+    statusReason: null,
     endedAt: null,
+    // The viewer is the run's owner unless a test overrides this — owners get
+    // the interactive terminal and the Stop/Share/actions controls.
+    viewerRole: "owner",
     agent: {
       id: "00000000-0000-4000-8000-000000000001",
       name: "Codex",

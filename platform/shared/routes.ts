@@ -485,6 +485,9 @@ export const RouteId = {
   UpdateAgentExecution: "updateAgentExecution",
   CancelAgentExecution: "cancelAgentExecution",
   DeleteAgentExecution: "deleteAgentExecution",
+  GetAgentExecutionShare: "getAgentExecutionShare",
+  ShareAgentExecution: "shareAgentExecution",
+  UnshareAgentExecution: "unshareAgentExecution",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -833,6 +836,7 @@ export const RouteId = {
   RestoreProject: "restoreProject",
   PermanentlyDeleteProject: "permanentlyDeleteProject",
   GetProjectConversations: "getProjectConversations",
+  GetProjectExecutions: "getProjectExecutions",
   GetProjectFiles: "getProjectFiles",
   UploadProjectFiles: "uploadProjectFiles",
   GetProjectInstructions: "getProjectInstructions",

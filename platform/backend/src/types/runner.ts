@@ -231,18 +231,35 @@ export const SelectAgentExecutionSessionSchema =
       name: z.string(),
       icon: z.string().nullable(),
     }),
+    projectName: z.string().nullable(),
+    projectIcon: z.string().nullable(),
+  });
+
+/**
+ * How the requesting user relates to an execution they're allowed to open.
+ * `owner` started it and may attach interactively; `shared` was granted a
+ * read-only view through a share and may only stream its logs.
+ */
+export const AgentExecutionViewerRoleSchema = z.enum(["owner", "shared"]);
+
+/** A single execution session plus the viewer's relationship to it. */
+export const GetAgentExecutionResponseSchema =
+  SelectAgentExecutionSessionSchema.extend({
+    viewerRole: AgentExecutionViewerRoleSchema,
   });
 
 export const UpdateAgentExecutionSchema = createUpdateSchema(
   schema.agentRunsTable,
 )
-  .pick({ title: true, pinnedAt: true })
+  .pick({ title: true, pinnedAt: true, projectId: true })
   .extend({
     title: z.string().trim().min(1).max(100).optional(),
     pinnedAt: z.string().datetime().nullable().optional(),
+    projectId: z.string().uuid().nullable().optional(),
   })
   .refine(
-    ({ title, pinnedAt }) => title !== undefined || pinnedAt !== undefined,
+    ({ title, pinnedAt, projectId }) =>
+      title !== undefined || pinnedAt !== undefined || projectId !== undefined,
     "At least one field must be provided",
   );
 
@@ -252,6 +269,7 @@ export const StartAgentExecutionResponseSchema = z.object({
   agentId: z.string().uuid(),
   agentName: z.string(),
   prompt: z.string(),
+  projectId: z.string().uuid().nullable(),
   createdAt: z.date(),
 });
 
@@ -260,6 +278,12 @@ export type InsertAgentRun = z.infer<typeof InsertAgentRunSchema>;
 export type AgentExecution = z.infer<typeof SelectAgentExecutionSchema>;
 export type AgentExecutionSession = z.infer<
   typeof SelectAgentExecutionSessionSchema
+>;
+export type AgentExecutionViewerRole = z.infer<
+  typeof AgentExecutionViewerRoleSchema
+>;
+export type GetAgentExecutionResponse = z.infer<
+  typeof GetAgentExecutionResponseSchema
 >;
 
 export const SelectUserCredentialSchema = createSelectSchema(

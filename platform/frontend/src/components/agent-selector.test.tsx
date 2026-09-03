@@ -9,6 +9,7 @@ const personalProxy: AgentSelectorAgent = {
   agentType: "llm_proxy",
   scope: "personal",
   authorEmail: "owner@example.com",
+  backgroundExecution: { credentials: [] },
 };
 
 const orgProxy: AgentSelectorAgent = {
@@ -45,6 +46,29 @@ describe("AgentSelector (single, flat)", () => {
 
     expect(screen.getByText("My Proxy")).toBeInTheDocument();
     expect(screen.getByText("owner@example.com")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("combobox")).getByLabelText("Isolated execution"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows execution capability in the option as well as the closed trigger", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentSelector
+        mode="single"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value="p1"
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    const option = await screen.findByRole("option", { name: /My Proxy/ });
+    expect(
+      within(option).getByLabelText("Isolated execution"),
+    ).toBeInTheDocument();
   });
 
   it("omits the owner email for a non-personal selection", () => {

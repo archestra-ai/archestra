@@ -304,7 +304,7 @@ describe("buildForbiddenErrorMessage", () => {
       "file:manage (List, read, write, and delete files in chats and projects)",
     );
     expect(message).toContain(
-      "project:read (View projects and your own chats inside them)",
+      "project:read (View projects and your own sessions inside them)",
     );
     expect(message.indexOf("file:manage")).toBeLessThan(
       message.indexOf("project:read"),

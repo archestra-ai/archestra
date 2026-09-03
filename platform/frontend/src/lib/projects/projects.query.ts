@@ -32,6 +32,7 @@ const {
   deleteSkillSandboxArtifact,
   getProject,
   getProjectConversations,
+  getProjectExecutions,
   getProjectFiles,
   getProjectInstructions,
   getProjects,
@@ -131,6 +132,24 @@ export function useProjectConversations(
       throwOnApiError(error, { allowNotFound: true });
       return data ?? null;
     },
+  });
+}
+
+export function useProjectExecutions(
+  id: string | undefined,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ["projects", id, "executions"],
+    enabled: !!id && (options?.enabled ?? true),
+    queryFn: async () => {
+      const { data, error } = await getProjectExecutions({
+        path: { id: id as string },
+      });
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
+    },
+    refetchInterval: 3_000,
   });
 }
 

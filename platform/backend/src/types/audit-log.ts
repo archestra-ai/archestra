@@ -31,6 +31,8 @@ export const AuditEventNameSchema = z.enum([
   "agentExecution.canceled",
   "agentExecution.updated",
   "agentExecution.deleted",
+  "agentExecution.shared",
+  "agentExecution.unshared",
   "executionCredential.created",
   "executionCredential.updated",
   "executionCredential.deleted",

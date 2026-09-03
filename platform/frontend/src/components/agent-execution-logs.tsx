@@ -25,6 +25,10 @@ export function AgentExecutionLogs({
   const [content, setContent] = useState("");
   const [error, setError] = useState<string>();
   const [isStreaming, setIsStreaming] = useState(!execution.endedAt);
+  const [retainedStatus, setRetainedStatus] = useState<{
+    source: "full" | "tail";
+    truncated: boolean;
+  }>();
   const {
     scrollAreaRef,
     showScrollToBottom,
@@ -37,6 +41,7 @@ export function AgentExecutionLogs({
     setContent("");
     setError(undefined);
     setIsStreaming(!execution.endedAt);
+    setRetainedStatus(undefined);
     resetAutoScroll();
     websocketService.connect();
     const subscriptions = [
@@ -63,6 +68,12 @@ export function AgentExecutionLogs({
         (message: AgentRunLogsEndedMessage) => {
           if (message.payload.runId === execution.taskId) {
             setIsStreaming(false);
+            if (message.payload.source) {
+              setRetainedStatus({
+                source: message.payload.source,
+                truncated: message.payload.truncated ?? false,
+              });
+            }
           }
         },
       ),
@@ -110,15 +121,49 @@ export function AgentExecutionLogs({
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            Streaming
+            <span>Streaming</span>
           </div>
         ) : content ? (
-          <div className="flex items-center gap-1.5 font-mono text-xs text-slate-500">
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-slate-600" />
-            Retained
-          </div>
+          <RetainedTranscriptStatus status={retainedStatus} />
         ) : null
       }
     />
+  );
+}
+
+function RetainedTranscriptStatus({
+  status,
+}: {
+  status?: { source: "full" | "tail"; truncated: boolean };
+}) {
+  const isTailOnly = status?.source === "tail" && status.truncated;
+  return (
+    <div
+      className={
+        isTailOnly
+          ? "flex items-center gap-1.5 font-mono text-xs text-amber-500"
+          : "flex items-center gap-1.5 font-mono text-xs text-slate-500"
+      }
+      title={
+        isTailOnly
+          ? "The complete transcript exceeded this deployment's storage limit."
+          : undefined
+      }
+    >
+      <span
+        className={
+          isTailOnly
+            ? "relative inline-flex h-2 w-2 rounded-full bg-amber-500"
+            : "relative inline-flex h-2 w-2 rounded-full bg-slate-600"
+        }
+      />
+      <span>
+        {status?.source === "full"
+          ? "Full transcript"
+          : isTailOnly
+            ? "Retained tail only"
+            : "Retained"}
+      </span>
+    </div>
   );
 }

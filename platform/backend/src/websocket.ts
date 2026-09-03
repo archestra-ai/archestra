@@ -1,5 +1,6 @@
 import type { IncomingMessage, Server } from "node:http";
 import { PassThrough } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import {
   type ClientWebSocketMessage,
   ClientWebSocketMessageSchema,
@@ -29,6 +30,8 @@ import {
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { resolveRunnerBackend } from "@/services/runners/backends";
+import { RETAINED_LOG_BYTES } from "@/services/runners/output-capture";
+import { agentRunTranscriptStore } from "@/services/runners/transcript-store";
 
 interface McpLogsSubscription {
   serverId: string;
@@ -687,6 +690,47 @@ class WebSocketService {
     }
 
     if (session.endedAt) {
+      const decoder = new StringDecoder("utf8");
+      const transcript = await agentRunTranscriptStore
+        .stream({
+          runId: session.id,
+          onChunk: (chunk) => {
+            const logs = decoder.write(chunk);
+            if (logs) {
+              this.sendToClient(ws, {
+                type: "agent_run_logs",
+                payload: { runId, logs },
+              });
+            }
+          },
+        })
+        .catch((error) => {
+          logger.warn(
+            { error, sessionId: session.id, taskId: session.taskId },
+            "Could not read the complete Agent execution transcript",
+          );
+          return null;
+        });
+      if (transcript?.isComplete) {
+        const finalLogs = decoder.end();
+        if (finalLogs) {
+          this.sendToClient(ws, {
+            type: "agent_run_logs",
+            payload: { runId, logs: finalLogs },
+          });
+        }
+        this.sendToClient(ws, {
+          type: "agent_run_logs_ended",
+          payload: {
+            runId,
+            source: "full",
+            truncated: false,
+            totalBytes: transcript.uncompressedBytes,
+          },
+        });
+        return;
+      }
+
       if (session.logs) {
         this.sendToClient(ws, {
           type: "agent_run_logs",
@@ -695,7 +739,14 @@ class WebSocketService {
       }
       this.sendToClient(ws, {
         type: "agent_run_logs_ended",
-        payload: { runId },
+        payload: {
+          runId,
+          source: "tail",
+          truncated:
+            transcript?.isComplete === false ||
+            Buffer.byteLength(session.logs ?? "", "utf8") >= RETAINED_LOG_BYTES,
+          totalBytes: transcript?.uncompressedBytes,
+        },
       });
       return;
     }

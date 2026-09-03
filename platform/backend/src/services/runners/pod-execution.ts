@@ -27,6 +27,7 @@ import { resolveRunnerBackend } from "./backends";
 import { buildRunnerLaunchSpec } from "./launch-spec";
 import { RunnerOutputCapture } from "./output-capture";
 import { generateAgentExecutionTitle } from "./title";
+import { agentRunTranscriptStore } from "./transcript-store";
 
 /**
  * Start one delegated A2A task through its configured execution backend.
@@ -240,6 +241,7 @@ export async function cleanupBackgroundTask(session: AgentRun): Promise<void> {
   await Promise.race([capture, delayMs(LOG_DRAIN_GRACE_MS)]);
   stopCapture.abort();
   await output.recoverSnapshot(AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS));
+  await persistTranscript({ session, output });
   await backend.teardown(session);
   await AgentRunModel.close({ id: session.id, logs: output.retainedLogs });
 }
@@ -330,6 +332,7 @@ async function followBackgroundTask(params: {
           ? "stopped_by_user"
           : "failed",
     );
+    await persistTranscript({ session, output });
     await backend.teardown(session).catch((error) => {
       logger.warn(
         { error, sessionId: session.id, taskId: session.taskId },
@@ -346,6 +349,28 @@ async function followBackgroundTask(params: {
       );
     });
   }
+}
+
+async function persistTranscript(params: {
+  session: AgentRun;
+  output: RunnerOutputCapture;
+}): Promise<void> {
+  await agentRunTranscriptStore
+    .persist({
+      runId: params.session.id,
+      transcript: params.output.completeTranscript,
+      observedBytes: params.output.observedTranscriptBytes,
+    })
+    .catch((error) => {
+      logger.warn(
+        {
+          error,
+          sessionId: params.session.id,
+          taskId: params.session.taskId,
+        },
+        "Could not retain the complete Agent execution transcript",
+      );
+    });
 }
 
 function delayMs(ms: number, signal?: AbortSignal): Promise<void> {

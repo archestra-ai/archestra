@@ -24,6 +24,7 @@ import {
 } from "@/models";
 import AgentModel from "@/models/agent";
 import { projectService } from "@/services/project";
+import { agentRunTranscriptStore } from "@/services/runners/transcript-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import websocketService from "@/websocket";
 
@@ -437,7 +438,11 @@ describe("websocket Agent run authorization and cleanup", () => {
       2,
       JSON.stringify({
         type: "agent_run_logs_ended",
-        payload: { runId: task.id },
+        payload: {
+          runId: task.id,
+          source: "tail",
+          truncated: false,
+        },
       }),
     );
   });
@@ -529,7 +534,11 @@ describe("websocket Agent run authorization and cleanup", () => {
       2,
       JSON.stringify({
         type: "agent_run_logs_ended",
-        payload: { runId: task.id },
+        payload: {
+          runId: task.id,
+          source: "tail",
+          truncated: false,
+        },
       }),
     );
   });
@@ -607,10 +616,96 @@ describe("websocket Agent run authorization and cleanup", () => {
       2,
       JSON.stringify({
         type: "agent_run_logs_ended",
-        payload: { runId: task.id },
+        payload: {
+          runId: task.id,
+          source: "tail",
+          truncated: false,
+        },
       }),
     );
     expect(service.agentRunLogsSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("streams a complete compressed transcript instead of the retained tail", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      deploymentName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    await AgentRunModel.close({ id: run.id, logs: "final tail\n" });
+    const completeTranscript = `${"earlier output\n".repeat(30_000)}done ✓\n`;
+    await agentRunTranscriptStore.persist({
+      runId: run.id,
+      transcript: completeTranscript,
+      observedBytes: Buffer.byteLength(completeTranscript),
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: owner.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: task.id, lines: 100 },
+      },
+      ws,
+    );
+
+    const sent = vi
+      .mocked(ws.send)
+      .mock.calls.map(([message]) => JSON.parse(String(message)));
+    expect(sent.at(-1)).toEqual({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: task.id,
+        source: "full",
+        truncated: false,
+        totalBytes: Buffer.byteLength(completeTranscript),
+      },
+    });
+    expect(
+      sent
+        .filter((message) => message.type === "agent_run_logs")
+        .map((message) => message.payload.logs)
+        .join(""),
+    ).toBe(completeTranscript);
   });
 
   test("does not let an Agent administrator attach to another user's run", async ({

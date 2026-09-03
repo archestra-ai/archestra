@@ -2383,6 +2383,15 @@ const config = {
         .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RECONCILE_INTERVAL_SECONDS,
       30,
     ),
+    /**
+     * Maximum uncompressed PTY bytes retained as a complete transcript. Runs
+     * beyond it keep the bounded tail and report that the full transcript was
+     * truncated instead of allowing one noisy TUI to exhaust backend memory.
+     */
+    transcriptMaxBytes: parsePositiveInt(
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TRANSCRIPT_MAX_BYTES,
+      250 * 1024 * 1024,
+    ),
   },
   plugins: {
     /**

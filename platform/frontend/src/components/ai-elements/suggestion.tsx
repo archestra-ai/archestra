@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { ComponentProps } from "react";
 import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ export const Suggestions = ({
 }: SuggestionsProps) => (
   <fieldset
     className={cn(
-      "m-0 grid min-w-0 w-full max-w-xl grid-cols-2 gap-x-4 border-0 p-0 sm:gap-x-8",
+      "m-0 flex max-w-[34rem] flex-wrap justify-center gap-1 border-0 p-0",
       className,
     )}
     {...props}
@@ -45,7 +45,7 @@ export const Suggestion = ({
   return (
     <Button
       className={cn(
-        "group h-auto min-h-11 w-full cursor-pointer justify-between rounded-none border-b border-border/60 px-1 py-2.5 text-left font-normal text-muted-foreground hover:bg-transparent hover:text-foreground active:translate-y-px dark:hover:bg-transparent",
+        "group h-8 max-w-full cursor-pointer gap-1.5 rounded-md px-2.5 text-[13px] font-normal text-muted-foreground hover:bg-muted/60 hover:text-foreground active:translate-y-px",
         className,
       )}
       onClick={handleClick}
@@ -54,10 +54,10 @@ export const Suggestion = ({
       variant={variant}
       {...props}
     >
-      <span className="min-w-0 text-pretty">{children || suggestion}</span>
-      <ArrowRight
+      <span className="min-w-0 truncate">{children || suggestion}</span>
+      <ArrowUpRight
         aria-hidden="true"
-        className="size-3.5 shrink-0 opacity-40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:opacity-80 group-focus-visible:translate-x-0.5 group-focus-visible:opacity-80 motion-reduce:transition-none"
+        className="size-3 shrink-0 opacity-35 transition-[opacity,transform] duration-150 group-hover:-translate-y-px group-hover:translate-x-px group-hover:opacity-70 group-focus-visible:-translate-y-px group-focus-visible:translate-x-px group-focus-visible:opacity-70 motion-reduce:transition-none"
       />
     </Button>
   );

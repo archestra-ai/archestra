@@ -106,8 +106,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # silently reintroducing cve-2026-71556. Do not lower without also lowering go-git.
     go get golang.org/x/net@v0.56.0 && \
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
-    # Pinned to 0.53.0 for the same go-git 5.19.2 floor reason as x/net above.
-    go get golang.org/x/crypto@v0.53.0 && \
+    # cve-2026-78662 / cve-2026-56855: x/crypto HIGH fixed in >= 0.56.0.
+    go get golang.org/x/crypto@v0.56.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
     # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs

@@ -114,6 +114,10 @@ export function ConnectConfigPanel({
   const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
   const { data: allSkills } = useAllSkills({
     enabled: canAdminSkills === true,
+    // Rides along with the generated config rather than gating it, so it waits
+    // for the download panel to render first. Same catalogue walk as the
+    // review step's list.
+    deferMs: 750,
   });
   const skills = allSkills ?? [];
   const skillsEligible = canAdminSkills === true && skills.length > 0;

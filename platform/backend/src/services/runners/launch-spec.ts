@@ -238,6 +238,12 @@ export async function buildRunnerLaunchSpec(params: {
           : null,
       })
     : llm.selectedModel;
+  const modelContextLength = selectedModel
+    ? ModelModel.resolveEffectiveContextLength(selectedModel)
+    : null;
+  const modelOutputLength = selectedModel
+    ? ModelModel.resolveEffectiveOutputLength(selectedModel)
+    : null;
   const nonSecretEnv: Record<string, string> = {
     // The runner's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
@@ -257,6 +263,18 @@ export async function buildRunnerLaunchSpec(params: {
     // qualified model id above.
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: nativeModel,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER: llm.selectedProvider,
+    ...(modelContextLength
+      ? {
+          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH:
+            String(modelContextLength),
+        }
+      : {}),
+    ...(modelOutputLength
+      ? {
+          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH:
+            String(modelOutputLength),
+        }
+      : {}),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE: params.executionMode,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER: executionBanner(
       params.appName,
@@ -373,6 +391,8 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO",

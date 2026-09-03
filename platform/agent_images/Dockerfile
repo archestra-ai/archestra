@@ -57,6 +57,17 @@ RUN pnpm add --global @openai/codex@0.149.1 \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
 
+FROM agent-base AS agent-opencode
+USER root
+RUN pnpm add --global opencode-ai@1.18.23 \
+ && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai | jq -r '.[0].dependencies["opencode-ai"].path')" \
+ && node "${OPENCODE_PACKAGE_DIR}/postinstall.mjs" \
+ && opencode --version \
+ && chown -R 1000:1000 /home/node
+ENV OPENCODE_DISABLE_AUTOUPDATE=1
+ENV OPENCODE_DISABLE_PROJECT_CONFIG=1
+USER 1000:1000
+
 FROM agent-base AS agent-hermes
 USER root
 RUN python3 -m venv /opt/hermes \

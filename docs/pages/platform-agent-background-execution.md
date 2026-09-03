@@ -10,13 +10,13 @@ lastUpdated: 2026-09-03
 
 Background execution gives an Agent an isolated deployment for delegated, long-running work. It is an optional capability of the Agent, not a separate resource to create or grant access to.
 
-![The Create Agent catalog with Archestra Agent, Claude Code, Codex, Hermes, OpenClaw, and Start from scratch](/docs/automated_screenshots/platform-agent-background-execution_catalog.webp)
+![The Create Agent catalog with Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Start from scratch](/docs/automated_screenshots/platform-agent-background-execution_catalog.webp)
 
 Think of the configuration as three composable layers:
 
 - The **Agent** is the durable identity: its instructions, selected model, tools, knowledge, environment, and access rules.
 - The **foreground runtime** is Archestra's built-in Agent loop. It powers ordinary conversations and the full chat interface.
-- The optional **background runtime** is an isolated execution selected by Archestra's control plane. The first execution backend uses Kubernetes pods and can run Archestra Agent, Claude Code, Codex, Hermes, OpenClaw, or a custom image. Each task is presented as an execution with logs and a live shell.
+- The optional **background runtime** is an isolated execution selected by Archestra's control plane. The first execution backend uses Kubernetes pods and can run Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, or a custom image. Each task is presented as an execution with logs and a live shell.
 
 The runtime does not become a second Agent. Both runtimes act as the same Agent and receive the same platform-managed model and tool access.
 
@@ -37,8 +37,8 @@ Invocation is explicit and surface-specific:
 - **Delegation selects the configured runtime.** When another Agent delegates to this Agent, Archestra starts a durable task in the Agent's deployment if Background execution is configured. Without it, the delegation uses the foreground Agent loop.
 
 Background executions have two launch modes. Chat starts the image in
-**interactive** mode and exposes its live terminal; maintained Claude Code and
-Codex images run their native TUIs. Delegation from another Agent, A2A,
+**interactive** mode and exposes its live terminal. Maintained Claude Code,
+Codex, and OpenCode images run their native TUIs. Delegation from another Agent, A2A,
 incoming email, schedules, and task tools uses **one-shot** mode. The same
 image receives the task, exits when it is finished, and lets Archestra settle
 the durable task and deliver its result. This is selected by the invocation
@@ -70,7 +70,7 @@ To configure an Agent:
 
 When you create an Agent, the catalog can prefill this setup for one of the
 maintained images. Choose **Archestra Agent**, **Claude Code**, **Codex**,
-**Hermes**, or **OpenClaw**, then review the ordinary Agent wizard. The catalog
+**OpenCode**, **Hermes**, or **OpenClaw**, then review the ordinary Agent wizard. The catalog
 does not create a different resource type: it supplies a name, instructions,
 image, command, inference protocol, and credential declarations to the same
 form used by **Start from scratch**.
@@ -146,7 +146,7 @@ maintained runtime cannot silently switch from subscription access to metered
 API billing.
 
 The **Inference API** setting describes the wire protocol expected by the
-image. Choose **OpenAI Responses** for clients such as Codex. Choose **OpenAI
+image. Choose **OpenAI Responses** for clients such as Codex and OpenCode. Choose **OpenAI
 Chat Completions** for clients such as Hermes and OpenClaw. Choose
 **Anthropic Messages** for clients such as Claude Code. Archestra rejects an
 incompatible model and image before creating a pod.
@@ -220,6 +220,7 @@ accept useful follow-up instructions.
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_MANIFEST` | JSON manifest containing each input file's name, path, media type, and size. |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL` | Provider-qualified model ID for generic clients. |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL` | Provider-native model slug for clients that configure their provider separately. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH` | Known context and output limits for native client configuration. |
 | `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL` | Agent-scoped inference endpoint and its `openai_responses`, `openai_chat`, or `anthropic` protocol. |
 | `ARCHESTRA_VIRTUAL_KEY` | Personal virtual key for the execution. |
 | `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL` | Native client aliases for the Agent-scoped proxy. |

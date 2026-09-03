@@ -17958,6 +17958,8 @@ export type GetAgentRunsResponses = {
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
     }>;
 };
 
@@ -18162,6 +18164,8 @@ export type GetMyAgentRunsResponses = {
             state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
             statusReason: string | null;
             stateChangedAt: string | null;
+            hardDeadlineAt: string;
+            lastModelActivityAt: string | null;
             prompt: string;
             agent: {
                 id: string;
@@ -18367,6 +18371,8 @@ export type GetMyAgentRunResponses = {
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
         prompt: string;
         agent: {
             id: string;
@@ -18483,6 +18489,8 @@ export type UpdateAgentRunResponses = {
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
         prompt: string;
         agent: {
             id: string;
@@ -88550,6 +88558,8 @@ export type GetProjectRunsResponses = {
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
         prompt: string;
         agent: {
             id: string;

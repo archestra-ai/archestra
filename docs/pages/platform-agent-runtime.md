@@ -170,6 +170,7 @@ resolves those concerns before the backend starts the image.
 | --- | --- |
 | Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
 | Live terminal | `tmux` must be on `PATH`. The process runs in one tmux session so the run can accept terminal input and a user can attach from the Runs tab. |
+| Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |

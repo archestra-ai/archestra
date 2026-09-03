@@ -2,6 +2,7 @@
 
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { hasNoRecentModelActivity } from "@/components/agent-run-liveness";
 import { LogConsole } from "@/components/log-console";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,13 +19,29 @@ export function AgentRunState({
   compact = false,
   iconOnly = false,
   statusReason,
+  lastModelActivityAt,
+  startedAt,
+  endedAt,
 }: {
   state: AgentRun["state"];
   compact?: boolean;
   iconOnly?: boolean;
   statusReason?: string | null;
+  lastModelActivityAt?: string | null;
+  startedAt?: string;
+  endedAt?: string | null;
 }) {
-  const presentation = runStatePresentation(state);
+  const presentation = runStatePresentation(
+    state,
+    startedAt
+      ? hasNoRecentModelActivity({
+          state,
+          lastModelActivityAt: lastModelActivityAt ?? null,
+          startedAt,
+          endedAt: endedAt ?? null,
+        })
+      : false,
+  );
   const [detailsOpen, setDetailsOpen] = useState(false);
   const dot = (
     <span
@@ -102,13 +119,19 @@ export function AgentRunState({
   );
 }
 
-function runStatePresentation(state: AgentRun["state"]): {
+function runStatePresentation(
+  state: AgentRun["state"],
+  noRecentActivity = false,
+): {
   label: string;
   dotClassName: string;
   pulse?: boolean;
 } {
   switch (state) {
     case "TASK_STATE_WORKING":
+      if (noRecentActivity) {
+        return { label: "No recent activity", dotClassName: "bg-amber-500" };
+      }
       return { label: "Running", dotClassName: "bg-emerald-500" };
     case "TASK_STATE_COMPLETED":
       return { label: "Completed", dotClassName: "bg-muted-foreground/50" };

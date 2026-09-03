@@ -205,10 +205,15 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
   completionTarget: true,
   completionNotificationClaimedAt: true,
   completionNotifiedAt: true,
+  activeDeadlineSeconds: true,
 }).extend({
   state: A2ATaskStateSchema,
   statusReason: z.string().nullable(),
   stateChangedAt: z.date().nullable(),
+  /** Effective Kubernetes lifetime limit, resolved for this run. */
+  hardDeadlineAt: z.date(),
+  /** Most recent model-router request attributed to this run. */
+  lastModelActivityAt: z.date().nullable(),
 });
 
 /** A user's durable run session as rendered in Chat and its sidebar. */

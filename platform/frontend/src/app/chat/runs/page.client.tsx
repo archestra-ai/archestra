@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
@@ -93,6 +94,9 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                   <AgentRunState
                     state={run.state}
                     statusReason={run.statusReason}
+                    lastModelActivityAt={run.lastModelActivityAt}
+                    startedAt={run.startedAt}
+                    endedAt={run.endedAt}
                     compact
                   />
                 </div>
@@ -150,7 +154,8 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         ) : null}
       </header>
 
-      <section className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
+      <section className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-6">
+        {run && live && <AgentRunLiveness run={run} />}
         {showLiveTerminal ? (
           <AgentRunTerminal
             taskId={taskId}

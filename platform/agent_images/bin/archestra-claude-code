@@ -59,6 +59,50 @@ if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
   args+=(--append-system-prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT}")
 fi
 
+# Claude Code knows when it is waiting for a person. Reflect its native hook
+# events in tmux rather than guessing from terminal contents. The platform's
+# tmux status-left format reads these user options for every attached client.
+attention_hook="${runtime_dir}/attention-hook.sh"
+settings_file="${runtime_dir}/claude-settings.json"
+cat > "${attention_hook}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+payload="$(cat)"
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+notification="$(jq -r '.notification_type // empty' <<<"${payload}")"
+target="${TMUX_PANE:-agent}"
+
+case "${event}:${notification}" in
+  Notification:permission_prompt)
+    label="Permission needed"
+    ;;
+  Notification:idle_prompt)
+    label="Waiting for input"
+    ;;
+  Notification:elicitation_dialog)
+    label="Input requested"
+    ;;
+  *)
+    tmux set-option -t "${target}" @archestra_attention 0 >/dev/null 2>&1 || true
+    tmux set-option -t "${target}" @archestra_attention_label "" >/dev/null 2>&1 || true
+    exit 0
+    ;;
+esac
+
+tmux set-option -t "${target}" @archestra_attention 1 >/dev/null 2>&1 || true
+tmux set-option -t "${target}" @archestra_attention_label "${label}" >/dev/null 2>&1 || true
+HOOK
+chmod 0700 "${attention_hook}"
+jq -n --arg cmd "${attention_hook}" '{hooks:{
+  Notification:[{
+    matcher:"permission_prompt|idle_prompt|elicitation_dialog|elicitation_complete|elicitation_response|auth_success",
+    hooks:[{type:"command",command:$cmd}]
+  }],
+  UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$cmd}]}],
+  PostToolUse:[{matcher:"",hooks:[{type:"command",command:$cmd}]}]
+}}' > "${settings_file}"
+args+=(--settings "${settings_file}")
+
 case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
     # A Chat execution owns a real pty. Start Claude Code's native TUI with the
@@ -88,7 +132,7 @@ case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
     answer_file="${runtime_dir}/final-answer.txt"
     done_marker="${runtime_dir}/turn-complete"
     hook_script="${runtime_dir}/stop-hook.sh"
-    settings_file="${runtime_dir}/claude-settings.json"
+    settings_tmp="${runtime_dir}/claude-settings.tmp.json"
     rm -f "${answer_file}" "${done_marker}"
 
     # The hook is handed the session JSON on stdin, including the transcript
@@ -112,10 +156,10 @@ fi
 touch "${runtime_dir}/turn-complete"
 HOOK
     chmod 0700 "${hook_script}"
-    jq -n --arg cmd "${hook_script}" \
-      '{hooks:{Stop:[{matcher:"",hooks:[{type:"command",command:$cmd}]}]}}' \
-      > "${settings_file}"
-    args+=(--settings "${settings_file}")
+    jq --arg cmd "${hook_script}" \
+      '.hooks.Stop=[{matcher:"",hooks:[{type:"command",command:$cmd}]}]' \
+      "${settings_file}" > "${settings_tmp}"
+    mv "${settings_tmp}" "${settings_file}"
 
     claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" &
     claude_pid=$!

@@ -1,11 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentRunState } from "@/components/agent-run-state";
 
 vi.mock("@/lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
 
 describe("AgentRunState", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("opens copyable failure details from the compact status", async () => {
     const user = userEvent.setup();
     render(
@@ -48,5 +52,22 @@ describe("AgentRunState", () => {
 
     expect(screen.getByRole("img", { name: "Needs input" })).toBeVisible();
     expect(screen.queryByText("Needs input")).not.toBeInTheDocument();
+  });
+
+  it("calls out an active run with no recent model activity", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime("2026-09-03T12:00:00.000Z");
+
+    render(
+      <AgentRunState
+        state="TASK_STATE_WORKING"
+        lastModelActivityAt="2026-09-03T11:30:00.000Z"
+        startedAt="2026-09-03T10:00:00.000Z"
+        endedAt={null}
+        compact
+      />,
+    );
+
+    expect(screen.getByText("No recent activity")).toBeInTheDocument();
   });
 });

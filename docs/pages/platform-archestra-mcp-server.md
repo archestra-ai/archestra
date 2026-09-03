@@ -2334,6 +2334,8 @@ Required RBAC permission: `agent:read`
 | `runs[].started_at` | `string` | Yes |  |
 | `runs[].ended_at` | `string \| null` | Yes |  |
 | `runs[].state_changed_at` | `string \| null` | Yes |  |
+| `runs[].hard_deadline_at` | `string` | Yes | When the runtime will be forcefully stopped. |
+| `runs[].last_model_activity_at` | `string \| null` | Yes | Most recent model request attributed to this run. |
 | `runs[].agent` | `object` | Yes |  |
 | `runs[].agent.id` | `string` | Yes |  |
 | `runs[].agent.name` | `string` | Yes |  |

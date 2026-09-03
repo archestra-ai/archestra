@@ -63206,6 +63206,15 @@
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "hardDeadlineAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "lastModelActivityAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
                       }
                     },
                     "required": [
@@ -63227,7 +63236,9 @@
                       "endedAt",
                       "state",
                       "statusReason",
-                      "stateChangedAt"
+                      "stateChangedAt",
+                      "hardDeadlineAt",
+                      "lastModelActivityAt"
                     ],
                     "additionalProperties": false
                   }
@@ -63984,6 +63995,15 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "hardDeadlineAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "lastModelActivityAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "prompt": {
                             "type": "string"
                           },
@@ -64039,6 +64059,8 @@
                           "state",
                           "statusReason",
                           "stateChangedAt",
+                          "hardDeadlineAt",
+                          "lastModelActivityAt",
                           "prompt",
                           "agent",
                           "projectName",
@@ -64459,6 +64481,15 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "hardDeadlineAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastModelActivityAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "prompt": {
                       "type": "string"
                     },
@@ -64521,6 +64552,8 @@
                     "state",
                     "statusReason",
                     "stateChangedAt",
+                    "hardDeadlineAt",
+                    "lastModelActivityAt",
                     "prompt",
                     "agent",
                     "projectName",
@@ -64921,6 +64954,15 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "hardDeadlineAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastModelActivityAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "prompt": {
                       "type": "string"
                     },
@@ -64976,6 +65018,8 @@
                     "state",
                     "statusReason",
                     "stateChangedAt",
+                    "hardDeadlineAt",
+                    "lastModelActivityAt",
                     "prompt",
                     "agent",
                     "projectName",
@@ -344587,6 +344631,15 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "hardDeadlineAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "lastModelActivityAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "prompt": {
                         "type": "string"
                       },
@@ -344649,6 +344702,8 @@
                       "state",
                       "statusReason",
                       "stateChangedAt",
+                      "hardDeadlineAt",
+                      "lastModelActivityAt",
                       "prompt",
                       "agent",
                       "projectName",

@@ -1,0 +1,1 @@
+ALTER TABLE "agent_runs" ADD COLUMN "active_deadline_seconds" integer;

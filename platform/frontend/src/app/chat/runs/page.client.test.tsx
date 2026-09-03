@@ -237,7 +237,9 @@ describe("AgentRunChatSession", () => {
     expect(
       screen.getByText(/viewing its terminal output in read-only mode/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Read-only terminal");
+    expect(
+      screen.getByText("Read-only terminal").closest("[role=status]"),
+    ).toHaveTextContent("Read-only terminal");
     // None of the owner-only controls are rendered.
     expect(
       screen.queryByRole("button", { name: "Stop" }),
@@ -276,6 +278,9 @@ function run(overrides: Record<string, unknown>) {
     prompt: "Implement the small feature",
     state: "TASK_STATE_SUBMITTED",
     statusReason: null,
+    startedAt: "2099-08-28T17:00:00.000Z",
+    hardDeadlineAt: "2100-08-31T17:00:00.000Z",
+    lastModelActivityAt: "2099-08-28T17:00:00.000Z",
     endedAt: null,
     // The viewer is the run's owner unless a test overrides this — owners get
     // the interactive terminal and the Stop/Share/actions controls.

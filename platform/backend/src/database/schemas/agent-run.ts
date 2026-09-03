@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -60,6 +61,8 @@ const agentRunsTable = pgTable(
     backend: text("backend").$type<AgentRuntimeBackend>().notNull(),
     /** Backend-owned placement scope, intentionally not Kubernetes-specific. */
     runtimeScope: text("runtime_scope").notNull(),
+    /** Frozen Kubernetes Job lifetime so the UI shows the actual deadline. */
+    activeDeadlineSeconds: integer("active_deadline_seconds"),
     /** Revoked when the session ends; a live key outliving its runtime keeps billing. */
     virtualApiKeyId: uuid("virtual_api_key_id").references(
       () => virtualApiKeysTable.id,

@@ -220,6 +220,13 @@ const ListAgentRunsOutputSchema = z.object({
       started_at: z.string(),
       ended_at: z.string().nullable(),
       state_changed_at: z.string().nullable(),
+      hard_deadline_at: z
+        .string()
+        .describe("When the runtime will be forcefully stopped."),
+      last_model_activity_at: z
+        .string()
+        .nullable()
+        .describe("Most recent model request attributed to this run."),
       agent: z.object({
         id: z.string().uuid(),
         name: z.string(),
@@ -421,6 +428,9 @@ const registry = defineArchestraTools([
           started_at: row.startedAt.toISOString(),
           ended_at: row.endedAt?.toISOString() ?? null,
           state_changed_at: row.stateChangedAt?.toISOString() ?? null,
+          hard_deadline_at: row.hardDeadlineAt.toISOString(),
+          last_model_activity_at:
+            row.lastModelActivityAt?.toISOString() ?? null,
           agent: {
             id: row.agentId,
             name: row.agentName,

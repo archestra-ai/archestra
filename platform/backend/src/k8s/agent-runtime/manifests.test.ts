@@ -293,6 +293,15 @@ describe("the container bootstrap", () => {
     );
   });
 
+  it("shows runtime-reported attention states in every attached terminal", () => {
+    expect(script()).toContain("@archestra_attention 0");
+    expect(script()).toContain("@archestra_attention_label");
+    expect(script()).toContain("status-left");
+    expect(script().indexOf("status-left")).toBeLessThan(
+      script().indexOf("tmux respawn-pane"),
+    );
+  });
+
   it("installs a portable attach command for exec clients", () => {
     expect(script()).toContain("> /var/run/archestra/attach");
     expect(script()).toContain("chmod 755 /var/run/archestra/attach");

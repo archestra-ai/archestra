@@ -14,11 +14,12 @@ describe("AppTeamAccessWarning", () => {
     );
 
     expect(
-      screen.getByText("You are not a member of the selected teams"),
+      screen.getByText("You are not a member of the selected teams."),
     ).toBeVisible();
     expect(
       screen.getByText(/will not be able to modify this app through chat/i),
     ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveClass("py-1.5", "text-xs");
   });
 
   it("does not warn when the administrator belongs to a selected team", () => {
@@ -32,7 +33,7 @@ describe("AppTeamAccessWarning", () => {
     );
 
     expect(
-      screen.queryByText("You are not a member of the selected teams"),
+      screen.queryByText("You are not a member of the selected teams."),
     ).not.toBeInTheDocument();
   });
 
@@ -47,7 +48,7 @@ describe("AppTeamAccessWarning", () => {
     );
 
     expect(
-      screen.queryByText("You are not a member of the selected teams"),
+      screen.queryByText("You are not a member of the selected teams."),
     ).not.toBeInTheDocument();
 
     rerender(
@@ -59,7 +60,7 @@ describe("AppTeamAccessWarning", () => {
       />,
     );
     expect(
-      screen.queryByText("You are not a member of the selected teams"),
+      screen.queryByText("You are not a member of the selected teams."),
     ).not.toBeInTheDocument();
   });
 });

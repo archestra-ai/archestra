@@ -212,7 +212,7 @@ describe("AppSettingsForm save", () => {
     });
 
     expect(
-      screen.getByText("You are not a member of the selected teams"),
+      screen.getByText("You are not a member of the selected teams."),
     ).toBeVisible();
     expect(
       screen.getByText(/you will not be able to modify this app through chat/i),

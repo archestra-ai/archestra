@@ -272,7 +272,7 @@ describe("AppSection cards", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit visibility" }));
 
     expect(
-      screen.getByText("You are not a member of the selected teams"),
+      screen.getByText("You are not a member of the selected teams."),
     ).toBeVisible();
     expect(
       screen.getByText(/will not be able to modify this app through chat/i),

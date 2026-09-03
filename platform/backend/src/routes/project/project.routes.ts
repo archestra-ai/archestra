@@ -3,15 +3,18 @@ import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
+  parseLabelsParam,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import { ProjectModel } from "@/models";
+import { ProjectLabelModel, ProjectModel } from "@/models";
 import { projectService } from "@/services/project";
 import {
   constructResponseSchema,
+  GetAgentExecutionResponseSchema,
+  LabelWithDetailsSchema,
   ProjectConversationItemSchema,
   ProjectDetailSchema,
   ProjectLifecycleSchema,
@@ -26,6 +29,7 @@ import {
   BulkOutcomeSchema,
   runBulk,
 } from "../bulk-route";
+import { registerEntityLabelRoutes } from "../entity-labels";
 
 /** A comma-separated query param parsed into a string[] (mirrors the agents list). */
 const CommaSeparatedIds = z.preprocess(
@@ -48,6 +52,15 @@ const PROJECT_UPLOAD_BODY_LIMIT =
  * owner-only and "not yours" is indistinguishable from 404.
  */
 const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/projects",
+    tag: "Projects",
+    entityNamePlural: "projects",
+    model: ProjectLabelModel,
+    keysOperationId: RouteId.GetProjectLabelKeys,
+    valuesOperationId: RouteId.GetProjectLabelValues,
+  });
+
   fastify.post(
     "/api/projects",
     {
@@ -66,6 +79,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
           defaultAgentId: z.string().uuid().nullable().optional(),
+          labels: z.array(LabelWithDetailsSchema).default([]),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
       },
@@ -78,7 +92,9 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: body.description ?? null,
         icon: body.icon ?? null,
         defaultAgentId: body.defaultAgentId ?? null,
+        labels: body.labels,
       });
+      const labels = await ProjectLabelModel.getLabelsFor(project.id);
       return {
         id: project.id,
         name: project.name,
@@ -92,6 +108,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: user.name || null,
           email: user.email || null,
         },
+        labels,
         conversationCount: 0,
         visibility: null,
         shareTeamNames: null,
@@ -123,6 +140,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .nullable()
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
+          labels: z.array(LabelWithDetailsSchema).default([]),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
       },
@@ -135,7 +153,9 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name ?? null,
         description: body.description ?? null,
         icon: body.icon ?? null,
+        labels: body.labels,
       });
+      const labels = await ProjectLabelModel.getLabelsFor(project.id);
       return {
         id: project.id,
         name: project.name,
@@ -149,6 +169,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: user.name || null,
           email: user.email || null,
         },
+        labels,
         conversationCount: 1,
         visibility: null,
         shareTeamNames: null,
@@ -178,6 +199,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z.object({
           scope: ProjectListScopeSchema.optional(),
           search: z.string().optional(),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
           teamIds: CommaSeparatedIds.optional().describe(
             "Team IDs (comma-separated); only used when scope=team.",
           ),
@@ -202,6 +229,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "project",
         "admin",
       );
+      const parsedLabels = parseLabelsParam(query.labels);
+      const labelFilteredIds = parsedLabels
+        ? await ProjectLabelModel.getIdsMatchingLabels(parsedLabels)
+        : undefined;
       return projectService.list({
         organizationId,
         userId: user.id,
@@ -213,6 +244,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         excludeAuthorIds: isProjectAdmin ? query.excludeAuthorIds : undefined,
         search: query.search,
         status: query.status,
+        labelFilteredIds,
       });
     },
   );
@@ -259,6 +291,12 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
           defaultAgentId: z.string().uuid().nullable().optional(),
+          labels: z
+            .array(LabelWithDetailsSchema)
+            .optional()
+            .describe(
+              "Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.",
+            ),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
@@ -272,6 +310,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: body.description,
         icon: body.icon,
         defaultAgentId: body.defaultAgentId,
+        labels: body.labels,
       });
       return { ok: true as const };
     },
@@ -642,6 +681,30 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, user }) =>
       projectService.listConversations({
+        id,
+        organizationId,
+        userId: user.id,
+      }),
+  );
+
+  fastify.get(
+    "/api/projects/:id/executions",
+    {
+      schema: {
+        operationId: RouteId.GetProjectExecutions,
+        description:
+          "All execution sessions in a project the caller can read. Sessions " +
+          "started by others require `project:read-all`; all non-owner views " +
+          "are read-only.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(
+          z.array(GetAgentExecutionResponseSchema),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.listExecutions({
         id,
         organizationId,
         userId: user.id,

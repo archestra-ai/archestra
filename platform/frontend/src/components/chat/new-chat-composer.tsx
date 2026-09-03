@@ -1,11 +1,14 @@
 "use client";
 
+import type { FileUIPart } from "ai";
 import { useMemo } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
+import { AgentExecutionCredentialPrompt } from "@/components/agent-execution-credential-prompt";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import { useAgentBackgroundExecutionPreflight } from "@/lib/agent-background-execution.query";
 import { useMemberDefaultModel } from "@/lib/chat/chat.query";
-import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
+import { useFeature } from "@/lib/config/config.query";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -32,12 +35,15 @@ export function NewChatComposer({
   onSubmit,
   projectDefaultAgentId,
   isProjectLoading,
+  isSubmitting = false,
 }: {
   onSubmit: (submission: {
     text: string;
     agentId: string;
     modelId: string;
     apiKeyId: string | null;
+    files: FileUIPart[];
+    executionMode: boolean;
   }) => void;
   /** The pinned agent of the project this composer starts chats in, if any. */
   projectDefaultAgentId?: string | null;
@@ -48,6 +54,7 @@ export function NewChatComposer({
    * loaded can omit it.
    */
   isProjectLoading?: boolean;
+  isSubmitting?: boolean;
 }) {
   const { data: internalAgents = [] } = useInternalAgents();
   const { data: defaultAgentId } = useDefaultAgentId();
@@ -89,6 +96,19 @@ export function NewChatComposer({
     return model?.capabilities?.inputModalities ?? null;
   }, [modelId, chatModels]);
 
+  const backgroundExecutionEnabled =
+    useFeature("agentBackgroundExecution") === true;
+  const executionAgent = backgroundExecutionEnabled
+    ? internalAgents.find(
+        (agent) => agent.id === agentId && agent.backgroundExecution !== null,
+      )
+    : undefined;
+  const isExecutionMode = !!executionAgent;
+  const executionPreflight = useAgentBackgroundExecutionPreflight(
+    agentId ?? "",
+    isExecutionMode,
+  );
+
   if (!agentId) return null;
 
   return (
@@ -109,16 +129,18 @@ export function NewChatComposer({
           onSubmit={(message) => {
             const text = message.text?.trim() ?? "";
             const files = message.files ?? [];
-            // Nothing to start a chat with.
             if (!text && files.length === 0) return;
-            // Data URLs are too large to pass inline, so stash attachments in
-            // memory for the caller to drain once the conversation exists. Always
-            // set — an empty array clears any abandoned prior set so a text-only
-            // handoff never inherits stale files.
-            setPendingChatHandoffFiles(files);
-            onSubmit({ text, agentId, modelId, apiKeyId });
+            if (isExecutionMode && !text) return;
+            onSubmit({
+              text,
+              agentId,
+              modelId,
+              apiKeyId,
+              files,
+              executionMode: isExecutionMode,
+            });
           }}
-          status="ready"
+          status={isSubmitting ? "submitted" : "ready"}
           selectedModel={modelId}
           onModelChange={onModelChange}
           agentId={agentId}
@@ -141,7 +163,27 @@ export function NewChatComposer({
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
+          sendDisabled={
+            isExecutionMode &&
+            (executionPreflight.isPending ||
+              executionPreflight.data?.ready !== true)
+          }
+          executionMode={isExecutionMode}
+          executionAgentName={executionAgent?.name}
         />
+        {isExecutionMode && executionPreflight.data?.ready === false && (
+          <AgentExecutionCredentialPrompt
+            agentId={agentId}
+            missing={[
+              ...executionPreflight.data.missing,
+              ...executionPreflight.data.misconfigured,
+            ]}
+            declarations={
+              executionAgent?.backgroundExecution?.credentials ?? []
+            }
+            onConnected={() => executionPreflight.refetch()}
+          />
+        )}
       </div>
     </ViewTransition>
   );

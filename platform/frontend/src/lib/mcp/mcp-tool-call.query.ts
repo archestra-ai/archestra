@@ -55,52 +55,40 @@ const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
 export function useMcpToolCalls({
   agentId,
+  mcpServerName,
   startDate,
   endDate,
-  search,
   limit = DEFAULT_TABLE_LIMIT,
-  offset = 0,
-  sortBy,
-  sortDirection = "desc",
+  cursor,
   initialData,
 }: {
   agentId?: string;
+  mcpServerName?: string;
   startDate?: string;
   endDate?: string;
-  search?: string;
   limit?: number;
-  offset?: number;
-  sortBy?: NonNullable<
-    archestraApiTypes.GetMcpToolCallsData["query"]
-  >["sortBy"];
-  sortDirection?: NonNullable<
-    archestraApiTypes.GetMcpToolCallsData["query"]
-  >["sortDirection"];
+  cursor?: string;
   initialData?: archestraApiTypes.GetMcpToolCallsResponses["200"];
 } = {}) {
   return useQuery({
     queryKey: [
       "mcpToolCalls",
       agentId,
+      mcpServerName,
       startDate,
       endDate,
-      search,
       limit,
-      offset,
-      sortBy,
-      sortDirection,
+      cursor,
     ],
     queryFn: async () => {
       const response = await getMcpToolCalls({
         query: {
           ...(agentId ? { agentId } : {}),
+          ...(mcpServerName ? { mcpServerName } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
-          ...(search ? { search } : {}),
           limit,
-          offset,
-          ...(sortBy ? { sortBy } : {}),
-          sortDirection,
+          ...(cursor ? { cursor } : {}),
         },
       });
       // Screen renders its own QueryLoadError panel; don't also toast.
@@ -109,26 +97,21 @@ export function useMcpToolCalls({
         response.data ?? {
           data: [],
           pagination: {
-            currentPage: 1,
             limit,
-            total: 0,
-            totalPages: 0,
+            nextCursor: null,
             hasNext: false,
-            hasPrev: false,
           },
         }
       );
     },
-    // Only use initialData for the first page (offset 0) with default sorting and default limit
+    // Only use initialData for the newest page with default sorting and limit.
     initialData:
-      offset === 0 &&
+      !cursor &&
       limit === DEFAULT_TABLE_LIMIT &&
       !agentId &&
-      sortBy === "createdAt" &&
-      sortDirection === "desc" &&
+      !mcpServerName &&
       !startDate &&
-      !endDate &&
-      !search
+      !endDate
         ? initialData
         : undefined,
   });

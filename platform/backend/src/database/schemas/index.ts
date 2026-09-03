@@ -58,6 +58,15 @@ export { default as agentExecutionInputsTable } from "./agent-execution-input";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentRunsTable } from "./agent-run";
+export {
+  agentRunShareTeamsTable,
+  agentRunShareUsersTable,
+  default as agentRunSharesTable,
+} from "./agent-run-share";
+export {
+  agentRunTranscriptChunksTable,
+  agentRunTranscriptsTable,
+} from "./agent-run-transcript";
 export { default as agentSkillsTable } from "./agent-skill";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";
@@ -190,6 +199,7 @@ export {
   projectShareTeamsTable,
   projectShareUsersTable,
 } from "./project";
+export { default as projectLabelsTable } from "./project-label";
 export { default as projectPinsTable } from "./project-pin";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";

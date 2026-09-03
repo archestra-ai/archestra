@@ -1,14 +1,17 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SearchInput } from "./search-input";
 
 vi.mock("next/navigation");
 
+const mockPush = vi.fn();
+
 describe("SearchInput", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
-      push: vi.fn(),
+      push: mockPush,
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(usePathname).mockReturnValue("/mcp/registry");
     vi.mocked(useSearchParams).mockReturnValue(
@@ -48,6 +51,31 @@ describe("SearchInput", () => {
     expect(screen.getByPlaceholderText("Search knowledge bases")).toHaveClass(
       "pl-9",
     );
+  });
+
+  it("removes cursor pagination from the URL when cursor-backed search changes", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "cursor=opaque&page=3&pageSize=10",
+      ) as unknown as ReturnType<typeof useSearchParams>,
+    );
+    render(
+      <SearchInput
+        placeholder="Search logs"
+        paginationMode="cursor"
+        debounceMs={0}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Search logs"), {
+      target: { value: "tools" },
+    });
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/mcp/registry?search=tools", {
+        scroll: false,
+      });
+    });
   });
   /**
    * Typing used to produce no feedback at all: the debounce, the commit and the

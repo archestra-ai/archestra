@@ -1,3 +1,4 @@
+import type { PaginationQuery } from "@archestra/shared";
 import {
   and,
   desc,
@@ -8,9 +9,11 @@ import {
   isNull,
   lt,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
   AgentExecution,
   AgentExecutionSession,
@@ -166,12 +169,12 @@ class AgentRunModel {
       .orderBy(desc(schema.agentRunsTable.startedAt))
       .limit(params.limit);
 
-    const messages = await A2AMessageModel.findByTaskIds(
+    const prompts = await A2AMessageModel.findFirstUserPartsByTaskIds(
       rows.map((row) => row.taskId),
     );
     return rows.map((row) => ({
       ...row,
-      prompt: extractPrompt(messages.get(row.taskId) ?? []),
+      prompt: extractPrompt(prompts.get(row.taskId) ?? []),
     }));
   }
 
@@ -179,12 +182,28 @@ class AgentRunModel {
   static async listForActor(params: {
     actorUserId: string;
     organizationId: string;
-  }): Promise<AgentExecutionSession[]> {
-    const rows = await AgentRunModel.selectExecutionSessions({
-      actorUserId: params.actorUserId,
-      organizationId: params.organizationId,
-    });
-    return await AgentRunModel.addExecutionPrompts(rows);
+    pagination: PaginationQuery;
+  }) {
+    const conditions = [
+      eq(schema.agentRunsTable.actorKind, "user"),
+      eq(schema.agentRunsTable.actorId, params.actorUserId),
+      eq(schema.agentRunsTable.organizationId, params.organizationId),
+    ];
+    const [rows, [{ total }]] = await Promise.all([
+      AgentRunModel.selectExecutionSessionsWhere({
+        conditions,
+        pagination: params.pagination,
+      }),
+      db
+        .select({ total: sql<number>`count(*)` })
+        .from(schema.agentRunsTable)
+        .where(and(...conditions)),
+    ]);
+    return createPaginatedResult(
+      await AgentRunModel.addExecutionPrompts(rows),
+      Number(total),
+      params.pagination,
+    );
   }
 
   static async findForActorByTaskId(params: {
@@ -195,6 +214,44 @@ class AgentRunModel {
     const rows = await AgentRunModel.selectExecutionSessions(params);
     const [session] = await AgentRunModel.addExecutionPrompts(rows);
     return session ?? null;
+  }
+
+  /**
+   * A single execution session by task, scoped only to the organization — not
+   * to the actor who started it. Used to serve shared (read-only) viewers, whose
+   * access is authorized separately via {@link AgentRunShareModel}. Callers must
+   * verify share access before exposing the result.
+   */
+  static async findSessionByTaskId(params: {
+    taskId: string;
+    organizationId: string;
+  }): Promise<AgentExecutionSession | null> {
+    const rows = await AgentRunModel.selectExecutionSessionsWhere({
+      conditions: [
+        eq(schema.agentRunsTable.taskId, params.taskId),
+        eq(schema.agentRunsTable.organizationId, params.organizationId),
+      ],
+    });
+    const [session] = await AgentRunModel.addExecutionPrompts(rows);
+    return session ?? null;
+  }
+
+  /** Execution sessions assigned to one project, newest first. */
+  static async listForProject(params: {
+    projectId: string;
+    organizationId: string;
+    actorUserId?: string;
+  }): Promise<AgentExecutionSession[]> {
+    const rows = await AgentRunModel.selectExecutionSessionsWhere({
+      conditions: [
+        eq(schema.agentRunsTable.projectId, params.projectId),
+        eq(schema.agentRunsTable.organizationId, params.organizationId),
+        ...(params.actorUserId
+          ? [eq(schema.agentRunsTable.actorUserId, params.actorUserId)]
+          : []),
+      ],
+    });
+    return await AgentRunModel.addExecutionPrompts(rows);
   }
 
   static async updateTitleIfCurrent(params: {
@@ -221,10 +278,15 @@ class AgentRunModel {
     organizationId: string;
     title?: string;
     pinnedAt?: Date | null;
+    projectId?: string | null;
   }): Promise<AgentExecutionSession | null> {
     const updated = await db
       .update(schema.agentRunsTable)
-      .set({ title: params.title, pinnedAt: params.pinnedAt })
+      .set({
+        title: params.title,
+        pinnedAt: params.pinnedAt,
+        projectId: params.projectId,
+      })
       .where(
         and(
           eq(schema.agentRunsTable.taskId, params.taskId),
@@ -321,6 +383,22 @@ class AgentRunModel {
     organizationId: string;
     taskId?: string;
   }) {
+    return AgentRunModel.selectExecutionSessionsWhere({
+      conditions: [
+        eq(schema.agentRunsTable.actorKind, "user"),
+        eq(schema.agentRunsTable.actorId, params.actorUserId),
+        eq(schema.agentRunsTable.organizationId, params.organizationId),
+        ...(params.taskId
+          ? [eq(schema.agentRunsTable.taskId, params.taskId)]
+          : []),
+      ],
+    });
+  }
+
+  private static async selectExecutionSessionsWhere(params: {
+    conditions: SQL[];
+    pagination?: PaginationQuery;
+  }) {
     const {
       logs: _logs,
       completionTarget: _completionTarget,
@@ -328,7 +406,7 @@ class AgentRunModel {
       completionNotifiedAt: _completionNotifiedAt,
       ...runColumns
     } = getTableColumns(schema.agentRunsTable);
-    return await db
+    const query = db
       .select({
         ...runColumns,
         state: schema.a2aTasksTable.state,
@@ -339,6 +417,8 @@ class AgentRunModel {
           name: schema.agentsTable.name,
           icon: schema.agentsTable.icon,
         },
+        projectName: schema.projectsTable.name,
+        projectIcon: schema.projectsTable.icon,
       })
       .from(schema.agentRunsTable)
       .innerJoin(
@@ -349,28 +429,30 @@ class AgentRunModel {
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
       )
-      .where(
-        and(
-          eq(schema.agentRunsTable.actorKind, "user"),
-          eq(schema.agentRunsTable.actorId, params.actorUserId),
-          eq(schema.agentRunsTable.organizationId, params.organizationId),
-          ...(params.taskId
-            ? [eq(schema.agentRunsTable.taskId, params.taskId)]
-            : []),
-        ),
+      .leftJoin(
+        schema.projectsTable,
+        eq(schema.agentRunsTable.projectId, schema.projectsTable.id),
       )
-      .orderBy(desc(schema.agentRunsTable.startedAt));
+      .where(and(...params.conditions))
+      .orderBy(desc(schema.agentRunsTable.startedAt))
+      .$dynamic();
+
+    return params.pagination
+      ? await query
+          .limit(params.pagination.limit)
+          .offset(params.pagination.offset)
+      : await query;
   }
 
   private static async addExecutionPrompts(
     rows: Awaited<ReturnType<typeof AgentRunModel.selectExecutionSessions>>,
   ): Promise<AgentExecutionSession[]> {
-    const messages = await A2AMessageModel.findByTaskIds(
+    const prompts = await A2AMessageModel.findFirstUserPartsByTaskIds(
       rows.map((row) => row.taskId),
     );
     return rows.map((row) => ({
       ...row,
-      prompt: extractPrompt(messages.get(row.taskId) ?? []),
+      prompt: extractPrompt(prompts.get(row.taskId) ?? []),
     }));
   }
 }
@@ -379,11 +461,7 @@ export default AgentRunModel;
 
 const NOTIFICATION_CLAIM_TTL_MS = 2 * 60 * 1_000;
 
-function extractPrompt(
-  messages: Array<{ role: string; parts: unknown[] }>,
-): string {
-  const userMessage = messages.find((message) => message.role === "ROLE_USER");
-  const parts = userMessage?.parts ?? [];
+function extractPrompt(parts: unknown[]): string {
   return parts
     .map((part) =>
       part &&

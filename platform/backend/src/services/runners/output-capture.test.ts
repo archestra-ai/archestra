@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "@/test";
 import type { AgentRun } from "@/types";
 import type { RunnerBackend } from "./backends";
-import { RunnerOutputCapture } from "./output-capture";
+import { RETAINED_LOG_BYTES, RunnerOutputCapture } from "./output-capture";
 
 describe("RunnerOutputCapture", () => {
   test("recovers the complete transcript after the live stream ends early", async () => {
@@ -39,6 +39,42 @@ describe("RunnerOutputCapture", () => {
 
     expect(capture.transcript).toBe("partial but useful\n");
     expect(capture.retainedLogs).toBe("partial but useful\n");
+  });
+
+  test("keeps the final tail but marks the complete transcript unavailable past the safety ceiling", async () => {
+    const capture = new RunnerOutputCapture({
+      backend: outputBackend({
+        live: "first line\nsecond line\nfinal answer\n",
+      }),
+      session,
+      maxTranscriptBytes: 20,
+    });
+
+    await capture.follow();
+
+    expect(capture.completeTranscript).toBeNull();
+    expect(capture.observedTranscriptBytes).toBe(36);
+    expect(capture.transcript).toBe("first line\nsecond line\nfinal answer\n");
+    expect(capture.retainedLogs).toBe(
+      "first line\nsecond line\nfinal answer\n",
+    );
+  });
+
+  test("bounds the fallback tail when the complete transcript is too large", async () => {
+    const finalLine = "\nfinal answer\n";
+    const capture = new RunnerOutputCapture({
+      backend: outputBackend({
+        live: `${"x".repeat(RETAINED_LOG_BYTES)}${finalLine}`,
+      }),
+      session,
+      maxTranscriptBytes: 20,
+    });
+
+    await capture.follow();
+
+    expect(capture.completeTranscript).toBeNull();
+    expect(Buffer.byteLength(capture.retainedLogs)).toBe(RETAINED_LOG_BYTES);
+    expect(capture.retainedLogs.endsWith(finalLine)).toBe(true);
   });
 });
 

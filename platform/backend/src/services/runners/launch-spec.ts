@@ -6,6 +6,7 @@ import {
   providerDisplayNames,
   requiresOpenAiResponsesApi,
   requiresResponsesApi,
+  resolveClaudeContextVariant,
   SESSION_ID_HEADER,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
@@ -143,13 +144,14 @@ export async function buildRunnerLaunchSpec(params: {
     userId: actorUserId ?? "system",
     includeMemberChatDefault: false,
   });
+  const selectedModel = llm.modelId
+    ? await ModelModel.findById(llm.modelId)
+    : null;
   assertInferenceProtocolSupported({
     protocol: params.deployment.inferenceProtocol,
     provider: llm.selectedProvider,
     model: llm.selectedModel,
-    supportedEndpoints: llm.modelId
-      ? (await ModelModel.findById(llm.modelId))?.supportedEndpoints
-      : null,
+    supportedEndpoints: selectedModel?.supportedEndpoints,
   });
 
   const claudeCodeSubscriptionToken =
@@ -228,6 +230,20 @@ export async function buildRunnerLaunchSpec(params: {
     params.deployment.inferenceProtocol !== "anthropic"
       ? `${llm.selectedProvider}:${llm.selectedModel}`
       : llm.selectedModel;
+  const nativeModel = isClaudeCodeRuntime
+    ? resolveClaudeContextVariant({
+        modelId: llm.selectedModel,
+        contextLength: selectedModel
+          ? ModelModel.resolveArchitecturalContextLength(selectedModel)
+          : null,
+      })
+    : llm.selectedModel;
+  const modelContextLength = selectedModel
+    ? ModelModel.resolveEffectiveContextLength(selectedModel)
+    : null;
+  const modelOutputLength = selectedModel
+    ? ModelModel.resolveEffectiveOutputLength(selectedModel)
+    : null;
   const nonSecretEnv: Record<string, string> = {
     // The runner's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
@@ -245,8 +261,20 @@ export async function buildRunnerLaunchSpec(params: {
     // capability detection. Their single-provider virtual key keeps this
     // unambiguous at the Model Router while the generic runner retains the
     // qualified model id above.
-    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: llm.selectedModel,
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: nativeModel,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER: llm.selectedProvider,
+    ...(modelContextLength
+      ? {
+          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH:
+            String(modelContextLength),
+        }
+      : {}),
+    ...(modelOutputLength
+      ? {
+          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH:
+            String(modelOutputLength),
+        }
+      : {}),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE: params.executionMode,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER: executionBanner(
       params.appName,
@@ -363,6 +391,8 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL",
   "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO",

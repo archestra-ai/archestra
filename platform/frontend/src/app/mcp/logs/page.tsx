@@ -19,12 +19,9 @@ export default async function McpGatewayLogsPageServer() {
     mcpToolCalls: {
       data: [],
       pagination: {
-        currentPage: 1,
         limit: DEFAULT_TABLE_LIMIT,
-        total: 0,
-        totalPages: 0,
+        nextCursor: null,
         hasNext: false,
-        hasPrev: false,
       },
     },
   };
@@ -35,9 +32,6 @@ export default async function McpGatewayLogsPageServer() {
       headers,
       query: {
         limit: DEFAULT_TABLE_LIMIT,
-        offset: 0,
-        sortBy: "createdAt",
-        sortDirection: "desc",
       },
     });
     if (mcpToolCallsResponse.error) {
@@ -47,12 +41,9 @@ export default async function McpGatewayLogsPageServer() {
       mcpToolCalls: mcpToolCallsResponse.data || {
         data: [],
         pagination: {
-          currentPage: 1,
           limit: DEFAULT_TABLE_LIMIT,
-          total: 0,
-          totalPages: 0,
+          nextCursor: null,
           hasNext: false,
-          hasPrev: false,
         },
       },
     };

@@ -230,7 +230,13 @@ describe("ProjectSchedulesSection default agent", () => {
     );
     vi.mocked(useProfiles).mockReturnValue({
       data: [
-        { id: "agent-1", name: "Reporter", agentType: "agent", scope: "org" },
+        {
+          id: "agent-1",
+          name: "Reporter",
+          agentType: "agent",
+          scope: "org",
+          backgroundExecution: { credentials: [] },
+        },
         {
           id: "agent-2",
           name: "Test1 Agent",
@@ -300,5 +306,8 @@ describe("ProjectSchedulesSection default agent", () => {
     );
 
     expect(agentPicker()).toHaveTextContent("Reporter");
+    expect(
+      within(agentPicker()).getByLabelText("Isolated execution"),
+    ).toBeInTheDocument();
   });
 });

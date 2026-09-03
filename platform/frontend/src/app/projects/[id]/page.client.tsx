@@ -14,6 +14,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  TerminalSquare,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +29,7 @@ import {
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentIcon } from "@/components/agent-icon";
+import { ExecutionStateIcon } from "@/components/chat/execution-state-icon";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import type { FileListItem } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
@@ -55,9 +57,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useStartAgentExecution } from "@/lib/agent-background-execution.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { useDialogFlagUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -71,6 +75,7 @@ import {
   usePinProject,
   useProject,
   useProjectConversations,
+  useProjectExecutions,
   useProjectFiles,
   useUploadProjectFiles,
 } from "@/lib/projects/projects.query";
@@ -94,6 +99,9 @@ function ProjectDetail() {
   const { data: project, isPending, isLoadingError, refetch } = useProject(id);
   // Chats are hidden from admin oversight, so don't even fetch them there.
   const { data: conversations } = useProjectConversations(id, {
+    enabled: !!project && project.viewerRole !== "admin",
+  });
+  const { data: executions } = useProjectExecutions(id, {
     enabled: !!project && project.viewerRole !== "admin",
   });
   const deleteProject = useDeleteProject();
@@ -273,6 +281,7 @@ function ProjectDetail() {
               canCreate={canChat}
               defaultAgentId={project.defaultAgent?.id ?? null}
             />
+            {!isAdminView && <ExecutionsList executions={executions ?? []} />}
             {!isAdminView && <ChatsList conversations={conversations ?? []} />}
           </div>
         </PageLayout>
@@ -312,15 +321,38 @@ function ProjectChatInput({
 }) {
   const router = useRouter();
   const createConversation = useCreateConversation();
+  const startExecution = useStartAgentExecution();
   const { data: projectFiles } = useProjectFiles(projectId);
   const projectHasFiles = (projectFiles?.length ?? 0) > 0;
 
   return (
     <NewChatComposer
       projectDefaultAgentId={defaultAgentId}
-      onSubmit={({ text, agentId, modelId, apiKeyId }) => {
+      isSubmitting={createConversation.isPending || startExecution.isPending}
+      onSubmit={({
+        text,
+        agentId,
+        modelId,
+        apiKeyId,
+        files,
+        executionMode,
+      }) => {
         // Ignore a second submit while the first create is still in flight.
-        if (createConversation.isPending) return;
+        if (createConversation.isPending || startExecution.isPending) return;
+        if (executionMode) {
+          startExecution.mutate(
+            { agentId, message: text, files, projectId },
+            {
+              onSuccess: (execution) => {
+                if (execution) {
+                  router.push(`/chat/executions/${execution.taskId}`);
+                }
+              },
+            },
+          );
+          return;
+        }
+        setPendingChatHandoffFiles(files);
         createConversation.mutate(
           {
             agentId,
@@ -351,6 +383,57 @@ function ProjectChatInput({
         );
       }}
     />
+  );
+}
+
+function ExecutionsList({
+  executions,
+}: {
+  executions: Array<{
+    taskId: string;
+    title: string;
+    state: Parameters<typeof ExecutionStateIcon>[0]["state"];
+    stateChangedAt: string | null;
+    startedAt: string;
+    viewerRole: "owner" | "shared";
+  }>;
+}) {
+  if (executions.length === 0) return null;
+  return (
+    <section>
+      <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        Executions
+      </h2>
+      <div className="space-y-2">
+        {executions.map((execution) => (
+          <Link
+            key={execution.taskId}
+            href={`/chat/executions/${execution.taskId}`}
+            className="flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <ExecutionStateIcon state={execution.state} className="size-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">
+                {execution.title}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {execution.viewerRole === "owner"
+                  ? "Your execution"
+                  : "Read-only execution"}
+              </span>
+            </span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {formatRelativeTimeFromNow(
+                execution.stateChangedAt ?? execution.startedAt,
+              )}
+            </span>
+            <TerminalSquare className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

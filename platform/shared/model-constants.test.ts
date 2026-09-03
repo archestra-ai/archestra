@@ -10,6 +10,7 @@ import {
   providerDisplayNames,
   providerSearchTerms,
   requiresOpenAiResponsesApi,
+  resolveClaudeContextVariant,
   SMALL_MODEL_MAX_PARAMETERS,
   stripClaudeContextVariantSuffix,
 } from "./model-constants";
@@ -233,6 +234,44 @@ describe("stripClaudeContextVariantSuffix", () => {
     expect(stripClaudeContextVariantSuffix("claude-[1m]-opus")).toBe(
       "claude-[1m]-opus",
     );
+  });
+});
+
+describe("resolveClaudeContextVariant", () => {
+  test("selects the explicit 1M variant for a Claude model with a 1M window", () => {
+    expect(
+      resolveClaudeContextVariant({
+        modelId: "claude-opus-4-8",
+        contextLength: 1_000_000,
+      }),
+    ).toBe("claude-opus-4-8[1m]");
+  });
+
+  test("leaves smaller, unknown, non-Claude, and already-marked models unchanged", () => {
+    expect(
+      resolveClaudeContextVariant({
+        modelId: "claude-haiku-4-5",
+        contextLength: 200_000,
+      }),
+    ).toBe("claude-haiku-4-5");
+    expect(
+      resolveClaudeContextVariant({
+        modelId: "claude-uncatalogued",
+        contextLength: null,
+      }),
+    ).toBe("claude-uncatalogued");
+    expect(
+      resolveClaudeContextVariant({
+        modelId: "gpt-5.4",
+        contextLength: 1_000_000,
+      }),
+    ).toBe("gpt-5.4");
+    expect(
+      resolveClaudeContextVariant({
+        modelId: "claude-opus-4-8[1m]",
+        contextLength: 1_000_000,
+      }),
+    ).toBe("claude-opus-4-8[1m]");
   });
 });
 

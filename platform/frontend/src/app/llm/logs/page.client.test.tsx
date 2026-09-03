@@ -55,6 +55,14 @@ const orgProxy = {
 
 const push = vi.fn();
 
+function makePagination() {
+  return {
+    limit: 10,
+    nextCursor: null,
+    hasNext: false,
+  };
+}
+
 type SessionSummary =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
 
@@ -98,6 +106,7 @@ function makeSessionSummary(
     unattributedReason: null,
     virtualKeys: [],
     lastUserMessagePreview: null,
+    lastInteractionId: null,
     lastInteractionType: null,
     conversationTitle: null,
     claudeCodeTitle: null,
@@ -131,7 +140,7 @@ describe("LlmProxyLogsPage proxy filter", () => {
       data: [],
     } as unknown as ReturnType<typeof useUniqueUserIds>);
     vi.mocked(useInteractionSessions).mockReturnValue({
-      data: { data: [], pagination: { total: 0 } },
+      data: { data: [], pagination: makePagination() },
       isFetching: false,
     } as unknown as ReturnType<typeof useInteractionSessions>);
   });
@@ -159,21 +168,16 @@ describe("LlmProxyLogsPage proxy filter", () => {
   // This page keeps its filter in the URL rather than local state, so picking a
   // proxy is observable as the query params it writes (and the session query
   // re-derives from there on the next render).
-  it("filters sessions by the picked proxy, back on the first page", async () => {
+  it("filters sessions by the picked proxy without offset pagination params", async () => {
     const user = userEvent.setup();
     render(<LlmProxyLogsPage />);
 
     await openProxyFilter(user);
     await user.click(await screen.findByText("My Proxy"));
 
-    expect(push).toHaveBeenCalledWith(
-      expect.stringContaining("profileId=p1"),
-      expect.anything(),
-    );
-    expect(push).toHaveBeenCalledWith(
-      expect.stringContaining("page=1"),
-      expect.anything(),
-    );
+    expect(push).toHaveBeenCalledWith("/llm/logs?profileId=p1", {
+      scroll: false,
+    });
   });
 
   it("presents session context and usage without separate source and details columns", () => {
@@ -193,7 +197,7 @@ describe("LlmProxyLogsPage proxy filter", () => {
             userNames: ["Demo Admin"],
           }),
         ],
-        pagination: { total: 1 },
+        pagination: makePagination(),
       },
       isFetching: false,
     } as unknown as ReturnType<typeof useInteractionSessions>);
@@ -246,7 +250,7 @@ describe("LlmProxyLogsPage proxy filter", () => {
             ],
           }),
         ],
-        pagination: { total: 1 },
+        pagination: makePagination(),
       },
       isFetching: false,
     } as unknown as ReturnType<typeof useInteractionSessions>);
@@ -281,7 +285,7 @@ describe("LlmProxyLogsPage proxy filter", () => {
             ],
           }),
         ],
-        pagination: { total: 1 },
+        pagination: makePagination(),
       },
       isFetching: false,
     } as unknown as ReturnType<typeof useInteractionSessions>);
@@ -304,7 +308,7 @@ describe("LlmProxyLogsPage proxy filter", () => {
             virtualKeys: [],
           }),
         ],
-        pagination: { total: 1 },
+        pagination: makePagination(),
       },
       isFetching: false,
     } as unknown as ReturnType<typeof useInteractionSessions>);

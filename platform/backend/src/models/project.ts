@@ -20,6 +20,7 @@ import {
   softDelete,
 } from "@/database/soft-delete";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
+import { ProjectLabelModel } from "./entity-labels";
 import ProjectShareModel from "./project-share";
 
 /**
@@ -30,7 +31,7 @@ import ProjectShareModel from "./project-share";
  * and every read here excludes it, so the project is gone from the API. Its
  * files and scheduled tasks are RETAINED, hidden behind {@link belongsToLiveProject}
  * (and the transitive project resolution every file path performs), so a
- * restore brings them back; only the chats detach. See that method.
+ * restore brings them back; chats and execution sessions detach. See that method.
  */
 class ProjectModel {
   static async create(project: InsertProject): Promise<Project> {
@@ -251,13 +252,11 @@ class ProjectModel {
    * soft-deleted rows; schedules pause via {@link belongsToLiveProject}). Nothing
    * is purged, so a restore recovers them intact.
    *
-   * The one exception is CHATS, which DETACH (`project_id` → NULL) and survive
-   * as ordinary conversations, matching the old `ON DELETE SET NULL`. Left
-   * attached they would keep rendering the deleted project's name and icon in
-   * the sidebar (`ConversationModel.findAll` joins `projects`). Detach is
-   * one-way: a restore does not re-adopt them, so a restored project reports
-   * zero chats. Done in one transaction with the soft-delete so the two never
-   * diverge.
+   * User-started chats and execution sessions DETACH (`project_id` → NULL) and
+   * survive as ordinary sessions, matching `ON DELETE SET NULL`. Left attached
+   * they would keep rendering the deleted project's name and icon. Detach is
+   * one-way: a restore does not re-adopt them. Done in one transaction with the
+   * soft-delete so the two never diverge.
    */
   static async delete(id: string): Promise<void> {
     await db.transaction(async (tx) => {
@@ -265,6 +264,10 @@ class ProjectModel {
         .update(schema.conversationsTable)
         .set({ projectId: null })
         .where(eq(schema.conversationsTable.projectId, id));
+      await tx
+        .update(schema.agentRunsTable)
+        .set({ projectId: null })
+        .where(eq(schema.agentRunsTable.projectId, id));
       await softDelete(
         tx,
         schema.projectsTable,
@@ -538,12 +541,16 @@ class ProjectModel {
       .limit(1);
     if (!row) return null;
 
-    const share = await ProjectShareModel.findByProjectId(id);
+    const [share, labels] = await Promise.all([
+      ProjectShareModel.findByProjectId(id),
+      ProjectLabelModel.getLabelsFor(id),
+    ]);
     return {
       ...row,
       visibility: share?.visibility ?? null,
       shareTeamIds: [...(share?.teamIds ?? [])].sort(),
       shareUserIds: [...(share?.userIds ?? [])].sort(),
+      labels: labels.map(({ key, value }) => `${key}:${value}`).sort(),
     };
   }
 

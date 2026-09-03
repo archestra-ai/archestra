@@ -537,9 +537,11 @@ export async function assignArchestraToolsToProfile(
   const toolsResponse = await makeApiRequest({
     request,
     method: "get",
-    urlSuffix: "/api/tools",
+    urlSuffix: "/api/tools?limit=100",
   });
-  const tools = await toolsResponse.json();
+  const { data: tools } = (await toolsResponse.json()) as {
+    data: Array<{ id: string; name: string }>;
+  };
   const archestraTools = tools.filter((tool: { name: string }) =>
     tool.name.startsWith("archestra__"),
   );

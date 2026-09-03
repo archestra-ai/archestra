@@ -1,4 +1,5 @@
 import {
+  type CursorQuery,
   type PaginationQuery,
   redactCatalogToolArguments,
 } from "@archestra/shared";
@@ -32,7 +33,10 @@ import {
 import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
 import db, { schema } from "@/database";
 import {
+  type CursorPaginatedResult,
+  createCursorPaginatedResult,
   createPaginatedResult,
+  decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
@@ -109,45 +113,13 @@ class McpToolCallModel {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = McpToolCallModel.getOrderByClause(sorting);
 
-    // Build where clauses
-    const conditions: SQL[] = [];
-    if (filters?.ownUserId) {
-      conditions.push(eq(schema.mcpToolCallsTable.userId, filters.ownUserId));
-    }
-
-    // Access control filter
-    if (userId && !isMcpServerAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return createPaginatedResult([], 0, pagination);
-      }
-
-      conditions.push(
-        inArray(schema.mcpToolCallsTable.agentId, accessibleAgentIds),
-      );
-    }
-
-    // Date range filter
-    if (filters?.startDate) {
-      conditions.push(
-        gte(schema.mcpToolCallsTable.createdAt, filters.startDate),
-      );
-    }
-    if (filters?.endDate) {
-      conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
-    }
-
-    // Free-text search filter (case-insensitive)
-    // Searches across: mcpServerName, toolCall.name, toolCall.arguments
-    if (filters?.search) {
-      const searchCondition = buildMcpToolCallSearchCondition(filters.search);
-      if (searchCondition) {
-        conditions.push(searchCondition);
-      }
+    const conditions = await McpToolCallModel.buildListConditions(
+      userId,
+      isMcpServerAdmin,
+      filters,
+    );
+    if (conditions === null) {
+      return createPaginatedResult([], 0, pagination);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -192,6 +164,96 @@ class McpToolCallModel {
   }
 
   /**
+   * The same listing, walked by cursor instead of offset.
+   *
+   * Drops the `count()` that scanned every visible row on each page load to
+   * render a page number, and drops the offset, so a page deep in the log
+   * costs what the first page costs.
+   *
+   * Ordered by `(created_at, id)` only. The offset method's other sort
+   * columns are deliberately not carried over: none of them is indexed, and
+   * several are nullable, which a keyset predicate handles badly — a NULL on
+   * either side makes the row comparison NULL and silently truncates the
+   * walk. The cursor listing supports an exact server-name filter instead.
+   */
+  static async findAllCursorPaginated(
+    cursorQuery: CursorQuery,
+    userId?: string,
+    isMcpServerAdmin?: boolean,
+    filters?: {
+      agentId?: string;
+      startDate?: Date;
+      endDate?: Date;
+      mcpServerName?: string;
+      /** Narrow to rows attributed to this user (the own-logs log:read view). */
+      ownUserId?: string;
+    },
+  ): Promise<CursorPaginatedResult<McpToolCall>> {
+    const { limit, cursor } = cursorQuery;
+
+    const conditions = await McpToolCallModel.buildListConditions(
+      userId,
+      isMcpServerAdmin,
+      filters,
+    );
+    if (conditions === null) {
+      return createCursorPaginatedResult([], cursorQuery, () => ({
+        value: "",
+        id: "",
+      }));
+    }
+
+    // An unreadable cursor is treated as no cursor, so a stale or truncated
+    // link lands on the newest page rather than erroring.
+    const position = decodeCursor(cursor);
+    if (position) {
+      const at = new Date(position.value);
+      if (!Number.isNaN(at.getTime())) {
+        const keyset = sql`(${schema.mcpToolCallsTable.createdAt}, ${schema.mcpToolCallsTable.id})`;
+        conditions.push(
+          sql`${keyset} < (${position.value}::timestamp, ${position.id}::uuid)`,
+        );
+      }
+    }
+
+    const rows = await db
+      .select({
+        ...getTableColumns(schema.mcpToolCallsTable),
+        userName: schema.usersTable.name,
+        agentDeletedAt: schema.agentsTable.deletedAt,
+        appName: schema.appsTable.name,
+        appDeletedAt: schema.appsTable.deletedAt,
+      })
+      .from(schema.mcpToolCallsTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.mcpToolCallsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.appsTable,
+        eq(schema.mcpToolCallsTable.appId, schema.appsTable.id),
+      )
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(
+        desc(schema.mcpToolCallsTable.createdAt),
+        desc(schema.mcpToolCallsTable.id),
+      )
+      // One more than the page needs: its presence answers "is there another
+      // page", replacing the count this method no longer runs.
+      .limit(limit + 1);
+
+    return createCursorPaginatedResult(
+      rows.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
+      cursorQuery,
+      (row) => ({ value: row.createdAt.toISOString(), id: row.id }),
+    );
+  }
+
+  /**
    * Helper to get the appropriate ORDER BY clause based on sorting params
    */
   private static getOrderByClause(sorting?: SortingQuery) {
@@ -210,6 +272,75 @@ class McpToolCallModel {
         // Default: newest first
         return desc(schema.mcpToolCallsTable.createdAt);
     }
+  }
+
+  /**
+   * Access-control and filter predicates shared by both listing methods, so
+   * the offset and cursor paths cannot drift into showing different rows.
+   *
+   * Returns null when the caller can reach no agents at all. That is distinct
+   * from an empty predicate list, which means "no filters, show everything" —
+   * conflating the two would turn a permission denial into a full listing.
+   */
+  private static async buildListConditions(
+    userId?: string,
+    isMcpServerAdmin?: boolean,
+    filters?: {
+      agentId?: string;
+      startDate?: Date;
+      endDate?: Date;
+      search?: string;
+      mcpServerName?: string;
+      ownUserId?: string;
+    },
+  ): Promise<SQL[] | null> {
+    const conditions: SQL[] = [];
+
+    if (filters?.agentId) {
+      conditions.push(eq(schema.mcpToolCallsTable.agentId, filters.agentId));
+    }
+    if (filters?.ownUserId) {
+      conditions.push(eq(schema.mcpToolCallsTable.userId, filters.ownUserId));
+    }
+    if (filters?.mcpServerName) {
+      conditions.push(
+        eq(schema.mcpToolCallsTable.mcpServerName, filters.mcpServerName),
+      );
+    }
+
+    if (userId && !isMcpServerAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return null;
+      }
+
+      conditions.push(
+        inArray(schema.mcpToolCallsTable.agentId, accessibleAgentIds),
+      );
+    }
+
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.mcpToolCallsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.mcpToolCallsTable.createdAt, filters.endDate));
+    }
+
+    // Free-text search across mcpServerName, toolCall.name, toolCall.arguments
+    if (filters?.search) {
+      const searchCondition = buildMcpToolCallSearchCondition(filters.search);
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
+    }
+
+    return conditions;
   }
 
   static async findById(

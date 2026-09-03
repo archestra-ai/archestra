@@ -487,7 +487,12 @@ export type AgentRunLogsErrorMessage = {
 
 export type AgentRunLogsEndedMessage = {
   type: "agent_run_logs_ended";
-  payload: { runId: string };
+  payload: {
+    runId: string;
+    source?: "full" | "tail";
+    truncated?: boolean;
+    totalBytes?: number;
+  };
 };
 
 export type McpDeploymentStatusesMessage = {

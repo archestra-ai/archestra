@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FileUIPart } from "ai";
+import { toast } from "sonner";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -8,18 +9,21 @@ const {
   deleteAgentExecution,
   deleteAgentBackgroundExecutionCredential,
   getAgentBackgroundExecutionPreflight,
+  getAgentExecutionShare,
   getAgentExecutions,
   getMyAgentExecution,
   getMyAgentExecutions,
   setAgentBackgroundExecutionCredential,
+  shareAgentExecution,
   startAgentExecution,
+  unshareAgentExecution,
   updateAgentExecution,
 } = archestraApiSdk;
 
 export type AgentExecution =
   archestraApiTypes.GetAgentExecutionsResponses["200"][number];
 export type AgentExecutionSession =
-  archestraApiTypes.GetMyAgentExecutionsResponses["200"][number];
+  archestraApiTypes.GetMyAgentExecutionsResponses["200"]["data"][number];
 
 export function useAgentBackgroundExecutionPreflight(
   agentId: string,
@@ -56,13 +60,12 @@ export function useAgentExecutions(agentId: string, enabled = true) {
 export function useMyAgentExecutions(enabled = true) {
   return useQuery({
     queryKey: ["agent-executions", "mine"],
-    queryFn: async () => {
-      const { data, error } = await getMyAgentExecutions();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: loadMyAgentExecutions,
     enabled,
-    refetchInterval: enabled ? 3_000 : false,
+    refetchInterval: (query) =>
+      enabled && query.state.data?.some((execution) => !execution.endedAt)
+        ? 3_000
+        : false,
   });
 }
 
@@ -91,21 +94,27 @@ export function useStartAgentExecution() {
       agentId,
       message,
       files,
+      projectId,
     }: {
       agentId: string;
       message: string;
       files?: FileUIPart[];
+      projectId?: string;
     }) => {
       const attachments = files?.map(executionAttachmentFromFile);
       const { data, error } = await startAgentExecution({
         path: { id: agentId },
-        body: { message, attachments },
+        body: { message, attachments, projectId },
       });
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+      ]);
+    },
   });
 }
 
@@ -140,6 +149,7 @@ export function useUpdateAgentExecution() {
       taskId: string;
       title?: string;
       pinnedAt?: string | null;
+      projectId?: string | null;
     }) => {
       const { data, error } = await updateAgentExecution({
         path: { taskId },
@@ -156,6 +166,7 @@ export function useUpdateAgentExecution() {
         queryClient.invalidateQueries({
           queryKey: ["agent-executions", "mine"],
         }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
       ]);
     },
   });
@@ -169,8 +180,85 @@ export function useDeleteAgentExecution() {
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["agent-executions"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+      ]);
+    },
+  });
+}
+
+export type AgentExecutionShare = NonNullable<
+  archestraApiTypes.GetAgentExecutionShareResponses["200"]
+>;
+
+/**
+ * Owner-only: reads the current share for an execution. The route 404s for
+ * anyone but the owner, so this is only queried behind the owner's share
+ * dialog. A `null` result means the execution is private (not shared).
+ */
+export function useAgentExecutionShare(taskId: string | undefined) {
+  return useQuery({
+    queryKey: ["agent-executions", taskId, "share"],
+    queryFn: async () => {
+      if (!taskId) return null;
+      const { data, error } = await getAgentExecutionShare({
+        path: { taskId },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!taskId,
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+}
+
+type ShareAgentExecutionInput = {
+  taskId: string;
+  suppressSuccessToast?: boolean;
+} & archestraApiTypes.ShareAgentExecutionData["body"];
+
+export function useShareAgentExecution() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      taskId,
+      visibility,
+      teamIds,
+      userIds,
+      suppressSuccessToast: _suppressSuccessToast,
+    }: ShareAgentExecutionInput) => {
+      const { data, error } = await shareAgentExecution({
+        path: { taskId },
+        body: { visibility, teamIds, userIds },
+      });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: (data, { taskId, suppressSuccessToast }) => {
+      if (!data) return;
+      queryClient.setQueryData(["agent-executions", taskId, "share"], data);
+      if (!suppressSuccessToast) {
+        toast.success("Execution visibility updated");
+      }
+    },
+  });
+}
+
+export function useUnshareAgentExecution() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { data, error } = await unshareAgentExecution({ path: { taskId } });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: (_data, taskId) => {
+      queryClient.setQueryData(["agent-executions", taskId, "share"], null);
+      toast.success("Execution sharing removed");
+    },
   });
 }
 
@@ -224,3 +312,23 @@ export function useDeleteAgentBackgroundExecutionCredential(agentId: string) {
       }),
   });
 }
+
+async function loadMyAgentExecutions(): Promise<AgentExecutionSession[]> {
+  const executions: AgentExecutionSession[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await getMyAgentExecutions({
+      query: { limit: MY_EXECUTIONS_PAGE_SIZE, offset },
+    });
+    throwOnApiError(error, { toastOnError: false });
+    executions.push(...(data?.data ?? []));
+
+    if (!data?.pagination.hasNext) {
+      return executions;
+    }
+    offset += MY_EXECUTIONS_PAGE_SIZE;
+  }
+}
+
+const MY_EXECUTIONS_PAGE_SIZE = 100;

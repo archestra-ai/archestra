@@ -7,8 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { throwOnApiError } from "@/lib/utils";
 
-const { getTool, getToolObservers, getTools, getToolsWithAssignments } =
-  archestraApiSdk;
+const { getTool, getToolObservers, getToolsWithAssignments } = archestraApiSdk;
 
 /**
  * Fetch a single tool's policy-editor fields by id, scoped to what the caller
@@ -34,23 +33,6 @@ type GetToolsWithAssignmentsQueryParams = NonNullable<
 // Exported type for tool with assignments data
 export type ToolWithAssignmentsData =
   archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number];
-
-/** Non-suspense version for use in dialogs/portals */
-export function useTools({
-  initialData,
-}: {
-  initialData?: archestraApiTypes.GetToolsResponses["200"];
-}) {
-  return useQuery({
-    queryKey: ["tools"],
-    queryFn: async () => {
-      const { data, error } = await getTools();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-    initialData,
-  });
-}
 
 export function useToolsWithAssignments({
   initialData,

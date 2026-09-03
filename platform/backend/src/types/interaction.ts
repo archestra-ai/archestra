@@ -329,6 +329,34 @@ const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
 export const RequestTypeSchema = z.enum(["main", "subagent"]);
 
 /**
+ * Scalar fields rendered by an interaction-list row. Large request, response,
+ * analysis and guardrail payloads stay behind the individual detail endpoint.
+ */
+export const InteractionSummarySchema = BaseSelectInteractionSchema.pick({
+  id: true,
+  profileId: true,
+  externalAgentId: true,
+  sessionId: true,
+  model: true,
+  baselineModel: true,
+  billingMode: true,
+  inputTokens: true,
+  outputTokens: true,
+  cacheReadTokens: true,
+  cacheWriteTokens: true,
+  cost: true,
+  baselineCost: true,
+  toonTokensBefore: true,
+  toonTokensAfter: true,
+  toonCostSavings: true,
+  toonSkipReason: true,
+  createdAt: true,
+}).extend({
+  type: SupportedProvidersDiscriminatorSchema,
+  externalAgentIdLabel: z.string().nullable(),
+});
+
+/**
  * Persisted `request` / `processedRequest` payloads are re-validated on
  * read-back, and the provider schemas inevitably drift from what was actually
  * persisted (see FinishReasonSchema; delta-reconstructed requests can also be
@@ -747,6 +775,7 @@ export const InsertInteractionSchema = createInsertSchema(
 export type UserInfo = z.infer<typeof UserInfoSchema>;
 
 export type Interaction = z.infer<typeof SelectInteractionSchema>;
+export type InteractionSummary = z.infer<typeof InteractionSummarySchema>;
 export type InsertInteraction = z.infer<typeof InsertInteractionSchema>;
 export type InteractionAuthMethod = z.infer<typeof InteractionAuthMethodSchema>;
 
@@ -840,6 +869,8 @@ export const SessionSummarySchema = z.object({
     .describe(
       "Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.",
     ),
+  /** Interaction backing the preview and latest-conversation detail view. */
+  lastInteractionId: z.string().uuid().nullable(),
   lastInteractionType: z.string().nullable(),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),

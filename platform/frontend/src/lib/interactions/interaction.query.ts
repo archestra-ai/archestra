@@ -13,6 +13,7 @@ import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const {
   getInteraction,
+  getInteractionSummaries,
   getInteractions,
   getInteractionSessions,
   getUniqueExternalAgentIds,
@@ -126,23 +127,105 @@ export function useInteractions({
   });
 }
 
+export function useInteractionSummaries({
+  profileId,
+  externalAgentId,
+  userId,
+  sessionId,
+  startDate,
+  endDate,
+  limit = DEFAULT_TABLE_LIMIT,
+  offset = 0,
+  sortBy,
+  sortDirection = "desc",
+  enabled = true,
+}: {
+  profileId?: string;
+  externalAgentId?: string;
+  userId?: string;
+  sessionId?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  offset?: number;
+  sortBy?: NonNullable<
+    archestraApiTypes.GetInteractionSummariesData["query"]
+  >["sortBy"];
+  sortDirection?: NonNullable<
+    archestraApiTypes.GetInteractionSummariesData["query"]
+  >["sortDirection"];
+  enabled?: boolean;
+} = {}) {
+  return useQuery({
+    queryKey: [
+      "interaction-summaries",
+      profileId,
+      externalAgentId,
+      userId,
+      sessionId,
+      startDate,
+      endDate,
+      limit,
+      offset,
+      sortBy,
+      sortDirection,
+    ],
+    queryFn: async () => {
+      const response = await getInteractionSummaries({
+        query: {
+          profileId,
+          externalAgentId,
+          userId,
+          sessionId,
+          startDate,
+          endDate,
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+        },
+      });
+      throwOnApiError(response.error);
+      return (
+        response.data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
+    },
+    enabled,
+  });
+}
+
 export function useInteraction({
   interactionId,
   initialData,
   refetchInterval = 3_000,
+  enabled = true,
 }: {
-  interactionId: string;
+  interactionId?: string;
   initialData?: archestraApiTypes.GetInteractionResponses["200"];
   refetchInterval?: number | null;
+  enabled?: boolean;
 }) {
   return useQuery({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
-      const response = await getInteraction({ path: { interactionId } });
+      const response = await getInteraction({
+        path: { interactionId: interactionId as string },
+      });
       throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
     },
     initialData,
+    enabled: enabled && !!interactionId,
     ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
   });
 }
@@ -178,7 +261,7 @@ export function useInteractionSessions({
   startDate,
   endDate,
   limit = DEFAULT_TABLE_LIMIT,
-  offset = 0,
+  cursor,
   initialData,
   toastOnError,
 }: {
@@ -190,7 +273,7 @@ export function useInteractionSessions({
   startDate?: string;
   endDate?: string;
   limit?: number;
-  offset?: number;
+  cursor?: string;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
   toastOnError?: boolean;
 } = {}) {
@@ -206,7 +289,7 @@ export function useInteractionSessions({
       startDate,
       endDate,
       limit,
-      offset,
+      cursor,
     ],
     queryFn: async () => {
       const response = await getInteractionSessions({
@@ -219,18 +302,15 @@ export function useInteractionSessions({
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
           limit,
-          offset,
+          ...(cursor ? { cursor } : {}),
         },
       });
       const emptyResponse = {
         data: [],
         pagination: {
-          currentPage: 1,
           limit,
-          total: 0,
-          totalPages: 0,
+          nextCursor: null,
           hasNext: false,
-          hasPrev: false,
         },
       };
 
@@ -238,7 +318,7 @@ export function useInteractionSessions({
       return response.data ?? emptyResponse;
     },
     initialData:
-      offset === 0 &&
+      !cursor &&
       limit === DEFAULT_TABLE_LIMIT &&
       !profileId &&
       !userId &&

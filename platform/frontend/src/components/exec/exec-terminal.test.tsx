@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const terminalHarness = vi.hoisted(() => {
   return {
+    write: vi.fn(),
     dataHandler: null as ((data: string) => void) | null,
     resizeHandler: null as
       | ((dimensions: { cols: number; rows: number }) => void)
@@ -24,7 +25,7 @@ vi.mock("@xterm/xterm", () => ({
     loadAddon() {}
     open() {}
     dispose() {}
-    write() {}
+    write = terminalHarness.write;
     onData(handler: (data: string) => void) {
       terminalHarness.dataHandler = handler;
     }
@@ -65,6 +66,7 @@ describe("ExecTerminal", () => {
     terminalHarness.resizeHandler = null;
     terminalHarness.resizeObserverCallback = null;
     terminalHarness.proposedDimensions = { cols: 80, rows: 24 };
+    terminalHarness.write.mockReset();
   });
 
   it("waits for a usable terminal grid before opening the remote session", async () => {
@@ -214,7 +216,58 @@ describe("ExecTerminal", () => {
 
     render(<ExecTerminal sessionKey="task-3" transport={transport} isActive />);
 
-    expect(await screen.findByText("Connecting...")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Connecting to the terminal",
+    );
+  });
+
+  it("explains a failed attach as an accessible terminal error", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onError(
+          "Timed out waiting for the Agent pod to accept a terminal",
+        );
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal sessionKey="task-error" transport={transport} isActive />,
+    );
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Unable to open the terminal")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Timed out waiting for the Agent pod to accept a terminal",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("separates a closed session's summary from its reason", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onClosed("The pod stopped responding");
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal
+        sessionKey="task-closed"
+        transport={transport}
+        isActive
+        disconnectedLabel="Execution finished"
+      />,
+    );
+
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("Execution finished")).toBeInTheDocument();
+    expect(screen.getByText("The pod stopped responding")).toBeInTheDocument();
   });
 
   it("drops the startup progress once the session is live", async () => {
@@ -271,6 +324,79 @@ describe("ExecTerminal", () => {
       "\x1b[<0;8;12M\x1b[<32;9;12M",
     );
     expect(transport.sendInput).toHaveBeenCalledTimes(2);
+  });
+
+  it("accelerates remote wheel scrolling without changing keyboard input", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal sessionKey="task-wheel" transport={transport} isActive />,
+    );
+    await screen.findByText("Connected");
+
+    terminalHarness.emitData("\x1b[<64;5;18M");
+    terminalHarness.emitData("j");
+
+    expect(transport.sendInput).toHaveBeenNthCalledWith(
+      1,
+      "\x1b[<64;5;18M".repeat(3),
+    );
+    expect(transport.sendInput).toHaveBeenNthCalledWith(2, "j");
+  });
+
+  it("does not render tmux's exit notice into the completed frame", async () => {
+    const session: { handlers: ExecSessionHandlers | null } = {
+      handlers: null,
+    };
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        session.handlers = handlers;
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal sessionKey="task-exit" transport={transport} isActive />,
+    );
+    await screen.findByText("Connected");
+
+    act(() => session.handlers?.onOutput("done\r\n[exited]\r\n"));
+
+    expect(terminalHarness.write).toHaveBeenCalledWith("done");
+  });
+
+  it("keeps the last TUI frame when tmux exits its alternate screen", async () => {
+    const session: { handlers: ExecSessionHandlers | null } = {
+      handlers: null,
+    };
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        session.handlers = handlers;
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal sessionKey="task-exit" transport={transport} isActive />,
+    );
+    await screen.findByText("Connected");
+
+    act(() => session.handlers?.onOutput("\u001b[?1049l\r\n[exited]\r\n"));
+
+    expect(terminalHarness.write).not.toHaveBeenCalled();
   });
 
   it("can retain the terminal frame without adding a disconnected banner", async () => {

@@ -1,17 +1,15 @@
 import {
-  createPaginatedResponseSchema,
-  PaginationQuerySchema,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
-import { createPaginatedResult } from "@/database/utils/pagination";
 import { AgentTeamModel, McpToolCallModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
-  createSortingQuerySchema,
   McpToolCallResponseSchema,
   UuidIdSchema,
 } from "@/types";
@@ -22,7 +20,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetMcpToolCalls,
-        description: "Get all MCP tool calls with pagination and sorting",
+        description: "Get all MCP tool calls with cursor pagination",
         tags: ["MCP Tool Call"],
         querystring: z
           .object({
@@ -37,47 +35,27 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .datetime()
               .optional()
               .describe("Filter by end date (ISO 8601 format)"),
-            search: z
+            mcpServerName: z
               .string()
               .optional()
-              .describe(
-                "Free-text search across MCP server name, tool name, and arguments (case-insensitive)",
-              ),
+              .describe("Filter by exact MCP server name"),
           })
-          .merge(PaginationQuerySchema)
-          .merge(
-            createSortingQuerySchema([
-              "createdAt",
-              "agentId",
-              "mcpServerName",
-              "method",
-            ] as const),
-          ),
+          .merge(CursorQuerySchema),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(McpToolCallResponseSchema),
+          createCursorPaginatedResponseSchema(McpToolCallResponseSchema),
         ),
       },
     },
     async (
       {
-        query: {
-          agentId,
-          startDate,
-          endDate,
-          search,
-          limit,
-          offset,
-          sortBy,
-          sortDirection,
-        },
+        query: { agentId, startDate, endDate, mcpServerName, limit, cursor },
         user,
         organizationId,
         headers,
       },
       reply,
     ) => {
-      const pagination = { limit, offset };
-      const sorting = { sortBy, sortDirection };
+      const cursorQuery = { limit, cursor };
       // log:read scopes the view to the caller's own attributed rows;
       // log:admin lifts it (agent-visibility filtering still applies).
       const canSeeAllLogs = await userHasPermission(
@@ -86,50 +64,37 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "log",
         "admin",
       );
-      const filters = {
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
-        search: search || undefined,
-        ownUserId: canSeeAllLogs ? undefined : user.id,
-      };
-
-      if (agentId) {
-        // The per-agent listing previously skipped the access filter
-        // entirely; scope it like the main listing (own rows only without
-        // log:admin, and the agent must be visible to the caller).
-        const { success: isMcpServerAdmin } = await hasPermission(
-          { mcpServerInstallation: ["admin"] },
-          headers,
-        );
-        if (
-          !isMcpServerAdmin &&
-          !(await AgentTeamModel.userHasAgentAccess(user.id, agentId, false))
-        ) {
-          return reply.send(createPaginatedResult([], 0, pagination));
-        }
-        return reply.send(
-          await McpToolCallModel.getAllMcpToolCallsForAgentPaginated(
-            agentId,
-            pagination,
-            sorting,
-            undefined,
-            filters,
-          ),
-        );
-      }
-
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
       );
 
+      // The per-agent listing is the same query with one more predicate, so
+      // it runs through the same method rather than a parallel one that has
+      // to be kept in step with it.
+      if (
+        agentId &&
+        !isMcpServerAdmin &&
+        !(await AgentTeamModel.userHasAgentAccess(user.id, agentId, false))
+      ) {
+        return reply.send({
+          data: [],
+          pagination: { limit, hasNext: false, nextCursor: null },
+        });
+      }
+
       return reply.send(
-        await McpToolCallModel.findAllPaginated(
-          pagination,
-          sorting,
+        await McpToolCallModel.findAllCursorPaginated(
+          cursorQuery,
           user.id,
           isMcpServerAdmin,
-          filters,
+          {
+            agentId,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+            mcpServerName,
+            ownUserId: canSeeAllLogs ? undefined : user.id,
+          },
         ),
       );
     },

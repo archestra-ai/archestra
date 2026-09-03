@@ -1,14 +1,17 @@
 import { Writable } from "node:stream";
+import config from "@/config";
 import logger from "@/logging";
 import type { AgentRun } from "@/types";
 import type { RunnerBackend } from "./backends";
+
+export const RETAINED_LOG_BYTES = 1024 * 1024;
 
 /**
  * Captures live runner output and replaces it with an authoritative snapshot
  * before the runtime is torn down.
  */
 export class RunnerOutputCapture {
-  private transcriptChunks: string[] = [];
+  private fullTranscript: FullTranscriptCapture;
   private retainedLogsValue = "";
 
   constructor(
@@ -16,11 +19,25 @@ export class RunnerOutputCapture {
       backend: Pick<RunnerBackend, "streamOutput" | "snapshotOutput">;
       session: AgentRun;
       onTextDelta?: (delta: string) => void;
+      maxTranscriptBytes?: number;
     },
-  ) {}
+  ) {
+    this.fullTranscript = new FullTranscriptCapture(
+      params.maxTranscriptBytes ??
+        config.agentBackgroundExecution.transcriptMaxBytes,
+    );
+  }
 
   get transcript(): string {
-    return this.transcriptChunks.join("");
+    return this.fullTranscript.value ?? this.retainedLogsValue;
+  }
+
+  get completeTranscript(): string | null {
+    return this.fullTranscript.value;
+  }
+
+  get observedTranscriptBytes(): number {
+    return this.fullTranscript.observedBytes;
   }
 
   get retainedLogs(): string {
@@ -61,11 +78,16 @@ export class RunnerOutputCapture {
    * The live capture remains as a fallback when the final read is unavailable.
    */
   async recoverSnapshot(abortSignal?: AbortSignal): Promise<void> {
-    const snapshotChunks: string[] = [];
+    const snapshot = new FullTranscriptCapture(
+      this.params.maxTranscriptBytes ??
+        config.agentBackgroundExecution.transcriptMaxBytes,
+    );
     let snapshotLogs = "";
+    let receivedSnapshot = false;
     const destination = this.createDestination({
       onChunk: (chunk) => {
-        snapshotChunks.push(chunk);
+        receivedSnapshot = true;
+        snapshot.append(chunk);
         snapshotLogs = retainLogTail(snapshotLogs, chunk);
       },
     });
@@ -84,13 +106,13 @@ export class RunnerOutputCapture {
       return;
     }
 
-    if (snapshotChunks.length === 0) return;
-    this.transcriptChunks = snapshotChunks;
+    if (!receivedSnapshot) return;
+    this.fullTranscript = snapshot;
     this.retainedLogsValue = snapshotLogs;
   }
 
   private appendLiveChunk(chunk: string): void {
-    this.transcriptChunks.push(chunk);
+    this.fullTranscript.append(chunk);
     this.retainedLogsValue = retainLogTail(this.retainedLogsValue, chunk);
     this.params.onTextDelta?.(chunk);
   }
@@ -109,8 +131,6 @@ export class RunnerOutputCapture {
 
 // ===================== internals =====================
 
-const RETAINED_LOG_BYTES = 1024 * 1024;
-
 function retainLogTail(current: string, chunk: string): string {
   const combined = current + chunk;
   if (Buffer.byteLength(combined, "utf8") <= RETAINED_LOG_BYTES) {
@@ -120,4 +140,25 @@ function retainLogTail(current: string, chunk: string): string {
     .subarray(-RETAINED_LOG_BYTES)
     .toString("utf8")
     .replace(/^\uFFFD/, "");
+}
+
+class FullTranscriptCapture {
+  private chunks: string[] | null = [];
+  observedBytes = 0;
+
+  constructor(private readonly maxBytes: number) {}
+
+  get value(): string | null {
+    return this.chunks?.join("") ?? null;
+  }
+
+  append(chunk: string): void {
+    this.observedBytes += Buffer.byteLength(chunk, "utf8");
+    if (!this.chunks) return;
+    if (this.observedBytes > this.maxBytes) {
+      this.chunks = null;
+      return;
+    }
+    this.chunks.push(chunk);
+  }
 }

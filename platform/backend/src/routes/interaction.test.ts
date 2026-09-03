@@ -92,6 +92,54 @@ describe("interaction routes", () => {
     expect(response.json().data).toHaveLength(1);
   });
 
+  test("lists scalar interaction summaries without content payloads", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    const interaction = await InteractionModel.create({
+      profileId: agent.id,
+      sessionId: "summary-session",
+      model: "gpt-4",
+      inputTokens: 12,
+      outputTokens: 7,
+      request: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "Content stays in detail." }],
+      },
+      response: {
+        id: "summary-response",
+        object: "chat.completion",
+        created: Date.now(),
+        model: "gpt-4",
+        choices: [],
+      },
+      type: "openai:chatCompletions",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions/summaries?sessionId=summary-session&limit=10&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({
+        id: interaction.id,
+        sessionId: "summary-session",
+        model: "gpt-4",
+        inputTokens: 12,
+        outputTokens: 7,
+      }),
+    ]);
+    expect(response.json().data[0]).not.toHaveProperty("request");
+    expect(response.json().data[0]).not.toHaveProperty("response");
+    expect(response.json().data[0]).not.toHaveProperty("dualLlmAnalyses");
+  });
+
   test("lists interactions whose response carries a non-standard finish_reason", async ({
     makeAgent,
   }) => {
@@ -497,13 +545,14 @@ describe("interaction routes", () => {
     InteractionDeltaManager.reset();
     const sessions = await app.inject({
       method: "GET",
-      url: "/api/interactions/sessions?limit=10&offset=0&sessionId=route-delta-session",
+      url: "/api/interactions/sessions?limit=10&sessionId=route-delta-session",
     });
     expect(sessions.statusCode).toBe(200);
     const sessionRow = sessions.json().data[0];
     expect(sessionRow.lastUserMessagePreview).toBe(
       "first message in the claude session",
     );
+    expect(sessionRow.lastInteractionId).toBe(tip.id);
     expect(sessionRow).not.toHaveProperty("lastInteractionRequest");
 
     // Detail endpoint reconstructs the full request and passes response
@@ -568,7 +617,7 @@ describe("interaction routes", () => {
     // The Claude filter expands to every Claude client id → both Claude sessions.
     const filtered = await app.inject({
       method: "GET",
-      url: `/api/interactions/sessions?limit=50&offset=0&client=${CLAUDE_CLIENT_FILTER}`,
+      url: `/api/interactions/sessions?limit=50&client=${CLAUDE_CLIENT_FILTER}`,
     });
     expect(filtered.statusCode).toBe(200);
     expect(filtered.json().data).toHaveLength(2);
@@ -576,7 +625,7 @@ describe("interaction routes", () => {
     // The Codex filter → the single Codex session.
     const codex = await app.inject({
       method: "GET",
-      url: `/api/interactions/sessions?limit=50&offset=0&client=${CODEX_CLIENT_FILTER}`,
+      url: `/api/interactions/sessions?limit=50&client=${CODEX_CLIENT_FILTER}`,
     });
     expect(codex.statusCode).toBe(200);
     expect(codex.json().data).toHaveLength(1);
@@ -585,13 +634,13 @@ describe("interaction routes", () => {
     // No filter → all four sessions.
     const all = await app.inject({
       method: "GET",
-      url: "/api/interactions/sessions?limit=50&offset=0",
+      url: "/api/interactions/sessions?limit=50",
     });
     expect(all.statusCode).toBe(200);
     expect(all.json().data).toHaveLength(4);
   });
 
-  test("counts distinct sessions plus sessionless interactions in the sessions total", async ({
+  test("cursor-paginates distinct sessions plus sessionless interactions", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -629,12 +678,124 @@ describe("interaction routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/interactions/sessions?limit=2&offset=0",
+      url: "/api/interactions/sessions?limit=2",
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toHaveLength(2);
-    expect(response.json().pagination.total).toBe(4);
+    const first = response.json();
+    expect(first.data).toHaveLength(2);
+    expect(first.pagination.hasNext).toBe(true);
+
+    const next = await app.inject({
+      method: "GET",
+      url: `/api/interactions/sessions?limit=2&cursor=${encodeURIComponent(first.pagination.nextCursor)}`,
+    });
+    expect(next.statusCode).toBe(200);
+    expect(next.json().data).toHaveLength(2);
+    expect(next.json().pagination).toMatchObject({
+      hasNext: false,
+      nextCursor: null,
+    });
+  });
+
+  test("walks tied session heads once when interactions straddle page boundaries", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    const create = (sessionId: string, createdAt: Date) =>
+      InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        source: "api",
+        request: {
+          model: "gpt-4",
+          messages: [],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        } as unknown as InsertInteraction["response"],
+        type: "openai:chatCompletions",
+        createdAt,
+      });
+
+    const tiedAt = new Date("2026-01-04T00:00:00.000Z");
+    await create("straddling-session", new Date("2026-01-01T00:00:00.000Z"));
+    await create("straddling-session", tiedAt);
+    await create("tied-session-a", tiedAt);
+    await create("tied-session-b", tiedAt);
+    await create("older-session", new Date("2026-01-02T00:00:00.000Z"));
+
+    const firstResponse = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=2",
+    });
+    expect(firstResponse.statusCode).toBe(200);
+    const first = firstResponse.json();
+    const secondResponse = await app.inject({
+      method: "GET",
+      url: `/api/interactions/sessions?limit=2&cursor=${encodeURIComponent(first.pagination.nextCursor)}`,
+    });
+    expect(secondResponse.statusCode).toBe(200);
+    const second = secondResponse.json();
+    expect(second.pagination).toMatchObject({
+      hasNext: false,
+      nextCursor: null,
+    });
+
+    const sessions = [...first.data, ...second.data].map(
+      (row: { sessionId: string }) => row.sessionId,
+    );
+
+    expect(sessions).toHaveLength(4);
+    expect(new Set(sessions).size).toBe(4);
+    expect(
+      sessions.filter((sessionId) => sessionId === "straddling-session"),
+    ).toHaveLength(1);
+  });
+
+  test("legacy offsets and malformed cursors serve the newest session", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    await InteractionModel.create({
+      profileId: agent.id,
+      sessionId: "newest-session",
+      source: "api",
+      request: {
+        model: "gpt-4",
+        messages: [],
+      } as unknown as InsertInteraction["request"],
+      response: {
+        id: "r",
+        object: "chat.completion" as const,
+        created: Date.now(),
+        model: "gpt-4",
+        choices: [],
+      } as unknown as InsertInteraction["response"],
+      type: "openai:chatCompletions",
+      createdAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
+
+    for (const query of ["offset=999&page=999", "cursor=truncated"] as const) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/interactions/sessions?limit=1&${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data[0].sessionId).toBe("newest-session");
+    }
   });
 
   test("derives the newest preview for long sessions and for sessionless interactions", async ({
@@ -679,7 +840,7 @@ describe("interaction routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/interactions/sessions?limit=10&offset=0",
+      url: "/api/interactions/sessions?limit=10",
     });
     expect(response.statusCode).toBe(200);
     const rows = response.json().data as Array<{
@@ -922,10 +1083,10 @@ describe("interaction routes", () => {
 
       const sessions = await app.inject({
         method: "GET",
-        url: "/api/interactions/sessions?limit=10&offset=0",
+        url: "/api/interactions/sessions?limit=10",
       });
       expect(sessions.statusCode).toBe(200);
-      expect(sessions.json().pagination.total).toBe(1);
+      expect(sessions.json().data).toHaveLength(1);
       expect(sessions.json().data[0].sessionId).toBe("own-session");
 
       const userIds = await app.inject({
@@ -1029,7 +1190,7 @@ describe("interaction routes", () => {
     const fetchSession = async (sessionId: string) => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/interactions/sessions?limit=10&offset=0&sessionId=${sessionId}`,
+        url: `/api/interactions/sessions?limit=10&sessionId=${sessionId}`,
       });
       expect(res.statusCode).toBe(200);
       return res.json().data[0];
@@ -1135,7 +1296,7 @@ describe("interaction routes", () => {
     const fetchSession = async (sessionId: string) => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/interactions/sessions?limit=10&offset=0&sessionId=${sessionId}`,
+        url: `/api/interactions/sessions?limit=10&sessionId=${sessionId}`,
       });
       expect(res.statusCode).toBe(200);
       return res.json().data[0];

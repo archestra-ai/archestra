@@ -5,6 +5,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
+import { ProjectLabelModel } from "@/models/entity-labels";
 import FileModel from "@/models/file";
 import ProjectShareModel from "@/models/project-share";
 import { projectService } from "@/services/project";
@@ -59,7 +60,7 @@ describe("create_project_from_conversation tool", () => {
 
     const result = await executeArchestraTool(
       TOOL_NAME,
-      {},
+      { labels: [{ key: "stage", value: "draft" }] },
       { ...baseContext, conversationId: conv.id },
     );
 
@@ -77,6 +78,9 @@ describe("create_project_from_conversation tool", () => {
       organizationId,
     });
     expect(meta?.projectId).toBe(projectId);
+    expect(await ProjectLabelModel.getLabelsFor(projectId)).toMatchObject([
+      { key: "stage", value: "draft" },
+    ]);
     expect(
       await FileModel.listByProject({ organizationId, projectId }),
     ).toHaveLength(1);

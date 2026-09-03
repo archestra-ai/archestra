@@ -181,6 +181,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agentExecution",
     resourceIdParam: "taskId",
   },
+  // Registered explicitly so the DELETE (unshare) is not mislabeled as
+  // `agentExecution.deleted` by the walk-up to `/api/agent-executions/:taskId`.
+  "/api/agent-executions/:taskId/share": {
+    resourceType: "agentExecution",
+    resourceIdParam: "taskId",
+    actionByMethod: {
+      PUT: "agentExecution.shared",
+      DELETE: "agentExecution.unshared",
+    },
+  },
   "/api/agents/:id/restore": {
     resourceType: "agent",
     action: "agent.restored",

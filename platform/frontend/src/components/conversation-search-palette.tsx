@@ -1,7 +1,7 @@
 "use client";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useDebounce } from "@uidotdev/usehooks";
-import { Folder, MessageCircle, Pencil, Pin, UsersRound } from "lucide-react";
+import { MessageCircle, Pencil, Pin, UsersRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -9,9 +9,9 @@ import {
   contentNavGroups,
   isNavItemPermitted,
 } from "@/app/_parts/studio-nav";
-import { AgentIcon } from "@/components/agent-icon";
 import { ExecutionStateIcon } from "@/components/chat/execution-state-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { Badge } from "@/components/ui/badge";
 import {
   CommandDialog,
@@ -503,7 +503,7 @@ export function ConversationSearchPalette({
         onSelect={() => handleSelectConversation(conv.id)}
         className="flex flex-col items-start gap-1.5 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full relative"
       >
-        <div className="flex items-start gap-2 w-full min-w-0">
+        <div className="flex items-center gap-2 w-full min-w-0">
           {/* One leading icon per row: the lock replaces the chat/pin glyph
               for locked chats, at the same size and color, so the icon
               column stays aligned. */}
@@ -531,22 +531,19 @@ export function ConversationSearchPalette({
               </Tooltip>
             </TooltipProvider>
           )}
-          <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
+          <span className="text-sm flex-1 min-w-0 truncate leading-snug">
             {displayTitle}
           </span>
-          {conv.projectName && (
-            <span className="mt-0.5 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-              {conv.projectIcon ? (
-                <AgentIcon
-                  icon={conv.projectIcon}
-                  fallbackType="project"
-                  size={10}
-                />
-              ) : (
-                <Folder className="h-2.5 w-2.5 shrink-0" />
-              )}
-              <span className="truncate">{conv.projectName}</span>
-            </span>
+          {conv.projectId && conv.projectName && (
+            <ProjectBadgeButton
+              projectId={conv.projectId}
+              projectName={conv.projectName}
+              projectIcon={conv.projectIcon}
+              onNavigate={(projectId) => {
+                router.push(`/projects/${projectId}`);
+                onOpenChange(false);
+              }}
+            />
           )}
           {dateLabel && !isPending && (
             <span className="shrink-0 text-xs text-muted-foreground">
@@ -588,6 +585,17 @@ export function ConversationSearchPalette({
       <span className="text-sm flex-1 min-w-0 truncate leading-snug">
         {execution.title}
       </span>
+      {execution.projectId && execution.projectName && (
+        <ProjectBadgeButton
+          projectId={execution.projectId}
+          projectName={execution.projectName}
+          projectIcon={execution.projectIcon}
+          onNavigate={(projectId) => {
+            router.push(`/projects/${projectId}`);
+            onOpenChange(false);
+          }}
+        />
+      )}
       {opts?.dateLabel && (
         <span className="shrink-0 text-xs text-muted-foreground">
           {opts.dateLabel}

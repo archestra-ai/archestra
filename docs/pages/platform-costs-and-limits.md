@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-08-29
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -54,13 +54,29 @@ Your summary counts every request Archestra attributed to you in the current org
 
 The People section of the statistics view breaks usage down by person. For each user it shows requests, tokens, the models they use, how many days they were active, and their cost. Use it to see who has adopted AI, and which models they reach for.
 
-A request only appears here when Archestra knows who made it. Identity comes from an authenticated credential — a [passthrough virtual key](platform-llm-proxy-authentication#passthrough-virtual-keys) or your identity provider. A request made with a shared credential and no user context is not attributed to anyone, so per-user totals read lower than org-wide totals when some traffic is unattributed.
+A request only appears here when Archestra knows who made it. Identity comes from a user-bound [authentication method](platform-llm-proxy-authentication) or trusted user context. A request made with a shared credential and no user context is not attributed to anyone, so per-user totals read lower than org-wide totals when some traffic is unattributed.
 
 Tokens and requests are the honest measure of adoption. Cost is not: a person whose traffic runs on a flat-rate subscription is billed nothing, however much they use. See [Subscription vs Metered Cost](#subscription-vs-metered-cost).
 
 The same data is available from the API at `GET /api/statistics/users`, which returns one row per user with their email, so you can join it to an external roster. The response is paginated. Two options are off by default because each one costs extra work: `includeModels` adds the per-model breakdown, and `includeTimeSeries` adds a cost series per user.
 
 Per-user usage is employee-level data. Seeing other people's usage requires permission to read the member list; without it, both the UI and the API show you only your own.
+
+### Attributing External Proxy Traffic
+
+Any client that uses LLM Proxy can contribute to per-user usage. Each request must carry an identity that Archestra can resolve.
+
+Personal virtual keys, passthrough virtual keys, user OAuth tokens, and identity provider JWTs identify a user. Team and organization virtual keys identify a shared credential instead. OAuth client credentials identify an application. See [Authentication](platform-llm-proxy-authentication) for each option.
+
+An integration that authenticates its own callers can attach `X-Archestra-User-Id` when it uses a shared credential. Set it to the member's Archestra user ID after authentication. The header attributes usage but does not authenticate or authorize the user. For example, an internal workflow portal can add the member ID before it calls the proxy.
+
+For authenticated attribution, use a [passthrough virtual key](platform-llm-proxy-authentication#passthrough-virtual-keys) instead. It is a secret bound to one user, so it proves who made the request.
+
+Set `X-Archestra-Agent-Id` to record which client made the request. Use a stable value for each application. See [Custom Headers](platform-llm-proxy#custom-headers) for both headers.
+
+Use `GET /api/interactions` for request-level exports. Each row includes `userId`, `externalAgentId`, credential references, tokens, and cost. `GET /api/interactions/sessions` groups the same data into sessions and resolves virtual key details. Organization-wide interaction exports require `log:admin`.
+
+A shared credential without user context cannot be split by person later. Report that traffic by virtual key or authenticated application instead.
 
 ## Per-App Cost
 

@@ -118,15 +118,23 @@ test.describe("LLM logs — session detail inline conversation", () => {
     llmLogsPage,
     mswControl,
   }) => {
+    const interaction = makeInteraction({ id: "i1", sessionId: "s1" });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions",
-      body: paginated([makeInteraction({ id: "i1", sessionId: "s1" })]),
+      url: "/api/interactions/summaries",
+      body: paginated([interaction]),
     });
     await mswControl.use({
       method: "get",
       url: "/api/interactions/sessions",
-      body: paginated([makeSessionSummary({ sessionId: "s1" })]),
+      body: paginated([
+        makeSessionSummary({ sessionId: "s1", lastInteractionId: "i1" }),
+      ]),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/interactions/i1",
+      body: interaction,
     });
 
     await llmLogsPage.gotoSession("s1");
@@ -157,20 +165,34 @@ test.describe("LLM logs — session detail inline conversation", () => {
     mswControl,
   }) => {
     // Sorted desc: the subagent request is newer, the main request older.
+    const subagentInteraction = qa(
+      "sub",
+      "Subagent question",
+      "Subagent answer",
+      { requestType: "subagent" },
+    );
+    const mainInteraction = qa("main", "Main question", "Main answer", {
+      requestType: "main",
+    });
     await mswControl.use({
       method: "get",
-      url: "/api/interactions",
-      body: paginated([
-        qa("sub", "Subagent question", "Subagent answer", {
-          requestType: "subagent",
-        }),
-        qa("main", "Main question", "Main answer", { requestType: "main" }),
-      ]),
+      url: "/api/interactions/summaries",
+      body: paginated([subagentInteraction, mainInteraction]),
     });
     await mswControl.use({
       method: "get",
       url: "/api/interactions/sessions",
-      body: paginated([makeSessionSummary({ sessionId: "s2" })]),
+      body: paginated([
+        makeSessionSummary({
+          sessionId: "s2",
+          lastInteractionId: "main",
+        }),
+      ]),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/interactions/main",
+      body: mainInteraction,
     });
 
     await llmLogsPage.gotoSession("s2");
@@ -189,7 +211,7 @@ test.describe("LLM logs — session detail inline conversation", () => {
   }) => {
     await mswControl.use({
       method: "get",
-      url: "/api/interactions",
+      url: "/api/interactions/summaries",
       body: paginated([]),
     });
     await mswControl.use({

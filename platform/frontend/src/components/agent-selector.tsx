@@ -3,6 +3,7 @@
 import { Check, ChevronDown, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
+import { ExecutionCapableIndicator } from "@/components/chat/execution-capable-indicator";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ export type AgentSelectorAgent = {
   authorEmail?: string | null;
   description?: string | null;
   teams?: Array<{ name: string }>;
+  backgroundExecution?: unknown | null;
 };
 
 type AgentSelectorProps =
@@ -543,8 +545,8 @@ function AgentSelectorRow({
    * to the full row width so the text stays left-aligned while the row's own
    * scope badge sits in {@link AgentSelectorItem}'s right-hand cluster.
    * "trigger" is the compact button showing the current value — no
-   * description, and the badge stays beside the name rather than stranded
-   * across the control.
+   * description, and its capability/scope indicators center against the whole
+   * name + owner block rather than hanging off the first line.
    * "compact" is "trigger" pared back to one line, dropping the owner email so
    * the control fits a filter bar's row height.
    */
@@ -566,13 +568,8 @@ function AgentSelectorRow({
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate">{agent.name}</span>
-          {!isOption && agent.scope ? (
-            <span className="shrink-0">
-              <ScopeBadge
-                scope={agent.scope}
-                teamNames={agent.teams?.map((team) => team.name)}
-              />
-            </span>
+          {isOption && agent.backgroundExecution ? (
+            <ExecutionCapableIndicator />
           ) : null}
         </span>
         {description && (
@@ -586,6 +583,17 @@ function AgentSelectorRow({
           </span>
         )}
       </span>
+      {!isOption && agent.backgroundExecution ? (
+        <ExecutionCapableIndicator className="self-center" />
+      ) : null}
+      {!isOption && agent.scope ? (
+        <span className="shrink-0 self-center">
+          <ScopeBadge
+            scope={agent.scope}
+            teamNames={agent.teams?.map((team) => team.name)}
+          />
+        </span>
+      ) : null}
     </span>
   );
 }

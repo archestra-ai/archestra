@@ -16,7 +16,6 @@ import {
   Loader2,
   Plus,
   Search,
-  TerminalSquare,
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -41,6 +40,7 @@ import { ToolChecklist } from "@/components/agent-tools-editor";
 import { sortCatalogItems } from "@/components/agent-tools-editor.utils";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { CatalogDocsLink } from "@/components/catalog-docs-link";
+import { ExecutionCapableIndicator } from "@/components/chat/execution-capable-indicator";
 import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
@@ -741,23 +741,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     </>
   );
 });
-
-function ExecutionCapableIndicator() {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className="inline-flex shrink-0 text-muted-foreground/60"
-          role="img"
-          aria-label="Isolated execution"
-        >
-          <TerminalSquare className="size-3" />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">Runs in an isolated execution</TooltipContent>
-    </Tooltip>
-  );
-}
 
 // Reusable dialog header with back button and close
 function DialogHeader({

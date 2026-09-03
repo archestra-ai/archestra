@@ -1,5 +1,6 @@
 import type { IncomingMessage, Server } from "node:http";
 import { PassThrough } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import {
   type ClientWebSocketMessage,
   ClientWebSocketMessageSchema,
@@ -18,10 +19,19 @@ import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
-import { AgentRunModel, McpServerModel, UserModel } from "@/models";
+import {
+  AgentRunModel,
+  AgentRunShareModel,
+  McpServerModel,
+  ProjectModel,
+  ProjectShareModel,
+  UserModel,
+} from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { resolveRunnerBackend } from "@/services/runners/backends";
+import { RETAINED_LOG_BYTES } from "@/services/runners/output-capture";
+import { agentRunTranscriptStore } from "@/services/runners/transcript-store";
 
 interface McpLogsSubscription {
   serverId: string;
@@ -668,7 +678,7 @@ class WebSocketService {
       });
       return;
     }
-    if (!(await this.mayControlSession(session, clientContext))) {
+    if (!(await this.mayViewSessionLogs(session, clientContext))) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
         payload: {
@@ -680,6 +690,47 @@ class WebSocketService {
     }
 
     if (session.endedAt) {
+      const decoder = new StringDecoder("utf8");
+      const transcript = await agentRunTranscriptStore
+        .stream({
+          runId: session.id,
+          onChunk: (chunk) => {
+            const logs = decoder.write(chunk);
+            if (logs) {
+              this.sendToClient(ws, {
+                type: "agent_run_logs",
+                payload: { runId, logs },
+              });
+            }
+          },
+        })
+        .catch((error) => {
+          logger.warn(
+            { error, sessionId: session.id, taskId: session.taskId },
+            "Could not read the complete Agent execution transcript",
+          );
+          return null;
+        });
+      if (transcript?.isComplete) {
+        const finalLogs = decoder.end();
+        if (finalLogs) {
+          this.sendToClient(ws, {
+            type: "agent_run_logs",
+            payload: { runId, logs: finalLogs },
+          });
+        }
+        this.sendToClient(ws, {
+          type: "agent_run_logs_ended",
+          payload: {
+            runId,
+            source: "full",
+            truncated: false,
+            totalBytes: transcript.uncompressedBytes,
+          },
+        });
+        return;
+      }
+
       if (session.logs) {
         this.sendToClient(ws, {
           type: "agent_run_logs",
@@ -688,7 +739,14 @@ class WebSocketService {
       }
       this.sendToClient(ws, {
         type: "agent_run_logs_ended",
-        payload: { runId },
+        payload: {
+          runId,
+          source: "tail",
+          truncated:
+            transcript?.isComplete === false ||
+            Buffer.byteLength(session.logs ?? "", "utf8") >= RETAINED_LOG_BYTES,
+          totalBytes: transcript?.uncompressedBytes,
+        },
       });
       return;
     }
@@ -754,6 +812,48 @@ class WebSocketService {
       clientContext.organizationId,
       "agent",
       "admin",
+    );
+  }
+
+  /**
+   * Who may stream a run's logs read-only: anyone who could control it, plus
+   * anyone an execution share or project grants access to. Interactive attach stays owner-only (see
+   * {@link handleSubscribeAgentRunAttach}) — a share never lends the owner's
+   * live credentials, only a view of the output.
+   */
+  private async mayViewSessionLogs(
+    session: {
+      actorUserId: string | null;
+      taskId: string;
+      projectId: string | null;
+    },
+    clientContext: WebSocketClientContext,
+  ): Promise<boolean> {
+    if (await this.mayControlSession(session, clientContext)) return true;
+    const share = await AgentRunShareModel.findAccessibleByTaskId({
+      taskId: session.taskId,
+      organizationId: clientContext.organizationId,
+      userId: clientContext.userId,
+    });
+    if (share) return true;
+    if (!session.projectId) return false;
+
+    const project = await ProjectModel.findById(session.projectId);
+    if (
+      !project ||
+      !(await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: clientContext.userId,
+        organizationId: clientContext.organizationId,
+      }))
+    ) {
+      return false;
+    }
+    return userHasPermission(
+      clientContext.userId,
+      clientContext.organizationId,
+      "project",
+      "read-all",
     );
   }
 

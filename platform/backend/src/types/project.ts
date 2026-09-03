@@ -3,6 +3,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { ConversationOriginSchema } from "./conversation";
+import { LabelWithDetailsSchema } from "./label";
 
 /** Who a shared project is visible to (no share row = owner only). */
 // `user` shares with named individuals listed in `project_share_user`, the
@@ -84,6 +85,7 @@ export const ProjectListItemSchema = z.object({
    * ownership does not transfer — so one field answers both questions.
    */
   createdBy: CreatedByNullableSchema,
+  labels: z.array(LabelWithDetailsSchema),
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */
   visibility: ProjectShareVisibilitySchema.nullable(),

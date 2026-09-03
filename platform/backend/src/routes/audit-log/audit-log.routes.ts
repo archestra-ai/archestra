@@ -1,6 +1,6 @@
 import {
-  createPaginatedResponseSchema,
-  PaginationQuerySchema,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -14,7 +14,6 @@ import {
   AuditLogWithImpersonatorSchema,
   AuditOutcomeSchema,
   constructResponseSchema,
-  SortDirectionSchema,
 } from "@/types";
 
 const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -56,19 +55,10 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by resource ID (e.g. a specific agent's ID)"),
-            search: z
-              .string()
-              .optional()
-              .describe(
-                "Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name",
-              ),
           })
-          .extend({
-            sortDirection: SortDirectionSchema.optional().default("desc"),
-          })
-          .merge(PaginationQuerySchema),
+          .merge(CursorQuerySchema),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(AuditLogWithImpersonatorSchema),
+          createCursorPaginatedResponseSchema(AuditLogWithImpersonatorSchema),
         ),
       },
     },
@@ -83,10 +73,8 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           actorType,
           resourceType,
           resourceId,
-          search,
           limit,
-          offset,
-          sortDirection,
+          cursor,
         },
         user,
         organizationId,
@@ -102,11 +90,10 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "admin",
       );
 
-      const result = await AuditLogModel.findPaginated({
+      const result = await AuditLogModel.findCursorPaginated({
         organizationId,
         limit,
-        offset,
-        sortDirection,
+        cursor,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
         actorId: canSeeAllAuditLogs ? actorId : user.id,
@@ -115,7 +102,6 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         actorType,
         resourceType,
         resourceId,
-        search,
       });
 
       return reply.send(result);

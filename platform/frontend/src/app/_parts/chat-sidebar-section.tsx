@@ -29,6 +29,7 @@ import { ExecutionStateIcon } from "@/components/chat/execution-state-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
 import {
@@ -345,6 +346,18 @@ export function ChatSidebarSection({
     }
   };
 
+  const handleChangeExecutionProject = async (
+    taskId: string,
+    projectId: string | null,
+  ) => {
+    try {
+      await updateExecutionMutation.mutateAsync({ taskId, projectId });
+      setOpenMenuId(null);
+    } catch {
+      // Error is handled by the mutation's onError callback.
+    }
+  };
+
   const handleSelectProject = (id: string) => {
     if (isMobile) {
       setOpenMobile(false);
@@ -559,21 +572,19 @@ export function ChatSidebarSection({
                   className="ml-1 h-2 w-2 shrink-0 rounded-full bg-primary"
                 />
               ) : null}
-              {conv.projectName && (
-                <span className="ml-1 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                  {conv.projectIcon ? (
-                    <AgentIcon
-                      icon={conv.projectIcon}
-                      fallbackType="project"
-                      size={10}
-                    />
-                  ) : (
-                    <Folder className="h-2.5 w-2.5 shrink-0" />
-                  )}
-                  <span className="truncate">{conv.projectName}</span>
-                </span>
-              )}
             </SidebarMenuButton>
+          )}
+          {editingId !== conv.id && conv.projectId && conv.projectName && (
+            <ProjectBadgeButton
+              projectId={conv.projectId}
+              projectName={conv.projectName}
+              projectIcon={conv.projectIcon}
+              compact
+              onNavigate={(projectId) => {
+                if (isMobile) setOpenMobile(false);
+                router.push(`/projects/${projectId}`);
+              }}
+            />
           )}
           {/* Sibling of the row button (not nested inside it): interactive
               controls must not be nested, and the trigger must be a real
@@ -744,6 +755,18 @@ export function ChatSidebarSection({
               </span>
             </SidebarMenuButton>
           )}
+          {!isEditing && execution.projectId && execution.projectName && (
+            <ProjectBadgeButton
+              projectId={execution.projectId}
+              projectName={execution.projectName}
+              projectIcon={execution.projectIcon}
+              compact
+              onNavigate={(projectId) => {
+                if (isMobile) setOpenMobile(false);
+                router.push(`/projects/${projectId}`);
+              }}
+            />
+          )}
           {!isEditing && (
             <DropdownMenu
               open={isMenuOpen}
@@ -790,6 +813,16 @@ export function ChatSidebarSection({
                   <Pencil className="mr-2 size-4" />
                   Rename
                 </DropdownMenuItem>
+                {canReadProjects === true && (
+                  <ConversationProjectActions
+                    projectId={execution.projectId}
+                    projects={projectsData ?? []}
+                    isPending={updateExecutionMutation.isPending}
+                    onProjectChange={(projectId) =>
+                      handleChangeExecutionProject(execution.taskId, projectId)
+                    }
+                  />
+                )}
                 {live ? (
                   <DropdownMenuItem
                     onClick={() => setStopExecutionId(execution.taskId)}

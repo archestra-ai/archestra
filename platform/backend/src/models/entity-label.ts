@@ -95,6 +95,11 @@ export const LABEL_JUNCTIONS: LabelJunction[] = [
     valueId: schema.pluginLabelsTable.valueId,
   },
   {
+    table: schema.projectLabelsTable,
+    keyId: schema.projectLabelsTable.keyId,
+    valueId: schema.projectLabelsTable.valueId,
+  },
+  {
     table: schema.serviceAccountLabelsTable,
     keyId: schema.serviceAccountLabelsTable.keyId,
     valueId: schema.serviceAccountLabelsTable.valueId,

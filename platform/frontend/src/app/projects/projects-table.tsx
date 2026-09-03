@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AgentIcon } from "@/components/agent-icon";
+import { LabelTags } from "@/components/label-tags";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -90,6 +91,7 @@ export function ProjectsTable({
                 />
               </span>
               <span className="truncate font-medium">{project.name}</span>
+              <LabelTags labels={project.labels} />
             </div>
             {project.description && (
               <div className="truncate text-xs text-muted-foreground">

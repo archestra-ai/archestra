@@ -203,6 +203,10 @@ export const AUDIT_DECISIONS = {
   // admin — so delete and restore are cross-user administrative actions on
   // someone else's data, not the personal grouping this table started as.
   projectsTable: { audited: true, model: ProjectModel },
+  projectLabelsTable: {
+    audited: false,
+    reason: "join: project × label; parent (project) audited",
+  },
   projectSharesTable: {
     audited: false,
     reason: "project share metadata; parent (project) audited",
@@ -649,10 +653,32 @@ export const AUDIT_DECISIONS = {
     reason:
       "records which pod carries an A2A task; the task's own state machine and event log are the record of the work",
   },
+  agentRunTranscriptsTable: {
+    audited: false,
+    reason:
+      "task-owned execution output; the Agent execution surface is the record of the work",
+  },
+  agentRunTranscriptChunksTable: {
+    audited: false,
+    reason: "storage chunks owned by an Agent run transcript",
+  },
   agentExecutionInputsTable: {
     audited: false,
     reason:
       "task-owned runtime inputs; the execution start event records the file count without logging file names or content",
+  },
+  agentRunSharesTable: {
+    audited: false,
+    reason:
+      "agent execution share metadata; share and unshare are audited at the route level (agentExecution.shared/unshared)",
+  },
+  agentRunShareTeamsTable: {
+    audited: false,
+    reason: "join: agent run share × team",
+  },
+  agentRunShareUsersTable: {
+    audited: false,
+    reason: "join: agent run share × user",
   },
   userCredentialsTable: {
     audited: false,

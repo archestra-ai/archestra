@@ -38,7 +38,7 @@ test.describe("Audit log UI", {
 
     // Page heading and filter controls are part of the audit log table contract.
     await expect(
-      adminPage.getByPlaceholder(/Search audit events/i),
+      adminPage.getByRole("combobox", { name: "Filter by action" }),
     ).toBeVisible({ timeout: 15_000 });
 
     // Column headers are stable and part of the visual contract.

@@ -118,9 +118,10 @@ test("Verify tool calling using dynamic credentials", async ({
 
   const toolsResponse = await archestraApiSdk.getTools({
     headers: { Cookie: cookieHeaders },
+    query: { limit: 100, offset: 0 },
   });
   const toolIds =
-    toolsResponse.data
+    toolsResponse.data?.data
       ?.filter((tool) => tool.name.startsWith(`${CATALOG_ITEM_NAME}__`))
       .map((tool) => tool.id) ?? [];
   if (toolIds.length === 0) {

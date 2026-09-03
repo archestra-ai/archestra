@@ -174,6 +174,7 @@ export const RouteId = {
 
   // Interaction Routes
   GetInteractions: "getInteractions",
+  GetInteractionSummaries: "getInteractionSummaries",
   GetInteraction: "getInteraction",
   GetInteractionSessions: "getInteractionSessions",
   GetUniqueExternalAgentIds: "getUniqueExternalAgentIds",
@@ -485,6 +486,9 @@ export const RouteId = {
   UpdateAgentExecution: "updateAgentExecution",
   CancelAgentExecution: "cancelAgentExecution",
   DeleteAgentExecution: "deleteAgentExecution",
+  GetAgentExecutionShare: "getAgentExecutionShare",
+  ShareAgentExecution: "shareAgentExecution",
+  UnshareAgentExecution: "unshareAgentExecution",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -822,6 +826,8 @@ export const RouteId = {
   CreateProject: "createProject",
   CreateProjectFromConversation: "createProjectFromConversation",
   GetProjects: "getProjects",
+  GetProjectLabelValues: "projectLabelValues",
+  GetProjectLabelKeys: "projectLabelKeys",
   GetProject: "getProject",
   UpdateProject: "updateProject",
   SetProjectShare: "setProjectShare",
@@ -831,6 +837,7 @@ export const RouteId = {
   RestoreProject: "restoreProject",
   PermanentlyDeleteProject: "permanentlyDeleteProject",
   GetProjectConversations: "getProjectConversations",
+  GetProjectExecutions: "getProjectExecutions",
   GetProjectFiles: "getProjectFiles",
   UploadProjectFiles: "uploadProjectFiles",
   GetProjectInstructions: "getProjectInstructions",

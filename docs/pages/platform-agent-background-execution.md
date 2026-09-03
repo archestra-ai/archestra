@@ -3,20 +3,20 @@ title: Background Execution
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated deployment
-lastUpdated: 2026-09-02
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Background execution gives an Agent an isolated deployment for delegated, long-running work. It is an optional capability of the Agent, not a separate resource to create or grant access to.
 
-![The Create Agent catalog with Archestra Agent, Claude Code, Codex, Hermes, OpenClaw, and Start from scratch](/docs/automated_screenshots/platform-agent-background-execution_catalog.webp)
+![The Create Agent catalog with Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, and Start from scratch](/docs/automated_screenshots/platform-agent-background-execution_catalog.webp)
 
 Think of the configuration as three composable layers:
 
 - The **Agent** is the durable identity: its instructions, selected model, tools, knowledge, environment, and access rules.
 - The **foreground runtime** is Archestra's built-in Agent loop. It powers ordinary conversations and the full chat interface.
-- The optional **background runtime** is an isolated execution selected by Archestra's control plane. The first execution backend uses Kubernetes pods and can run Archestra Agent, Claude Code, Codex, Hermes, OpenClaw, or a custom image. Each task is presented as an execution with logs and a live shell.
+- The optional **background runtime** is an isolated execution selected by Archestra's control plane. The first execution backend uses Kubernetes pods and can run Archestra Agent, Claude Code, Codex, OpenCode, Hermes, OpenClaw, or a custom image. Each task is presented as an execution with logs and a live shell.
 
 The runtime does not become a second Agent. Both runtimes act as the same Agent and receive the same platform-managed model and tool access.
 
@@ -31,13 +31,14 @@ the future without changing Agents, delegation, or the Executions UI.
 Invocation is explicit and surface-specific:
 
 - **Archestra Chat uses execution mode for a Background-enabled Agent.** Selecting that Agent from the composer or choosing **Chat** on its detail page changes the composer into an execution launcher. The first message starts the isolated deployment and opens its live terminal.
+- **Projects use the same execution launcher.** Selecting a Background-enabled Agent in a project's composer starts the execution inside that project, where it stays grouped with the project's work.
 - **Ordinary messaging-channel messages stay in the foreground.** A channel Agent uses the normal Archestra Agent loop unless it delegates a durable task to a Background-enabled Agent.
 - **A2A and email select the configured runtime.** An A2A `SendMessage` or incoming email addressed directly to a Background-enabled Agent creates a durable task in its deployment. The same calls use the foreground loop when the Agent has no Background execution configuration.
 - **Delegation selects the configured runtime.** When another Agent delegates to this Agent, Archestra starts a durable task in the Agent's deployment if Background execution is configured. Without it, the delegation uses the foreground Agent loop.
 
 Background executions have two launch modes. Chat starts the image in
-**interactive** mode and exposes its live terminal; maintained Claude Code and
-Codex images run their native TUIs. Delegation from another Agent, A2A,
+**interactive** mode and exposes its live terminal. Maintained Claude Code,
+Codex, and OpenCode images run their native TUIs. Delegation from another Agent, A2A,
 incoming email, schedules, and task tools uses **one-shot** mode. The same
 image receives the task, exits when it is finished, and lets Archestra settle
 the durable task and deliver its result. This is selected by the invocation
@@ -69,7 +70,7 @@ To configure an Agent:
 
 When you create an Agent, the catalog can prefill this setup for one of the
 maintained images. Choose **Archestra Agent**, **Claude Code**, **Codex**,
-**Hermes**, or **OpenClaw**, then review the ordinary Agent wizard. The catalog
+**OpenCode**, **Hermes**, or **OpenClaw**, then review the ordinary Agent wizard. The catalog
 does not create a different resource type: it supplies a name, instructions,
 image, command, inference protocol, and credential declarations to the same
 form used by **Start from scratch**.
@@ -145,7 +146,7 @@ maintained runtime cannot silently switch from subscription access to metered
 API billing.
 
 The **Inference API** setting describes the wire protocol expected by the
-image. Choose **OpenAI Responses** for clients such as Codex. Choose **OpenAI
+image. Choose **OpenAI Responses** for clients such as Codex and OpenCode. Choose **OpenAI
 Chat Completions** for clients such as Hermes and OpenClaw. Choose
 **Anthropic Messages** for clients such as Claude Code. Archestra rejects an
 incompatible model and image before creating a pod.
@@ -219,6 +220,7 @@ accept useful follow-up instructions.
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_MANIFEST` | JSON manifest containing each input file's name, path, media type, and size. |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL` | Provider-qualified model ID for generic clients. |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL` | Provider-native model slug for clients that configure their provider separately. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH` | Known context and output limits for native client configuration. |
 | `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL` | Agent-scoped inference endpoint and its `openai_responses`, `openai_chat`, or `anthropic` protocol. |
 | `ARCHESTRA_VIRTUAL_KEY` | Personal virtual key for the execution. |
 | `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL` | Native client aliases for the Agent-scoped proxy. |
@@ -354,6 +356,25 @@ appear under **Pinned** in the conversation search palette. The same menu stops
 an active execution or deletes a finished one. Stopping removes the deployment
 and keeps the output produced before cancellation.
 
+## Organize Executions in Projects
+
+Start an execution from a project's composer to place it in that project immediately. The project page lists its execution sessions separately from chats so you can reopen live and completed work from one place.
+
+To organize an existing session, open its sidebar menu and choose **Change project**. Choose **Remove from project** to make it unassigned again. Moving a session does not stop it or change its output.
+
+Project access follows the same rules for chats and execution sessions. You always see sessions you started. Reading another member's project session requires the project's read-all permission and gives you a read-only view; only the person who started the run can attach to its live shell.
+
+## Share an Execution
+
+Share an execution the same way you share a conversation. From the execution's
+**Share** button, choose who can see it — your whole organization, specific
+teams, or named users. Recipients get a read-only view of the execution: its
+details and its terminal output, both live and retained.
+
+Sharing never grants terminal input. Attaching to the live shell runs commands
+under your own credentials, so it stays limited to you — the person who started
+the run.
+
 ## View Executions from an Agent
 
 An Agent with Background execution configured has an **Executions** tab. Use it to:
@@ -368,7 +389,18 @@ the Agent session automatically. Press `Ctrl-b`, then `d`, to detach without
 stopping the execution. For a raw diagnostic shell, set
 `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH=0` on the exec command.
 
-Archestra retains up to 1 MB of container output after the pod is removed. Only the user whose credentials started an execution can attach to its live shell. Agent administrators cannot enter another user's shell. There is no separate Background execution permission or sidebar resource.
+After the pod is removed, Archestra retains the complete container transcript
+as independently compressed chunks and replays those chunks into the terminal
+view. The transcript follows the execution's task retention period, which is
+90 days by default. Set
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TRANSCRIPT_MAX_BYTES` to cap the
+uncompressed transcript size accepted from one run. A run beyond that ceiling
+keeps its final 1 MiB instead, and the terminal labels the recording
+**Retained tail only** so the missing history is never silent.
+
+Only the user whose credentials started an execution can attach to its live
+shell. Agent administrators cannot enter another user's shell. There is no
+separate Background execution permission or sidebar resource.
 
 ## Example Architecture
 

@@ -7,8 +7,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  useInteraction,
   useInteractionSessions,
-  useInteractions,
+  useInteractionSummaries,
 } from "@/lib/interactions/interaction.query";
 import SessionDetailPage from "./page.client";
 
@@ -19,7 +20,8 @@ vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
-  useInteractions: vi.fn(),
+  useInteraction: vi.fn(),
+  useInteractionSummaries: vi.fn(),
   useInteractionSessions: vi.fn(),
   useExportSessionInteractions: vi.fn(() => ({
     mutate: vi.fn(),
@@ -47,13 +49,16 @@ describe("SessionDetailPage", () => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: undefined,
     } as unknown as ReturnType<typeof useInteractionSessions>);
+    vi.mocked(useInteraction).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useInteraction>);
   });
 
   it("says nothing at all while session interactions are loading", async () => {
-    vi.mocked(useInteractions).mockReturnValue({
+    vi.mocked(useInteractionSummaries).mockReturnValue({
       data: undefined,
       isLoading: true,
-    } as unknown as ReturnType<typeof useInteractions>);
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
     renderSessionDetailPage();
 
@@ -69,7 +74,7 @@ describe("SessionDetailPage", () => {
   });
 
   it("shows the empty state after session interactions finish loading empty", async () => {
-    vi.mocked(useInteractions).mockReturnValue({
+    vi.mocked(useInteractionSummaries).mockReturnValue({
       data: {
         data: [],
         pagination: {
@@ -82,7 +87,7 @@ describe("SessionDetailPage", () => {
         },
       },
       isLoading: false,
-    } as unknown as ReturnType<typeof useInteractions>);
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
     renderSessionDetailPage();
 
@@ -107,10 +112,10 @@ describe("SessionDetailPage", () => {
         ],
       },
     } as unknown as ReturnType<typeof useInteractionSessions>);
-    vi.mocked(useInteractions).mockReturnValue({
+    vi.mocked(useInteractionSummaries).mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
       isLoading: false,
-    } as unknown as ReturnType<typeof useInteractions>);
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
     renderSessionDetailPage();
 
@@ -128,10 +133,10 @@ describe("SessionDetailPage", () => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [{ externalAgentIds: [externalAgentId] }] },
     } as unknown as ReturnType<typeof useInteractionSessions>);
-    vi.mocked(useInteractions).mockReturnValue({
+    vi.mocked(useInteractionSummaries).mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
       isLoading: false,
-    } as unknown as ReturnType<typeof useInteractions>);
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
     renderSessionDetailPage();
 
@@ -142,10 +147,10 @@ describe("SessionDetailPage", () => {
     vi.mocked(useInteractionSessions).mockReturnValue({
       data: { data: [{ externalAgentIds: ["my-custom-agent"] }] },
     } as unknown as ReturnType<typeof useInteractionSessions>);
-    vi.mocked(useInteractions).mockReturnValue({
+    vi.mocked(useInteractionSummaries).mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
       isLoading: false,
-    } as unknown as ReturnType<typeof useInteractions>);
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
     renderSessionDetailPage();
 
@@ -156,7 +161,7 @@ describe("SessionDetailPage", () => {
   });
 
   it("renders the rows-per-page selector when the session has interactions", async () => {
-    vi.mocked(useInteractions).mockReturnValue({
+    vi.mocked(useInteractionSummaries).mockReturnValue({
       data: {
         data: [],
         pagination: {
@@ -169,7 +174,7 @@ describe("SessionDetailPage", () => {
         },
       },
       isLoading: false,
-    } as unknown as ReturnType<typeof useInteractions>);
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
     renderSessionDetailPage();
 
@@ -195,10 +200,10 @@ describe("SessionDetailPage", () => {
         ],
       },
     } as unknown as ReturnType<typeof useInteractionSessions>);
-    vi.mocked(useInteractions).mockReturnValue({
+    vi.mocked(useInteractionSummaries).mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
       isLoading: false,
-    } as unknown as ReturnType<typeof useInteractions>);
+    } as unknown as ReturnType<typeof useInteractionSummaries>);
 
     renderSessionDetailPage();
 

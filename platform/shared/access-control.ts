@@ -573,7 +573,7 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:create": "Start new chat conversations",
   "chat:update": "Edit chat messages and conversation settings",
   "chat:delete": "Delete chat conversations",
-  "project:read": "View projects and your own chats inside them",
+  "project:read": "View projects and your own sessions inside them",
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
@@ -582,7 +582,7 @@ export const permissionDescriptions: Record<string, string> = {
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
   "project:read-all":
-    "View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own.",
+    "View chats and execution sessions that other members started in any project you can access. Without this, you only see the sessions you started yourself — including in projects you own.",
   "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read": "View your own LLM proxy and MCP tool call logs",
   "log:admin": "View every user's LLM proxy and MCP tool call logs",
@@ -701,6 +701,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgentExecution]: { agent: ["read"] },
   [RouteId.CancelAgentExecution]: { agent: ["read"] },
   [RouteId.DeleteAgentExecution]: { agent: ["read"] },
+  [RouteId.GetAgentExecutionShare]: { agent: ["read"] },
+  [RouteId.ShareAgentExecution]: { agent: ["read"] },
+  [RouteId.UnshareAgentExecution]: { agent: ["read"] },
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -832,6 +835,9 @@ export const requiredEndpointPermissionsMap: Partial<
     toolPolicy: ["delete"],
   },
   [RouteId.GetInteractions]: {
+    log: ["read"],
+  },
+  [RouteId.GetInteractionSummaries]: {
     log: ["read"],
   },
   [RouteId.GetInteraction]: {
@@ -1917,6 +1923,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // tool's RBAC). The owner can always read their own chat.
   [RouteId.CreateProjectFromConversation]: { project: ["create"] },
   [RouteId.GetProjects]: { project: ["read"] },
+  [RouteId.GetProjectLabelKeys]: { project: ["read"] },
+  [RouteId.GetProjectLabelValues]: { project: ["read"] },
   [RouteId.GetProject]: { project: ["read"] },
   [RouteId.UpdateProject]: { project: ["update"] },
   [RouteId.SetProjectShare]: { project: ["update"] },
@@ -1933,6 +1941,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // branch here to answer 403 and leak a trashed project's existence.
   [RouteId.PermanentlyDeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
+  [RouteId.GetProjectExecutions]: { project: ["read"], agent: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is
   // still enforced in the handler (projectService.listFiles/uploadFile ->

@@ -740,12 +740,19 @@ class ToolModel {
     };
   }
 
-  static async findAll(
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<ExtendedTool[]> {
-    // Get all tools
-    let query = db
+  static async findAll(params: {
+    userId?: string;
+    isAgentAdmin?: boolean;
+    pagination: { limit: number; offset: number };
+  }): Promise<PaginatedResult<ExtendedTool>> {
+    const conditions = [
+      eq(schema.toolsTable.clonedPendingDiscovery, false),
+      ...(params.userId && !params.isAgentAdmin
+        ? [isNotNull(schema.toolsTable.catalogId)]
+        : []),
+    ];
+    const whereClause = and(...conditions);
+    const rowsQuery = db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
@@ -787,32 +794,18 @@ class ToolModel {
         schema.internalMcpCatalogTable,
         eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
       )
+      .where(whereClause)
       .orderBy(desc(schema.toolsTable.createdAt))
-      .$dynamic();
+      .limit(params.pagination.limit)
+      .offset(params.pagination.offset);
 
-    /**
-     * Apply access control filtering for users that are not agent admins
-     *
-     * Non-admins can only see MCP tools (catalogId IS NOT NULL).
-     * Proxy tools (catalogId=NULL) are not surfaced in this endpoint.
-     */
-    // TODO: this require a re-work.
-    // findAll currently used only by the auto-policy configuration and it bypass access control checks.
-    // Chaining `.where()` twice on a dynamic Drizzle query replaces the prior
-    // clause rather than ANDing it, so combine both filters in a single call.
-    if (userId && !isAgentAdmin) {
-      query = query.where(
-        and(
-          isNotNull(schema.toolsTable.catalogId),
-          eq(schema.toolsTable.clonedPendingDiscovery, false),
-        ),
-      );
-    } else {
-      query = query.where(eq(schema.toolsTable.clonedPendingDiscovery, false));
-    }
-
-    const results = await query;
-    return results;
+    // Non-admins can only see MCP tools (catalogId IS NOT NULL). Proxy tools
+    // (catalogId=NULL) are not surfaced in this endpoint.
+    const [rows, [{ total }]] = await Promise.all([
+      rowsQuery,
+      db.select({ total: count() }).from(schema.toolsTable).where(whereClause),
+    ]);
+    return createPaginatedResult(rows, Number(total), params.pagination);
   }
 
   static async findByName(

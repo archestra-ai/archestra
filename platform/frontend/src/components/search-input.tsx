@@ -18,6 +18,7 @@ type SearchInputProps = {
   onSearchChange?: (value: string) => void;
   value?: string;
   syncQueryParams?: boolean;
+  paginationMode?: "offset" | "cursor";
   /**
    * Whether the list this box filters is currently fetching.
    *
@@ -50,6 +51,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       onSearchChange,
       value,
       syncQueryParams = true,
+      paginationMode = "offset",
       isLoading = false,
     }: SearchInputProps,
     ref,
@@ -85,11 +87,21 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
         } else {
           params.delete(paramName);
         }
-        params.set("page", "1");
-        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+        if (paginationMode === "cursor") {
+          params.delete("cursor");
+          params.delete("page");
+          params.delete("pageSize");
+        } else {
+          params.set("page", "1");
+        }
+        const query = params.toString();
+        router.push(query ? `${pathname}?${query}` : pathname, {
+          scroll: false,
+        });
       },
       [
         onSearchChange,
+        paginationMode,
         paramName,
         pathname,
         router,

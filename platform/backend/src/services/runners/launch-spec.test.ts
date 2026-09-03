@@ -72,6 +72,7 @@ describe("buildRunnerLaunchSpec", () => {
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL: "gemini:selected-model",
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: "selected-model",
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER: "gemini",
+      ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH: "16384",
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
       ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
       OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
@@ -401,6 +402,8 @@ describe("buildRunnerLaunchSpec", () => {
   }) => {
     const setup = await makeConfiguredAgent({
       provider: "anthropic",
+      modelId: "claude-opus-4-8",
+      contextLength: 1_000_000,
       makeOrganization,
       makeAdmin,
       makeMember,
@@ -458,6 +461,18 @@ describe("buildRunnerLaunchSpec", () => {
     expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toMatch(
       /X-Archestra-Virtual-Key: arch_/,
     );
+    expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL).toBe(
+      "claude-opus-4-8",
+    );
+    expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL).toBe(
+      "claude-opus-4-8[1m]",
+    );
+    expect(
+      spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH,
+    ).toBe("1000000");
+    expect(
+      spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH,
+    ).toBe("16384");
 
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
     expect(virtualKey?.keyType).toBe("passthrough");
@@ -665,6 +680,7 @@ describe("buildRunnerLaunchSpec", () => {
 async function makeConfiguredAgent(params: {
   provider: SupportedProvider;
   modelId?: string;
+  contextLength?: number;
   makeOrganization: () => Promise<{ id: string }>;
   makeAdmin: () => Promise<User>;
   makeMember: (
@@ -706,6 +722,8 @@ async function makeConfiguredAgent(params: {
     modelId,
     inputModalities: ["text"],
     outputModalities: ["text"],
+    contextLength: params.contextLength,
+    outputLength: 16_384,
     supportsToolCalling: true,
     lastSyncedAt: new Date(),
   });

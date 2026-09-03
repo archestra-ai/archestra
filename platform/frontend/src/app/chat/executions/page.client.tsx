@@ -4,6 +4,7 @@ import {
   Bot,
   Copy,
   MoreHorizontal,
+  Share2,
   Square,
   TerminalSquare,
 } from "lucide-react";
@@ -14,8 +15,9 @@ import { AgentExecutionLogs } from "@/components/agent-execution-logs";
 import { AgentExecutionState } from "@/components/agent-execution-state";
 import { AgentExecutionTerminal } from "@/components/agent-execution-terminal";
 import { AgentIcon } from "@/components/agent-icon";
+import { ShareAgentExecutionDialog } from "@/components/chat/share-agent-execution-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { QueryLoadError } from "@/components/query-load-error";
+import { ExecTerminalStatus } from "@/components/exec/exec-terminal-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,27 +36,44 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
   const query = useMyAgentExecution(taskId);
   const cancelExecution = useCancelAgentExecution();
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [connectionCommand, setConnectionCommand] = useState<string | null>(
+    null,
+  );
+  const [liveTerminalTaskId, setLiveTerminalTaskId] = useState<string | null>(
     null,
   );
   const [commandCopied, setCommandCopied] = useState(false);
   const execution = query.data;
 
+  // Metadata and the log stream are readable by shared viewers, but attaching
+  // to the live terminal runs a shell under the owner's own credentials — so it
+  // stays owner-only. Everyone else gets the read-only output stream.
+  const isOwner = execution?.viewerRole === "owner";
+
   if (!query.isPending && !execution) {
+    // Sit in the same centered terminal-box placement the attach loader
+    // ("Waiting for a node…") uses, but with only this access notice in place
+    // of the loader's progress steps.
     return (
-      <div className="flex h-full items-center justify-center p-6">
-        <QueryLoadError
-          className="max-w-lg border"
-          title="Couldn't load this execution"
-          description={executionLoadErrorDescription(query.error)}
-          onRetry={() => query.refetch()}
-        />
-      </div>
+      <main className="flex h-full min-h-0 flex-col bg-background p-4 md:p-6">
+        <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border bg-slate-950">
+          <ExecTerminalStatus
+            title="Terminal unavailable"
+            detail="Only the person who started this run can attach to it."
+          />
+        </div>
+      </main>
     );
   }
 
   const live = !execution || execution.endedAt === null;
+  const preserveLiveTerminal = isOwner && liveTerminalTaskId === taskId;
+  const showLiveTerminal =
+    (!execution && query.isPending) ||
+    (isOwner && live) ||
+    preserveLiveTerminal;
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background">
@@ -90,7 +109,7 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {live && (
+              {isOwner && live && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -100,53 +119,73 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
                   <span>Stop</span>
                 </Button>
               )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    aria-label="More execution actions"
-                  >
-                    <MoreHorizontal className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <Link
-                      href={`/agents/${execution.agent.id}?section=executions`}
+              {isOwner && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-8"
+                      aria-label="More execution actions"
                     >
-                      <Bot className="size-4" />
-                      <span>View Agent</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={!connectionCommand}
-                    onSelect={() => setConnectionDialogOpen(true)}
-                  >
-                    <TerminalSquare className="size-4" />
-                    <span>View connection details</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
+                      <Share2 className="size-4" />
+                      <span>Share</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href={`/agents/${execution.agent.id}?section=executions`}
+                      >
+                        <Bot className="size-4" />
+                        <span>View Agent</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={!connectionCommand}
+                      onSelect={() => setConnectionDialogOpen(true)}
+                    >
+                      <TerminalSquare className="size-4" />
+                      <span>View connection details</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </>
         ) : null}
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
-        {live ? (
+        {showLiveTerminal ? (
           <AgentExecutionTerminal
             taskId={taskId}
             active
-            title="Live terminal"
+            title={live ? "Live terminal" : "Output"}
             showManualCommand={false}
             showDisconnectedStatus={false}
-            onCommandChange={setConnectionCommand}
+            onCommandChange={(command) => {
+              setConnectionCommand(command);
+              if (command) setLiveTerminalTaskId(taskId);
+            }}
             onClosed={() => void query.refetch()}
           />
         ) : execution ? (
-          <AgentExecutionLogs execution={execution} />
+          <>
+            {live && (
+              <div className="shrink-0 overflow-hidden rounded-md border bg-slate-950">
+                <ExecTerminalStatus
+                  title="Read-only terminal"
+                  detail="Only the person who started this run can attach to it. You're viewing its terminal output in read-only mode."
+                  compact
+                />
+              </div>
+            )}
+            <AgentExecutionLogs execution={execution} />
+          </>
         ) : null}
       </section>
       <DeleteConfirmDialog
@@ -162,6 +201,11 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
             onSuccess: () => setStopDialogOpen(false),
           })
         }
+      />
+      <ShareAgentExecutionDialog
+        taskId={taskId}
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
       />
       <StandardDialog
         open={connectionDialogOpen}
@@ -200,11 +244,4 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
       </StandardDialog>
     </main>
   );
-}
-
-function executionLoadErrorDescription(error: unknown): string | undefined {
-  if (error instanceof Error && error.message === "Execution not found") {
-    return "This execution no longer exists, or you no longer have access to it.";
-  }
-  return undefined;
 }

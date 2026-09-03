@@ -26,18 +26,27 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetTools,
-        description: "Get all tools",
+        description: "Get a paginated list of tools",
         tags: ["Tools"],
-        response: constructResponseSchema(z.array(ExtendedSelectToolSchema)),
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(ExtendedSelectToolSchema),
+        ),
       },
     },
-    async ({ user, organizationId }, reply) => {
+    async ({ query, user, organizationId }, reply) => {
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
         organizationId,
       });
 
-      return reply.send(await ToolModel.findAll(user.id, isAgentAdmin));
+      return reply.send(
+        await ToolModel.findAll({
+          userId: user.id,
+          isAgentAdmin,
+          pagination: query,
+        }),
+      );
     },
   );
 

@@ -1,9 +1,16 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
 import { PluginClientIcon } from "./plugin-client-icon";
 import { type PluginPlatform, PluginPlatforms } from "./plugin-platforms";
@@ -39,6 +46,7 @@ export function PluginContentFields({
   files,
   onFilesChange,
   readOnly = false,
+  readOnlyReason,
 }: {
   displayName: string;
   onDisplayNameChange: (value: string) => void;
@@ -53,34 +61,46 @@ export function PluginContentFields({
   onFilesChange: (value: PluginFileDraft[]) => void;
   /** Everything is frozen (viewer without update permission). */
   readOnly?: boolean;
+  /**
+   * Why the fields refuse to be typed into, shown on the field the reader
+   * tried to change. A control that silently ignores keystrokes reads as
+   * broken, and the reason is only useful where the attempt happened — so it
+   * hangs off each locked field rather than off the panel around them, which
+   * put the tooltip halfway up the page.
+   */
+  readOnlyReason?: string;
 }) {
   return (
     <div className="space-y-6">
       <section className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="plugin-display-name">Display name</Label>
-          <Input
-            id="plugin-display-name"
-            value={displayName}
-            readOnly={readOnly}
-            onChange={(event) => onDisplayNameChange(event.target.value)}
-            placeholder="Session attribution"
-            maxLength={120}
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="plugin-description">Description</Label>
-          <Textarea
-            id="plugin-description"
-            value={description}
-            readOnly={readOnly}
-            onChange={(event) => onDescriptionChange(event.target.value)}
-            placeholder="What this plugin does."
-            maxLength={1000}
-            rows={3}
-          />
-        </div>
+        <Locked reason={readOnlyReason}>
+          <div className="space-y-2">
+            <Label htmlFor="plugin-display-name">Display name</Label>
+            <Input
+              id="plugin-display-name"
+              value={displayName}
+              readOnly={readOnly}
+              onChange={(event) => onDisplayNameChange(event.target.value)}
+              placeholder="Session attribution"
+              maxLength={120}
+              required
+            />
+          </div>
+        </Locked>
+        <Locked reason={readOnlyReason}>
+          <div className="space-y-2">
+            <Label htmlFor="plugin-description">Description</Label>
+            <Textarea
+              id="plugin-description"
+              value={description}
+              readOnly={readOnly}
+              onChange={(event) => onDescriptionChange(event.target.value)}
+              placeholder="What this plugin does."
+              maxLength={1000}
+              rows={3}
+            />
+          </div>
+        </Locked>
         {pluginSlug ? (
           <div className="space-y-2">
             <Label htmlFor="plugin-slug">Plugin identity</Label>
@@ -110,38 +130,72 @@ export function PluginContentFields({
             />
           </div>
         ) : null}
-        <PluginPlatforms
-          value={platforms}
-          onChange={onPlatformsChange}
-          disabled={readOnly}
-        />
+        <Locked reason={readOnlyReason}>
+          <PluginPlatforms
+            value={platforms}
+            onChange={onPlatformsChange}
+            disabled={readOnly}
+          />
+        </Locked>
       </section>
 
-      <SkillContentEditor
-        manifest={null}
-        files={files.map(({ path, content, encoding }) => ({
-          path,
-          content,
-          encoding,
-        }))}
-        onManifestChange={() => {}}
-        onFilesChange={(update) => {
-          const next = update(files);
-          const modesByPath = new Map(
-            files.map((file) => [file.path, file.mode]),
-          );
-          onFilesChange(
-            next.map((file, index) => ({
-              ...file,
-              mode:
-                modesByPath.get(file.path) ?? files[index]?.mode ?? "100644",
-            })),
-          );
-        }}
-        readOnly={readOnly}
-        className="h-[calc(100vh-26rem)] min-h-[28rem]"
-      />
+      <Locked reason={readOnlyReason}>
+        <SkillContentEditor
+          manifest={null}
+          files={files.map(({ path, content, encoding }) => ({
+            path,
+            content,
+            encoding,
+          }))}
+          onManifestChange={() => {}}
+          onFilesChange={(update) => {
+            const next = update(files);
+            const modesByPath = new Map(
+              files.map((file) => [file.path, file.mode]),
+            );
+            onFilesChange(
+              next.map((file, index) => ({
+                ...file,
+                mode:
+                  modesByPath.get(file.path) ?? files[index]?.mode ?? "100644",
+              })),
+            );
+          }}
+          readOnly={readOnly}
+          className="h-[calc(100vh-26rem)] min-h-[28rem]"
+        />
+      </Locked>
     </div>
+  );
+}
+
+/**
+ * One locked field, with the reason on it. `reason` undefined means the field
+ * is editable and the wrapper disappears entirely, so an editable form carries
+ * no tooltip machinery at all.
+ */
+function Locked({
+  reason,
+  children,
+}: {
+  reason?: string;
+  children: ReactNode;
+}) {
+  if (!reason) return children;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        {/* The field itself is the trigger, so the tooltip opens beside what
+            the reader tried to type into. Focus bubbles out of the control
+            inside, so tabbing to it shows the reason too. */}
+        <TooltipTrigger asChild>
+          <div className="flex min-h-0 flex-col">{children}</div>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="start" className="max-w-xs">
+          {reason}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

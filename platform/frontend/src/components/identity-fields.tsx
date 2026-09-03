@@ -22,6 +22,7 @@ export function IdentityFields({
   onIconChange,
   fallbackType,
   showLogos,
+  disabled,
   children,
 }: {
   icon: string | null;
@@ -34,6 +35,8 @@ export function IdentityFields({
    * pick, so the layout stays the same and only the opening tab differs.
    */
   showLogos?: boolean;
+  /** Render the icon as orientation rather than an edit control. */
+  disabled?: boolean;
   /** The labelled fields that sit under the picker. */
   children: React.ReactNode;
 }) {
@@ -44,6 +47,7 @@ export function IdentityFields({
         onChange={onIconChange}
         fallbackType={fallbackType}
         showLogos={showLogos}
+        disabled={disabled}
       />
       {children}
     </div>

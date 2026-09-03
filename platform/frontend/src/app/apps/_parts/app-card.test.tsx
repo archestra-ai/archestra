@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAppAccess } from "@/lib/apps/use-app-access";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppCard } from "./app-card";
 
@@ -30,7 +30,7 @@ vi.mock("@/lib/app.query", () => ({
   useApp: () => ({ data: undefined }),
 }));
 
-vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/apps/use-app-access");
 
 // The card reads the locked-chat flag to decide whether to offer "Open as
 // locked chat". Off here: these tests are about the card's ordinary actions.
@@ -93,15 +93,10 @@ beforeEach(() => {
   vi.mocked(useRouter).mockReturnValue({
     push: pushMock,
   } as unknown as ReturnType<typeof useRouter>);
-  vi.mocked(useHasPermissions).mockReturnValue({
-    data: true,
-  } as ReturnType<typeof useHasPermissions>);
-  // The card now derives "is this someone else's app" from the server-computed
-  // viewerRole, not the session, but useSession is still mocked so the shared
-  // auth.query mock resolves cleanly.
-  vi.mocked(useSession).mockReturnValue({
-    data: { user: { id: "user-1" } },
-  } as ReturnType<typeof useSession>);
+  vi.mocked(useAppAccess).mockReturnValue({
+    canEdit: true,
+    canDeleteApp: true,
+  } as ReturnType<typeof useAppAccess>);
 });
 
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
@@ -277,6 +272,20 @@ describe("OwnedAppCard", () => {
     expect(screen.getByTestId("delete-dialog")).toHaveTextContent(
       "Delete My Owned App",
     );
+  });
+
+  it("offers view-only settings without delete when the app is outside the caller's scope", () => {
+    vi.mocked(useAppAccess).mockReturnValue({
+      canEdit: false,
+      canDeleteApp: false,
+    } as ReturnType<typeof useAppAccess>);
+
+    render(<AppCard app={ownedApp} />);
+
+    expect(
+      screen.getByRole("menuitem", { name: "View settings" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
   });
 
   it("folds team names into the scope pill's label", () => {

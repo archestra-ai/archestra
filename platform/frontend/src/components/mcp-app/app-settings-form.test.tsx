@@ -49,7 +49,7 @@ vi.mock("@/lib/app.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/apps/use-app-access");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/organization.query");
 
@@ -122,7 +122,7 @@ vi.mock("@/components/agent-icon-picker", () => ({
   ),
 }));
 
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAppAccess } from "@/lib/apps/use-app-access";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { AppSettingsForm } from "./app-settings-form";
@@ -132,6 +132,7 @@ const APP = {
   name: "Budget",
   description: "Team budget tracker",
   scope: "personal",
+  authorId: "author-id",
   enabled: true,
   locked: false,
   teams: [],
@@ -172,12 +173,18 @@ function submitForm(container: HTMLElement) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(useHasPermissions).mockReturnValue({
-    data: true,
-  } as ReturnType<typeof useHasPermissions>);
-  vi.mocked(useSession).mockReturnValue({
-    data: { user: { id: "author-id" } },
-  } as unknown as ReturnType<typeof useSession>);
+  vi.mocked(useAppAccess).mockReturnValue({
+    canEdit: true,
+    canDeleteApp: true,
+    canModify: true,
+    isAdmin: true,
+    isTeamAdmin: true,
+    canUpdate: true,
+    canDelete: true,
+    currentUserId: "author-id",
+    userTeamIds: new Set(),
+    isPending: false,
+  });
   vi.mocked(useOrganizationMembers).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useOrganizationMembers>);
@@ -191,6 +198,27 @@ beforeEach(() => {
 });
 
 describe("AppSettingsForm save", () => {
+  test("warns an app admin who is outside every selected team", () => {
+    vi.mocked(useAssignableTeams).mockReturnValue({
+      data: [{ id: "leadership", name: "Leadership" }],
+    } as ReturnType<typeof useAssignableTeams>);
+
+    renderForm({
+      app: {
+        ...APP,
+        scope: "team",
+        teams: [{ id: "leadership", name: "Leadership" }],
+      },
+    });
+
+    expect(
+      screen.getByText("You are not a member of the selected teams"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/you will not be able to modify this app through chat/i),
+    ).toBeVisible();
+  });
+
   test("keeps labels under Advanced and saves an in-progress label", async () => {
     const user = userEvent.setup();
     const { container, onBack } = renderForm();

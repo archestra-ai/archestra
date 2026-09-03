@@ -1,7 +1,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FilterBar } from "@/components/filter-bar";
 import { TableCardView } from "@/components/table-card-view";
 import { AppSection, matchesKind } from "./page.client";
@@ -31,6 +31,28 @@ vi.mock("@/lib/app.query", () => ({
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
 }));
+
+const { appAccessState } = vi.hoisted(() => ({
+  appAccessState: { canEdit: true, canDeleteApp: true },
+}));
+
+vi.mock("@/lib/apps/use-app-access", () => {
+  const access = {
+    isAdmin: true,
+    isTeamAdmin: true,
+    canUpdate: true,
+    canDelete: true,
+    currentUserId: "user-1",
+    userTeamIds: new Set<string>(),
+    isPending: false,
+    canModify: true,
+  };
+  return {
+    useAppAccessContext: () => access,
+    useAppAccess: () => ({ ...access, ...appAccessState }),
+    computeAppAccess: () => ({ ...access, ...appAccessState }),
+  };
+});
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
@@ -111,6 +133,11 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   requiresInput: false,
 };
 
+beforeEach(() => {
+  appAccessState.canEdit = true;
+  appAccessState.canDeleteApp = true;
+});
+
 describe("matchesKind", () => {
   it("matches every app when kind is all", () => {
     expect(matchesKind(ownedApp, "all")).toBe(true);
@@ -163,6 +190,23 @@ describe("AppSection cards", () => {
 
     fireEvent.click(checkbox);
 
+    expect(screen.queryByText("1 app selected")).not.toBeInTheDocument();
+  });
+
+  it("keeps an owned app out of bulk selection when scope rules deny changes", () => {
+    appAccessState.canEdit = false;
+    appAccessState.canDeleteApp = false;
+    renderAppSection([ownedApp]);
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Select My Owned App",
+    });
+    expect(checkbox).toBeDisabled();
+    expect(
+      screen.getByTitle("You do not have permission to modify this app"),
+    ).toContainElement(checkbox);
+
+    fireEvent.click(checkbox);
     expect(screen.queryByText("1 app selected")).not.toBeInTheDocument();
   });
 

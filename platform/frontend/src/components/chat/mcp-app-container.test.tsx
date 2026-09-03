@@ -77,6 +77,10 @@ vi.mock("@/lib/app.query", () => ({
   useDeleteApp: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 
+vi.mock("@/lib/apps/use-app-access", () => ({
+  useAppAccess: () => ({ canEdit: true, isPending: false }),
+}));
+
 // Session-recording hooks pull TanStack Query mutations; this suite renders
 // without a QueryClient, so stub the module (recording flows have their own
 // coverage).

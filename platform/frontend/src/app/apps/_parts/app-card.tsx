@@ -44,7 +44,7 @@ import {
   usePinApp,
 } from "@/lib/app.query";
 import { appRunUrl } from "@/lib/apps/app-run-url";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppAccess } from "@/lib/apps/use-app-access";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFeature } from "@/lib/config/config.query";
 import type { BulkCardSelectionProps } from "@/lib/hooks/use-bulk-card-selection";
@@ -82,10 +82,12 @@ function CardSelectionCheckbox({
   label,
   selection,
   disabled = false,
+  disabledReason = "Installed apps are managed through their MCP server",
 }: {
   label: string;
   selection?: BulkCardSelectionProps;
   disabled?: boolean;
+  disabledReason?: string;
 }) {
   const checkbox = (
     <Checkbox
@@ -103,15 +105,14 @@ function CardSelectionCheckbox({
 
   if (!disabled) return checkbox;
 
-  const reason = "Installed apps are managed through their MCP server";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex cursor-not-allowed" title={reason}>
+        <span className="inline-flex cursor-not-allowed" title={disabledReason}>
           {checkbox}
         </span>
       </TooltipTrigger>
-      <TooltipContent>{reason}</TooltipContent>
+      <TooltipContent>{disabledReason}</TooltipContent>
     </Tooltip>
   );
 }
@@ -233,7 +234,7 @@ function OwnedAppCard({
   const router = useRouter();
   const openApp = useOpenAppInChat();
   const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
-  const { data: canDelete } = useHasPermissions({ app: ["delete"] });
+  const access = useAppAccess(app);
   // A personal app the caller only reaches through app:admin oversight
   // (viewerRole "admin") — i.e. someone else's personal app — gets a visible
   // "Owned by <name>" badge (mirroring the Projects page) so an admin can tell
@@ -280,6 +281,8 @@ function OwnedAppCard({
               <CardSelectionCheckbox
                 label={`Select ${app.name}`}
                 selection={selection}
+                disabled={selection.selectionDisabled || !access.canEdit}
+                disabledReason="You do not have permission to modify this app"
               />
             ) : null}
             <AppTypeIcon owned icon={app.icon} />
@@ -328,7 +331,7 @@ function OwnedAppCard({
             />
             <DropdownMenuItem onSelect={() => onOpenSettings?.(app)}>
               <Settings className="h-4 w-4" />
-              Settings
+              <span>{access.canEdit ? "Settings" : "View settings"}</span>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
@@ -346,7 +349,7 @@ function OwnedAppCard({
                 Open as locked chat
               </DropdownMenuItem>
             ) : null}
-            {canDelete ? (
+            {access.canDeleteApp ? (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

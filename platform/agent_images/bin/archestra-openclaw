@@ -29,6 +29,7 @@ resolve_docker_desktop_url() {
 }
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 config_file="${runtime_dir}/openclaw.json"
 task_file="${runtime_dir}/task.md"
 model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
@@ -36,6 +37,86 @@ runtime_instructions="${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
 export OPENCLAW_STATE_DIR="${runtime_dir}/openclaw-state"
 export OPENCLAW_CONFIG_PATH="${config_file}"
 mkdir -p "${OPENCLAW_STATE_DIR}"
+
+completion_plugin_dir=""
+if [[ "${runtime_mode}" == "one_shot" ]] \
+  && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
+  completion_plugin_dir="${runtime_dir}/openclaw-completion"
+  mkdir -p "${completion_plugin_dir}"
+  cat > "${completion_plugin_dir}/package.json" <<'JSON'
+{
+  "name": "archestra-openclaw-completion",
+  "version": "1.0.0",
+  "type": "module",
+  "openclaw": {
+    "extensions": ["./index.mjs"]
+  }
+}
+JSON
+  cat > "${completion_plugin_dir}/openclaw.plugin.json" <<'JSON'
+{
+  "id": "archestra-completion",
+  "name": "Archestra completion",
+  "description": "Settles a delegated Agent Runtime task after the native TUI finishes its turn.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
+JSON
+  cat > "${completion_plugin_dir}/index.mjs" <<'PLUGIN'
+import { writeFile } from "node:fs/promises";
+
+function messageText(message) {
+  if (!message || message.role !== "assistant") return "";
+  if (typeof message.content === "string") return message.content;
+  if (!Array.isArray(message.content)) return "";
+  return message.content
+    .filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("");
+}
+
+export default {
+  id: "archestra-completion",
+  name: "Archestra completion",
+  description: "Settles delegated native-TUI runs.",
+  configSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {},
+  },
+  register(api) {
+    api.on("agent_end", async (event, context) => {
+      const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
+      const taskId = process.env.ARCHESTRA_AGENT_RUNTIME_TASK_ID;
+      const expectedSessionKey = taskId ? `agent:main:${taskId}` : undefined;
+      if (expectedSessionKey && context?.sessionKey !== expectedSessionKey) return;
+
+      const answer = [...event.messages]
+        .reverse()
+        .map(messageText)
+        .find((text) => text.trim().length > 0)
+        ?.trim();
+
+      if (answer) {
+        await writeFile(`${runtimeDir}/final-answer.txt`, `${answer}\n`, "utf8");
+      } else if (event.error) {
+        await writeFile(`${runtimeDir}/final-answer.txt`, `${event.error}\n`, "utf8");
+      }
+      if (!event.success) {
+        await writeFile(`${runtimeDir}/turn-complete.failed`, "", "utf8");
+      }
+      await writeFile(`${runtimeDir}/turn-complete`, "", "utf8");
+    });
+  },
+};
+PLUGIN
+fi
 
 # OpenClaw deliberately owns its generated system prompt. Its supported
 # extension point is the workspace bootstrap files, so expose the Agent's
@@ -93,7 +174,8 @@ jq -n \
   --arg mcp_url "${openclaw_mcp_url}" \
   --arg api "${openclaw_api}" \
   --arg workspace "${PWD}" \
-  '{
+  --arg completion_plugin_dir "${completion_plugin_dir}" \
+  '({
     logging:{level:"error",consoleLevel:"silent"},
     models:{
       mode:"replace",
@@ -128,7 +210,18 @@ jq -n \
         }
       }
     }
-  }' > "${config_file}"
+  } + if $completion_plugin_dir == "" then {} else {
+    plugins:{
+      allow:["archestra-completion"],
+      load:{paths:[$completion_plugin_dir]},
+      entries:{
+        "archestra-completion":{
+          enabled:true,
+          hooks:{allowConversationAccess:true}
+        }
+      }
+    }
+  } end)' > "${config_file}"
 chmod 0600 "${config_file}"
 if [[ -n "${runtime_instructions}" && "${soul_created}" != true ]]; then
   printf '%s\n\n# Delegated task\n\n%s\n' \
@@ -140,7 +233,7 @@ fi
 
 session_key="agent:main:${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
 
-case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
+case "${runtime_mode}" in
   interactive)
     set +e
     openclaw tui \
@@ -152,17 +245,29 @@ case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
     exit "${status}"
     ;;
   one_shot)
-    set +e
-    openclaw agent \
-      --local \
-      --session-key "${session_key}" \
-      --model "archestra/${model}" \
-      --message-file "${task_file}" 2>&1 | tee "${runtime_dir}/openclaw-output.log"
-    status=${PIPESTATUS[0]}
-    set -e
-    if [[ ${status} -ne 0 ]] || grep -Eq "FailoverError:|LLM request failed|network connection error|empty response retries exhausted|Agent couldn't generate a response" "${runtime_dir}/openclaw-output.log"; then
-      exit 1
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
+      set +e
+      openclaw agent \
+        --local \
+        --session-key "${session_key}" \
+        --model "archestra/${model}" \
+        --message-file "${task_file}" 2>&1 | tee "${runtime_dir}/openclaw-output.log"
+      status=${PIPESTATUS[0]}
+      set -e
+      if [[ ${status} -ne 0 ]] || grep -Eq "FailoverError:|LLM request failed|network connection error|empty response retries exhausted|Agent couldn't generate a response" "${runtime_dir}/openclaw-output.log"; then
+        exit 1
+      fi
+      exit 0
     fi
+
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    "${script_dir}/archestra-tui-run" \
+      "${runtime_dir}/turn-complete" \
+      "${runtime_dir}/final-answer.txt" \
+      openclaw tui \
+        --local \
+        --session "${session_key}" \
+        --message "$(cat "${task_file}")"
     ;;
   *)
     echo "archestra: unknown Agent Runtime mode" >&2

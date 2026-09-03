@@ -38,7 +38,8 @@ Invocation is explicit and surface-specific:
 
 Agent Runtime runs have two launch modes. Chat starts the image in
 **interactive** mode and exposes its live terminal. Maintained Claude Code,
-Codex, and OpenCode images run their native TUIs. Delegation from another Agent, A2A,
+Codex, OpenCode, Hermes, and OpenClaw images run their native TUIs in both
+interactive and delegated one-shot runs. Delegation from another Agent, A2A,
 incoming email, schedules, and task tools uses **one-shot** mode. The same
 image receives the task, exits when it is finished, and lets Archestra settle
 the durable task and deliver its result. This is selected by the invocation
@@ -377,7 +378,9 @@ the run.
 
 ## View Runs from an Agent
 
-An Agent with Agent Runtime configured has a **Runs** tab. Use it to:
+An Agent with Agent Runtime configured has a **Runs** tab. A running run opens
+its live terminal, while a completed run opens its retained terminal output;
+there is no separate output-mode selector. Use this tab to:
 
 - review run outcomes and timestamps
 - read live or retained container logs
@@ -391,7 +394,10 @@ stopping the run. For a raw diagnostic shell, set
 
 After the pod is removed, Archestra retains the complete container transcript
 as independently compressed chunks and replays those chunks into the terminal
-view. The transcript follows the run's task retention period, which is
+view. Native TUI recordings preserve their original terminal geometry and
+scale as one canvas to fit narrower viewers, with scrolling as a fallback at
+very small widths. They do not reflow and jumble the interface. The transcript
+follows the run's task retention period, which is
 90 days by default. Set
 `ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES` to cap the
 uncompressed transcript size accepted from one run. A run beyond that ceiling

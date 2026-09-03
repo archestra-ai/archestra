@@ -1,5 +1,5 @@
 import type { ServerWebSocketMessage } from "@archestra/shared";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 
@@ -85,6 +85,45 @@ describe("AgentRunLogs", () => {
       "title",
       "The complete transcript exceeded this deployment's storage limit.",
     );
+  });
+
+  it("retries when completed metadata arrives before retained output", async () => {
+    render(<AgentRunLogs run={completedRun} />);
+    expect(socket.send).toHaveBeenCalledTimes(1);
+
+    emit({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: "task-1",
+        source: "tail",
+        truncated: false,
+      },
+    });
+
+    await waitFor(() => expect(socket.send).toHaveBeenCalledTimes(2));
+    expect(socket.send).toHaveBeenLastCalledWith({
+      type: "subscribe_agent_run_logs",
+      payload: { runId: "task-1" },
+    });
+
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "retained output" },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: "task-1",
+        source: "full",
+        truncated: false,
+        totalBytes: 15,
+      },
+    });
+
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "retained output",
+    );
+    expect(screen.getByText("Full transcript")).toBeInTheDocument();
   });
 });
 

@@ -32,7 +32,6 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
-import { LoadingState } from "@/components/loading";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
 import {
@@ -829,9 +828,7 @@ function SkillsList() {
         }
       >
         <TableCardView storageKey="archestra-skills-view" defaultMode="table">
-          {isInitialSkillsLoad ? (
-            <LoadingState label="Loading skills…" variant="page" />
-          ) : showEmptyState ? (
+          {isInitialSkillsLoad ? null : showEmptyState ? (
             <SkillsEmptyState />
           ) : (
             <>

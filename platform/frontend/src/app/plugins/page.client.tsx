@@ -27,7 +27,6 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
-import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
@@ -645,9 +644,7 @@ function PluginsList() {
         }
       >
         <TableCardView storageKey="archestra-plugins-view" defaultMode="table">
-          {isInitialPluginsLoad ? (
-            <LoadingState label="Loading plugins…" variant="page" />
-          ) : showEmptyState ? (
+          {isInitialPluginsLoad ? null : showEmptyState ? (
             <PluginsEmptyState />
           ) : (
             <>

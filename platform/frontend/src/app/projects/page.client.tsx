@@ -23,7 +23,6 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { IdentityFields } from "@/components/identity-fields";
-import { LoadingState } from "@/components/loading";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
@@ -286,9 +285,8 @@ function ProjectsList() {
               />
             </FilterBar>
           </CollectionFilters>
-          {(isPending || isFetching) && projects.length === 0 ? (
-            <LoadingState label="Loading projects…" variant="page" />
-          ) : isDeletedView ? (
+          {(isPending || isFetching) &&
+          projects.length === 0 ? null : isDeletedView ? (
             projects.length === 0 ? (
               <EmptyState icon={FolderKanban} title="No deleted projects" />
             ) : (

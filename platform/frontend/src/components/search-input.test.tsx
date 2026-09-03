@@ -66,19 +66,39 @@ describe("SearchInput", () => {
       expect(input).toHaveAttribute("aria-busy", "true");
     });
 
-    it("stays busy while the list it filters is fetching", () => {
+    it("stays busy while the list it filters fetches a search", () => {
       const { rerender } = render(
-        <SearchInput placeholder="Search skills" isLoading />,
+        <SearchInput placeholder="Search skills" value="not" isLoading />,
       );
 
-      // Nothing has been typed in this render, so only the caller's flag can
-      // be holding the indicator on — the half that covers the request.
+      // There is a term in the box, so the caller's flag is covering the
+      // request that term triggered — the half after the commit.
       expect(screen.getByPlaceholderText("Search skills")).toHaveAttribute(
         "aria-busy",
         "true",
       );
 
-      rerender(<SearchInput placeholder="Search skills" isLoading={false} />);
+      rerender(
+        <SearchInput
+          placeholder="Search skills"
+          value="not"
+          isLoading={false}
+        />,
+      );
+
+      expect(screen.getByPlaceholderText("Search skills")).toHaveAttribute(
+        "aria-busy",
+        "false",
+      );
+    });
+
+    it("ignores a fetch that is not a search", () => {
+      // Callers pass the list query's `isFetching`, which is also true for its
+      // first load and for every background refetch. An empty box is not
+      // searching, whatever the list behind it is doing — and claiming
+      // otherwise suppresses the sidebar toggle's spinner, which is the
+      // indicator that should be reporting that load.
+      render(<SearchInput placeholder="Search skills" isLoading />);
 
       expect(screen.getByPlaceholderText("Search skills")).toHaveAttribute(
         "aria-busy",

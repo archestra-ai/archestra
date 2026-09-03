@@ -10,7 +10,6 @@ import { ConversationSearchProvider } from "@/components/conversation-search-pro
 import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { LoadingState } from "@/components/loading";
-import { NavigationProgressBar } from "@/components/navigation-progress-bar";
 import {
   NavigationStatusProvider,
   useNavigationStatus,
@@ -195,13 +194,7 @@ export function AppShell({ children }: AppShellProps) {
             tabIndex={-1}
             className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto md:overflow-hidden focus:outline-none"
           >
-            {/* Inside the non-scrolling header block, not <main>: <main> is the
-                scroll container on mobile, and an absolutely positioned child
-                of a scrolling box scrolls away with the content. This block
-                stays put, so the bar stays pinned to the top of the content
-                area on every breakpoint. */}
-            <div className="shrink-0 relative">
-              <NavigationProgressBar />
+            <div className="shrink-0">
               <ConnectivityBar />
               <EnvSiteNotificationBar />
               {notification && (

@@ -41,7 +41,6 @@ import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { FileDropZone } from "@/components/files/file-drop-zone";
-import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
@@ -115,7 +114,7 @@ function ProjectDetail() {
   if (isPending) {
     return (
       <PageLayout title="Project" description="">
-        <LoadingState label="Loading project…" variant="page" />
+        null
       </PageLayout>
     );
   }

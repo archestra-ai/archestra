@@ -2,7 +2,6 @@
 
 import { FileX } from "lucide-react";
 import type { MouseEvent } from "react";
-import { LoadingState } from "@/components/loading";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import {
@@ -40,7 +39,7 @@ export function SkillPageLoading() {
       backLink={<SkillBackLink href="/skills" label="Skills" />}
       maxWidth="wizard"
     >
-      <LoadingState label="Loading skill…" variant="page" />
+      null
     </PageLayout>
   );
 }

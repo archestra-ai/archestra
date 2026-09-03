@@ -18,7 +18,6 @@ import {
 import { type LucideIcon, Search } from "lucide-react";
 import React, { useState } from "react";
 import { EmptyState } from "@/components/empty-state";
-import { LoadingSkeletons } from "@/components/loading";
 import {
   Table,
   TableBody,
@@ -437,30 +436,17 @@ export function DataTable<TData, TValue>({
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={columns.length} className="py-0">
                     {/* An empty body while a fetch is still out is not an empty
-                      result, so it does not announce one: saying "No Data" and
-                      then replacing it with rows a moment later is the flash
-                      this area used to produce.
+                      result, so it says nothing: announcing "No Data" and then
+                      replacing it with rows a moment later is the flash this
+                      area used to produce. The row keeps its height either
+                      way, so the rows arrive without shifting the pagination
+                      controls underneath.
 
-                      Saying *nothing* is not right either, though. With no
-                      rows yet there is nothing else in this area, so a blank
-                      box under a full set of headers reads as a table that
-                      loaded and came back empty — the empty state then
-                      arriving on top of it is the second flash. Placeholder
-                      rows say "these are being fetched" without claiming a
-                      result.
-
-                      They fit inside the row's reserved minimum, so they add
-                      no movement of their own. The area does still grow when
-                      an empty state taller than that minimum replaces them,
-                      exactly as it grew out of the blank box before — that
-                      resize belongs to the empty state's own height and is
-                      unchanged here. */}
+                      It draws no indicator of its own either. The sidebar
+                      toggle is the one place the app reports that it is
+                      loading; a placeholder here would be a second. */}
                     <div className="flex min-h-[164px] flex-col items-center justify-center text-center">
-                      {isLoading ? (
-                        <div className="w-full px-2">
-                          <LoadingSkeletons rows={3} />
-                        </div>
-                      ) : (
+                      {!isLoading && (
                         <EmptyState
                           icon={
                             emptyIcon ?? (hasActiveFilters ? Search : undefined)

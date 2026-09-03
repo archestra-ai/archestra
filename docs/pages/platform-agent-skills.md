@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-28
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,9 +38,9 @@ Typing `/` lists the available skills. Picking one, for example `/pdf-to-markdow
 
 ## Writing a skill
 
-**Add new skill** on the Skills page opens a three-step wizard: pick a source, write the `SKILL.md` and any resource files, then choose who can use the skill. Creating it takes you to the skill's own page. Picking a GitHub repo instead hands over to the import dialog described below.
+**Add new skill** on the Skills page asks for a source, then opens the skill form: the name and description, the `SKILL.md` and any resource files, and who can use the skill. It is one page — everything a skill has, in the order you fill it in. Creating it takes you to the skill's own page. Picking a GitHub repo instead hands over to the import dialog described below.
 
-Every skill has a page of its own. The `SKILL.md` and resource file tree stay visible and read-only, while a collapsed **Overview** holds its environment, sharing, source, and version. **Edit** in the page header opens the same wizard: a **Content** step and an **Access** step. **Save** on either step saves and returns to the skill's page; **Save & Continue** saves and moves on. Version history, usage, chat, and delete sit in the page header too.
+Every skill has a page of its own, and that page is the form you just filled in. Change the name, the instructions, the files, or who can use the skill, then **Save changes** — there is no separate edit screen to open. **Discard changes** puts the skill back the way you found it. **Usage** is a tab beside the settings; version history, chat, and delete sit in the page header.
 
 A skill is a `SKILL.md` plus optional resource files.
 
@@ -107,7 +107,7 @@ A few behaviors worth knowing:
 
 ### Turning the Online Catalog Off
 
-**Settings → Skills → Online skill catalog** controls whether people can reach the public catalog at all. Turning it off removes the source step from the add-skill wizard, so **Add new skill** opens the blank editor directly.
+**Settings → Skills → Online skill catalog** controls whether people can reach the public catalog at all. Turning it off removes the source step, so **Add new skill** opens the blank form directly.
 
 The setting is enforced on the server, not just in the wizard. Catalog search and the GitHub discover, preview, and import endpoints all refuse the request, so a script or an agent calling the API directly gets the same answer as the UI.
 

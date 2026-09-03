@@ -23,7 +23,7 @@ const {
 export type AgentExecution =
   archestraApiTypes.GetAgentExecutionsResponses["200"][number];
 export type AgentExecutionSession =
-  archestraApiTypes.GetMyAgentExecutionsResponses["200"][number];
+  archestraApiTypes.GetMyAgentExecutionsResponses["200"]["data"][number];
 
 export function useAgentBackgroundExecutionPreflight(
   agentId: string,
@@ -60,13 +60,12 @@ export function useAgentExecutions(agentId: string, enabled = true) {
 export function useMyAgentExecutions(enabled = true) {
   return useQuery({
     queryKey: ["agent-executions", "mine"],
-    queryFn: async () => {
-      const { data, error } = await getMyAgentExecutions();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: loadMyAgentExecutions,
     enabled,
-    refetchInterval: enabled ? 3_000 : false,
+    refetchInterval: (query) =>
+      enabled && query.state.data?.some((execution) => !execution.endedAt)
+        ? 3_000
+        : false,
   });
 }
 
@@ -313,3 +312,23 @@ export function useDeleteAgentBackgroundExecutionCredential(agentId: string) {
       }),
   });
 }
+
+async function loadMyAgentExecutions(): Promise<AgentExecutionSession[]> {
+  const executions: AgentExecutionSession[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await getMyAgentExecutions({
+      query: { limit: MY_EXECUTIONS_PAGE_SIZE, offset },
+    });
+    throwOnApiError(error, { toastOnError: false });
+    executions.push(...(data?.data ?? []));
+
+    if (!data?.pagination.hasNext) {
+      return executions;
+    }
+    offset += MY_EXECUTIONS_PAGE_SIZE;
+  }
+}
+
+const MY_EXECUTIONS_PAGE_SIZE = 100;

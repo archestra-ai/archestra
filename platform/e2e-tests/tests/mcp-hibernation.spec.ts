@@ -665,13 +665,15 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
             const toolsResponse = await makeApiRequest({
               request,
               method: "get",
-              urlSuffix: "/api/tools",
+              urlSuffix: "/api/tools?limit=100",
             });
-            const tools: Array<{
-              id: string;
-              name: string;
-              catalogId?: string | null;
-            }> = await toolsResponse.json();
+            const { data: tools } = (await toolsResponse.json()) as {
+              data: Array<{
+                id: string;
+                name: string;
+                catalogId?: string | null;
+              }>;
+            };
             testTool = tools.find(
               (tool) =>
                 tool.catalogId === catalogItemId &&

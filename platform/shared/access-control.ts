@@ -837,6 +837,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteractions]: {
     log: ["read"],
   },
+  [RouteId.GetInteractionSummaries]: {
+    log: ["read"],
+  },
   [RouteId.GetInteraction]: {
     log: ["read"],
   },

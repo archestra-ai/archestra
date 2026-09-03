@@ -19,6 +19,7 @@ import {
   ApiError,
   constructResponseSchema,
   createSortingQuerySchema,
+  InteractionSummarySchema,
   SelectInteractionSchema,
   SessionSummarySchema,
   UserInfoSchema,
@@ -153,6 +154,86 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(result);
+    },
+  );
+
+  fastify.get(
+    "/api/interactions/summaries",
+    {
+      schema: {
+        operationId: RouteId.GetInteractionSummaries,
+        description:
+          "Get paginated interaction metadata without request and response payloads",
+        tags: ["Interaction"],
+        querystring: z
+          .object({
+            profileId: UuidIdSchema.optional(),
+            externalAgentId: z.string().optional(),
+            userId: z.string().optional(),
+            sessionId: z.string().optional(),
+            startDate: z.string().datetime().optional(),
+            endDate: z.string().datetime().optional(),
+          })
+          .merge(PaginationQuerySchema)
+          .merge(
+            createSortingQuerySchema([
+              "createdAt",
+              "profileId",
+              "externalAgentId",
+              "model",
+              "userId",
+            ] as const),
+          ),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(InteractionSummarySchema),
+        ),
+      },
+    },
+    async (
+      {
+        query: {
+          profileId,
+          externalAgentId,
+          userId,
+          sessionId,
+          startDate,
+          endDate,
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+        },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      return reply.send(
+        await InteractionModel.findSummariesPaginated({
+          pagination: { limit, offset },
+          sorting: { sortBy, sortDirection },
+          requestingUserId: user.id,
+          isAgentAdmin,
+          filters: {
+            profileId,
+            externalAgentId,
+            userId: canSeeAllLogs ? userId : user.id,
+            sessionId,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+          },
+        }),
+      );
     },
   );
 

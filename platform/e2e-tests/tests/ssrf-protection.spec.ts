@@ -170,9 +170,11 @@ test.describe("SSRF Protection - NetworkPolicy for MCP Servers", () => {
       const allToolsResponse = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: "/api/tools",
+        urlSuffix: "/api/tools?limit=100",
       });
-      const allTools = await allToolsResponse.json();
+      const { data: allTools } = (await allToolsResponse.json()) as {
+        data: Array<{ id: string; name: string }>;
+      };
       const toolEntity = allTools.find(
         (t: { name: string }) => t.name === ssrfTool.name,
       );

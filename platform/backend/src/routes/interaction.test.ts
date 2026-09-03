@@ -92,6 +92,54 @@ describe("interaction routes", () => {
     expect(response.json().data).toHaveLength(1);
   });
 
+  test("lists scalar interaction summaries without content payloads", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    const interaction = await InteractionModel.create({
+      profileId: agent.id,
+      sessionId: "summary-session",
+      model: "gpt-4",
+      inputTokens: 12,
+      outputTokens: 7,
+      request: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "Content stays in detail." }],
+      },
+      response: {
+        id: "summary-response",
+        object: "chat.completion",
+        created: Date.now(),
+        model: "gpt-4",
+        choices: [],
+      },
+      type: "openai:chatCompletions",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions/summaries?sessionId=summary-session&limit=10&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({
+        id: interaction.id,
+        sessionId: "summary-session",
+        model: "gpt-4",
+        inputTokens: 12,
+        outputTokens: 7,
+      }),
+    ]);
+    expect(response.json().data[0]).not.toHaveProperty("request");
+    expect(response.json().data[0]).not.toHaveProperty("response");
+    expect(response.json().data[0]).not.toHaveProperty("dualLlmAnalyses");
+  });
+
   test("lists interactions whose response carries a non-standard finish_reason", async ({
     makeAgent,
   }) => {
@@ -504,6 +552,7 @@ describe("interaction routes", () => {
     expect(sessionRow.lastUserMessagePreview).toBe(
       "first message in the claude session",
     );
+    expect(sessionRow.lastInteractionId).toBe(tip.id);
     expect(sessionRow).not.toHaveProperty("lastInteractionRequest");
 
     // Detail endpoint reconstructs the full request and passes response

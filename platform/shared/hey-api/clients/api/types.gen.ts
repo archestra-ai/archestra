@@ -48280,6 +48280,129 @@ export type GetInteractionsResponses = {
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
 
+export type GetInteractionSummariesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        profileId?: string;
+        externalAgentId?: string;
+        userId?: string;
+        sessionId?: string;
+        startDate?: string;
+        endDate?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/interactions/summaries';
+};
+
+export type GetInteractionSummariesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInteractionSummariesError = GetInteractionSummariesErrors[keyof GetInteractionSummariesErrors];
+
+export type GetInteractionSummariesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            sessionId: string | null;
+            model: string | null;
+            baselineModel: string | null;
+            billingMode: 'metered' | 'subscription';
+            inputTokens: number | null;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cost: string | null;
+            baselineCost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            createdAt: string;
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings';
+            externalAgentIdLabel: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetInteractionSummariesResponse = GetInteractionSummariesResponses[keyof GetInteractionSummariesResponses];
+
 export type GetInteractionSessionsData = {
     body?: never;
     path?: never;
@@ -48428,6 +48551,7 @@ export type GetInteractionSessionsResponses = {
              * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
              */
             lastUserMessagePreview: string | null;
+            lastInteractionId: string | null;
             lastInteractionType: string | null;
             conversationTitle: string | null;
             claudeCodeTitle: string | null;
@@ -88626,7 +88750,10 @@ export type StartAgentExecutionResponse = StartAgentExecutionResponses[keyof Sta
 export type GetMyAgentExecutionsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
     url: '/api/agent-executions';
 };
 
@@ -88699,35 +88826,45 @@ export type GetMyAgentExecutionsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        taskId: string;
-        agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
-        actorId: string;
-        actorUserId: string | null;
-        title: string;
-        pinnedAt: string | null;
-        projectId: string | null;
-        deploymentName: string;
-        backend: 'kubernetes';
-        runtimeScope: string;
-        virtualApiKeyId: string | null;
-        startedAt: string;
-        endedAt: string | null;
-        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
-        statusReason: string | null;
-        stateChangedAt: string | null;
-        prompt: string;
-        agent: {
+    200: {
+        data: Array<{
             id: string;
-            name: string;
-            icon: string | null;
+            organizationId: string;
+            taskId: string;
+            agentId: string;
+            actorKind: 'user' | 'team' | 'organization' | 'system';
+            actorId: string;
+            actorUserId: string | null;
+            title: string;
+            pinnedAt: string | null;
+            projectId: string | null;
+            deploymentName: string;
+            backend: 'kubernetes';
+            runtimeScope: string;
+            virtualApiKeyId: string | null;
+            startedAt: string;
+            endedAt: string | null;
+            state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+            statusReason: string | null;
+            stateChangedAt: string | null;
+            prompt: string;
+            agent: {
+                id: string;
+                name: string;
+                icon: string | null;
+            };
+            projectName: string | null;
+            projectIcon: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-        projectName: string | null;
-        projectIcon: string | null;
-    }>;
+    };
 };
 
 export type GetMyAgentExecutionsResponse = GetMyAgentExecutionsResponses[keyof GetMyAgentExecutionsResponses];
@@ -99099,7 +99236,10 @@ export type RotateTokenResponse = RotateTokenResponses[keyof RotateTokenResponse
 export type GetToolsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
     url: '/api/tools';
 };
 
@@ -99172,48 +99312,58 @@ export type GetToolsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        catalogId: string | null;
-        delegateToAgentId: string | null;
-        name: string;
-        rawName: string | null;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
+    200: {
+        data: Array<{
+            id: string;
+            catalogId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            rawName: string | null;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: string | null;
+            agent: {
+                id: string;
+                name: string;
+            } | null;
+            catalog: {
+                id: string;
+                name: string;
+            } | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-        description: string | null;
-        meta: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        clonedPendingDiscovery: boolean;
-        policiesAutoConfiguredAt: string | null;
-        policiesAutoConfiguringStartedAt: string | null;
-        policiesAutoConfiguredReasoning: string | null;
-        policiesAutoConfiguredModel: string | null;
-        createdAt: string;
-        updatedAt: string;
-        deletedAt: string | null;
-        agent: {
-            id: string;
-            name: string;
-        } | null;
-        catalog: {
-            id: string;
-            name: string;
-        } | null;
-    }>;
+    };
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];

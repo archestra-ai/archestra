@@ -373,7 +373,7 @@ describe("Agent Background execution routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([
+    expect(response.json().data).toEqual([
       expect.objectContaining({
         taskId: ownTask.id,
         prompt: "Create a compact status page.",
@@ -384,6 +384,31 @@ describe("Agent Background execution routes", () => {
         },
       }),
     ]);
+  });
+
+  test("paginates execution sessions before loading their prompt messages", async () => {
+    const firstTask = await createTask(agent.id);
+    const secondTask = await createTask(agent.id);
+    await createRun({ taskId: firstTask.id, actorUserId: user.id });
+    await createRun({ taskId: secondTask.id, actorUserId: user.id });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/agent-executions?limit=1&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: [expect.objectContaining({ agentId: agent.id })],
+      pagination: {
+        currentPage: 1,
+        limit: 1,
+        total: 2,
+        totalPages: 2,
+        hasNext: true,
+        hasPrev: false,
+      },
+    });
   });
 
   test("lets only the initiating user cancel an active execution and audits the transition", async ({
@@ -530,7 +555,7 @@ describe("Agent Background execution routes", () => {
       url: "/api/agent-executions",
     });
     expect(listed.statusCode).toBe(200);
-    expect(listed.json()[0]).toEqual(
+    expect(listed.json().data[0]).toEqual(
       expect.objectContaining({ taskId: task.id, pinnedAt }),
     );
 

@@ -159,7 +159,7 @@ export function AppsTable({
     },
     {
       id: "sharing",
-      size: 180,
+      size: 160,
       header: "Sharing",
       cell: ({ row }) => {
         const app = row.original;
@@ -300,6 +300,8 @@ export function AppsTable({
         emptyIcon={AppWindow}
         emptyMessage="No apps here yet"
         hidePaginationWhenSinglePage
+        fixedWidthColumnIds={["sharing"]}
+        flexibleColumnIds={["name"]}
       />
 
       {deletingApp && (

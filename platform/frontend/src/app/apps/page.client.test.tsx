@@ -233,11 +233,29 @@ describe("AppSection cards", () => {
       screen.getByText("2 apps selected", { selector: '[aria-hidden="true"]' }),
     ).toBeVisible();
   });
+
+  it("keeps Sharing compact while the app name absorbs table width", () => {
+    const { container } = renderAppSection([ownedApp], "table");
+
+    expect(container.querySelector('th[data-column-id="sharing"]')).toHaveStyle(
+      { width: "160px" },
+    );
+    expect(
+      (container.querySelector('th[data-column-id="name"]') as HTMLElement)
+        .style.width,
+    ).toBe("");
+  });
 });
 
-function renderAppSection(apps: AppListItem[] = [ownedApp, externalApp]) {
+function renderAppSection(
+  apps: AppListItem[] = [ownedApp, externalApp],
+  defaultMode: "cards" | "table" = "cards",
+) {
   return render(
-    <TableCardView storageKey="apps-test-view" defaultMode="cards">
+    <TableCardView
+      storageKey={`apps-test-view-${defaultMode}`}
+      defaultMode={defaultMode}
+    >
       <FilterBar>
         <span>Filters</span>
       </FilterBar>

@@ -774,12 +774,78 @@ describe("AgentForm delegation state", () => {
     });
   });
 
+  // A gateway advertises its subagents as delegation tools on every
+  // `tools/list` it answers, so it configures them here like an agent does.
   it.each([
     "mcp_gateway",
     "profile",
-  ] as const)("omits agent-only Subagents for %s forms", (agentType) => {
+  ] as const)("offers Subagents on %s forms, seeded from that record's sets", (agentType) => {
     render(
       <AgentForm agentType={agentType} agent={{ ...baseAgent, agentType }} />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Subagents" }),
+    ).toBeInTheDocument();
+    expect(useAgentDelegationsMock).toHaveBeenCalledWith(baseAgent.id);
+  });
+
+  it("saves a gateway's subagent mode and delegation set", async () => {
+    const user = userEvent.setup();
+    const gateway = {
+      ...baseAgent,
+      agentType: "mcp_gateway" as const,
+      accessAllSubagents: false,
+    };
+    const updateAgent = vi.fn().mockResolvedValue(gateway);
+    const syncDelegations = vi
+      .fn()
+      .mockResolvedValue({ added: [targetAgent.id], removed: [] });
+    useProfileMock.mockReturnValue({ data: gateway, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
+    useSyncAgentDelegationsMock.mockReturnValue({
+      mutateAsync: syncDelegations,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: updateAgent,
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="mcp_gateway" agent={gateway} />);
+
+    const section = screen
+      .getByRole("heading", { name: "Subagents" })
+      .closest("section") as HTMLElement;
+    expect(
+      within(section).getByText(
+        "No delegation tools appear in this gateway's tool list.",
+      ),
+    ).toBeInTheDocument();
+    await user.click(
+      within(section).getByRole("button", { name: "Add Target Agent" }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() =>
+      expect(updateAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ accessAllSubagents: false }),
+        }),
+      ),
+    );
+    expect(syncDelegations).toHaveBeenCalledWith(
+      expect.objectContaining({ targetAgentIds: [targetAgent.id] }),
+    );
+  });
+
+  it("omits Subagents on an LLM proxy, which has no MCP surface to advertise one on", () => {
+    render(
+      <AgentForm
+        agentType="llm_proxy"
+        agent={{ ...baseAgent, agentType: "llm_proxy" }}
+      />,
     );
 
     expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();

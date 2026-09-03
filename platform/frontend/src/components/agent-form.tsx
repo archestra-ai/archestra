@@ -461,6 +461,12 @@ interface SubagentsEditorProps {
   // (disabled-subagents) role only narrows an existing set, so it omits it.
   showCreateAction?: boolean;
   tone?: "delegate" | "exclude";
+  /**
+   * What an empty delegation set means for this record. An agent runs the task
+   * itself; a gateway simply advertises no delegation tool, and never had a
+   * task of its own to hand on.
+   */
+  emptyDescription?: string;
 }
 
 function SubagentsEditor({
@@ -471,6 +477,7 @@ function SubagentsEditor({
   placeholder = "Search agents...",
   showCreateAction = true,
   tone = "delegate",
+  emptyDescription = "Every task is handled here, with nothing handed on.",
 }: SubagentsEditorProps) {
   // Filter out the current agent, and the advisor: its own switch below owns
   // that decision, and listing it here would offer a second way to change the
@@ -515,9 +522,7 @@ function SubagentsEditor({
       {isEmpty && (
         <div className="space-y-0.5">
           <p className="text-sm font-medium">No subagents assigned</p>
-          <p className="text-xs text-muted-foreground">
-            Every task is handled here, with nothing handed on.
-          </p>
+          <p className="text-xs text-muted-foreground">{emptyDescription}</p>
         </div>
       )}
       {selectedAgents.map((agent) => (
@@ -932,7 +937,18 @@ export function AgentForm({
     showConfigurationSections || showToolsSections || showAdvancedSections;
   const isActiveSection = (group: AgentFormSection) =>
     activeSection === undefined || activeSection === group;
-  const supportsSubagents = agentType === "agent";
+  // Which records can delegate at all, mirroring the backend's
+  // `DELEGATING_AGENT_TYPES` (services/agent-subagent-exclusions.ts): only an
+  // `llm_proxy` is excluded, because it has no MCP surface to advertise a
+  // delegation tool on. A gateway does — `routes/mcp-gateway/utils.ts` resolves
+  // the Auto/Custom subagent seam through `getAgentTools` and splices the
+  // result into every `tools/list` it answers — so narrowing this to `agent`
+  // left a gateway with a live delegation surface and no control over it, while
+  // its list page kept a Subagents column reporting on the set.
+  const supportsSubagents =
+    agentType === "agent" ||
+    agentType === "mcp_gateway" ||
+    agentType === "profile";
   const shouldLoadIdentityProviders =
     agentType === "mcp_gateway" || agentType === "agent";
   const shouldLoadKnowledgeSources = true;
@@ -3238,7 +3254,15 @@ export function AgentForm({
               {showSubagents && (
                 <SettingsSection
                   title="Subagents"
-                  description="Other agents this one may hand a task to."
+                  // An agent hands the task over itself. A gateway does not
+                  // run anything — it advertises each subagent as a delegation
+                  // tool and its client decides when to call one — so saying it
+                  // "hands a task over" would describe the wrong actor.
+                  description={
+                    isInternalAgent
+                      ? "Other agents this one may hand a task to."
+                      : `Agents this ${agentTypeDisplayName[agentType] || "agent"} offers its clients as delegation tools.`
+                  }
                 >
                   {!subagentSetsLoaded ? (
                     <p className="text-sm text-muted-foreground">
@@ -3281,6 +3305,11 @@ export function AgentForm({
                             selectedAgentIds={selectedDelegationTargetIds}
                             onSelectionChange={setSelectedDelegationTargetIds}
                             currentAgentId={agent?.id}
+                            emptyDescription={
+                              isInternalAgent
+                                ? undefined
+                                : "No delegation tools appear in this gateway's tool list."
+                            }
                           />
                         </div>
                       )}
@@ -3314,9 +3343,13 @@ export function AgentForm({
                               </Badge>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              {advisorEnabled
-                                ? "Gets a second opinion from the Advisor before answering."
-                                : "Answers without consulting the Advisor."}{" "}
+                              {isInternalAgent
+                                ? advisorEnabled
+                                  ? "Gets a second opinion from the Advisor before answering."
+                                  : "Answers without consulting the Advisor."
+                                : advisorEnabled
+                                  ? "Reachable through this gateway, alongside its other subagents."
+                                  : "Not reachable through this gateway."}{" "}
                               <ExternalDocsLink
                                 href={advisorDocsUrl}
                                 className="underline"

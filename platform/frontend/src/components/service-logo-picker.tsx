@@ -5,18 +5,19 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import {
-  buildIconList,
-  filterIcons,
-  iconToDataUrl,
-  type ServiceIcon,
-} from "./service-logo-picker.utils";
+import { iconToDataUrl, type ServiceIcon } from "./service-logo-picker.utils";
+
+const PAGE_SIZE = 120;
+
+interface ServiceIconsResponse {
+  data: ServiceIcon[];
+  total: number;
+}
 
 interface ServiceLogoPickerProps {
   onSelect: (dataUrl: string) => void;
@@ -24,22 +25,62 @@ interface ServiceLogoPickerProps {
 
 export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
   const [icons, setIcons] = useState<ServiceIcon[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const requestVersionRef = useRef(0);
 
   useEffect(() => {
-    import("simple-icons").then((module) => {
-      setIcons(buildIconList(module));
-      setLoading(false);
-    });
-  }, []);
+    const requestVersion = ++requestVersionRef.current;
+    const abortController = new AbortController();
+    const searchParams = new URLSearchParams({ limit: String(PAGE_SIZE) });
+    if (deferredQuery.trim()) {
+      searchParams.set("q", deferredQuery.trim());
+    }
 
-  const filtered = useMemo(
-    () => filterIcons(icons, deferredQuery),
-    [icons, deferredQuery],
-  );
+    setLoading(true);
+    setLoadingMore(false);
+    setLoadFailed(false);
+    setLoadMoreFailed(false);
+
+    fetch(`/api/service-icons?${searchParams}`, {
+      signal: abortController.signal,
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load service icons");
+        }
+        return response.json() as Promise<ServiceIconsResponse>;
+      })
+      .then((result) => {
+        if (requestVersion !== requestVersionRef.current) return;
+        setIcons(result.data);
+        setTotal(result.total);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        if (requestVersion === requestVersionRef.current) {
+          setLoadFailed(true);
+        }
+      })
+      .finally(() => {
+        if (
+          !abortController.signal.aborted &&
+          requestVersion === requestVersionRef.current
+        ) {
+          setLoading(false);
+        }
+      });
+
+    return () => abortController.abort();
+  }, [deferredQuery]);
 
   // Reset scroll when search changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally trigger on deferredQuery change
@@ -54,25 +95,49 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
     [onSelect],
   );
 
-  // Only render first N icons for performance, load more on scroll
-  const [visibleCount, setVisibleCount] = useState(120);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset on search change
-  useEffect(() => {
-    setVisibleCount(120);
-  }, [deferredQuery]);
-
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const el = e.currentTarget;
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-        setVisibleCount((prev) => Math.min(prev + 120, filtered.length));
-      }
-    },
-    [filtered.length],
-  );
+      const nearBottom =
+        el.scrollTop + el.clientHeight >= el.scrollHeight - 100;
+      if (!nearBottom || loadingMore || icons.length >= total) return;
 
-  const visibleIcons = filtered.slice(0, visibleCount);
+      const searchParams = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(icons.length),
+      });
+      if (deferredQuery.trim()) {
+        searchParams.set("q", deferredQuery.trim());
+      }
+
+      setLoadingMore(true);
+      setLoadMoreFailed(false);
+      const requestVersion = requestVersionRef.current;
+      fetch(`/api/service-icons?${searchParams}`)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to load more service icons");
+          }
+          return response.json() as Promise<ServiceIconsResponse>;
+        })
+        .then((result) => {
+          if (requestVersion !== requestVersionRef.current) return;
+          setIcons((current) => [...current, ...result.data]);
+          setTotal(result.total);
+        })
+        .catch(() => {
+          if (requestVersion === requestVersionRef.current) {
+            setLoadMoreFailed(true);
+          }
+        })
+        .finally(() => {
+          if (requestVersion === requestVersionRef.current) {
+            setLoadingMore(false);
+          }
+        });
+    },
+    [deferredQuery, icons.length, loadingMore, total],
+  );
 
   return (
     <div className="flex flex-col">
@@ -98,7 +163,11 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
             <span>Loading logos...</span>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : loadFailed ? (
+          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            <span>Could not load logos</span>
+          </div>
+        ) : icons.length === 0 ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
             <span>No logos found</span>
           </div>
@@ -116,7 +185,7 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
               fits the large majority on one line and caps the rest at two.
             */}
             <div className="grid grid-cols-4 gap-1">
-              {visibleIcons.map((icon) => (
+              {icons.map((icon) => (
                 <button
                   key={icon.slug}
                   type="button"
@@ -156,9 +225,13 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
                 </button>
               ))}
             </div>
-            {visibleCount < filtered.length && (
+            {icons.length < total && (
               <p className="text-xs text-muted-foreground text-center py-2">
-                Scroll for more ({filtered.length - visibleCount} remaining)
+                {loadingMore
+                  ? "Loading more..."
+                  : loadMoreFailed
+                    ? "Could not load more logos"
+                    : `Scroll for more (${total - icons.length} remaining)`}
               </p>
             )}
           </>

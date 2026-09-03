@@ -81,7 +81,7 @@ export function useDeploymentLogAutoScroll() {
 
 /**
  * Shared tab chrome for a deployed workload's logs and interactive tools.
- * MCP deployments and Agent background executions use the same visual and
+ * MCP deployments and Agent Runtime runs use the same visual and
  * interaction pattern even though their WebSocket transports differ.
  */
 export function DeploymentConsoleTabs({
@@ -170,7 +170,7 @@ export function DeploymentConsoleTabList({
   );
 }
 
-/** Shared deployment-log surface used by MCP servers and Agent executions. */
+/** Shared deployment-log surface used by MCP servers and Agent runs. */
 export function DeploymentLogPanel({
   title,
   detail,

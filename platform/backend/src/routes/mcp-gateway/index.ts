@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { EXECUTION_ID_HEADER } from "@archestra/shared";
+import { RUN_ID_HEADER } from "@archestra/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -105,16 +105,10 @@ async function logHandshake(params: {
   method: "initialize" | typeof SERVER_DISCOVER_METHOD;
   revision: McpProtocolRevision;
   tokenAuthContext: TokenAuthContext | undefined;
-  executionId?: string;
+  runId?: string;
 }): Promise<void> {
-  const {
-    fastify,
-    profileId,
-    method,
-    revision,
-    tokenAuthContext,
-    executionId,
-  } = params;
+  const { fastify, profileId, method, revision, tokenAuthContext, runId } =
+    params;
 
   try {
     await McpToolCallModel.create({
@@ -129,7 +123,7 @@ async function logHandshake(params: {
         // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
       }) as any,
       userId: tokenAuthContext?.userId ?? null,
-      executionId: executionId ?? null,
+      runId: runId ?? null,
       authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
     });
     fastify.log.trace({ profileId, method }, "Saved handshake request");
@@ -157,7 +151,7 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
-  const executionId = readHeader(request, EXECUTION_ID_HEADER);
+  const runId = readHeader(request, RUN_ID_HEADER);
 
   // Read from the raw body: the SDK's request schemas drop unknown params, so
   // these are gone by the time a request handler runs.
@@ -192,7 +186,7 @@ async function handleMcpPostRequest(
     const { server } = await createAgentServer({
       agentId: profileId,
       tokenAuth: tokenAuthContext,
-      executionId,
+      runId,
       mrtr: {
         // Only a 2026-07-28 client can act on an InputRequiredResult. A legacy
         // client keeps the in-band elicitation it has always used.
@@ -254,7 +248,7 @@ async function handleMcpPostRequest(
         method: "initialize",
         revision,
         tokenAuthContext,
-        executionId,
+        runId,
       });
     }
 
@@ -644,7 +638,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId: tokenAuth.organizationId,
             ...(tokenAuth.userId && { userId: tokenAuth.userId }),
           },
-          executionId: readHeader(request, EXECUTION_ID_HEADER),
+          runId: readHeader(request, RUN_ID_HEADER),
         });
         return {
           jsonrpc: "2.0",
@@ -657,7 +651,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const executionId = readHeader(request, EXECUTION_ID_HEADER);
+      const runId = readHeader(request, RUN_ID_HEADER);
       const tokenAuthContext: TokenAuthContext = {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,
@@ -667,7 +661,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
-        ...(executionId && { executionId }),
+        ...(runId && { runId }),
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist

@@ -23,15 +23,15 @@ import {
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import {
-  resolveAgentDeployment,
-  resumeBackgroundTask,
-  runTaskInBackground,
-} from "@/services/runners/pod-execution";
+  resolveAgentRuntime,
+  resumeAgentRun,
+  runTaskInAgentRuntime,
+} from "@/services/agent-runtime/pod-run";
 import type {
   A2AContext,
   A2AMessage,
-  AgentRun,
   AgentRunCompletionTarget,
+  AgentRunRecord,
 } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import {
@@ -168,7 +168,7 @@ export interface A2ASystemParams {
    * Chat. Every other durable task is one-shot so delegation surfaces can
    * receive a terminal result without waiting for somebody to exit a TUI.
    */
-  backgroundExecutionMode?: "interactive" | "one_shot";
+  runtimeMode?: "interactive" | "one_shot";
   /**
    * Per-turn framing prepended to the executed user turn but NOT
    * persisted with it. Callers with server-side sessions (chatops) put
@@ -203,13 +203,13 @@ export class A2AManager {
    * recovered run produces the same artifact and terminal events as a run
    * that never crossed a restart.
    */
-  public async adoptBackgroundTask(params: {
+  public async adoptAgentRun(params: {
     taskId: string;
-    session: AgentRun;
+    session: AgentRunRecord;
   }): Promise<void> {
     if (this.config.taskMode !== "full") {
       throw new Error(
-        "[A2AManager] Background task adoption requires full mode",
+        "[A2AManager] Agent Runtime task adoption requires full mode",
       );
     }
     const task = await A2ATaskManager.loadTaskWithDataById(params.taskId);
@@ -224,7 +224,7 @@ export class A2AManager {
       contextId: task.contextId,
       survivesRestart: true,
       executeRun: (runOpts) =>
-        resumeBackgroundTask({
+        resumeAgentRun({
           session: params.session,
           onTextDelta: runOpts.onTextDelta,
           abortSignal: runOpts.abortSignal,
@@ -570,10 +570,10 @@ export class A2AManager {
             })
           : [],
       ]);
-      // Background execution belongs to the Agent itself and is selected only
+      // Agent Runtime belongs to the Agent itself and is selected only
       // for a durable task. Invocation surfaces decide whether a plain send
       // should remain a Message or be promoted to that task lifecycle.
-      const deployment = resolveAgentDeployment(agent);
+      const runtime = resolveAgentRuntime(agent);
 
       const executeRun = (runOpts: {
         abortSignal?: AbortSignal;
@@ -596,9 +596,9 @@ export class A2AManager {
             // Only a task run goes to the container. This keeps the runtime
             // decision independent from the protocol surface: A2A can promote
             // a direct send, while foreground Chat can remain message-based.
-            if (deployment && runOpts.taskId) {
-              return runTaskInBackground({
-                deployment,
+            if (runtime && runOpts.taskId) {
+              return runTaskInAgentRuntime({
+                runtime,
                 // The task is the pod's identity: one session per task, so a
                 // resumed task adopts its own pod rather than starting a second.
                 taskId: runOpts.taskId,
@@ -610,8 +610,7 @@ export class A2AManager {
                 task: executedTurnText,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
-                executionMode:
-                  systemParams?.backgroundExecutionMode ?? "one_shot",
+                runMode: systemParams?.runtimeMode ?? "one_shot",
                 titleUserId: actor.kind === "user" ? actor.id : undefined,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,
@@ -689,7 +688,7 @@ export class A2AManager {
             task: runTask,
             contextId: runContextId,
             executeRun,
-            survivesRestart: Boolean(deployment),
+            survivesRestart: Boolean(runtime),
           });
 
         if (params.taskRun?.detached) {

@@ -381,8 +381,8 @@ vi.mock("@/components/agent-chat-apps", () => ({
   },
 }));
 
-vi.mock("./agent-pages/agent-background-execution-card", () => ({
-  AgentBackgroundExecutionCard: () => <div>Mock Background Credentials</div>,
+vi.mock("./agent-pages/agent-runtime-credential-card", () => ({
+  AgentRuntimeCredentialCard: () => <div>Mock Background Credentials</div>,
 }));
 
 vi.mock(
@@ -678,8 +678,8 @@ const AgentForm = (props: Omit<AgentFormProps, "footer">) => (
 );
 
 const baseAgent = {
-  backgroundExecution: null,
-  backgroundExecutionSecretId: null,
+  runtime: null,
+  runtimeSecretId: null,
   id: "00000000-0000-4000-8000-000000000001",
   organizationId: "00000000-0000-4000-8000-000000000010",
   name: "Existing Agent",

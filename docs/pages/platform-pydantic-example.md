@@ -2,7 +2,7 @@
 title: Secure Agent with Pydantic AI
 category: Examples
 order: 6
-lastUpdated: 2026-08-24
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -118,7 +118,7 @@ agent = Agent(
 
 That's it! Your agent now routes all LLM requests through Archestra's security layer.
 
-## Step 7. Observe agent execution in Archestra
+## Step 7. Observe agent run in Archestra
 
 Archestra proxies every request from your AI Agent and records all the details, so you can review them:
 

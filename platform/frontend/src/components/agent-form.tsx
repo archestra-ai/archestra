@@ -47,10 +47,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import {
-  AgentBackgroundExecutionFields,
-  type BackgroundExecutionConfig,
-} from "@/components/agent-background-execution-fields";
 import { AgentChatAppsEditor } from "@/components/agent-chat-apps";
 import {
   AgentHooksEditor,
@@ -63,6 +59,10 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
+import {
+  type AgentRuntimeConfig,
+  AgentRuntimeFields,
+} from "@/components/agent-runtime-fields";
 import {
   AgentSkillsEditor,
   type EditableSkill,
@@ -213,7 +213,7 @@ import {
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-form.utils";
-import { AgentBackgroundExecutionCard } from "./agent-pages/agent-background-execution-card";
+import { AgentRuntimeCredentialCard } from "./agent-pages/agent-runtime-credential-card";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
@@ -791,7 +791,7 @@ export function AccessLevelSelector({
  *   agent.
  * - `tools`: everything the agent reaches — tools and knowledge sources,
  *   subagents, published skills, and hooks.
- * - `advanced`: background execution, security, passthrough headers, identity
+ * - `advanced`: Agent Runtime, security, passthrough headers, identity
  *   provider, and labels.
  */
 /**
@@ -842,7 +842,7 @@ export interface AgentFormInitialValues {
   icon?: string | null;
   description?: string;
   systemPrompt?: string;
-  backgroundExecution?: BackgroundExecutionConfig | null;
+  runtime?: AgentRuntimeConfig | null;
   accessAllTools?: boolean;
   /** Catalog runtimes that must bill an acting user's own subscription. */
   requiredSubscriptionKind?: SubscriptionCredentialKind;
@@ -1190,8 +1190,7 @@ export function AgentForm({
     String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
   );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
-  const [backgroundExecution, setBackgroundExecution] =
-    useState<BackgroundExecutionConfig | null>(null);
+  const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
   // Takes the id to write against: on create it is the one the record was just
   // given, which does not exist when the handler is registered.
@@ -1332,8 +1331,7 @@ export function AgentForm({
       : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
-  const agentBackgroundExecutionEnabled =
-    useFeature("agentBackgroundExecution") === true;
+  const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   // "Auto" (implicit access to all tools) is the default for new agents; admins
   // can switch an agent to "Custom" (explicitly assigned tools). Implicit access
   // is scoped to tools/knowledge visible to the user AND in the agent's
@@ -1554,9 +1552,7 @@ export function AgentForm({
                 ? String(agentData.builtInAgentConfig.maxRounds)
                 : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
-            backgroundExecution:
-              (agentData.backgroundExecution as BackgroundExecutionConfig | null) ??
-              null,
+            runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
               agentData.missingCredentialBehavior ?? "allow",
@@ -1588,7 +1584,7 @@ export function AgentForm({
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
-            backgroundExecution: initialValues?.backgroundExecution ?? null,
+            runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
@@ -1615,7 +1611,7 @@ export function AgentForm({
       setConnectorIds(nextValues.connectorIds);
       setScope(nextValues.scope);
       setPassthroughHeaders(nextValues.passthroughHeaders);
-      setBackgroundExecution(nextValues.backgroundExecution);
+      setAgentRuntime(nextValues.runtime);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
@@ -2136,8 +2132,8 @@ export function AgentForm({
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
-              ...(agentBackgroundExecutionEnabled && {
-                backgroundExecution,
+              ...(agentRuntimeEnabled && {
+                runtime,
               }),
             }),
             // The tools group: what the agent may reach, and how.
@@ -2199,8 +2195,8 @@ export function AgentForm({
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
           }),
-          ...(agentBackgroundExecutionEnabled && {
-            backgroundExecution,
+          ...(agentRuntimeEnabled && {
+            runtime,
           }),
         });
         if (!created) return false;
@@ -2441,8 +2437,8 @@ export function AgentForm({
     accessAllSubagents,
     supportsEnvironment,
     supportsSubagents,
-    agentBackgroundExecutionEnabled,
-    backgroundExecution,
+    agentRuntimeEnabled,
+    runtime,
     channelAssignmentsDirty,
   ]);
 
@@ -2530,7 +2526,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
-    backgroundExecution,
+    runtime,
   });
   const isDirty =
     !readOnly &&
@@ -3393,7 +3389,7 @@ export function AgentForm({
             </SettingsSectionGroup>
           )}
 
-          {/* The Advanced step: background execution, security, passthrough
+          {/* The Advanced step: Agent Runtime, security, passthrough
               headers, the identity provider, and labels. A built-in agent has
               none. */}
           {showAdvancedSections && !isBuiltIn && (
@@ -3681,19 +3677,19 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
-              {agentType === "agent" && agentBackgroundExecutionEnabled && (
+              {agentType === "agent" && agentRuntimeEnabled && (
                 <SettingsSection
-                  title="Background execution"
+                  title="Agent Runtime"
                   description="Whether this agent may run on its own, and the credentials it runs with."
                 >
-                  <AgentBackgroundExecutionFields
-                    value={backgroundExecution}
-                    onChange={setBackgroundExecution}
+                  <AgentRuntimeFields
+                    value={runtime}
+                    onChange={setAgentRuntime}
                   />
-                  {agent?.backgroundExecution?.credentials && (
-                    <AgentBackgroundExecutionCard
+                  {agent?.runtime?.credentials && (
+                    <AgentRuntimeCredentialCard
                       agentId={agent.id}
-                      credentials={agent.backgroundExecution.credentials}
+                      credentials={agent.runtime.credentials}
                     />
                   )}
                 </SettingsSection>
@@ -3971,7 +3967,7 @@ type AgentFormFields = {
   autoConfigureOnToolDiscovery: boolean;
   dualLlmMaxRounds: string;
   passthroughHeaders: string[];
-  backgroundExecution: BackgroundExecutionConfig | null;
+  runtime: AgentRuntimeConfig | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;
   accessAllTools: boolean;

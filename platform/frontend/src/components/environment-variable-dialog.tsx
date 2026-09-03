@@ -4,12 +4,12 @@ import { E2eTestId, parseVaultReference } from "@archestra/shared";
 import { CheckCircle2, Key } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ExecutionCredentialIcon } from "@/components/execution-credential-icon";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import {
   FieldScopeSelect,
   type FieldScopeValue,
 } from "@/components/field-scope-select";
+import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,7 +38,7 @@ export interface EnvVarDraft {
   required: boolean;
   description: string;
   value: string;
-  /** Stable reusable connection id for Agent Background execution secrets. */
+  /** Stable reusable connection id for Agent Runtime secrets. */
   credentialId?: string;
 }
 
@@ -408,7 +408,7 @@ function CredentialBindingEditor({
             ? "Uses a saved connection. Rotating it updates every Agent that uses it."
             : "Saved for this Agent only."}{" "}
           <Link
-            href="/settings/agents#execution-credentials"
+            href="/settings/agents#runtime-credentials"
             className="font-medium text-foreground underline underline-offset-4"
           >
             Manage saved connections
@@ -452,7 +452,7 @@ function CredentialBindingEditor({
                   </span>
                 ) : undefined
               }
-              icon={<ExecutionCredentialIcon icon={option.icon ?? null} />}
+              icon={<RuntimeCredentialIcon icon={option.icon ?? null} />}
             >
               {option.label}
             </SelectItem>

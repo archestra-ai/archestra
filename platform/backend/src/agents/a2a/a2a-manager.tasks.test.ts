@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { A2AArtifactModel, A2AMessageModel, A2ATaskModel } from "@/models";
 import { describe, expect, test } from "@/test";
-import type { AgentRun } from "@/types";
+import type { AgentRunRecord } from "@/types";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import { buildApprovalDecisionSendMessageRequest } from "./a2a-helper";
 import { A2AManager } from "./a2a-manager";
@@ -13,32 +13,33 @@ import {
   A2AProtocolTaskState,
 } from "./a2a-protocol";
 
-const { executeA2AMessage, resumeBackgroundTask, runTaskInBackground } =
-  vi.hoisted(() => ({
+const { executeA2AMessage, resumeAgentRun, runTaskInAgentRuntime } = vi.hoisted(
+  () => ({
     executeA2AMessage: vi.fn(),
-    resumeBackgroundTask: vi.fn(),
-    runTaskInBackground: vi.fn(),
-  }));
+    resumeAgentRun: vi.fn(),
+    runTaskInAgentRuntime: vi.fn(),
+  }),
+);
 
 vi.mock("@/agents/a2a-executor.ts", () => ({
   executeA2AMessage,
 }));
 
-vi.mock("@/services/runners/pod-execution", () => ({
-  resolveAgentDeployment: (agent: {
+vi.mock("@/services/agent-runtime/pod-run", () => ({
+  resolveAgentRuntime: (agent: {
     id: string;
     name: string;
-    backgroundExecution?: object | null;
+    runtime?: object | null;
   }) =>
-    agent.backgroundExecution
+    agent.runtime
       ? {
           agentId: agent.id,
           name: agent.name,
-          ...agent.backgroundExecution,
+          ...agent.runtime,
         }
       : null,
-  runTaskInBackground,
-  resumeBackgroundTask,
+  runTaskInAgentRuntime,
+  resumeAgentRun,
 }));
 
 const actor: A2AActor = {
@@ -172,7 +173,7 @@ describe("A2AManager full task mode", () => {
       state: A2AProtocolTaskState.Working,
       lastHeartbeatAt: new Date(0),
     });
-    const session: AgentRun = {
+    const session: AgentRunRecord = {
       id: crypto.randomUUID(),
       organizationId: agent.organizationId,
       taskId: task.id,
@@ -183,7 +184,7 @@ describe("A2AManager full task mode", () => {
       title: "Recovered task",
       pinnedAt: null,
       projectId: null,
-      deploymentName: "runner-background-agent-recovery",
+      workloadName: "runner-background-agent-recovery",
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
@@ -194,7 +195,7 @@ describe("A2AManager full task mode", () => {
       startedAt: new Date(),
       endedAt: null,
     };
-    resumeBackgroundTask.mockImplementationOnce(
+    resumeAgentRun.mockImplementationOnce(
       async (params: { onTextDelta?: (delta: string) => void }) => {
         params.onTextDelta?.("recovered answer");
         const messageId = crypto.randomUUID();
@@ -211,9 +212,9 @@ describe("A2AManager full task mode", () => {
       },
     );
 
-    await fullManager().adoptBackgroundTask({ taskId: task.id, session });
+    await fullManager().adoptAgentRun({ taskId: task.id, session });
 
-    expect(resumeBackgroundTask).toHaveBeenCalledWith(
+    expect(resumeAgentRun).toHaveBeenCalledWith(
       expect.objectContaining({ session }),
     );
     expect((await A2ATaskModel.findById(task.id))?.state).toBe(
@@ -227,13 +228,13 @@ describe("A2AManager full task mode", () => {
     ]);
   });
 
-  test("an Agent deployment is used for a task, while a synchronous A2A message stays foreground", async ({
+  test("an Agent runtime is used for a task, while a synchronous A2A message stays foreground", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
       name: "background-agent",
       teams: [],
-      backgroundExecution: {
+      runtime: {
         image: "example.invalid/background-agent:test",
         command: null,
         inferenceProtocol: "openai_responses",
@@ -248,7 +249,7 @@ describe("A2AManager full task mode", () => {
       },
     });
     mockExecutorText("foreground answer");
-    runTaskInBackground.mockResolvedValueOnce({
+    runTaskInAgentRuntime.mockResolvedValueOnce({
       messageId: crypto.randomUUID(),
       text: "background answer",
       finishReason: "stop",
@@ -264,7 +265,7 @@ describe("A2AManager full task mode", () => {
       agentId: agent.id,
     });
     expect(direct.message?.parts).toEqual([{ text: "foreground answer" }]);
-    expect(runTaskInBackground).not.toHaveBeenCalled();
+    expect(runTaskInAgentRuntime).not.toHaveBeenCalled();
 
     const tasked = await sendMessage({
       manager: fullManager(),
@@ -272,12 +273,12 @@ describe("A2AManager full task mode", () => {
       taskRun: { createTask: true, detached: false },
     });
     expect(tasked.task?.status.state).toBe(A2AProtocolTaskState.Completed);
-    expect(runTaskInBackground).toHaveBeenCalledWith(
+    expect(runTaskInAgentRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: agent.id,
         taskId: tasked.task?.id,
-        deployment: expect.objectContaining({ agentId: agent.id }),
-        executionMode: "one_shot",
+        runtime: expect.objectContaining({ agentId: agent.id }),
+        runMode: "one_shot",
       }),
     );
     expect(executeA2AMessage).toHaveBeenCalledTimes(1);

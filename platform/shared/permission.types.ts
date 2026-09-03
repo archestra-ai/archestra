@@ -159,7 +159,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   log: "LLM proxy and MCP tool call logs",
   chat: "Chat conversations",
   project:
-    "Projects — shared collections of chats, execution sessions, and files",
+    "Projects — shared collections of chats, Agent Runtime runs, and files",
   file: "Files produced and used in chats and projects",
   agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
   scheduledTask: "Scheduled agent tasks that run on a schedule",

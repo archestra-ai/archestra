@@ -20,13 +20,13 @@ vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: (...args: unknown[]) => mockExecuteA2AMessage(...args),
 }));
 
-vi.mock("@/services/runners/pod-execution", async () => {
+vi.mock("@/services/agent-runtime/pod-run", async () => {
   const actual = await vi.importActual<
-    typeof import("@/services/runners/pod-execution")
-  >("@/services/runners/pod-execution");
+    typeof import("@/services/agent-runtime/pod-run")
+  >("@/services/agent-runtime/pod-run");
   return {
     ...actual,
-    runTaskInBackground: (...args: unknown[]) =>
+    runTaskInAgentRuntime: (...args: unknown[]) =>
       mockRunTaskInBackground(...args),
   };
 });
@@ -174,8 +174,7 @@ describe("a2a v2 task methods", () => {
   let agentId: string;
   let organizationId: string;
   let userId: string;
-  const previousBackgroundExecutionEnabled =
-    config.agentBackgroundExecution.enabled;
+  const previousAgentRuntimeEnabled = config.agentRuntime.enabled;
 
   beforeEach(async ({ makeInternalAgent, makeUser, makeMember }) => {
     const agent = await makeInternalAgent();
@@ -200,8 +199,7 @@ describe("a2a v2 task methods", () => {
     mockExecuteA2AMessage.mockReset();
     mockRunTaskInBackground.mockReset();
     mockValidateMCPGatewayToken.mockReset();
-    config.agentBackgroundExecution.enabled =
-      previousBackgroundExecutionEnabled;
+    config.agentRuntime.enabled = previousAgentRuntimeEnabled;
     await app.close();
   });
 
@@ -257,13 +255,13 @@ describe("a2a v2 task methods", () => {
     expect(settled.status.timestamp).toEqual(expect.any(String));
   });
 
-  test("SendMessage returns a durable Task when the Agent uses background execution", async ({
+  test("SendMessage returns a durable Task when the Agent uses Agent Runtime", async ({
     makeInternalAgent,
   }) => {
-    config.agentBackgroundExecution.enabled = true;
-    const backgroundAgent = await makeInternalAgent({
+    config.agentRuntime.enabled = true;
+    const runtimeAgent = await makeInternalAgent({
       organizationId,
-      backgroundExecution: {
+      runtime: {
         image: "example.invalid/background-agent:test",
         command: null,
         inferenceProtocol: "openai_responses",
@@ -277,7 +275,7 @@ describe("a2a v2 task methods", () => {
         idleTimeoutMinutes: null,
       },
     });
-    agentId = backgroundAgent.id;
+    agentId = runtimeAgent.id;
     mockRunTaskInBackground.mockImplementationOnce(
       async (params: { onTextDelta?: (delta: string) => void }) => {
         params.onTextDelta?.("background answer");
@@ -312,7 +310,7 @@ describe("a2a v2 task methods", () => {
     });
     expect(mockRunTaskInBackground).toHaveBeenCalledWith(
       expect.objectContaining({
-        agentId: backgroundAgent.id,
+        agentId: runtimeAgent.id,
         taskId: body.result.task.id,
         actor: {
           id: userId,
@@ -320,9 +318,9 @@ describe("a2a v2 task methods", () => {
           organizationId,
         },
         deployment: expect.objectContaining({
-          agentId: backgroundAgent.id,
+          agentId: runtimeAgent.id,
         }),
-        executionMode: "one_shot",
+        runMode: "one_shot",
       }),
     );
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();

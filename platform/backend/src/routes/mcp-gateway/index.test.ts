@@ -198,7 +198,7 @@ describe("MCP Gateway (stateless mode)", () => {
     });
   });
 
-  test("records the background execution id on gateway audit rows", async ({
+  test("records the Agent Runtime id on gateway audit rows", async ({
     makeAgent,
     makeOrganization,
   }) => {
@@ -210,14 +210,14 @@ describe("MCP Gateway (stateless mode)", () => {
       teamId: null,
       isOrganizationToken: true,
     });
-    const executionId = crypto.randomUUID();
+    const runId = crypto.randomUUID();
 
     const response = await app.inject({
       method: "POST",
       url: `/v1/mcp/${agent.id}`,
       headers: {
         ...makeMcpHeaders(token.value),
-        "x-archestra-execution-id": executionId,
+        "x-archestra-run-id": runId,
       },
       payload: {
         jsonrpc: "2.0",
@@ -237,13 +237,13 @@ describe("MCP Gateway (stateless mode)", () => {
       undefined,
       undefined,
       undefined,
-      { search: executionId },
+      { search: runId },
     );
     expect(rows.data).toEqual([
       expect.objectContaining({
         agentId: agent.id,
         method: "initialize",
-        executionId,
+        runId,
       }),
     ]);
   });

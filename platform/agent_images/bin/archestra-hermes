@@ -6,16 +6,16 @@ if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_chat" ]]; then
   exit 78
 fi
 
-runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 export HERMES_HOME="${runtime_dir}/hermes"
 mkdir -p "${HERMES_HOME}"
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
-  --arg model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}" \
-  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" \
+  --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg gateway_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
-  --arg system_prompt "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}" \
+  --arg system_prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" \
   '{
     providers:{archestra:{
       name:"Archestra",
@@ -29,7 +29,7 @@ jq -n \
       max_tokens:16384,
       context_length:1047576,
       default_headers:{
-        "X-Archestra-Execution-Id":$task_id,
+        "X-Archestra-Run-Id":$task_id,
         "X-Archestra-Session-Id":$task_id
       }
     },
@@ -37,7 +37,7 @@ jq -n \
       url:$mcp_url,
       headers:{
         Authorization:("Bearer " + $gateway_token),
-        "X-Archestra-Execution-Id":$task_id,
+        "X-Archestra-Run-Id":$task_id,
         "X-Archestra-Session-Id":$task_id
       }
     }}
@@ -48,16 +48,16 @@ chmod 0600 "${HERMES_HOME}/config.yaml"
 mkdir -p "${HOME}/.hermes"
 ln -sf "${HERMES_HOME}/config.yaml" "${HOME}/.hermes/config.yaml"
 task_file="${runtime_dir}/task.md"
-printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 
 common_args=(
   --provider archestra
-  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+  --model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
   --yolo
   --accept-hooks
 )
 
-case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
     exec hermes chat \
       "${common_args[@]}" \
@@ -77,7 +77,7 @@ case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
     fi
     ;;
   *)
-    echo "archestra: unknown Background execution mode" >&2
+    echo "archestra: unknown Agent Runtime mode" >&2
     exit 78
     ;;
 esac

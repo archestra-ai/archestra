@@ -194,11 +194,11 @@ function McpToolCallDetail({
           },
         ]
       : []),
-    ...(mcpToolCall.executionId
+    ...(mcpToolCall.runId
       ? [
           {
-            label: "Execution ID",
-            value: <span className="font-mono">{mcpToolCall.executionId}</span>,
+            label: "Run ID",
+            value: <span className="font-mono">{mcpToolCall.runId}</span>,
           },
         ]
       : []),

@@ -2,21 +2,21 @@ import { META_HEADER } from "@archestra/shared";
 
 /**
  * Parsed result from the composite X-Archestra-Meta header.
- * Format: external-agent-id/execution-id/session-id
+ * Format: external-agent-id/run-id/session-id
  *
  * Values must not contain "/" since it is used as the segment delimiter.
  */
 export interface ParsedMetaHeader {
   externalAgentId?: string;
-  executionId?: string;
+  runId?: string;
   sessionId?: string;
 }
 
 /**
  * Parse the composite X-Archestra-Meta header.
- * Format: external-agent-id/execution-id/session-id
+ * Format: external-agent-id/run-id/session-id
  *
- * Any segment can be empty (e.g., "/exec-123/" sets only execution-id).
+ * Any segment can be empty (e.g., "/exec-123/" sets only run-id).
  * Individual headers take precedence over meta header values — this function
  * only parses the meta header itself.
  *
@@ -41,7 +41,7 @@ export function parseMetaHeader(
       ? segments[0].trim()
       : undefined;
 
-  const executionId =
+  const runId =
     segments[1] && segments[1].trim().length > 0
       ? segments[1].trim()
       : undefined;
@@ -51,7 +51,7 @@ export function parseMetaHeader(
       ? segments[2].trim()
       : undefined;
 
-  return { externalAgentId, executionId, sessionId };
+  return { externalAgentId, runId, sessionId };
 }
 
 /**

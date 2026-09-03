@@ -360,16 +360,16 @@ export const SOURCE_HEADER = "X-Archestra-Source";
 export const UNTRUSTED_CONTEXT_HEADER = "X-Archestra-Context-Untrusted";
 
 /**
- * Header name for execution ID.
- * Clients can pass this header to associate interactions with a specific execution run.
+ * Header name for a run ID.
+ * Clients can pass this header to associate interactions with a specific run.
  */
-export const EXECUTION_ID_HEADER = "X-Archestra-Execution-Id";
+export const RUN_ID_HEADER = "X-Archestra-Run-Id";
 
 /**
- * Composite meta header with format: external-agent-id/execution-id/session-id.
+ * Composite meta header with format: external-agent-id/run-id/session-id.
  * Provides a convenience way to set all three values at once.
  * Individual headers take precedence over meta header values.
- * Any segment can be empty (e.g., "/exec-123/" sets only execution-id).
+ * Any segment can be empty (e.g., "/run-123/" sets only run-id).
  *
  * Values must not contain "/" since it is used as the segment delimiter.
  */

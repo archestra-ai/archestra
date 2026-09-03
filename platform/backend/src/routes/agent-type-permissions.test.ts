@@ -216,8 +216,8 @@ describe("agent type permission isolation (routes)", () => {
       });
       await makeMember(memberUser.id, organizationId, { role: "agent_only" });
       const memberApp = await createAppForUser(memberUser);
-      const previousEnabled = config.agentBackgroundExecution.enabled;
-      config.agentBackgroundExecution.enabled = true;
+      const previousEnabled = config.agentRuntime.enabled;
+      config.agentRuntime.enabled = true;
 
       try {
         const agentRes = await memberApp.inject({
@@ -239,7 +239,7 @@ describe("agent type permission isolation (routes)", () => {
         });
         expect(proxyRes.statusCode).toBe(400);
 
-        const backgroundAgent = await memberApp.inject({
+        const runtimeAgent = await memberApp.inject({
           method: "POST",
           url: "/api/agents",
           payload: {
@@ -247,7 +247,7 @@ describe("agent type permission isolation (routes)", () => {
             agentType: "agent",
             scope: "personal",
             teams: [],
-            backgroundExecution: {
+            runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
               inferenceProtocol: "openai_responses",
@@ -262,7 +262,7 @@ describe("agent type permission isolation (routes)", () => {
             },
           },
         });
-        expect(backgroundAgent.statusCode).toBe(200);
+        expect(runtimeAgent.statusCode).toBe(200);
 
         const privilegedAgent = await memberApp.inject({
           method: "POST",
@@ -272,7 +272,7 @@ describe("agent type permission isolation (routes)", () => {
             agentType: "agent",
             scope: "personal",
             teams: [],
-            backgroundExecution: {
+            runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
               inferenceProtocol: "openai_responses",
@@ -289,7 +289,7 @@ describe("agent type permission isolation (routes)", () => {
         });
         expect(privilegedAgent.statusCode).toBe(403);
       } finally {
-        config.agentBackgroundExecution.enabled = previousEnabled;
+        config.agentRuntime.enabled = previousEnabled;
         await memberApp.close();
       }
     });

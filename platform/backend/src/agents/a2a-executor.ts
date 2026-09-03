@@ -32,7 +32,7 @@ import {
   openAiReasoningSummaryCacheKey,
 } from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
-import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
+import { subagentRunTracker } from "@/agents/subagent-run-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
@@ -127,13 +127,13 @@ export interface A2AExecuteParams {
    * Id of a persisted `conversations` row, when the execution belongs to one
    * (chat delegation). Tools may persist it as a foreign key — never pass a
    * synthetic id here. When absent, the execution is headless and an isolation
-   * key scopes its per-execution state instead.
+   * key scopes its per-run state instead.
    */
   conversationId?: string;
   /**
    * Isolation scope inherited from the parent execution (headless
    * delegation), so sub-agents share the parent's browser tab tracking and
-   * per-execution sandbox. When neither this nor `conversationId` is
+   * per-run sandbox. When neither this nor `conversationId` is
    * provided (root headless call), a unique key is generated and its state is
    * cleaned up after execution.
    */
@@ -233,7 +233,7 @@ export async function executeA2AMessage(
     delegationToolCallId,
   } = params;
 
-  // Isolation key scoping per-execution state (browser tabs, MCP client
+  // Isolation key scoping per-run state (browser tabs, MCP client
   // cache, headless sandboxes). Chat delegation provides the conversation id;
   // headless delegation inherits the parent execution's key; a root headless
   // call generates one and cleans its state up after execution. Only
@@ -310,11 +310,11 @@ export async function executeA2AMessage(
       includeMemberChatDefault: false,
     });
 
-  // Track subagent execution so the browser preview can skip screenshots
+  // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
   // Only track delegated calls — direct A2A calls have no browser preview.
   if (!isDirectExecutionOutsideConversation) {
-    subagentExecutionTracker.increment(isolationKey);
+    subagentRunTracker.increment(isolationKey);
   }
 
   try {
@@ -840,11 +840,11 @@ export async function executeA2AMessage(
     });
 
     if (!isDirectExecutionOutsideConversation) {
-      subagentExecutionTracker.decrement(isolationKey);
+      subagentRunTracker.decrement(isolationKey);
     }
 
     // The root headless execution owns its generated isolation scope; drop the
-    // per-execution sandbox state once the run (and its delegations) finished.
+    // per-run sandbox state once the run (and its delegations) finished.
     if (isDirectExecutionOutsideConversation) {
       executionSandboxRegistry.release(isolationKey);
     }
@@ -855,7 +855,7 @@ export async function executeA2AMessage(
 // Exported helper functions
 // ============================================================================
 
-/** Stages raw (non-DB) attachments into the agent's per-execution sandbox. */
+/** Stages raw (non-DB) attachments into the agent's per-run sandbox. */
 type StageAttachmentsFn = (
   attachments: A2AAttachment[],
 ) => Promise<StageResult[]>;

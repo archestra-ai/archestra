@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   DEFAULT_SORT_BY,
@@ -298,6 +303,8 @@ export function useDefaultMcpGateway(params?: {
 }
 
 export function useProfile(id: string | undefined) {
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: ["agents", id],
     queryFn: async () => {
@@ -309,6 +316,27 @@ export function useProfile(id: string | undefined) {
     enabled: !!id,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    /**
+     * Start from the row the user clicked, when a list already holds it.
+     *
+     * Opening an agent is a chain, not a single request: `AgentForm` gates
+     * roughly ten of its queries on flags derived from the agent itself
+     * (`supportsSubagents`, `shouldLoadLlmConfiguration` and
+     * `showsModelControl` all read `agentType`), so none of them can start
+     * until this one lands. Seeding removes the first link — the form's gates
+     * resolve on the first render and the rest fetch immediately, rather than
+     * one round trip later.
+     *
+     * Safe because the list endpoints serialise agents with the same
+     * `SelectAgentSchema` this route returns, so a row is a whole agent rather
+     * than a summary of one. `initialDataUpdatedAt` carries the list's age
+     * across, so a stale row still revalidates on its normal schedule instead
+     * of being trusted indefinitely.
+     */
+    initialData: () =>
+      id ? findCachedAgent(queryClient, id)?.agent : undefined,
+    initialDataUpdatedAt: () =>
+      id ? findCachedAgent(queryClient, id)?.updatedAt : undefined,
   });
 }
 
@@ -701,4 +729,38 @@ export function useImportAgent() {
       }
     },
   });
+}
+
+/**
+ * Looks for an agent in whatever agent list happens to be cached.
+ *
+ * Handles both shapes the lists use — a bare array and a paginated
+ * `{ data: [...] }` — and skips `["agents", id]` entries, whose data is a
+ * single agent rather than a list.
+ */
+/** Exactly what this route's query function returns, so seeding cannot widen it. */
+type CachedAgent = NonNullable<Awaited<ReturnType<typeof getAgent>>["data"]>;
+
+function findCachedAgent(
+  queryClient: QueryClient,
+  id: string,
+): { agent: CachedAgent; updatedAt: number } | undefined {
+  for (const query of queryClient
+    .getQueryCache()
+    .findAll({ queryKey: ["agents"] })) {
+    const cached: unknown = query.state.data;
+    const rows = Array.isArray(cached)
+      ? cached
+      : (cached as { data?: unknown } | null | undefined)?.data;
+    if (!Array.isArray(rows)) continue;
+
+    const agent = rows.find(
+      (row): row is CachedAgent =>
+        typeof row === "object" &&
+        row !== null &&
+        (row as { id?: unknown }).id === id,
+    );
+    if (agent) return { agent, updatedAt: query.state.dataUpdatedAt };
+  }
+  return undefined;
 }

@@ -935,7 +935,17 @@ export function AgentForm({
   const supportsSubagents = agentType === "agent";
   const shouldLoadIdentityProviders =
     agentType === "mcp_gateway" || agentType === "agent";
-  const shouldLoadKnowledgeSources = true;
+  // The knowledge-source picker lives in the tools panel, so its three
+  // requests — knowledge bases, connectors and this agent's exclusions — only
+  // matter when that panel is mounted. Left unconditional, they fired on every
+  // agent opened and every agent created, including the create form, where
+  // there is no agent to have exclusions in the first place.
+  //
+  // Nothing downstream is stranded by switching them off: the exclusion save
+  // block already refuses to run until `knowledgeSourceExclusionsLoaded`, so a
+  // form without this panel leaves the stored exclusions untouched rather than
+  // overwriting them with the empty default.
+  const shouldLoadKnowledgeSources = showToolsSections;
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({

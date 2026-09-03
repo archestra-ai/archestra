@@ -5,8 +5,8 @@ import { isUsableTerminalDimensions } from "./exec/exec-terminal.utils";
 
 /**
  * Replays a captured PTY byte stream through xterm so cursor movement, clears,
- * alternate-screen updates, and colour changes produce the same terminal
- * frame the user saw while the execution was live.
+ * and colour changes retain the terminal's live structure while completed
+ * output remains readable and scrollable.
  */
 export function TerminalPlayback({ content }: { content: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -32,13 +32,16 @@ export function TerminalPlayback({ content }: { content: string }) {
 
       const fitAddon = new FitAddon();
       const terminal = new Terminal({
-        convertEol: false,
+        // Retained logs can contain bare line feeds from the container log
+        // stream. Treat them as complete newlines so playback does not carry
+        // the previous line's cursor column into the next one.
+        convertEol: true,
         cursorBlink: false,
         disableStdin: true,
         fontSize: 12,
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-        scrollback: 5000,
+        scrollback: RETAINED_SCROLLBACK_LINES,
         scrollSensitivity: TERMINAL_SCROLL_SENSITIVITY,
         theme: {
           background: "#020617",
@@ -47,6 +50,20 @@ export function TerminalPlayback({ content }: { content: string }) {
         },
       });
       initializedTerminal = terminal;
+
+      // Full-screen TUIs use the alternate screen because a live terminal
+      // should leave no history behind when they exit. That is exactly the
+      // wrong behavior for a retained recording: xterm cannot scroll an
+      // alternate buffer. Keep replay on the normal buffer so lines pushed
+      // above the viewport remain available to the reader.
+      terminal.parser.registerCsiHandler(
+        { prefix: "?", final: "h" },
+        containsAlternateScreenMode,
+      );
+      terminal.parser.registerCsiHandler(
+        { prefix: "?", final: "l" },
+        containsAlternateScreenMode,
+      );
 
       terminal.loadAddon(fitAddon);
       terminal.open(containerRef.current);
@@ -131,10 +148,10 @@ export function TerminalPlayback({ content }: { content: string }) {
   }, [content]);
 
   return (
-    <div className="min-h-0 flex-1 bg-slate-950 p-4 pb-2">
+    <div className="flex min-h-0 flex-1 overflow-hidden bg-slate-950 p-4 pb-2">
       <div
         ref={containerRef}
-        className="h-full"
+        className="min-h-0 flex-1 overflow-hidden"
         data-testid="terminal-playback"
       />
     </div>
@@ -145,8 +162,16 @@ export function TerminalPlayback({ content }: { content: string }) {
 
 const READ_ONLY_TERMINAL_STATE =
   "\u001b[?25l\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l\u001b[?1015l";
+const ALTERNATE_SCREEN_MODES = new Set([47, 1047, 1049]);
+const RETAINED_SCROLLBACK_LINES = 50_000;
 const TERMINAL_SCROLL_SENSITIVITY = 3;
 
 function withReadOnlyTerminalState(content: string): string {
   return `${content}${READ_ONLY_TERMINAL_STATE}`;
+}
+
+function containsAlternateScreenMode(params: (number | number[])[]): boolean {
+  return params.some(
+    (param) => typeof param === "number" && ALTERNATE_SCREEN_MODES.has(param),
+  );
 }

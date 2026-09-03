@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -156,13 +156,8 @@ describe("SkillDetailPage", () => {
     expect(screen.getByText("notes.md")).toBeInTheDocument();
 
     // Who can use it is the end of the same page, not a second route.
-    const accessPanel = screen
-      .getByRole("heading", { name: "Access" })
-      .closest("section");
-    if (!accessPanel) throw new Error("Access panel not rendered");
-    const access = within(accessPanel);
     expect(
-      access.getByRole("button", { name: "Share with organization" }),
+      screen.getByRole("button", { name: "Share with organization" }),
     ).toBeInTheDocument();
 
     // Nothing sends the reader anywhere to edit: this is where editing happens.

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -176,12 +176,7 @@ describe("PluginDetailPage", () => {
     expect(file).not.toHaveAttribute("readonly");
 
     // Who can discover it is the end of the same page, not a second route.
-    const accessPanel = screen
-      .getByRole("heading", { name: "Access" })
-      .closest("section");
-    if (!accessPanel) throw new Error("Access panel not rendered");
-    const access = within(accessPanel);
-    expect(access.getByText("Who can discover this plugin")).toBeVisible();
+    expect(screen.getByText("Who can discover this plugin")).toBeVisible();
 
     // Nothing sends the reader anywhere to edit: this is where editing happens.
     expect(

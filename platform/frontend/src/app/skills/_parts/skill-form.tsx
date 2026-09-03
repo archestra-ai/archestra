@@ -5,7 +5,6 @@ import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { typeRole } from "@/lib/design/type-scale";
 import {
   parseManifestFields,
   setManifestFrontmatterField,
@@ -119,7 +118,8 @@ export function SkillForm({
         />
       </FormPanel>
 
-      <FormPanel title="Access">
+      {/* No heading: the visibility control names the section itself. */}
+      <FormPanel>
         <fieldset disabled={readOnly} className="contents">
           <SkillAccessFields
             ref={labelsRef}
@@ -132,19 +132,10 @@ export function SkillForm({
   );
 }
 
-/** One panel of the form, named only where the fields do not name themselves. */
-function FormPanel({
-  title,
-  children,
-}: {
-  title?: string;
-  children: ReactNode;
-}) {
+/** One panel of the form. Every panel's own fields name it, so none is titled. */
+function FormPanel({ children }: { children: ReactNode }) {
   return (
     <section className="flex min-h-0 flex-col gap-4 rounded-lg border p-6">
-      {title && (
-        <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
-      )}
       {children}
     </section>
   );

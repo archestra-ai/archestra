@@ -106,7 +106,8 @@ export function PluginForm({
         </FormPanel>
       )}
 
-      <FormPanel title="Access">
+      {/* No heading: the visibility control names the section itself. */}
+      <FormPanel>
         <fieldset disabled={readOnly} className="contents">
           <PluginScopeSelector
             scope={draft.scope}

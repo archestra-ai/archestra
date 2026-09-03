@@ -77,6 +77,39 @@ export function parseManifestFields(raw: string): {
   };
 }
 
+/**
+ * Write one frontmatter scalar back into a raw manifest, in place.
+ *
+ * The skill form edits `name` and `description` as ordinary fields while the
+ * manifest they live in stays editable right below them, so the write has to
+ * be surgical: replace the line if it is there, insert it above the closing
+ * fence if the frontmatter exists without it, and open a frontmatter block if
+ * the manifest has none at all. Anything coarser (recomposing from parsed
+ * fields) would drop the keys this module does not know about, and reformat
+ * the body under the author's cursor.
+ */
+export function setManifestFrontmatterField({
+  manifest,
+  field,
+  value,
+}: {
+  manifest: string;
+  field: "name" | "description";
+  value: string;
+}): string {
+  const line = `${field}: ${yamlScalar(value)}`;
+  const fieldPattern = new RegExp(`^${field}:.*$`, "m");
+  if (fieldPattern.test(manifest)) {
+    return manifest.replace(fieldPattern, line);
+  }
+
+  const closingFence = manifest.indexOf("\n---", 4);
+  if (manifest.startsWith("---\n") && closingFence >= 0) {
+    return `${manifest.slice(0, closingFence)}\n${line}${manifest.slice(closingFence)}`;
+  }
+  return `---\n${line}\n---\n\n${manifest}`;
+}
+
 function yamlScalar(value: string): string {
   return JSON.stringify(value);
 }

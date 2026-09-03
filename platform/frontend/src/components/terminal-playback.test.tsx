@@ -136,7 +136,7 @@ describe("TerminalPlayback", () => {
     expect(terminal.options.at(-1)).toMatchObject({
       convertEol: true,
       disableStdin: true,
-      scrollback: 50_000,
+      scrollback: 1_000_000,
       scrollSensitivity: 3,
     });
     expect(terminal.write).toHaveBeenCalledWith(

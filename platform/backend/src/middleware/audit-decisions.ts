@@ -653,6 +653,15 @@ export const AUDIT_DECISIONS = {
     reason:
       "records which pod carries an A2A task; the task's own state machine and event log are the record of the work",
   },
+  agentRunTranscriptsTable: {
+    audited: false,
+    reason:
+      "task-owned execution output; the Agent execution surface is the record of the work",
+  },
+  agentRunTranscriptChunksTable: {
+    audited: false,
+    reason: "storage chunks owned by an Agent run transcript",
+  },
   agentExecutionInputsTable: {
     audited: false,
     reason:

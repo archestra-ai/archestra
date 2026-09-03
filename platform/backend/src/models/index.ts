@@ -17,6 +17,7 @@ export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentRunModel } from "./agent-run";
 export { default as AgentRunShareModel } from "./agent-run-share";
+export { default as AgentRunTranscriptModel } from "./agent-run-transcript";
 export { default as AgentSkillModel } from "./agent-skill";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";

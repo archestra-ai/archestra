@@ -163,7 +163,7 @@ export function TerminalPlayback({ content }: { content: string }) {
 const READ_ONLY_TERMINAL_STATE =
   "\u001b[?25l\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l\u001b[?1015l";
 const ALTERNATE_SCREEN_MODES = new Set([47, 1047, 1049]);
-const RETAINED_SCROLLBACK_LINES = 50_000;
+const RETAINED_SCROLLBACK_LINES = 1_000_000;
 const TERMINAL_SCROLL_SENSITIVITY = 3;
 
 function withReadOnlyTerminalState(content: string): string {

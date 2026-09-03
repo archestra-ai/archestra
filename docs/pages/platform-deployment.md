@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-01
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -926,6 +926,10 @@ Background execution runs delegated Agent tasks in dedicated Kubernetes pods. Yo
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RECONCILE_INTERVAL_SECONDS`** - How often the reconciler syncs run state and applies the lifetime and idle stops.
   - Default: `30`
 
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TRANSCRIPT_MAX_BYTES`** - Maximum uncompressed container output stored as a complete transcript for one execution. Transcripts are gzip-compressed in independent chunks before storage. A run that exceeds the limit keeps its final 1 MiB and is labeled **Retained tail only** in the terminal.
+  - Default: `262144000` (250 MiB)
+  - Completed transcripts follow `ARCHESTRA_A2A_TASK_RETENTION_DAYS`; deleting an execution also deletes its transcript.
+
 ### Skills Marketplace
 
 - **`ARCHESTRA_PLUGINS_ENABLED`** - Enables the Plugins catalog, an initial OpenAPPA import, and delivery through connection setup commands. Plugin files execute on connected developer machines, so this gate is off by default.
@@ -1460,7 +1464,7 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 
 A2A task streams work across replicas. A client can subscribe on one replica while the task runs on another — the stream reads the task's event log from the database, and Postgres `LISTEN/NOTIFY` wakes it as soon as the running replica writes. If a notification is missed, the stream falls back to a periodic read, so it stays correct either way. Behind a connection pooler that cannot hold a listener, set `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`.
 
-- **`ARCHESTRA_A2A_TASK_RETENTION_DAYS`** - How long a finished A2A task is kept before it is deleted, along with its artifacts and stream events.
+- **`ARCHESTRA_A2A_TASK_RETENTION_DAYS`** - How long a finished A2A task is kept before it is deleted, along with its artifacts, stream events, and retained execution transcript.
   - Default: `90`. Set to `0` to keep tasks forever.
   - Only terminal tasks (completed, failed, canceled, rejected) are eligible; a task still running is never deleted.
   - The task's messages are detached before it goes, so the conversation history they belong to is untouched — only the task-scoped view of them is lost. The agent's answer also stays in that history.

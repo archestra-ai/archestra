@@ -63,6 +63,10 @@ export {
   agentRunShareUsersTable,
   default as agentRunSharesTable,
 } from "./agent-run-share";
+export {
+  agentRunTranscriptChunksTable,
+  agentRunTranscriptsTable,
+} from "./agent-run-transcript";
 export { default as agentSkillsTable } from "./agent-skill";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";

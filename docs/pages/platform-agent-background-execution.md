@@ -3,7 +3,7 @@ title: Background Execution
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated deployment
-lastUpdated: 2026-09-02
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -388,7 +388,18 @@ the Agent session automatically. Press `Ctrl-b`, then `d`, to detach without
 stopping the execution. For a raw diagnostic shell, set
 `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH=0` on the exec command.
 
-Archestra retains up to 1 MB of container output after the pod is removed. Only the user whose credentials started an execution can attach to its live shell. Agent administrators cannot enter another user's shell. There is no separate Background execution permission or sidebar resource.
+After the pod is removed, Archestra retains the complete container transcript
+as independently compressed chunks and replays those chunks into the terminal
+view. The transcript follows the execution's task retention period, which is
+90 days by default. Set
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TRANSCRIPT_MAX_BYTES` to cap the
+uncompressed transcript size accepted from one run. A run beyond that ceiling
+keeps its final 1 MiB instead, and the terminal labels the recording
+**Retained tail only** so the missing history is never silent.
+
+Only the user whose credentials started an execution can attach to its live
+shell. Agent administrators cannot enter another user's shell. There is no
+separate Background execution permission or sidebar resource.
 
 ## Example Architecture
 

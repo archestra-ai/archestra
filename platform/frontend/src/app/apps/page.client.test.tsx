@@ -30,6 +30,11 @@ vi.mock("@/lib/app.query", () => ({
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
+  useSession: () => ({ data: { user: { id: "user-1" } } }),
+}));
+
+vi.mock("@/lib/organization.query", () => ({
+  useOrganizationMembers: () => ({ data: [] }),
 }));
 
 const { appAccessState } = vi.hoisted(() => ({
@@ -60,6 +65,12 @@ vi.mock("@/lib/apps/use-app-access", () => {
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
+}));
+
+vi.mock("@/lib/teams/team.query", () => ({
+  useAssignableTeams: () => ({
+    data: [{ id: "leadership", name: "Leadership" }],
+  }),
 }));
 
 vi.mock("@/components/ui/permission-button", () => ({
@@ -244,6 +255,28 @@ describe("AppSection cards", () => {
       (container.querySelector('th[data-column-id="name"]') as HTMLElement)
         .style.width,
     ).toBe("");
+  });
+
+  it("warns about losing chat authoring access in bulk visibility too", () => {
+    renderAppSection([
+      {
+        ...ownedApp,
+        scope: "team",
+        teams: [{ id: "leadership", name: "Leadership" }],
+      },
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select My Owned App" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit visibility" }));
+
+    expect(
+      screen.getByText("You are not a member of the selected teams"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/will not be able to modify this app through chat/i),
+    ).toBeVisible();
   });
 });
 

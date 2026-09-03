@@ -12,6 +12,7 @@ import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
+import { AppTeamAccessWarning } from "@/components/mcp-app/app-team-access-warning";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
@@ -272,11 +273,6 @@ export function AppSettingsForm({
   // plain personal app, quietly un-sharing it.
   const userSelectionMissing = scope === "user" && userIds.length === 0;
   const selectionMissing = teamSelectionMissing || userSelectionMissing;
-  const outsideSelectedTeams =
-    scope === "team" &&
-    teamIds.length > 0 &&
-    isAppAdmin &&
-    !teamIds.some((teamId) => userTeamIds.has(teamId));
   const readOnly = isAccessPending || !canEdit;
   // Save waits only while the assignments query is in flight. If it errors,
   // Save re-enables: identity/visibility still save, and the tool diff is
@@ -623,18 +619,12 @@ export function AppSettingsForm({
                 }
                 emptyMessage="No teams found."
               />
-              {outsideSelectedTeams ? (
-                <Alert variant="warning">
-                  <AlertTriangle />
-                  <AlertTitle>
-                    You are not a member of the selected teams
-                  </AlertTitle>
-                  <AlertDescription>
-                    You can still manage settings as an app administrator, but
-                    you will not be able to modify this app through chat.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
+              <AppTeamAccessWarning
+                scope={scope}
+                selectedTeamIds={teamIds}
+                isAppAdmin={!!isAppAdmin}
+                userTeamIds={userTeamIds}
+              />
             </div>
           )}
 

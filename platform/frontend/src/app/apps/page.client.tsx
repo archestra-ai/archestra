@@ -22,6 +22,7 @@ import {
 } from "@/components/label-select";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
+import { AppTeamAccessWarning } from "@/components/mcp-app/app-team-access-warning";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -473,9 +474,20 @@ export function AppSection({
           items={selectedOwnedApps.map((app) => ({
             id: app.id,
             scope: app.scope,
-            teams: [],
-            users: [],
+            teams: app.teams,
+            users: app.users,
           }))}
+          renderTeamSelectionNotice={(teamIds) => (
+            <AppTeamAccessWarning
+              scope="team"
+              selectedTeamIds={teamIds}
+              isAppAdmin={accessContext.isAdmin}
+              userTeamIds={accessContext.userTeamIds}
+              subject={
+                selectedOwnedApps.length === 1 ? "this app" : "these apps"
+              }
+            />
+          )}
           onApply={async (change) => {
             const outcome = await bulkVisibility.mutateAsync({
               apps: selectedApps,

@@ -117,9 +117,17 @@ vi.mock("@/components/ui/command", () => ({
     onSelect: () => void;
     value: string;
   }) => (
-    <button type="button" data-testid={`cmd-item-${value}`} onClick={onSelect}>
+    <div
+      role="option"
+      tabIndex={0}
+      data-testid={`cmd-item-${value}`}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") onSelect();
+      }}
+    >
       {children}
-    </button>
+    </div>
   ),
   CommandSeparator: () => <hr />,
 }));
@@ -311,6 +319,8 @@ describe("ConversationSearchPalette", () => {
           startedAt: new Date().toISOString(),
           stateChangedAt: new Date().toISOString(),
           endedAt: null,
+          projectId: "project-1",
+          projectName: "Release work",
         },
       ],
       isLoading: false,
@@ -321,6 +331,11 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getByText("Nightly report run")).toBeInTheDocument();
     // The row carries the same state-colored execution mark as the sidebar.
     expect(screen.getByLabelText("Execution running")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open project Release work" }),
+    );
+    expect(mockRouterPush).toHaveBeenCalledWith("/projects/project-1");
+    mockRouterPush.mockClear();
 
     fireEvent.click(screen.getByTestId("cmd-item-exec-task-1"));
     expect(mockRouterPush).toHaveBeenCalledWith("/chat/executions/task-1");
@@ -687,6 +702,7 @@ describe("ConversationSearchPalette", () => {
           updatedAt: new Date().toISOString(),
           lastMessageAt: new Date().toISOString(),
           messages: [],
+          projectId: "project-1",
           projectName: "Acme Redesign",
         },
       ],
@@ -697,6 +713,12 @@ describe("ConversationSearchPalette", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
 
     expect(screen.getByText("Acme Redesign")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open project Acme Redesign" }),
+    );
+    expect(mockRouterPush).toHaveBeenCalledWith("/projects/project-1");
+    expect(defaultProps.onOpenChange).toHaveBeenCalledWith(false);
+    expect(mockRouterPush).not.toHaveBeenCalledWith("/chat/conv-1");
   });
 
   it("does not offer the removed Client Credentials destination", () => {

@@ -63,6 +63,7 @@ let mockConversations: Array<{
   updatedAt: string;
   messages: unknown[];
   agent: { id: string; name: string };
+  projectId?: string | null;
   projectName?: string | null;
   projectIcon?: string | null;
   unread?: boolean;
@@ -290,11 +291,20 @@ vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
     onClick,
+    onPointerDown,
+    ...props
   }: {
     children: React.ReactNode;
-    onClick?: () => void;
+    onClick?: React.MouseEventHandler<HTMLButtonElement>;
+    onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
+    [key: string]: unknown;
   }) => (
-    <button type="button" onClick={onClick}>
+    <button
+      type="button"
+      onClick={onClick}
+      onPointerDown={onPointerDown}
+      aria-label={props["aria-label"] as string | undefined}
+    >
       {children}
     </button>
   ),
@@ -496,6 +506,10 @@ describe("ChatSidebarSection", () => {
     ];
     rerender(<ChatSidebarSection fadeIn={fadeIn} />);
     expect(screen.getByText("Release work")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open project Release work" }),
+    );
+    expect(mockRouterPush).toHaveBeenCalledWith("/projects/project-1");
     fireEvent.click(
       screen.getByRole("button", { name: "Remove from project" }),
     );
@@ -804,6 +818,7 @@ describe("ChatSidebarSection", () => {
     mockConversations = [
       {
         ...makeConv("c1", "Project Chat"),
+        projectId: "project-1",
         projectName: "Generic Project",
         projectIcon: "📌",
       },
@@ -815,12 +830,17 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByText("Generic Project")).toBeInTheDocument();
     expect(screen.queryByLabelText("projects icon")).not.toBeInTheDocument();
     expect(screen.getByTestId("project-emoji")).toHaveTextContent("📌");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open project Generic Project" }),
+    );
+    expect(mockRouterPush).toHaveBeenCalledWith("/projects/project-1");
   });
 
   it("shows a chat's project folder icon and name when the project has no emoji", () => {
     mockConversations = [
       {
         ...makeConv("c1", "Project Chat"),
+        projectId: "project-1",
         projectName: "Generic Project",
         projectIcon: null,
       },

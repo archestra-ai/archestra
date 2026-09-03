@@ -104,9 +104,7 @@ describe("TeamManagementExternalSyncSection", () => {
       .closest("p") as HTMLElement;
     expect(note).toHaveTextContent("Not able to edit team");
     expect(note).toHaveTextContent(/Org-wide roles are synced separately/);
-    expect(
-      screen.getByRole("link", { name: "Role Mapping" }),
-    ).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Role Mapping" })).toHaveAttribute(
       "href",
       "/settings/identity-providers?edit=idp-1&section=role-mapping",
     );

@@ -155,8 +155,12 @@ describe("TeamManagementDialog member roles", () => {
       await screen.findByText(/only for adding members by hand/i)
     ).closest("p");
     // The docs link appends screen-reader-only text, so match around it.
-    expect(note).toHaveTextContent(/External Group Sync syncs membership and Role Mapping/);
-    expect(note).toHaveTextContent(/in your OIDC provider syncs roles — never this setting\./);
+    expect(note).toHaveTextContent(
+      /External Group Sync syncs membership and Role Mapping/,
+    );
+    expect(note).toHaveTextContent(
+      /in your OIDC provider syncs roles — never this setting\./,
+    );
 
     await user.click(
       within(note as HTMLElement).getByRole("button", {

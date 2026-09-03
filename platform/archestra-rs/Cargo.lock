@@ -278,9 +278,9 @@ checksum = "01334b89b69ff726750c5ce5073fc8bd860e99aa9a8fc5ca11b04730e3aee97a"
 
 [[package]]
 name = "dagger-sdk"
-version = "0.21.8"
+version = "0.21.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf055227515c6343d67c00fb0f834f079a758675d3c45a90660d96112e51b282"
+checksum = "b064828d6089ee9805d34be1a853b9a28f51212c46c97ac8cd20a16643d55537"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
@@ -1310,9 +1310,9 @@ dependencies = [
 
 [[package]]
 name = "napi"
-version = "3.12.1"
+version = "3.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "459197f1592f4c3dbbf9c1b13f5a4599a343e4ef66b96bc340e2a518b36a6662"
+checksum = "58c5f4d5375213fdb7be2655e152386e82f026f9a5ba36a75556e11359aafe09"
 dependencies = [
  "bitflags 2.13.0",
  "ctor",

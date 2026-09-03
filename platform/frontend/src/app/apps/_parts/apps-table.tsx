@@ -33,6 +33,7 @@ import {
   usePinApp,
 } from "@/lib/app.query";
 import {
+  appActionDisabledReason,
   computeAppAccess,
   useAppAccessContext,
 } from "@/lib/apps/use-app-access";
@@ -122,7 +123,11 @@ export function AppsTable({
         app.source === "owned" && computeAppAccess(app, accessContext).canEdit,
       disabledReason: (app) =>
         app.source === "owned"
-          ? "You do not have permission to modify this app"
+          ? (appActionDisabledReason({
+              app,
+              access: computeAppAccess(app, accessContext),
+              action: "update",
+            }) ?? "You do not have permission to modify this app")
           : "Installed apps are managed through their MCP server",
     }),
     {
@@ -218,31 +223,39 @@ export function AppsTable({
 
   const ownedAppActions = (app: OwnedApp): TableRowAction[] => {
     const access = computeAppAccess(app, accessContext);
+    const settingsDisabledReason = appActionDisabledReason({
+      app,
+      access,
+      action: "update",
+    });
+    const deleteDisabledReason = appActionDisabledReason({
+      app,
+      access,
+      action: "delete",
+    });
     return [
-      ...(access.canEdit
-        ? [
-            {
-              icon: <Settings className="h-4 w-4" />,
-              label: "Settings",
-              onClick: () => onOpenSettings({ id: app.id }),
-            },
-          ]
-        : []),
+      {
+        icon: <Settings className="h-4 w-4" />,
+        label: "Settings",
+        permissions: { app: ["update"] },
+        disabled: !!settingsDisabledReason,
+        disabledTooltip: settingsDisabledReason,
+        onClick: () => onOpenSettings({ id: app.id }),
+      },
       {
         icon: <SquareArrowOutUpRight className="h-4 w-4" />,
         label: "Open in new tab",
         onClick: () => window.open(`/a/${app.id}`, "_blank", "noreferrer"),
       },
-      ...(access.canDeleteApp
-        ? [
-            {
-              icon: <Trash2 className="h-4 w-4" />,
-              label: "Delete",
-              variant: "destructive" as const,
-              onClick: () => setDeletingApp(app),
-            },
-          ]
-        : []),
+      {
+        icon: <Trash2 className="h-4 w-4" />,
+        label: "Delete",
+        permissions: { app: ["delete"] },
+        disabled: !!deleteDisabledReason,
+        disabledTooltip: deleteDisabledReason,
+        variant: "destructive" as const,
+        onClick: () => setDeletingApp(app),
+      },
     ];
   };
 

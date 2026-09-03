@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { LabelTags } from "@/components/label-tags";
@@ -44,7 +44,10 @@ import {
   usePinApp,
 } from "@/lib/app.query";
 import { appRunUrl } from "@/lib/apps/app-run-url";
-import { useAppAccess } from "@/lib/apps/use-app-access";
+import {
+  appActionDisabledReason,
+  useAppAccess,
+} from "@/lib/apps/use-app-access";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFeature } from "@/lib/config/config.query";
 import type { BulkCardSelectionProps } from "@/lib/hooks/use-bulk-card-selection";
@@ -248,6 +251,16 @@ function OwnedAppCard({
   // the card unmounts mid-navigation, so it never resets; only a failure does.
   const [isOpening, setIsOpening] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const settingsDisabledReason = appActionDisabledReason({
+    app,
+    access,
+    action: "update",
+  });
+  const deleteDisabledReason = appActionDisabledReason({
+    app,
+    access,
+    action: "delete",
+  });
 
   const handleOpen = async (lockedChat = false) => {
     setIsOpening(true);
@@ -282,7 +295,10 @@ function OwnedAppCard({
                 label={`Select ${app.name}`}
                 selection={selection}
                 disabled={selection.selectionDisabled || !access.canEdit}
-                disabledReason="You do not have permission to modify this app"
+                disabledReason={
+                  settingsDisabledReason ??
+                  "You do not have permission to modify this app"
+                }
               />
             ) : null}
             <AppTypeIcon owned icon={app.icon} />
@@ -329,12 +345,12 @@ function OwnedAppCard({
               pinned={!!app.pinnedAt}
               target={{ source: "owned", appId: app.id }}
             />
-            {access.canEdit ? (
-              <DropdownMenuItem onSelect={() => onOpenSettings?.(app)}>
-                <Settings className="h-4 w-4" />
-                <span>Settings</span>
-              </DropdownMenuItem>
-            ) : null}
+            <AppMenuItem
+              icon={<Settings className="h-4 w-4" />}
+              label="Settings"
+              disabledReason={settingsDisabledReason}
+              onSelect={() => onOpenSettings?.(app)}
+            />
             <DropdownMenuItem asChild>
               <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
                 <SquareArrowOutUpRight className="h-4 w-4" />
@@ -351,18 +367,14 @@ function OwnedAppCard({
                 Open as locked chat
               </DropdownMenuItem>
             ) : null}
-            {access.canDeleteApp ? (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </>
-            ) : null}
+            <DropdownMenuSeparator />
+            <AppMenuItem
+              icon={<Trash2 className="h-4 w-4" />}
+              label="Delete"
+              variant="destructive"
+              disabledReason={deleteDisabledReason}
+              onSelect={() => setDeleteOpen(true)}
+            />
           </CardOverflowMenu>
         </div>
 
@@ -523,5 +535,63 @@ function ExternalAppCard({
         </CardDescription>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * A refused menu item stays in the menu so the action remains discoverable.
+ * `aria-disabled` keeps it focusable, while the guarded select handler and the
+ * visible/screen-reader reason explain why it cannot run.
+ */
+function AppMenuItem({
+  icon,
+  label,
+  onSelect,
+  disabledReason,
+  variant,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onSelect: () => void;
+  disabledReason?: string;
+  variant?: "default" | "destructive";
+}) {
+  const reasonId = useId();
+  const isDisabled = !!disabledReason;
+  const content = (
+    <DropdownMenuItem
+      aria-disabled={isDisabled || undefined}
+      aria-describedby={isDisabled ? reasonId : undefined}
+      className={isDisabled ? "cursor-not-allowed opacity-50" : undefined}
+      variant={variant}
+      onSelect={(event) => {
+        if (isDisabled) {
+          event.preventDefault();
+          return;
+        }
+        onSelect();
+      }}
+    >
+      {icon}
+      <span>{label}</span>
+      {disabledReason ? (
+        <span id={reasonId} aria-hidden="true" className="sr-only">
+          {disabledReason}
+        </span>
+      ) : null}
+    </DropdownMenuItem>
+  );
+
+  if (!disabledReason) return content;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="cursor-not-allowed">{content}</div>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-64">
+        {disabledReason}
+      </TooltipContent>
+    </Tooltip>
   );
 }

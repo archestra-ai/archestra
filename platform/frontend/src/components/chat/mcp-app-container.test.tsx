@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { type ReactNode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { authPermissionState } = vi.hoisted(() => ({
+  authPermissionState: { granted: false },
+}));
+
 // ── Mock heavy dependencies before module import ─────────────────────────────
 
 vi.mock("@modelcontextprotocol/ext-apps/app-bridge", async (importActual) => ({
@@ -68,7 +72,7 @@ vi.mock("@/lib/hooks/use-app-name");
 // Avoid pulling the real auth client / app query (and their network deps) into
 // the test; the edit pencil is covered by app-frame.test.tsx.
 vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: false }),
+  useHasPermissions: () => ({ data: authPermissionState.granted }),
   useSession: () => ({ data: undefined }),
 }));
 
@@ -79,6 +83,8 @@ vi.mock("@/lib/app.query", () => ({
 
 vi.mock("@/lib/apps/use-app-access", () => ({
   useAppAccess: vi.fn(() => ({ canEdit: true, isPending: false })),
+  appActionDisabledReason: ({ access }: { access: { canEdit: boolean } }) =>
+    access.canEdit ? undefined : "Only an admin can change this org-wide app",
 }));
 
 // Session-recording hooks pull TanStack Query mutations; this suite renders
@@ -127,6 +133,7 @@ const mockUseAppAccess = vi.mocked(useAppAccess);
 // earlier test set, so re-seed the default here: one test's owned-app fixture
 // (a name, a fullscreen-by-default flag) must not leak into the next.
 beforeEach(() => {
+  authPermissionState.granted = false;
   mockUseApp.mockReturnValue({ data: undefined } as ReturnType<typeof useApp>);
   mockUseAppAccess.mockReturnValue({
     canEdit: true,
@@ -1529,6 +1536,7 @@ describe("McpAppSection owned-app panel chrome", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearAllAppDiagnostics();
+    authPermissionState.granted = true;
   });
 
   // Renders an owned app on the panel surface so the panel chrome (settings gear
@@ -1611,7 +1619,7 @@ describe("McpAppSection owned-app panel chrome", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides app settings when the viewer cannot edit the app", async () => {
+  it("disables app settings with the scope reason when the viewer cannot edit the app", async () => {
     mockUseAppAccess.mockReturnValue({
       canEdit: false,
       isPending: false,
@@ -1619,9 +1627,13 @@ describe("McpAppSection owned-app panel chrome", () => {
 
     await renderOwnedPanel();
 
+    const settings = screen.getByRole("button", { name: /^settings$/i });
+    expect(settings).toHaveAttribute("aria-disabled", "true");
     expect(
-      screen.queryByRole("button", { name: /^settings$/i }),
-    ).not.toBeInTheDocument();
+      document.getElementById(
+        settings.getAttribute("aria-describedby") as string,
+      ),
+    ).toHaveTextContent("Only an admin can change this org-wide app");
     expect(screen.queryByTestId("settings-form")).not.toBeInTheDocument();
   });
 

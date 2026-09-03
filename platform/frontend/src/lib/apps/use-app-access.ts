@@ -3,6 +3,8 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
+import { notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useMyTeams } from "@/lib/teams/team.query";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
@@ -42,6 +44,28 @@ export function computeAppAccess(
     canEdit: context.canUpdate && canModify,
     canDeleteApp: context.canDelete && canModify,
   };
+}
+
+export function appActionDisabledReason({
+  app,
+  access,
+  action,
+}: {
+  app: Pick<OwnedApp, "scope" | "authorId" | "teams">;
+  access: ReturnType<typeof computeAppAccess>;
+  action: "update" | "delete";
+}): string | undefined {
+  if (access.isPending) return "Checking permissions…";
+
+  const hasPermission =
+    action === "update" ? access.canUpdate : access.canDelete;
+  if (!hasPermission) {
+    return formatPermissionConstraint({ app: [action] });
+  }
+  if (!access.canModify) {
+    return notYoursToChange({ resource: "app", scope: app.scope });
+  }
+  return undefined;
 }
 
 /** Fetch the caller-level facts once for collections such as the Apps table. */

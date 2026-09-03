@@ -51,6 +51,10 @@ vi.mock("@/lib/apps/use-app-access", () => {
     useAppAccessContext: () => access,
     useAppAccess: () => ({ ...access, ...appAccessState }),
     computeAppAccess: () => ({ ...access, ...appAccessState }),
+    appActionDisabledReason: () =>
+      appAccessState.canEdit
+        ? undefined
+        : "Only an admin can change this org-wide app",
   };
 });
 
@@ -203,7 +207,7 @@ describe("AppSection cards", () => {
     });
     expect(checkbox).toBeDisabled();
     expect(
-      screen.getByTitle("You do not have permission to modify this app"),
+      screen.getByTitle("Only an admin can change this org-wide app"),
     ).toContainElement(checkbox);
 
     fireEvent.click(checkbox);

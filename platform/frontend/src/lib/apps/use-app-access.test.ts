@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type AppAccessContext, computeAppAccess } from "./use-app-access";
+import {
+  type AppAccessContext,
+  appActionDisabledReason,
+  computeAppAccess,
+} from "./use-app-access";
 
 const baseContext: AppAccessContext = {
   isAdmin: false,
@@ -52,5 +56,40 @@ describe("computeAppAccess", () => {
 
     expect(access.canEdit).toBe(true);
     expect(access.canDeleteApp).toBe(true);
+  });
+});
+
+describe("appActionDisabledReason", () => {
+  const orgApp = {
+    scope: "org" as const,
+    authorId: "someone-else",
+    teams: [],
+  };
+
+  it("names the base permission before evaluating the app scope", () => {
+    const access = computeAppAccess(orgApp, {
+      ...baseContext,
+      canUpdate: false,
+    });
+
+    expect(
+      appActionDisabledReason({ app: orgApp, access, action: "update" }),
+    ).toBe("Available to roles with the Apps (update) permission");
+  });
+
+  it("names the scope rule when the role permits updates", () => {
+    const access = computeAppAccess(orgApp, baseContext);
+
+    expect(
+      appActionDisabledReason({ app: orgApp, access, action: "update" }),
+    ).toBe("Only an admin can change this org-wide app");
+  });
+
+  it("returns no reason when the action is available", () => {
+    const access = computeAppAccess(orgApp, { ...baseContext, isAdmin: true });
+
+    expect(
+      appActionDisabledReason({ app: orgApp, access, action: "update" }),
+    ).toBeUndefined();
   });
 });

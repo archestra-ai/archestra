@@ -36,7 +36,10 @@ import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/app.query";
-import { useAppAccess } from "@/lib/apps/use-app-access";
+import {
+  appActionDisabledReason,
+  useAppAccess,
+} from "@/lib/apps/use-app-access";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
@@ -336,6 +339,13 @@ export function McpAppEntryContent({
   const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp, isSuccess: ownedAppResolved } = useApp(appId ?? null);
   const ownedAppAccess = useAppAccess(ownedApp);
+  const settingsDisabledReason = ownedApp
+    ? appActionDisabledReason({
+        app: ownedApp,
+        access: ownedAppAccess,
+        action: "update",
+      })
+    : undefined;
   // An owned app this viewer cannot mount, which happens for two very different
   // reasons the API deliberately does not tell apart: the app was deleted, or it
   // is perfectly healthy and simply not theirs to open (the ordinary case for a
@@ -548,8 +558,11 @@ export function McpAppEntryContent({
               disabled={recorder.status !== "idle"}
             />
           ) : null}
-          {isOwnedInPanel && ownedAppAccess.canEdit ? (
-            <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
+          {isOwnedInPanel ? (
+            <McpAppSettingsButton
+              disabledReason={settingsDisabledReason}
+              onClick={() => setSettingsOpen(true)}
+            />
           ) : null}
           {/* The bar is the only chrome the panel has, so it carries the way
               into fullscreen and the way back out. Escape alone doesn't cut it

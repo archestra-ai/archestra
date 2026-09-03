@@ -34,6 +34,7 @@ import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils";
+import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";
 import { AppSidebar } from "./sidebar";
@@ -145,16 +146,16 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  // Auth pages: render without sidebar, centered content with version at bottom
+  // Auth pages: render without sidebar, centered content with version at
+  // bottom. The frame is shared with WithAuthCheck's session gate so the
+  // loading indicator it shows ahead of this branch is centred in the same box.
   if (isAuthPage) {
     return (
-      <main className="h-app-viewport w-full flex flex-col bg-background">
+      <>
         <MaintenanceModeOverlay />
-        <EnvSiteNotificationBar />
-        <div className="flex-1 flex flex-col">{children}</div>
-        <Version />
+        <AuthSurfaceFrame>{children}</AuthSurfaceFrame>
         <Toaster />
-      </main>
+      </>
     );
   }
 

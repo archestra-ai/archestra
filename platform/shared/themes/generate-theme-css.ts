@@ -10,6 +10,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { withAccessibleLightTokens } from "./contrast-safe";
 import { mapThemeFontValue } from "./font-token-map";
 // Import theme configuration
 import { SUPPORTED_THEMES } from "./theme-config";
@@ -89,7 +90,9 @@ function generateThemeCSS(theme: ThemeItem): string {
   const className = `theme-${theme.name}`;
 
   // Light vars for base selector, dark vars for dark mode override.
-  const lightCSS = `html.${className} {\n${generateCSSVars(theme.cssVars.light)}\n}`;
+  // Structural chrome and muted text in the light palette are raised to WCAG
+  // minimums before emitting; dark vars are emitted verbatim.
+  const lightCSS = `html.${className} {\n${generateCSSVars(withAccessibleLightTokens(theme.cssVars.light))}\n}`;
   const darkCSS = `html.dark.${className} {\n${generateCSSVars(theme.cssVars.dark)}\n}`;
   return `/* ${theme.title} */\n${lightCSS}\n\n${darkCSS}`;
 }
@@ -107,6 +110,8 @@ function generateThemesCSS(): string {
  *
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
  * Generated from shared/themes/tweakcn-themes.json
+ * Light-mode structural chrome and muted text are raised to WCAG contrast
+ * minimums by shared/themes/contrast-safe.ts; dark mode is emitted verbatim.
  * Run: pnpm codegen:theme-css
  */\n`;
 

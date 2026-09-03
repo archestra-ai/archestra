@@ -20,7 +20,7 @@ let mockAgents: Array<{
   scope: "personal" | "team" | "org";
   authorEmail?: string | null;
 }> = [];
-let mockExecutionBackend: {
+let mockRuntimeBackend: {
   name: "kubernetes";
   available: boolean;
   defaultImage: string;
@@ -135,9 +135,7 @@ vi.mock("@/lib/agent.query", () => ({
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: (feature: string) =>
-    feature === "agentBackgroundExecutionBackend"
-      ? mockExecutionBackend
-      : undefined,
+    feature === "agentRuntimeBackend" ? mockRuntimeBackend : undefined,
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -208,7 +206,7 @@ beforeEach(() => {
     },
   ];
   mockAgents = [];
-  mockExecutionBackend = null;
+  mockRuntimeBackend = null;
 
   vi.mocked(useOrganization).mockReturnValue({
     data: mockOrganization,
@@ -227,14 +225,14 @@ beforeEach(() => {
 });
 
 describe("AgentSettingsPage", () => {
-  it("shows the configured execution backend as a managed row only when enabled", () => {
+  it("shows the configured runtime backend as a managed row only when enabled", () => {
     const { rerender } = renderPage();
 
     expect(
-      screen.queryByRole("heading", { name: "Execution backend" }),
+      screen.queryByRole("heading", { name: "Runtime backend" }),
     ).not.toBeInTheDocument();
 
-    mockExecutionBackend = {
+    mockRuntimeBackend = {
       name: "kubernetes",
       available: true,
       defaultImage: "registry.example.test/agent:latest",
@@ -254,7 +252,7 @@ describe("AgentSettingsPage", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Execution backend" }),
+      screen.getByRole("heading", { name: "Runtime backend" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add backend" })).toBeDisabled();
     expect(
@@ -268,11 +266,11 @@ describe("AgentSettingsPage", () => {
     ).not.toBeInTheDocument();
 
     const messagingChannels = screen.getByText("Available messaging channels");
-    const executionBackend = screen.getByRole("heading", {
-      name: "Execution backend",
+    const runtimeBackend = screen.getByRole("heading", {
+      name: "Runtime backend",
     });
     expect(
-      messagingChannels.compareDocumentPosition(executionBackend) &
+      messagingChannels.compareDocumentPosition(runtimeBackend) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });

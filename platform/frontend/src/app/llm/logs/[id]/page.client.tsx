@@ -251,14 +251,12 @@ function LogDetail({
           },
         ]
       : []),
-    ...(dynamicInteraction.executionId
+    ...(dynamicInteraction.runId
       ? [
           {
-            label: "Execution ID",
+            label: "Run ID",
             value: (
-              <span className="font-mono">
-                {dynamicInteraction.executionId}
-              </span>
+              <span className="font-mono">{dynamicInteraction.runId}</span>
             ),
           },
         ]

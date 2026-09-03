@@ -682,7 +682,7 @@ describe("model router proxy routes", () => {
     });
   }
 
-  test("routes an internal Agent through the model router for background execution attribution", async ({
+  test("routes an internal Agent through the model router for Agent Runtime attribution", async ({
     makeAgent,
     makeOrganization,
     makeUser,
@@ -702,7 +702,7 @@ describe("model router proxy routes", () => {
     });
     const agent = await makeAgent({
       organizationId: organization.id,
-      name: "Background execution Agent",
+      name: "Agent Runtime Agent",
       agentType: "agent",
     });
 

@@ -185,7 +185,7 @@ export class DynamicInteraction implements InteractionUtils {
   id: string;
   profileId: string | null;
   externalAgentId: string | null;
-  executionId: string | null;
+  runId: string | null;
   unsafeContextBoundary: Interaction["unsafeContextBoundary"];
   type: Interaction["type"];
   provider: SupportedProvider;
@@ -203,7 +203,7 @@ export class DynamicInteraction implements InteractionUtils {
     this.id = interaction.id;
     this.profileId = interaction.profileId;
     this.externalAgentId = interaction.externalAgentId;
-    this.executionId = interaction.executionId;
+    this.runId = interaction.runId;
     this.unsafeContextBoundary = interaction.unsafeContextBoundary;
     this.type = interaction.type;
     this.provider = provider as SupportedProvider;

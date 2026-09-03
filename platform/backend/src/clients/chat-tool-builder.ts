@@ -94,7 +94,7 @@ export interface ChatToolContext {
   organizationId: string;
   /** Id of a persisted `conversations` row; absent in headless executions. */
   conversationId?: string;
-  /** Per-conversation/per-execution scope key (isolationKey ?? conversationId). */
+  /** Per-conversation/per-run scope key (isolationKey ?? conversationId). */
   scopeKey?: string;
   /**
    * The owned app the chat UI has open this turn, access-verified by
@@ -432,7 +432,7 @@ export function buildMcpGatewayTool(params: {
 
 /**
  * Wraps an agent delegation tool as an AI SDK Tool: approval gating and direct
- * child-agent execution returning plain text. No lifecycle hooks, browser
+ * child-agent run returning plain text. No lifecycle hooks, browser
  * sync, or output enrichment — those are chat/MCP-tool concerns.
  */
 export function buildAgentDelegationTool(params: {
@@ -1179,7 +1179,7 @@ interface ToolExecutionContext {
   userId: string;
   organizationId: string;
   /**
-   * Per-conversation/per-execution scope key for browser tab selection and
+   * Per-conversation/per-run scope key for browser tab selection and
    * MCP session reuse. Equals the conversation id in UI chat.
    */
   isolationKey?: string;

@@ -11,7 +11,7 @@
  * This registry lets a mute abort those runs. Each turn registers an
  * AbortController for its thread; muting the thread aborts every controller
  * registered for it, so their model requests stop instead of running to
- * completion. The signal is threaded down into the agent execution (see
+ * completion. The signal is threaded down into the agent run (see
  * `A2AManager.sendMessage` → `executeA2AMessage`), which passes it to the AI SDK
  * `streamText` call.
  *
@@ -66,7 +66,7 @@ class ChatOpsRunRegistry {
 
   /**
    * Register an in-flight run for a thread. Returns the run's abort signal (to
-   * thread into the agent execution) and an `unregister` callback the caller
+   * thread into the agent run) and an `unregister` callback the caller
    * MUST invoke in a `finally` once the run settles, so the controller is not
    * retained after it completes.
    *

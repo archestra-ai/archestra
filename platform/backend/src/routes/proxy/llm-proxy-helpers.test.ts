@@ -545,7 +545,7 @@ describe("buildInteractionRecord", () => {
   const baseParams = {
     agent: { id: "agent-1" } as unknown as Agent,
     externalAgentId: "ext-1",
-    executionId: "exec-1",
+    runId: "exec-1",
     userId: "user-1",
     sessionId: "session-1",
     sessionSource: "header" as const,
@@ -590,7 +590,7 @@ describe("buildInteractionRecord", () => {
 
     expect(record.profileId).toBe("agent-1");
     expect(record.externalAgentId).toBe("ext-1");
-    expect(record.executionId).toBe("exec-1");
+    expect(record.runId).toBe("exec-1");
     expect(record.userId).toBe("user-1");
     expect(record.sessionId).toBe("session-1");
     expect(record.sessionSource).toBe("header");

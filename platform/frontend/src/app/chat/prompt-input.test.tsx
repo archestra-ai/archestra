@@ -407,19 +407,19 @@ describe("ArchestraPromptInput", () => {
     localStorage.clear();
   });
 
-  it("turns the composer into a focused execution launcher", () => {
+  it("turns the composer into a focused run launcher", () => {
     render(
       <ArchestraPromptInput
         {...defaultProps}
-        executionMode
-        executionAgentName="Codex"
+        runtimeMode
+        runtimeAgentName="Codex"
         allowFileUploads
       />,
     );
 
     expect(
       screen.getByText(
-        "Starts Codex in an isolated execution. This becomes its live terminal when ready.",
+        "Starts Codex in its dedicated runtime. This becomes its live terminal when ready.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveAttribute(

@@ -72,6 +72,7 @@ const uiTestMatch = [
   "**/mcp-install.spec.ts",
   "**/model-limits.spec.ts",
   "**/quickstart.spec.ts",
+  "**/skill-page-editing.spec.ts",
   "**/skill-share.spec.ts",
   "**/skill-version-history.spec.ts",
   "**/skills-bulk-actions.spec.ts",

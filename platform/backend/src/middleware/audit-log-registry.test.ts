@@ -88,7 +88,7 @@ describe("resolveAuditableRouteConfig", () => {
 
   test("shared Agent credential mutations are explicit Agent updates", () => {
     const resolved = resolveAuditableRouteConfig(
-      "/api/agents/:id/background-execution/credentials/:key",
+      "/api/agents/:id/runtime/credentials/:key",
     );
     expect(resolved?.viaWalkUp).toBe(false);
     expect(resolved?.cfg.resourceType).toBe("agent");

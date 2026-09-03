@@ -40,8 +40,8 @@ import { ToolChecklist } from "@/components/agent-tools-editor";
 import { sortCatalogItems } from "@/components/agent-tools-editor.utils";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { CatalogDocsLink } from "@/components/catalog-docs-link";
-import { ExecutionCapableIndicator } from "@/components/chat/execution-capable-indicator";
 import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
+import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
@@ -146,8 +146,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     [installOrchestrator],
   );
   const { data: session } = useSession();
-  const backgroundExecutionEnabled =
-    useFeature("agentBackgroundExecution") === true;
+  const runtimeEnabled = useFeature("agentRuntime") === true;
   const userId = session?.user?.id;
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
   const createProfile = useCreateProfile();
@@ -390,10 +389,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             <span className="truncate flex-1 text-left">
               {displayAgentName}
             </span>
-            {backgroundExecutionEnabled &&
-              currentAgent?.backgroundExecution && (
-                <ExecutionCapableIndicator />
-              )}
+            {runtimeEnabled && currentAgent?.runtime && (
+              <RuntimeCapableIndicator />
+            )}
             {/* In Auto mode the agent reaches everything dynamically,
                 so the per-server avatar group + its tool selector are
                 meaningless — hide them. */}
@@ -503,10 +501,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                             <span className="text-sm font-medium truncate">
                               {agent.name}
                             </span>
-                            {backgroundExecutionEnabled &&
-                              agent.backgroundExecution && (
-                                <ExecutionCapableIndicator />
-                              )}
+                            {runtimeEnabled && agent.runtime && (
+                              <RuntimeCapableIndicator />
+                            )}
                             <AgentBadge
                               type={agent.scope}
                               className="text-[10px] px-1.5 py-0 shrink-0"

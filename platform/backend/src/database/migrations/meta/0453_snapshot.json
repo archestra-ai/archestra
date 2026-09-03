@@ -1,5 +1,5 @@
 {
-  "id": "e517497f-891f-4e02-a472-dbff96c772e6",
+  "id": "067d9ecd-be85-4b53-a065-cb23d713b304",
   "prevId": "3e2adeac-4583-4d7f-8ff1-a47b218ffd64",
   "version": "7",
   "dialect": "postgresql",
@@ -2152,6 +2152,12 @@
         "active_deadline_seconds": {
           "name": "active_deadline_seconds",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attention_state": {
+          "name": "attention_state",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

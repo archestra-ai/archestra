@@ -1292,7 +1292,8 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 - **`ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS`** - Headers/body timeout (milliseconds) for LLM-call fetches, applied as a custom undici dispatcher on both the chat→proxy and proxy→upstream hops.
   - Default: unset, i.e. undici's defaults (5 minutes for both headers and body timeout)
-  - Opt-in: set a larger value (e.g. `600000` for 10 minutes) when an upstream's time-to-first-token can exceed 5 minutes — typically a slow CPU-only Ollama or vLLM model — which otherwise fails with `Headers Timeout Error`
+  - Opt-in: raise it when an upstream can take more than 5 minutes to send headers or the next stream chunk
+  - Keep it below the load balancer's request or idle timeout. For a 600-second load balancer timeout, use `540000` so Archestra can report the upstream timeout before the load balancer closes the connection
   - Keep it finite so genuinely-dead upstreams still surface as errors
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify subscription credentials as subscription usage.

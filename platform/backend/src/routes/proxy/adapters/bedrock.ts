@@ -9,6 +9,7 @@ import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";
 import type { BedrockClient } from "@/clients/bedrock-client";
 import { buildBedrockClient } from "@/clients/bedrock-credentials";
+import { fetchWithLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
@@ -2039,6 +2040,7 @@ export const bedrockAdapterFactory: LLMProvider<
     return buildBedrockClient({
       apiKey: apiKey ?? null,
       baseUrl: options?.baseUrl,
+      fetch: fetchWithLlmUpstreamDispatcher,
     });
   },
 

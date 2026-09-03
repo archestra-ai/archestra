@@ -142,6 +142,12 @@ export function RoleMappingForm({
 
   const content = (
     <>
+      <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-md">
+        Sets the organization-wide role only. Team membership is synced per team
+        via each team&apos;s{" "}
+        <span className="font-medium">External Group Sync</span>.
+      </p>
+
       {providerClaimHint && (
         <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
           {providerClaimHint.roleMappingNote}

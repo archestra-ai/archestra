@@ -126,6 +126,17 @@ beforeEach(() => {
 });
 
 describe("RoleMappingForm", () => {
+  it("distinguishes itself from External Group Sync", () => {
+    render(<TestWrapper identityProviderId="idp-1" />);
+
+    const note = screen
+      .getByText(/Sets the organization-wide role only/i)
+      .closest("p") as HTMLElement;
+    expect(note).toHaveTextContent(
+      /Team membership is synced per team via each team's External Group Sync\./,
+    );
+  });
+
   it("shows the template debugger without token claims", async () => {
     render(<TestWrapper identityProviderId="idp-1" />);
     expect(screen.getByText("Template Debugger")).toBeInTheDocument();

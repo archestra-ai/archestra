@@ -2403,7 +2403,7 @@ describe("LLM proxy provider matrix", () => {
         },
       );
 
-      test("stores execution IDs on interactions", async ({ makeAgent }) => {
+      test("stores run IDs on interactions", async ({ makeAgent }) => {
         const agent = await makeAgent({
           name: `${config.providerName} execution`,
         });

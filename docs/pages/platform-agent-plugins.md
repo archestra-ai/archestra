@@ -1,9 +1,9 @@
 ---
-title: Plugins
+title: Plugins (Beta)
 category: Agents
 order: 4
 description: Client-native extensions for Claude Code, Codex, Copilot CLI, and Cursor
-lastUpdated: 2026-09-01
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

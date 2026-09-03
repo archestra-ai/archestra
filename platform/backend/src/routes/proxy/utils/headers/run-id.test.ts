@@ -6,7 +6,7 @@ const runHeaderKey = RUN_ID_HEADER.toLowerCase();
 const metaHeaderKey = META_HEADER.toLowerCase();
 
 describe("getRunId", () => {
-  test("extracts execution ID from explicit header", () => {
+  test("extracts run ID from explicit header", () => {
     const result = getRunId({ [runHeaderKey]: "exec-123" });
 
     expect(result).toBe("exec-123");
@@ -29,7 +29,7 @@ describe("getRunId", () => {
     expect(result).toBe("explicit-exec");
   });
 
-  test("returns undefined when no execution ID is available", () => {
+  test("returns undefined when no run ID is available", () => {
     const result = getRunId({});
 
     expect(result).toBeUndefined();

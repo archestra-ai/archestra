@@ -2,12 +2,12 @@ import { RUN_ID_HEADER } from "@archestra/shared";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 /**
- * Extract the execution ID from request headers.
+ * Extract the run ID from request headers.
  * Checks X-Archestra-Run-Id first, then falls back to the
  * second segment of X-Archestra-Meta.
  *
  * @param headers - The request headers object
- * @returns The execution ID if present, undefined otherwise
+ * @returns The run ID if present, undefined otherwise
  */
 export function getRunId(
   headers: Record<string, string | string[] | undefined>,

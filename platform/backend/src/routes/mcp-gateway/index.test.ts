@@ -225,7 +225,7 @@ describe("MCP Gateway (stateless mode)", () => {
         params: {
           protocolVersion: "2024-11-05",
           capabilities: {},
-          clientInfo: { name: "background-agent", version: "1.0.0" },
+          clientInfo: { name: "runtime-agent", version: "1.0.0" },
         },
         id: 1,
       },

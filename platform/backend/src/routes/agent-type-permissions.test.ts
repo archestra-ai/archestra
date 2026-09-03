@@ -243,7 +243,7 @@ describe("agent type permission isolation (routes)", () => {
           method: "POST",
           url: "/api/agents",
           payload: {
-            name: "background-agent",
+            name: "runtime-agent",
             agentType: "agent",
             scope: "personal",
             teams: [],
@@ -268,7 +268,7 @@ describe("agent type permission isolation (routes)", () => {
           method: "POST",
           url: "/api/agents",
           payload: {
-            name: "privileged-background-agent",
+            name: "privileged-runtime-agent",
             agentType: "agent",
             scope: "personal",
             teams: [],

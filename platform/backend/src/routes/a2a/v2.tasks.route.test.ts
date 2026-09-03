@@ -8,11 +8,11 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const {
   mockExecuteA2AMessage,
-  mockRunTaskInBackground,
+  mockRunTaskInAgentRuntime,
   mockValidateMCPGatewayToken,
 } = vi.hoisted(() => ({
   mockExecuteA2AMessage: vi.fn(),
-  mockRunTaskInBackground: vi.fn(),
+  mockRunTaskInAgentRuntime: vi.fn(),
   mockValidateMCPGatewayToken: vi.fn(),
 }));
 
@@ -27,7 +27,7 @@ vi.mock("@/services/agent-runtime/pod-run", async () => {
   return {
     ...actual,
     runTaskInAgentRuntime: (...args: unknown[]) =>
-      mockRunTaskInBackground(...args),
+      mockRunTaskInAgentRuntime(...args),
   };
 });
 
@@ -197,7 +197,7 @@ describe("a2a v2 task methods", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     mockExecuteA2AMessage.mockReset();
-    mockRunTaskInBackground.mockReset();
+    mockRunTaskInAgentRuntime.mockReset();
     mockValidateMCPGatewayToken.mockReset();
     config.agentRuntime.enabled = previousAgentRuntimeEnabled;
     await app.close();
@@ -262,7 +262,7 @@ describe("a2a v2 task methods", () => {
     const runtimeAgent = await makeInternalAgent({
       organizationId,
       runtime: {
-        image: "example.invalid/background-agent:test",
+        image: "example.invalid/runtime-agent:test",
         command: null,
         inferenceProtocol: "openai_responses",
         backend: "kubernetes",
@@ -276,25 +276,25 @@ describe("a2a v2 task methods", () => {
       },
     });
     agentId = runtimeAgent.id;
-    mockRunTaskInBackground.mockImplementationOnce(
+    mockRunTaskInAgentRuntime.mockImplementationOnce(
       async (params: { onTextDelta?: (delta: string) => void }) => {
         params.onTextDelta?.("background answer");
         const messageId = crypto.randomUUID();
         return {
           messageId,
-          text: "background answer",
+          text: "runtime answer",
           finishReason: "stop",
           responseUiMessage: {
             id: messageId,
             role: "assistant",
-            parts: [{ type: "text", text: "background answer" }],
+            parts: [{ type: "text", text: "runtime answer" }],
           },
         };
       },
     );
 
     const body = await rpc(2, "SendMessage", {
-      message: userMessage("run this in the execution backend"),
+      message: userMessage("run this in Agent Runtime"),
     });
 
     expect(body.result.message).toBeUndefined();
@@ -304,11 +304,11 @@ describe("a2a v2 task methods", () => {
       artifacts: [
         {
           name: "agent-response",
-          parts: [{ text: "background answer" }],
+          parts: [{ text: "runtime answer" }],
         },
       ],
     });
-    expect(mockRunTaskInBackground).toHaveBeenCalledWith(
+    expect(mockRunTaskInAgentRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: runtimeAgent.id,
         taskId: body.result.task.id,
@@ -317,7 +317,7 @@ describe("a2a v2 task methods", () => {
           kind: "user",
           organizationId,
         },
-        deployment: expect.objectContaining({
+        runtime: expect.objectContaining({
           agentId: runtimeAgent.id,
         }),
         runMode: "one_shot",

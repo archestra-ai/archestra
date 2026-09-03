@@ -61,7 +61,7 @@ const { captureContent } = config.observability.otel;
  * @param params.stream - Whether this is a streaming request
  * @param params.agent - The agent/profile object (optional)
  * @param params.sessionId - Conversation/session ID (optional)
- * @param params.runId - Execution ID for tracking agent runs (optional)
+ * @param params.runId - Run ID for tracking Agent Runtime runs (optional)
  * @param params.externalAgentId - External agent ID from X-Archestra-Agent-Id header (optional)
  * @param params.source - The interaction source for trace filtering (optional)
  * @param params.serverAddress - The server address (base URL) of the LLM provider (optional)

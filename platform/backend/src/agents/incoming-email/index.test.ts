@@ -857,7 +857,7 @@ describe("processIncomingEmail with sendReply option", () => {
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "public",
         runtime: {
-          image: "example.invalid/background-agent:test",
+          image: "example.invalid/runtime-agent:test",
           command: null,
           inferenceProtocol: "openai_responses",
           backend: "kubernetes",

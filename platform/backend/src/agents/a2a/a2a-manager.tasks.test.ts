@@ -165,7 +165,7 @@ describe("A2AManager full task mode", () => {
   test("re-adopts a surviving background Job and settles its existing task", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "background-agent", teams: [] });
+    const agent = await makeAgent({ name: "runtime-agent", teams: [] });
     const context = await A2AContextManager.createContext(actor);
     const task = await A2ATaskModel.create({
       contextId: context.id,
@@ -184,7 +184,7 @@ describe("A2AManager full task mode", () => {
       title: "Recovered task",
       pinnedAt: null,
       projectId: null,
-      workloadName: "runner-background-agent-recovery",
+      workloadName: "agent-runtime-recovery",
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
@@ -232,10 +232,10 @@ describe("A2AManager full task mode", () => {
     makeAgent,
   }) => {
     const agent = await makeAgent({
-      name: "background-agent",
+      name: "runtime-agent",
       teams: [],
       runtime: {
-        image: "example.invalid/background-agent:test",
+        image: "example.invalid/runtime-agent:test",
         command: null,
         inferenceProtocol: "openai_responses",
         backend: "kubernetes",

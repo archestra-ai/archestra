@@ -18,7 +18,7 @@ Authoring is a staged flow — each tool's result points at the next step:
 
 - `refine_app` clarifies what to build. It asks the user up to three questions and records a spec, grounded in the MCP tools that user can assign.
 - `scaffold_app` seeds the app from one opinionated starter template.
-- `edit_app` builds up the HTML with targeted string replacements.
+- `edit_app` builds the HTML with targeted replacements. It embeds attached images without sending their base64 through the model.
 - `validate_app` checks the result — static structure plus the diagnostics from a live render.
 - `publish_app` promotes a personal app to a team or the organization.
 

@@ -2660,7 +2660,7 @@ Required RBAC permission: `file:manage`
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
 | `restore_app_version` | Restore a historical app version directly on the server as a new head version. | `app:update` |
-| `edit_app` | The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to s... | `app:update` |
+| `edit_app` | The single path for any change to an app's HTML: pass edits for targeted str_replace changes, imageReplacements to replace embedded images from chat attachments without sending base64 through the m... | `app:update` |
 | `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
 | `set_app_labels` | Replace an app's labels with exactly the set you pass ([] clears them). | `app:update` |
 | `set_app_lock` | Lock or unlock an app. | `app:update` |
@@ -2889,12 +2889,17 @@ Required RBAC permission: `app:update`
 |-----------|------|----------|-------------|
 | `appId` | `string` | Yes | The app id. |
 | `baseVersion` | `integer` | Yes | The version this edit is based on — the one named by read_app or the latest scaffold_app/edit_app result. Always report the version you actually built the edit from. When the head has moved past it (another conversation edited the app), your edit is treated as a delta from that base and merged with the newer changes; if the regions overlap, the call fails with the head's conflicting content to incorporate. |
-| `edits` | `object[]` | No | str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass exactly one of edits, replacementHtml, or replacementHtmlSource. |
+| `edits` | `object[]` | No | str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass exactly one edit mode. |
 | `edits[].old_str` | `string` | Yes | Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate). |
 | `edits[].new_str` | `string` | Yes | Replacement text (may be empty to delete). |
-| `replacementHtml` | `string` | No | The complete new document, replacing the current HTML outright with no old_str matching — use this for a full rewrite instead of reproducing the whole document as an edit. Pass exactly one of edits, replacementHtml, or replacementHtmlSource. |
-| `replacementHtmlSource` | `object` | No | Like replacementHtml, but the document is read server-side from a file you already saved instead of being written out here — use this when the HTML already exists as a file (assembled in the sandbox, or attached to the chat) so its bytes never have to be reproduced as tool arguments. The file must be UTF-8 text and is subject to the same size limit as any other document. Reads whatever the file holds at call time. Pass exactly one of edits, replacementHtml, or replacementHtmlSource. |
+| `replacementHtml` | `string` | No | The complete new document, replacing the current HTML outright with no old_str matching — use this for a full rewrite instead of reproducing the whole document as an edit. Pass exactly one edit mode. |
+| `replacementHtmlSource` | `object` | No | Like replacementHtml, but the document is read server-side from a file you already saved instead of being written out here — use this when the HTML already exists as a file (assembled in the sandbox, or attached to the chat) so its bytes never have to be reproduced as tool arguments. The file must be UTF-8 text and is subject to the same size limit as any other document. Reads whatever the file holds at call time. Pass exactly one edit mode. |
 | `replacementHtmlSource.fileId` | `string` | Yes | Id of a saved file whose bytes become the document, as returned by download_file, save_file, or search_files. |
+| `imageReplacements` | `object[]` | No | Replace one or more image URLs with the most recently attached image. Pass short surrounding anchors only: the server reads the newest attachment bytes, builds the data URL, and replaces everything between the anchors. Never put attachment ids, filenames, paths, or old/new base64 in edits/tool arguments. The batch is atomic. Pass exactly one edit mode. |
+| `imageReplacements[].before_str` | `string` | Yes | Exact short HTML ending with the opening quote immediately before the existing image URL or data URL (for example `<img src="`). It must occur exactly once; include nearby id/class context when needed to disambiguate. |
+| `imageReplacements[].after_str` | `string` | Yes | Exact short HTML starting with the matching closing quote immediately after the existing image URL or data URL (for example `" alt="Issue tracker"`). The text between before_str and after_str is replaced server-side. |
+| `imageReplacements[].source` | `object` | Yes | The most recently attached image in this conversation. Its bytes are read and encoded server-side; never read or base64-encode the attachment yourself. |
+| `imageReplacements[].source.type` | `string` | Yes |  |
 
 ##### Output
 

@@ -41,6 +41,8 @@ import {
   AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
+  ConversationAttachmentModel,
+  ConversationModel,
   EnvironmentModel,
   EnvironmentResourceDefaultModel,
   InternalMcpCatalogModel,
@@ -4473,6 +4475,238 @@ describe("edit_app replacementHtmlSource", () => {
     expect(text).toContain("exactly one");
     // Names what actually collided rather than a generic mode complaint.
     expect(text).toContain("edits and replacementHtmlSource");
+  });
+});
+
+describe("edit_app imageReplacements", () => {
+  const OLD_DATA_URL = "data:image/png;base64,b2xk";
+  const PNG_BASE64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
+  const HTML = `<html><head></head><body><section id="issue-card"><img src="${OLD_DATA_URL}" alt="Issue tracker"></section></body></html>`;
+
+  let context: ArchestraContext;
+  let organizationId: string;
+  let userId: string;
+  let agentId: string;
+  let conversationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Image Agent" });
+    agentId = agent.id;
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const conversation = await ConversationModel.create({
+      userId,
+      organizationId,
+      agentId,
+      title: "Image edit",
+    });
+    conversationId = conversation.id;
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId,
+      conversationId: conversation.id,
+    };
+  });
+
+  async function createApp() {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: `Image ${crypto.randomUUID()}` },
+      context,
+    );
+    const appId = structured(created).id as string;
+    const seeded = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: HTML },
+      context,
+    );
+    return {
+      appId,
+      version: structured(seeded).latestVersion as number,
+    };
+  }
+
+  function attach(params?: {
+    conversationId?: string;
+    filename?: string;
+    mimeType?: string;
+    data?: Buffer;
+  }) {
+    const data = params?.data ?? Buffer.from(PNG_BASE64, "base64");
+    return ConversationAttachmentModel.create({
+      organizationId,
+      conversationId: params?.conversationId ?? conversationId,
+      uploadedByUserId: userId,
+      originalName: params?.filename ?? "replacement.png",
+      mimeType: params?.mimeType ?? "image/png",
+      fileSize: data.byteLength,
+      contentHash: ConversationAttachmentModel.computeContentHash(data),
+      fileData: data,
+    });
+  }
+
+  function replaceImage(params: {
+    appId: string;
+    version: number;
+    beforeStr?: string;
+    afterStr?: string;
+  }) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId: params.appId,
+        baseVersion: params.version,
+        imageReplacements: [
+          {
+            before_str:
+              params.beforeStr ?? '<section id="issue-card"><img src="',
+            after_str: params.afterStr ?? '" alt="Issue tracker">',
+            source: {
+              type: "chat_attachment",
+            },
+          },
+        ],
+      },
+      context,
+    );
+  }
+
+  test("embeds an attached image server-side without returning its base64", async () => {
+    const { appId, version } = await createApp();
+    await attach();
+    await attach({
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      data: Buffer.from("newer non-image attachment", "utf8"),
+    });
+
+    const result = await replaceImage({ appId, version });
+
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(version + 1);
+    const head = await AppVersionModel.findByAppAndVersion(appId, version + 1);
+    expect(head?.html).toContain(`data:image/png;base64,${PNG_BASE64}`);
+    expect(head?.html).not.toContain(OLD_DATA_URL);
+    const resultText = (result.content[0] as any).text as string;
+    expect(resultText).toContain("server-side image replacement");
+    expect(resultText).not.toContain(PNG_BASE64);
+    expect(JSON.stringify(result.structuredContent)).not.toContain(PNG_BASE64);
+  });
+
+  test("rejects ambiguous anchors atomically without exposing image bytes", async () => {
+    const { appId, version } = await createApp();
+    await attach();
+
+    const result = await replaceImage({
+      appId,
+      version,
+      beforeStr: '"',
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("more than once");
+    expect((result.content[0] as any).text).not.toContain(PNG_BASE64);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("rejects anchors that do not surround an image URL attribute", async () => {
+    const { appId, version } = await createApp();
+    await attach();
+
+    const result = await replaceImage({
+      appId,
+      version,
+      beforeStr: '<section id="issue-card">',
+      afterStr: "</section>",
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "anchors do not surround an image URL attribute",
+    );
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("rejects attachments from another conversation", async () => {
+    const { appId, version } = await createApp();
+    const elsewhere = await ConversationModel.create({
+      userId,
+      organizationId,
+      agentId,
+      title: "Elsewhere",
+    });
+    await attach({ conversationId: elsewhere.id });
+
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        imageReplacements: [
+          {
+            before_str: '<section id="issue-card"><img src="',
+            after_str: '" alt="Issue tracker">',
+            source: {
+              type: "chat_attachment",
+            },
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "No image attachment exists in this conversation",
+    );
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("rejects content that is only labelled as an image", async () => {
+    const { appId, version } = await createApp();
+    await attach({
+      filename: "fake.png",
+      data: Buffer.from("<script>alert(1)</script>", "utf8"),
+    });
+
+    const result = await replaceImage({
+      appId,
+      version,
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "not a supported raster image",
+    );
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+  });
+
+  test("rejects a chat attachment placeholder in ordinary edits", async () => {
+    const { appId, version } = await createApp();
+    await attach();
+
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        edits: [
+          {
+            old_str: `<img src="${OLD_DATA_URL}"`,
+            new_str: '<img src="chat_attachment"',
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Use imageReplacements");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 });
 

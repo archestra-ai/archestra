@@ -76,9 +76,11 @@ import {
 import { mergeStaleBaseDocument } from "@/services/apps/app-version-merge";
 import { restoreAppVersion } from "@/services/apps/app-version-restore";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
+import { loadConversationAttachmentSource } from "@/services/conversation-attachment-source";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
+import { sniffInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
 import {
   APP_HTML_MAX_BYTES,
@@ -213,6 +215,14 @@ const RestoreAppVersionSchema = z.strictObject({
     ),
 });
 
+const ImageReplacementSourceSchema = z
+  .strictObject({
+    type: z.literal("chat_attachment"),
+  })
+  .describe(
+    "The most recently attached image in this conversation. Its bytes are read and encoded server-side; never read or base64-encode the attachment yourself.",
+  );
+
 const EditAppSchema = z.strictObject({
   appId: appIdField("The app id."),
   baseVersion: z
@@ -239,14 +249,14 @@ const EditAppSchema = z.strictObject({
     .min(1)
     .optional()
     .describe(
-      "str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass exactly one of edits, replacementHtml, or replacementHtmlSource.",
+      "str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass exactly one edit mode.",
     ),
   replacementHtml: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "The complete new document, replacing the current HTML outright with no old_str matching — use this for a full rewrite instead of reproducing the whole document as an edit. Pass exactly one of edits, replacementHtml, or replacementHtmlSource.",
+      "The complete new document, replacing the current HTML outright with no old_str matching — use this for a full rewrite instead of reproducing the whole document as an edit. Pass exactly one edit mode.",
     ),
   replacementHtmlSource: z
     .strictObject({
@@ -259,7 +269,33 @@ const EditAppSchema = z.strictObject({
     })
     .optional()
     .describe(
-      "Like replacementHtml, but the document is read server-side from a file you already saved instead of being written out here — use this when the HTML already exists as a file (assembled in the sandbox, or attached to the chat) so its bytes never have to be reproduced as tool arguments. The file must be UTF-8 text and is subject to the same size limit as any other document. Reads whatever the file holds at call time. Pass exactly one of edits, replacementHtml, or replacementHtmlSource.",
+      "Like replacementHtml, but the document is read server-side from a file you already saved instead of being written out here — use this when the HTML already exists as a file (assembled in the sandbox, or attached to the chat) so its bytes never have to be reproduced as tool arguments. The file must be UTF-8 text and is subject to the same size limit as any other document. Reads whatever the file holds at call time. Pass exactly one edit mode.",
+    ),
+  imageReplacements: z
+    .array(
+      z.strictObject({
+        before_str: z
+          .string()
+          .min(1)
+          .max(4000)
+          .describe(
+            'Exact short HTML ending with the opening quote immediately before the existing image URL or data URL (for example `<img src="`). It must occur exactly once; include nearby id/class context when needed to disambiguate.',
+          ),
+        after_str: z
+          .string()
+          .min(1)
+          .max(4000)
+          .describe(
+            'Exact short HTML starting with the matching closing quote immediately after the existing image URL or data URL (for example `" alt="Issue tracker"`). The text between before_str and after_str is replaced server-side.',
+          ),
+        source: ImageReplacementSourceSchema,
+      }),
+    )
+    .min(1)
+    .max(20)
+    .optional()
+    .describe(
+      "Replace one or more image URLs with the most recently attached image. Pass short surrounding anchors only: the server reads the newest attachment bytes, builds the data URL, and replaces everything between the anchors. Never put attachment ids, filenames, paths, or old/new base64 in edits/tool arguments. The batch is atomic. Pass exactly one edit mode.",
     ),
 });
 
@@ -1080,7 +1116,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to swap in the bytes of a file you already saved without reproducing them here — exactly one of the three. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules). baseVersion is required: pass the version your edit is actually built from (named by read_app or the latest scaffold_app/edit_app result) — when the head has moved past it, your edit is merged with the newer changes rather than overwriting them, and overlapping regions fail with the head's content to incorporate. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, imageReplacements to replace embedded images from chat attachments without sending base64 through the model, replacementHtml to swap in a complete document, or replacementHtmlSource to read a complete document from a saved file — exactly one mode. For an attached image, always use imageReplacements; the server automatically uses the most recent attachment. Never put chat_attachment, an attachment id/filename/path, or copied base64 in edits because those are not browser URLs. Read only the current HTML needed to identify short surrounding anchors when it is not already in context. baseVersion is required: pass the version your edit is actually built from (named by read_app or the latest scaffold_app/edit_app result) — when the head has moved past it, your edit is merged with the newer changes rather than overwriting them, and overlapping regions fail with the head's content to incorporate. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -1092,12 +1128,13 @@ const registry = defineArchestraTools([
       // ones that lost instead of naming the conflict.
       const requestedModes = [
         args.edits !== undefined && "edits",
+        args.imageReplacements !== undefined && "imageReplacements",
         args.replacementHtml !== undefined && "replacementHtml",
         args.replacementHtmlSource !== undefined && "replacementHtmlSource",
       ].filter((name): name is string => name !== false);
       if (requestedModes.length > 1) {
         return errorResult(
-          `Pass exactly one of edits, replacementHtml, or replacementHtmlSource; got ${requestedModes.join(" and ")}. edits applies str_replace changes to the current HTML; replacementHtml swaps in the complete new document; replacementHtmlSource swaps in the bytes of a file you already saved.`,
+          `Pass exactly one of edits, imageReplacements, replacementHtml, or replacementHtmlSource; got ${requestedModes.join(" and ")}. imageReplacements replaces embedded images from chat attachments without putting base64 in tool arguments.`,
         );
       }
       const mode =
@@ -1108,12 +1145,17 @@ const registry = defineArchestraTools([
                 kind: "replacementSource",
                 fileId: args.replacementHtmlSource.fileId,
               } as const)
-            : args.edits !== undefined
-              ? ({ kind: "edits", edits: args.edits } as const)
-              : null;
+            : args.imageReplacements !== undefined
+              ? ({
+                  kind: "imageReplacements",
+                  replacements: args.imageReplacements,
+                } as const)
+              : args.edits !== undefined
+                ? ({ kind: "edits", edits: args.edits } as const)
+                : null;
       if (!mode) {
         return errorResult(
-          "Pass exactly one of edits (str_replace changes to the current HTML), replacementHtml (the complete new document), or replacementHtmlSource (the id of a file holding it); none was provided.",
+          "Pass exactly one of edits, imageReplacements, replacementHtml, or replacementHtmlSource; none was provided.",
         );
       }
       const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
@@ -1146,6 +1188,10 @@ const registry = defineArchestraTools([
       let sourceFilename: string | null = null;
       let resolvedMode:
         | { kind: "replacement"; html: string }
+        | {
+            kind: "imageReplacements";
+            replacements: ResolvedImageReplacement[];
+          }
         | { kind: "edits"; edits: NonNullable<typeof args.edits> };
       if (mode.kind === "replacementSource") {
         // Authorization is not inherited: this tool's own gate is app:update
@@ -1172,6 +1218,31 @@ const registry = defineArchestraTools([
         if ("error" in resolved) return resolved.error;
         sourceFilename = resolved.filename;
         resolvedMode = { kind: "replacement", html: resolved.html };
+      } else if (mode.kind === "imageReplacements") {
+        const replacements: ResolvedImageReplacement[] = [];
+        for (const replacement of mode.replacements) {
+          const loaded = await loadConversationAttachmentSource({
+            organizationId: auth.organizationId,
+            userId: auth.userId,
+            conversationId: context.conversationId,
+            latest: true,
+            latestMimeTypePrefix: "image/",
+          });
+          if ("error" in loaded) return errorResult(loaded.error);
+          const mimeType = sniffInlineSafeImageMime(loaded.data);
+          if (!mimeType) {
+            return errorResult(
+              `"${escapeAppNameForModelText(loaded.originalName)}" is not a supported raster image (PNG, JPEG, GIF, or WebP). Nothing was saved.`,
+            );
+          }
+          replacements.push({
+            beforeStr: replacement.before_str,
+            afterStr: replacement.after_str,
+            dataUrl: `data:${mimeType};base64,${loaded.data.toString("base64")}`,
+            filename: loaded.originalName,
+          });
+        }
+        resolvedMode = { kind: "imageReplacements", replacements };
       } else {
         resolvedMode = mode;
       }
@@ -1187,7 +1258,18 @@ const registry = defineArchestraTools([
       try {
         if (resolvedMode.kind === "replacement") {
           editedHtml = resolvedMode.html;
+        } else if (resolvedMode.kind === "imageReplacements") {
+          editedHtml = applyImageReplacements(
+            base.html,
+            resolvedMode.replacements,
+          );
         } else {
+          if (hasChatAttachmentImagePlaceholder(resolvedMode.edits)) {
+            throw new ApiError(
+              400,
+              "An attachment name or chat_attachment placeholder is not a browser image URL. Nothing was saved. Use imageReplacements with short before_str/after_str anchors and source.type set to chat_attachment; the server will embed the most recent attachment's bytes.",
+            );
+          }
           const applied = applyStrReplaceEdits(base.html, resolvedMode.edits, {
             sourceNoun: "HTML",
             rereadHint: "Call read_app for the current source.",
@@ -1205,7 +1287,8 @@ const registry = defineArchestraTools([
         // an app that was already a fragment (no root in the base) is unaffected.
         const isWholeDocumentRewrite =
           resolvedMode.kind === "replacement" ||
-          (resolvedMode.edits.length === 1 &&
+          (resolvedMode.kind === "edits" &&
+            resolvedMode.edits.length === 1 &&
             resolvedMode.edits[0].old_str === base.html);
         if (
           !isWholeDocumentRewrite &&
@@ -1290,11 +1373,13 @@ const registry = defineArchestraTools([
           ? resolvedMode.edits.length - skippedEdits.length
           : 0;
       const editLabel =
-        resolvedMode.kind !== "replacement"
+        resolvedMode.kind === "edits"
           ? `${appliedEditCount} edit${appliedEditCount === 1 ? "" : "s"}`
-          : sourceFilename
-            ? `a full-document replacement from ${escapeAppNameForModelText(sourceFilename)}`
-            : "a full-document replacement";
+          : resolvedMode.kind === "imageReplacements"
+            ? `${resolvedMode.replacements.length} server-side image replacement${resolvedMode.replacements.length === 1 ? "" : "s"}`
+            : sourceFilename
+              ? `a full-document replacement from ${escapeAppNameForModelText(sourceFilename)}`
+              : "a full-document replacement";
       // A fork bumps latestVersion off the version the write was pinned to;
       // when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
@@ -1334,6 +1419,18 @@ const registry = defineArchestraTools([
           : sourceFilename
             ? `\nThe saved document is exactly the bytes ${escapeAppNameForModelText(sourceFilename)} held at save time; call read_app if you need to see them.`
             : "\nThe saved document is exactly the HTML just sent — no need to call read_app to verify it.";
+      const imageNote =
+        forked &&
+        resolvedMode.kind === "imageReplacements" &&
+        mergedOntoHeadVersion === null
+          ? `\nThe image bytes from ${resolvedMode.replacements
+              .map((replacement) =>
+                escapeAppNameForModelText(replacement.filename),
+              )
+              .join(
+                ", ",
+              )} were embedded server-side; no base64 was returned or needs verification.`
+          : "";
       return structuredSuccessResult(
         {
           id: updated.id,
@@ -1344,7 +1441,7 @@ const registry = defineArchestraTools([
           labels: appLabelParts(updated.labels),
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(updated.name, updated)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
+        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(updated.name, updated)}${replacementNote}${imageNote}${skippedNote}${warningsNote}${excerptsNote}`,
       );
     },
   }),
@@ -1841,6 +1938,74 @@ export const tools = registry.tools;
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+type ResolvedImageReplacement = {
+  beforeStr: string;
+  afterStr: string;
+  dataUrl: string;
+  filename: string;
+};
+
+function hasChatAttachmentImagePlaceholder(
+  edits: Array<{ old_str: string; new_str: string }>,
+): boolean {
+  return edits.some((edit) =>
+    /<img\b[^>]*\bsrc\s*=\s*["'](?:chat[_-]?attachment|attachment(?::\/\/)?)["']/i.test(
+      edit.new_str,
+    ),
+  );
+}
+
+function applyImageReplacements(
+  html: string,
+  replacements: ResolvedImageReplacement[],
+): string {
+  let result = html;
+  for (const [index, replacement] of replacements.entries()) {
+    const openingQuote = replacement.beforeStr.at(-1);
+    if (
+      (openingQuote !== '"' && openingQuote !== "'") ||
+      replacement.afterStr[0] !== openingQuote
+    ) {
+      throw new ApiError(
+        400,
+        `Image replacement ${index + 1} anchors do not surround an image URL attribute. Nothing was saved. before_str must end with its opening quote (for example <img src=") and after_str must start with the matching closing quote; do not include image base64.`,
+      );
+    }
+    const beforeIndex = result.indexOf(replacement.beforeStr);
+    if (beforeIndex === -1) {
+      throw new ApiError(
+        400,
+        `Image replacement ${index + 1} could not find before_str in the current HTML. Nothing was saved. Use short exact surrounding HTML from read_app; do not include image base64.`,
+      );
+    }
+    if (
+      result.indexOf(
+        replacement.beforeStr,
+        beforeIndex + replacement.beforeStr.length,
+      ) !== -1
+    ) {
+      throw new ApiError(
+        400,
+        `Image replacement ${index + 1} found before_str more than once. Nothing was saved. Include a nearby id, class, or other short HTML context to make it unique; do not include image base64.`,
+      );
+    }
+
+    const contentStart = beforeIndex + replacement.beforeStr.length;
+    const afterIndex = result.indexOf(replacement.afterStr, contentStart);
+    if (afterIndex === -1) {
+      throw new ApiError(
+        400,
+        `Image replacement ${index + 1} found before_str but no following after_str. Nothing was saved. Use short exact surrounding HTML from read_app; do not include image base64.`,
+      );
+    }
+    result =
+      result.slice(0, contentStart) +
+      replacement.dataUrl +
+      result.slice(afterIndex);
+  }
+  return result;
+}
 
 // Tool spine — every app tool opens by narrowing the caller to an authed context
 // and (for id-scoped tools) loading and authorizing the target app. These two

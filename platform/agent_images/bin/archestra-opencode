@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
+  echo "archestra: OpenCode requires an Agent configured for OpenAI Responses" >&2
+  exit 78
+fi
+
+runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+config_file="${runtime_dir}/opencode.json"
+instructions_file="${runtime_dir}/opencode-instructions.md"
+task_file="${runtime_dir}/task.md"
+model="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+context_length="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH:-32768}"
+output_length="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH:-8192}"
+
+mkdir -p "${runtime_dir}/config" "${runtime_dir}/data" "${runtime_dir}/cache" "${runtime_dir}/state"
+export XDG_CONFIG_HOME="${runtime_dir}/config"
+export XDG_DATA_HOME="${runtime_dir}/data"
+export XDG_CACHE_HOME="${runtime_dir}/cache"
+export XDG_STATE_HOME="${runtime_dir}/state"
+export OPENCODE_CONFIG="${config_file}"
+export OPENCODE_CONFIG_DIR="${runtime_dir}/config"
+export OPENCODE_DISABLE_AUTOUPDATE=1
+export OPENCODE_DISABLE_PROJECT_CONFIG=1
+export OPENCODE_PURE=1
+
+printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}" > "${instructions_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+
+jq -n \
+  --arg model "${model}" \
+  --arg base_url "${OPENAI_BASE_URL:?}" \
+  --arg api_key '{env:OPENAI_API_KEY}' \
+  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
+  --arg mcp_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
+  --arg instructions_file "${instructions_file}" \
+  --argjson context_length "${context_length}" \
+  --argjson output_length "${output_length}" \
+  '{
+    "$schema":"https://opencode.ai/config.json",
+    autoupdate:false,
+    model:("archestra/" + $model),
+    permission:"allow",
+    instructions:[$instructions_file],
+    provider:{archestra:{
+      npm:"@ai-sdk/openai",
+      name:"Archestra",
+      options:{
+        baseURL:$base_url,
+        apiKey:$api_key,
+        headers:{
+          "X-Archestra-Execution-Id":$task_id,
+          "X-Archestra-Session-Id":$task_id
+        }
+      },
+      models:{($model):{
+        name:$model,
+        tool_call:true,
+        limit:{context:$context_length,output:$output_length}
+      }}
+    }},
+    mcp:{archestra:{
+      type:"remote",
+      url:$mcp_url,
+      enabled:true,
+      oauth:false,
+      headers:{
+        Authorization:("Bearer " + $mcp_token),
+        "X-Archestra-Execution-Id":$task_id,
+        "X-Archestra-Session-Id":$task_id
+      }
+    }}
+  }' > "${config_file}"
+chmod 0600 "${config_file}" "${instructions_file}" "${task_file}"
+
+case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+  interactive)
+    exec opencode \
+      --pure \
+      --auto \
+      --model "archestra/${model}" \
+      --prompt "$(cat "${task_file}")"
+    ;;
+  one_shot)
+    exec opencode run \
+      --pure \
+      --auto \
+      --model "archestra/${model}" \
+      -- "$(cat "${task_file}")"
+    ;;
+  *)
+    echo "archestra: unknown Background execution mode" >&2
+    exit 78
+    ;;
+esac

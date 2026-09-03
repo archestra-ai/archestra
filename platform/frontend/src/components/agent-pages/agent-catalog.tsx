@@ -14,7 +14,13 @@ import {
 } from "@/lib/hooks/use-app-name";
 
 export interface AgentCatalogTemplate {
-  id: "archestra" | "claude-code" | "codex" | "hermes" | "openclaw";
+  id:
+    | "archestra"
+    | "claude-code"
+    | "codex"
+    | "opencode"
+    | "hermes"
+    | "openclaw";
   name: string;
   description: string;
   icon: string | null;
@@ -72,6 +78,17 @@ export function getAgentCatalogTemplates(
       inferenceProtocol: "openai_responses",
       steerMode: "tmux_keys",
       requiredSubscriptionKind: "chatgpt",
+    }),
+    template({
+      id: "opencode",
+      name: "OpenCode",
+      icon: "/agent-logos/opencode.svg",
+      description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      platformName: appName,
+      image: image(archestraImage, "opencode"),
+      command: ["archestra-opencode"],
+      inferenceProtocol: "openai_responses",
+      steerMode: "tmux_keys",
     }),
     template({
       id: "hermes",
@@ -185,6 +202,16 @@ function CatalogAgentIcon({
       return <ProviderIcon provider="anthropic" size={22} />;
     case "codex":
       return <ProviderIcon provider="openai" size={22} />;
+    case "opencode":
+      return (
+        <Image
+          src="/agent-logos/opencode.svg"
+          alt=""
+          width={22}
+          height={22}
+          className="h-[22px] w-auto object-contain dark:invert"
+        />
+      );
     case "hermes":
       return (
         <Image

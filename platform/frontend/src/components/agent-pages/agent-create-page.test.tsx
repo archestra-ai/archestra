@@ -107,6 +107,7 @@ describe("AgentCreatePage", () => {
       "Archestra Agent",
       "Claude Code",
       "Codex",
+      "OpenCode",
       "Hermes",
       "OpenClaw",
     ]) {
@@ -140,6 +141,35 @@ describe("AgentCreatePage", () => {
       }),
     );
     expect(screen.getByRole("button", { name: "Catalog" })).toBeInTheDocument();
+  });
+
+  it("prefills OpenCode with its maintained Responses runtime", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentBackgroundExecution"
+        ? true
+        : feature === "agentBackgroundExecutionBaseImage"
+          ? "agent-archestra:dev"
+          : undefined,
+    );
+
+    render(<AgentCreatePage kind="agent" />);
+    await user.click(screen.getByRole("button", { name: /opencode/i }));
+
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialValues: expect.objectContaining({
+          name: "OpenCode",
+          icon: "/agent-logos/opencode.svg",
+          backgroundExecution: expect.objectContaining({
+            image: "agent-opencode:dev",
+            command: ["archestra-opencode"],
+            inferenceProtocol: "openai_responses",
+            steerMode: "tmux_keys",
+          }),
+        }),
+      }),
+    );
   });
 
   it("prefills OpenClaw with its compatible Chat Completions transport", async () => {

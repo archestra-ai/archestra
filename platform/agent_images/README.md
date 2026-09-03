@@ -10,6 +10,7 @@ invoking user's Agent-scoped MCP gateway endpoint.
 | `agent-archestra` | `archestra-runner-agent` | Responses, Chat Completions, or Anthropic Messages |
 | `agent-claude-code` | `archestra-claude-code` | Anthropic Messages |
 | `agent-codex` | `archestra-codex` | OpenAI Responses |
+| `agent-opencode` | `archestra-opencode` | OpenAI Responses |
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or OpenAI Responses |
 
@@ -21,7 +22,7 @@ docker build -f agent_images/Dockerfile --target agent-codex -t agent-codex:dev 
 
 Tilt pulls the public GAR images by default. Set
 `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE=agent-archestra:dev` to build
-all five targets locally and use them for dynamically-created Jobs.
+all six targets locally and use them for dynamically-created Jobs.
 
 The native wrappers create their client configuration at run time under
 `/var/run/archestra`. Provider and MCP credentials are never baked into an
@@ -59,6 +60,6 @@ a per-user Background execution secret. GitHub SSH clone URLs are normalized
 to that authenticated HTTPS transport, so a catalog Agent does not also need a
 separate SSH key.
 
-The five public catalog targets are built for development deployments and
+The six public catalog targets are built for development deployments and
 releases. Keep native CLI versions exact and review their published package
 scripts before updating them.

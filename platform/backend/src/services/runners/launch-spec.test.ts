@@ -72,6 +72,7 @@ describe("buildRunnerLaunchSpec", () => {
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL: "gemini:selected-model",
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: "selected-model",
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER: "gemini",
+      ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH: "16384",
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
       ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
       OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
@@ -466,6 +467,12 @@ describe("buildRunnerLaunchSpec", () => {
     expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL).toBe(
       "claude-opus-4-8[1m]",
     );
+    expect(
+      spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_CONTEXT_LENGTH,
+    ).toBe("1000000");
+    expect(
+      spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_OUTPUT_LENGTH,
+    ).toBe("16384");
 
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
     expect(virtualKey?.keyType).toBe("passthrough");
@@ -716,6 +723,7 @@ async function makeConfiguredAgent(params: {
     inputModalities: ["text"],
     outputModalities: ["text"],
     contextLength: params.contextLength,
+    outputLength: 16_384,
     supportsToolCalling: true,
     lastSyncedAt: new Date(),
   });

@@ -68,7 +68,9 @@ Any client that uses LLM Proxy can contribute to per-user usage. Each request mu
 
 Personal virtual keys, passthrough virtual keys, user OAuth tokens, and identity provider JWTs identify a user. Team and organization virtual keys identify a shared credential instead. OAuth client credentials identify an application. See [Authentication](platform-llm-proxy-authentication) for each option.
 
-A trusted integration can attach `X-Archestra-User-Id` when it uses a shared credential. Set it to the member's Archestra user ID after the integration authenticates the caller. The header attributes usage but does not authenticate or authorize the user. For example, an internal workflow portal can add the member ID before it calls the proxy.
+An integration that authenticates its own callers can attach `X-Archestra-User-Id` when it uses a shared credential. Set it to the member's Archestra user ID after authentication. The header attributes usage but does not authenticate or authorize the user. For example, an internal workflow portal can add the member ID before it calls the proxy.
+
+For authenticated attribution, use a [passthrough virtual key](platform-llm-proxy-authentication#passthrough-virtual-keys) instead. It is a secret bound to one user, so it proves who made the request.
 
 Set `X-Archestra-Agent-Id` to record which client made the request. Use a stable value for each application. See [Custom Headers](platform-llm-proxy#custom-headers) for both headers.
 

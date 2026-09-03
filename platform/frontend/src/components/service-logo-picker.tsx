@@ -11,35 +11,23 @@ import {
 } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import {
-  buildIconList,
-  filterIcons,
-  iconToDataUrl,
-  type ServiceIcon,
-} from "./service-logo-picker.utils";
+import { useServiceIcons } from "./service-logo-picker.hook";
+import { iconToDataUrl, type ServiceIcon } from "./service-logo-picker.utils";
 
 interface ServiceLogoPickerProps {
   onSelect: (dataUrl: string) => void;
 }
 
 export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
-  const [icons, setIcons] = useState<ServiceIcon[]>([]);
-  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    import("simple-icons").then((module) => {
-      setIcons(buildIconList(module));
-      setLoading(false);
-    });
-  }, []);
-
-  const filtered = useMemo(
-    () => filterIcons(icons, deferredQuery),
-    [icons, deferredQuery],
+  const serviceIconsQuery = useServiceIcons(deferredQuery);
+  const icons = useMemo(
+    () => serviceIconsQuery.data?.pages.flatMap((page) => page.data) ?? [],
+    [serviceIconsQuery.data],
   );
+  const total = serviceIconsQuery.data?.pages[0]?.total ?? 0;
 
   // Reset scroll when search changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally trigger on deferredQuery change
@@ -54,25 +42,22 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
     [onSelect],
   );
 
-  // Only render first N icons for performance, load more on scroll
-  const [visibleCount, setVisibleCount] = useState(120);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset on search change
-  useEffect(() => {
-    setVisibleCount(120);
-  }, [deferredQuery]);
-
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const el = e.currentTarget;
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-        setVisibleCount((prev) => Math.min(prev + 120, filtered.length));
+      const nearBottom =
+        el.scrollTop + el.clientHeight >= el.scrollHeight - 100;
+      if (
+        !nearBottom ||
+        serviceIconsQuery.isFetchingNextPage ||
+        !serviceIconsQuery.hasNextPage
+      ) {
+        return;
       }
+      void serviceIconsQuery.fetchNextPage();
     },
-    [filtered.length],
+    [serviceIconsQuery],
   );
-
-  const visibleIcons = filtered.slice(0, visibleCount);
 
   return (
     <div className="flex flex-col">
@@ -94,11 +79,15 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
         style={{ height: 280 }}
         onScroll={handleScroll}
       >
-        {loading ? (
+        {serviceIconsQuery.isPending ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
             <span>Loading logos...</span>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : serviceIconsQuery.isError && icons.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            <span>Could not load logos</span>
+          </div>
+        ) : icons.length === 0 ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
             <span>No logos found</span>
           </div>
@@ -116,7 +105,7 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
               fits the large majority on one line and caps the rest at two.
             */}
             <div className="grid grid-cols-4 gap-1">
-              {visibleIcons.map((icon) => (
+              {icons.map((icon) => (
                 <button
                   key={icon.slug}
                   type="button"
@@ -156,9 +145,13 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
                 </button>
               ))}
             </div>
-            {visibleCount < filtered.length && (
+            {icons.length < total && (
               <p className="text-xs text-muted-foreground text-center py-2">
-                Scroll for more ({filtered.length - visibleCount} remaining)
+                {serviceIconsQuery.isFetchingNextPage
+                  ? "Loading more..."
+                  : serviceIconsQuery.isFetchNextPageError
+                    ? "Could not load more logos"
+                    : `Scroll for more (${total - icons.length} remaining)`}
               </p>
             )}
           </>

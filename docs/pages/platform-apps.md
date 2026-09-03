@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-08-26
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,6 +24,8 @@ Authoring is a staged flow — each tool's result points at the next step:
 
 Editing the HTML forks a new immutable version, and the head version is served when the app runs. The procedure and the SDK conventions live in the built-in **build-app** skill, not in the tool descriptions, so the model loads them on demand.
 
+To undo an unwanted edit, open the app's overflow menu on the **Apps** page and choose **Version history**, then restore an earlier version. Restoring copies that immutable artifact forward as a new current version, so no history is erased. You can also ask an agent to roll an app back; the `restore_app_version` tool performs the same server-side restore without reading or regenerating the app's HTML.
+
 Run or author an app at `/a/:slug` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
 
 ## Who Can Use an App
@@ -36,7 +38,7 @@ Disabling an app (in App settings) pulls it back without deleting it. It leaves 
 
 The `/apps` gallery lists everything the viewer can reach in two sections: apps you own, and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). Each `ui://` resource is its own card, titled by the server's display name (*Task Tracker*); when one server exposes several UIs, the title carries the tool — *Task Tracker / show_board*. A card opens the app in a new chat. That chat stays out of your conversation list until you write into it. An owned card carries **Open in new tab** and **Delete** in its overflow menu; an external card carries **Open in new tab** (the standalone runtime) and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
 
-While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
+While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `restore_app_version`, `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 
 ## Fullscreen
 

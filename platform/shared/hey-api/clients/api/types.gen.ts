@@ -24057,6 +24057,94 @@ export type GetAppVersionsResponses = {
 
 export type GetAppVersionsResponse = GetAppVersionsResponses[keyof GetAppVersionsResponses];
 
+export type GetAppVersionSummariesData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/versions/summaries';
+};
+
+export type GetAppVersionSummariesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppVersionSummariesError = GetAppVersionSummariesErrors[keyof GetAppVersionSummariesErrors];
+
+export type GetAppVersionSummariesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        appId: string | null;
+        version: number;
+        createdAt: string;
+    }>;
+};
+
+export type GetAppVersionSummariesResponse = GetAppVersionSummariesResponses[keyof GetAppVersionSummariesResponses];
+
 export type GetAppVersionData = {
     body?: never;
     path: {
@@ -24183,6 +24271,140 @@ export type GetAppVersionResponses = {
 };
 
 export type GetAppVersionResponse = GetAppVersionResponses[keyof GetAppVersionResponses];
+
+export type RestoreAppVersionData = {
+    body: {
+        baseVersion: number;
+    };
+    path: {
+        appId: string;
+        version: number;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/versions/{version}/restore';
+};
+
+export type RestoreAppVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestoreAppVersionError = RestoreAppVersionErrors[keyof RestoreAppVersionErrors];
+
+export type RestoreAppVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        name: string;
+        slug: string | null;
+        description: string | null;
+        templateId: string | null;
+        mcpServerId: string | null;
+        spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
+            summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
+            features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
+            data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
+            ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
+            tools: Array<string>;
+        } | null;
+        latestVersion: number;
+        enabled: boolean;
+        openInFullscreen: boolean;
+        locked: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
+        icon: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        warnings?: Array<string>;
+    };
+};
+
+export type RestoreAppVersionResponse = RestoreAppVersionResponses[keyof RestoreAppVersionResponses];
 
 export type GetAppToolsData = {
     body?: never;

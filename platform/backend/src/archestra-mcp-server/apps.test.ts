@@ -18,6 +18,7 @@ import {
   TOOL_READ_APP_SHORT_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_RESTORE_APP_VERSION_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SET_APP_LABELS_SHORT_NAME,
   TOOL_SET_APP_LOCK_SHORT_NAME,
@@ -148,6 +149,50 @@ describe("app tool execution", () => {
     );
     expect(deleted.isError).toBe(false);
     expect(await AppModel.findById(appId)).toBeNull();
+  });
+
+  test("restore_app_version rolls back without sending historical HTML through the model", async () => {
+    const created = await scaffold({ name: "Rollback Test" });
+    const appId = structured(created).id as string;
+    const original = await AppVersionModel.findByAppAndVersion(appId, 1);
+    expect(original).not.toBeNull();
+
+    const edited = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: 1,
+        edits: [
+          {
+            // biome-ignore lint/style/noNonNullAssertion: asserted above
+            old_str: original!.html,
+            new_str: "<!doctype html><title>unwanted edit</title>",
+          },
+        ],
+      },
+      context,
+    );
+    expect(structured(edited).latestVersion).toBe(2);
+
+    const restored = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_RESTORE_APP_VERSION_SHORT_NAME),
+      { appId, version: 1, baseVersion: 2 },
+      context,
+    );
+    expect(restored.isError).toBe(false);
+    expect(structured(restored).latestVersion).toBe(3);
+    expect(structured(restored)).not.toHaveProperty("html");
+    expect((await AppVersionModel.findByAppAndVersion(appId, 3))?.html).toBe(
+      original?.html,
+    );
+
+    const stale = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_RESTORE_APP_VERSION_SHORT_NAME),
+      { appId, version: 2, baseVersion: 2 },
+      context,
+    );
+    expect(stale.isError).toBe(true);
+    expect((stale.content[0] as any).text).toContain("moved to version 3");
   });
 
   test("delete_app tears down the app's backing catalog and server", async () => {

@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
+  History,
   Loader2,
   MoreHorizontal,
   Pin,
@@ -18,6 +19,7 @@ import { useState } from "react";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { LabelTags } from "@/components/label-tags";
+import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-history-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { useNavigableCard } from "@/components/table-card-view";
@@ -247,6 +249,7 @@ function OwnedAppCard({
   // the card unmounts mid-navigation, so it never resets; only a failure does.
   const [isOpening, setIsOpening] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const handleOpen = async (lockedChat = false) => {
     setIsOpening(true);
@@ -330,6 +333,10 @@ function OwnedAppCard({
               <Settings className="h-4 w-4" />
               Settings
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setHistoryOpen(true)}>
+              <History className="h-4 w-4" />
+              Version history
+            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
                 <SquareArrowOutUpRight className="h-4 w-4" />
@@ -383,6 +390,11 @@ function OwnedAppCard({
         app={{ id: app.id, name: app.name }}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+      />
+      <AppVersionHistoryDialog
+        app={app}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
       />
     </>
   );

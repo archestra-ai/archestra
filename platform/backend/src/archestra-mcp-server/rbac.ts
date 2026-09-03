@@ -213,6 +213,7 @@ export const TOOL_PERMISSIONS: Record<
   list_apps: { resource: "app", action: "read" },
   render_app: { resource: "app", action: "read" },
   read_app: { resource: "app", action: "read" },
+  restore_app_version: { resource: "app", action: "update" },
   edit_app: { resource: "app", action: "update" },
   // set_app_tools replaces an app's assigned tool set; assertCallerMayModifyApp
   // is the real authority, app:update is the floor (mirrors edit_app).

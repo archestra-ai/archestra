@@ -44,6 +44,17 @@ vi.mock("./app-delete-dialog", () => ({
     open ? <div data-testid="delete-dialog">Delete {app.name}</div> : null,
 }));
 
+vi.mock("@/components/mcp-app/app-version-history-dialog", () => ({
+  AppVersionHistoryDialog: ({
+    open,
+    app,
+  }: {
+    open: boolean;
+    app: { name: string };
+  }) =>
+    open ? <div data-testid="version-history">History {app.name}</div> : null,
+}));
+
 // Stub the catalog icon (its real render pulls appearance settings via react
 // query); the card test only asserts which icon value flows into it.
 vi.mock("@/components/mcp-catalog-icon", () => ({
@@ -263,6 +274,16 @@ describe("OwnedAppCard", () => {
     expect(
       screen.getByRole("link", { name: /open in new tab/i }),
     ).toHaveAttribute("href", "/a/owned-1");
+  });
+
+  it("opens version history from the overflow menu", () => {
+    render(<AppCard app={ownedApp} />);
+
+    expect(screen.queryByTestId("version-history")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: /version history/i }));
+    expect(screen.getByTestId("version-history")).toHaveTextContent(
+      "History My Owned App",
+    );
   });
 
   it("links to the app's slug when it has one", () => {

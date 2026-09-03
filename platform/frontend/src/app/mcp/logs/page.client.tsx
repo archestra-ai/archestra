@@ -234,12 +234,9 @@ function McpToolCallsTable({
         const installed = installedByName.get(serverName);
         const display = serverDisplayByName.get(serverName);
         const displayName = display?.name ?? serverName;
-        const secondaryLabel =
-          displayName !== serverName
-            ? serverName
-            : installed
-              ? undefined
-              : "From logs";
+        const secondaryLabel = installed
+          ? getMcpServerOwnerLabel(installed)
+          : "From logs";
         const icon = (
           <span
             key={serverName}
@@ -255,7 +252,7 @@ function McpToolCallsTable({
         return {
           value: serverName,
           label: displayName,
-          searchText: `${displayName} ${serverName}`,
+          searchText: `${displayName} ${secondaryLabel} ${serverName}`,
           content: (
             <span className="flex min-w-0 items-center gap-2">
               {icon}
@@ -622,6 +619,18 @@ function getGatewayDisplayName(
   return (
     agent?.name ?? (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
   );
+}
+
+function getMcpServerOwnerLabel(
+  server: archestraApiTypes.GetMcpServersResponses["200"][number],
+) {
+  const ownerEmail = server.ownerEmail?.trim();
+  if (ownerEmail) return ownerEmail;
+  if (server.scope === "team") {
+    return server.teamDetails?.name?.trim() || "Team installation";
+  }
+  if (server.scope === "org") return "Organization installation";
+  return "Owner unavailable";
 }
 
 function formatMcpMethod(method: string) {

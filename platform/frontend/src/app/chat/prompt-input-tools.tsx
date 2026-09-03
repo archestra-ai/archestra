@@ -306,15 +306,29 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const canShowProviderSettings =
     !runtimeMode && canSeeProviderSettings === true;
 
+  const focusTextarea = useCallback(() => {
+    // Popover restores focus to its trigger as it closes. Wait until that
+    // finishes before returning focus to the prompt for the user's next input.
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
+  }, [textareaRef]);
+
+  const handleAgentChange = useCallback(
+    (agentId: string) => {
+      onAgentChange?.(agentId);
+      focusTextarea();
+    },
+    [focusTextarea, onAgentChange],
+  );
+
   const handleModelSelectorOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
-        setTimeout(() => {
-          textareaRef.current?.focus();
-        }, 100);
+        focusTextarea();
       }
     },
-    [textareaRef],
+    [focusTextarea],
   );
 
   return (
@@ -380,7 +394,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       </p>
                       <InitialAgentSelector
                         currentAgentId={selectorAgentId}
-                        onAgentChange={onAgentChange}
+                        onAgentChange={handleAgentChange}
                       />
                     </div>
                   )}
@@ -626,7 +640,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             onAgentChange && (
               <InitialAgentSelector
                 currentAgentId={selectorAgentId}
-                onAgentChange={onAgentChange}
+                onAgentChange={handleAgentChange}
               />
             )}
           {!runtimeMode &&

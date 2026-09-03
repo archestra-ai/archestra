@@ -26,6 +26,7 @@ import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
+import { resourceOwnerLabel } from "@/lib/agent-owner-label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
@@ -235,7 +236,18 @@ function McpToolCallsTable({
         const display = serverDisplayByName.get(serverName);
         const displayName = display?.name ?? serverName;
         const secondaryLabel = installed
-          ? getMcpServerOwnerLabel(installed)
+          ? resourceOwnerLabel(
+              {
+                scope: installed.scope,
+                ownerEmail: installed.ownerEmail,
+                teamName: installed.teamDetails?.name,
+              },
+              {
+                personalFallback: "Owner unavailable",
+                teamFallback: "Team installation",
+                organization: "Organization installation",
+              },
+            )
           : "From logs";
         const icon = (
           <span
@@ -619,18 +631,6 @@ function getGatewayDisplayName(
   return (
     agent?.name ?? (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
   );
-}
-
-function getMcpServerOwnerLabel(
-  server: archestraApiTypes.GetMcpServersResponses["200"][number],
-) {
-  const ownerEmail = server.ownerEmail?.trim();
-  if (ownerEmail) return ownerEmail;
-  if (server.scope === "team") {
-    return server.teamDetails?.name?.trim() || "Team installation";
-  }
-  if (server.scope === "org") return "Organization installation";
-  return "Owner unavailable";
 }
 
 function formatMcpMethod(method: string) {

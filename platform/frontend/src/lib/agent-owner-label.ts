@@ -74,6 +74,30 @@ export function agentOwnerLabel(agent: {
   scope: string;
   ownerEmail: string | null;
 }): string | null {
-  if (agent.scope !== "personal") return null;
-  return agent.ownerEmail;
+  return resourceOwnerLabel(agent);
+}
+
+/**
+ * Resolve a resource owner consistently while letting each surface decide how
+ * shared and unavailable ownership should be described.
+ */
+export function resourceOwnerLabel(
+  resource: {
+    scope: string;
+    ownerEmail: string | null | undefined;
+    teamName?: string | null;
+  },
+  labels: {
+    personalFallback?: string;
+    teamFallback?: string;
+    organization?: string;
+  } = {},
+): string | null {
+  if (resource.scope === "personal") {
+    return resource.ownerEmail?.trim() || labels.personalFallback || null;
+  }
+  if (resource.scope === "team") {
+    return resource.teamName?.trim() || labels.teamFallback || null;
+  }
+  return labels.organization || null;
 }

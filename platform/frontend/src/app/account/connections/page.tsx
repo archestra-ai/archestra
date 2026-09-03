@@ -3,38 +3,38 @@
 import { Plug, RefreshCw, Unplug } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ExecutionCredentialConnectionDialog } from "@/components/execution-credential-connection-dialog";
-import { ExecutionCredentialDisconnectDialog } from "@/components/execution-credential-disconnect-dialog";
-import { ExecutionCredentialRowContent } from "@/components/execution-credential-row-content";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
+import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
+import { RuntimeCredentialRowContent } from "@/components/runtime-credential-row-content";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { useFeature } from "@/lib/config/config.query";
 import {
-  type ExecutionCredentialDefinition,
-  useDeleteExecutionCredentialConnection,
-  useExecutionCredentials,
-} from "@/lib/execution-credentials.query";
+  type RuntimeCredentialDefinition,
+  useDeleteRuntimeCredentialConnection,
+  useRuntimeCredentials,
+} from "@/lib/runtime-credentials.query";
 
 export default function AccountConnectionsPage() {
   const router = useRouter();
-  const executionEnabled = useFeature("agentBackgroundExecution");
+  const runtimeEnabled = useFeature("agentRuntime");
   const byosEnabled = useFeature("byosEnabled");
-  const definitions = useExecutionCredentials(executionEnabled === true);
+  const definitions = useRuntimeCredentials(runtimeEnabled === true);
   const [connecting, setConnecting] =
-    useState<ExecutionCredentialDefinition | null>(null);
+    useState<RuntimeCredentialDefinition | null>(null);
   const [disconnecting, setDisconnecting] =
-    useState<ExecutionCredentialDefinition | null>(null);
-  const disconnect = useDeleteExecutionCredentialConnection();
+    useState<RuntimeCredentialDefinition | null>(null);
+  const disconnect = useDeleteRuntimeCredentialConnection();
   const personalDefinitions = (definitions.data ?? []).filter(
     (definition) => definition.allowPersonal,
   );
 
   useEffect(() => {
-    if (executionEnabled === false) router.replace("/account");
-  }, [executionEnabled, router]);
+    if (runtimeEnabled === false) router.replace("/account");
+  }, [runtimeEnabled, router]);
 
-  if (executionEnabled !== true) return null;
+  if (runtimeEnabled !== true) return null;
 
   return (
     <>
@@ -55,7 +55,7 @@ export default function AccountConnectionsPage() {
                 key={definition.key}
                 className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center"
               >
-                <ExecutionCredentialRowContent
+                <RuntimeCredentialRowContent
                   definition={definition}
                   configured={definition.personalConfigured}
                 />
@@ -101,14 +101,14 @@ export default function AccountConnectionsPage() {
       </SettingsBlock>
 
       {connecting && (
-        <ExecutionCredentialConnectionDialog
+        <RuntimeCredentialConnectionDialog
           definition={connecting}
           scope="personal"
           useExternalSecretsManager={byosEnabled}
           onClose={() => setConnecting(null)}
         />
       )}
-      <ExecutionCredentialDisconnectDialog
+      <RuntimeCredentialDisconnectDialog
         definition={disconnecting}
         scope="personal"
         open={disconnecting !== null}

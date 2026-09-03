@@ -1,4 +1,4 @@
-// The shared agent-run streamText primitive for every agent execution surface
+// The shared agent-run streamText primitive for every agent run surface
 // (interactive chat SSE, headless/A2A, scheduled, ChatOps). It owns the
 // `streamText` invocation, the empty/abortive/context-length recovery loop, and
 // the stream-level `onError` capture — but not the stop policy: each caller

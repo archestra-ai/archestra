@@ -235,7 +235,7 @@ describe("ProjectSchedulesSection default agent", () => {
           name: "Reporter",
           agentType: "agent",
           scope: "org",
-          backgroundExecution: { credentials: [] },
+          runtime: { credentials: [] },
         },
         {
           id: "agent-2",
@@ -307,7 +307,7 @@ describe("ProjectSchedulesSection default agent", () => {
 
     expect(agentPicker()).toHaveTextContent("Reporter");
     expect(
-      within(agentPicker()).getByLabelText("Isolated execution"),
+      within(agentPicker()).getByLabelText("Dedicated runtime"),
     ).toBeInTheDocument();
   });
 });

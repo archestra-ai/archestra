@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { A2AProtocolTaskState } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import { AgentRunModel } from "@/models";
-import { agentRunTranscriptStore } from "@/services/runners/transcript-store";
+import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { describe, expect, test } from "@/test";
 import A2AContextModel from "./context";
 import A2AMessageModel from "./message";
@@ -493,7 +493,7 @@ describe("A2ATaskModel", () => {
         agentId: agent.id,
         actorKind: "system",
         actorId: "retention-test",
-        deploymentName: `runner-${task.id}`,
+        workloadName: `runner-${task.id}`,
         backend: "kubernetes",
         runtimeScope: "archestra-dev",
       });

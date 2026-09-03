@@ -18,9 +18,9 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AgentRuntimeSchema } from "./agent-runtime";
 import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
 import { LabelWithDetailsSchema } from "./label";
-import { AgentBackgroundExecutionSchema } from "./runner";
 import { SelectToolSchema } from "./tool";
 import {
   type ResourceVisibilityScope,
@@ -211,7 +211,7 @@ const selectExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
-  backgroundExecution: AgentBackgroundExecutionSchema.nullable(),
+  runtime: AgentRuntimeSchema.nullable(),
 };
 
 const insertExtendedFields = {
@@ -222,7 +222,7 @@ const insertExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
-  backgroundExecution: AgentBackgroundExecutionSchema.nullable().optional(),
+  runtime: AgentRuntimeSchema.nullable().optional(),
 };
 
 /**
@@ -401,7 +401,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
-    backgroundExecutionSecretId: true,
+    runtimeSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
     // flag in the generic agent body would let a caller without that
@@ -442,7 +442,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
-    backgroundExecutionSecretId: true,
+    runtimeSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
     // flag in the generic agent body would let a caller without that

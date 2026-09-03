@@ -3,9 +3,9 @@ import * as metrics from "./metrics";
 
 export async function initializeObservabilityMetrics(params?: {
   includeMcpMetrics?: boolean;
-  includeAgentExecutionMetrics?: boolean;
+  includeAgentRunMetrics?: boolean;
 }): Promise<string[]> {
-  const { includeMcpMetrics = true, includeAgentExecutionMetrics = true } =
+  const { includeMcpMetrics = true, includeAgentRunMetrics = true } =
     params ?? {};
   const labelKeys = await AgentLabelModel.getAllKeys();
 
@@ -15,8 +15,8 @@ export async function initializeObservabilityMetrics(params?: {
     metrics.mcp.initializeMcpMetrics(labelKeys);
   }
 
-  if (includeAgentExecutionMetrics) {
-    metrics.agentExecution.initializeAgentExecutionMetrics(labelKeys);
+  if (includeAgentRunMetrics) {
+    metrics.agentRun.initializeAgentRunMetrics(labelKeys);
   }
 
   metrics.database.initializeDatabaseMetrics();
@@ -27,7 +27,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.taskQueue.initializeTaskQueueMetrics();
   metrics.audit.initializeAuditMetrics();
   metrics.chat.initializeChatMetrics();
-  metrics.runner.initializeRunnerMetrics();
+  metrics.agentRuntime.initializeAgentRuntimeMetrics();
   metrics.skill.initializeSkillMetrics();
   metrics.activeUsers.initializeActiveUsersMetrics();
 

@@ -194,7 +194,7 @@ export interface LLMProxyContext<TRequest> {
   sessionId?: string | null;
   sessionSource?: SessionSource;
   source: InteractionSource;
-  executionId?: string;
+  runId?: string;
   parentContext?: Context;
   teamIds?: string[];
   teams?: SpanTeamInfo[];
@@ -287,8 +287,7 @@ export async function handleLLMProxy<
       bodyForExtraction,
     ) ??
     utils.headers.clientApp.detectCursorClientId(headersForExtraction);
-  const executionId =
-    utils.headers.executionId.getExecutionId(headersForExtraction);
+  const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
     request as FastifyRequest & { llmProxyAuthOverride?: LLMProxyAuthOverride }
   ).llmProxyAuthOverride;
@@ -370,21 +369,21 @@ export async function handleLLMProxy<
     `[${providerName}Proxy] Agent resolved`,
   );
 
-  if (executionId) {
-    const existsInDb = await InteractionModel.existsByExecutionId(executionId);
+  if (runId) {
+    const existsInDb = await InteractionModel.existsByRunId(runId);
     if (!existsInDb) {
       logger.debug(
-        { executionId, agentId: resolvedAgentId, externalAgentId },
+        { runId, agentId: resolvedAgentId, externalAgentId },
         `[${providerName}Proxy] New execution detected, reporting metric`,
       );
-      metrics.agentExecution.reportAgentExecution({
-        executionId,
+      metrics.agentRun.reportAgentRun({
+        runId,
         profile: resolvedAgent,
         externalAgentId,
       });
     } else {
       logger.debug(
-        { executionId, agentId: resolvedAgentId },
+        { runId, agentId: resolvedAgentId },
         `[${providerName}Proxy] Execution already exists in DB, skipping metric`,
       );
     }
@@ -1312,7 +1311,7 @@ export async function handleLLMProxy<
       sessionId,
       sessionSource,
       source,
-      executionId,
+      runId,
       parentContext,
       teamIds,
       teams,
@@ -1352,7 +1351,7 @@ export async function handleLLMProxy<
       const record: InsertInteraction = {
         profileId: resolvedAgent.id,
         externalAgentId,
-        executionId,
+        runId,
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
@@ -1445,7 +1444,7 @@ async function handleStreaming<
     sessionId,
     sessionSource,
     source,
-    executionId,
+    runId,
     parentContext,
     teamIds,
     teams,
@@ -1477,7 +1476,7 @@ async function handleStreaming<
       const record: InsertInteraction = {
         profileId: agent.id,
         externalAgentId,
-        executionId,
+        runId,
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
@@ -1531,7 +1530,7 @@ async function handleStreaming<
       teams,
       userTeams,
       sessionId,
-      executionId,
+      runId,
       externalAgentId,
       authMethod,
       authenticatedApp,
@@ -1932,7 +1931,7 @@ async function handleStreaming<
           authMethod,
           billingMode,
           authenticatedApp,
-          executionId,
+          runId,
           userId,
           virtualKeyId,
           passthroughVirtualKeyId,
@@ -2018,7 +2017,7 @@ async function handleNonStreaming<
     sessionId,
     sessionSource,
     source,
-    executionId,
+    runId,
     parentContext,
     teamIds,
     teams,
@@ -2044,7 +2043,7 @@ async function handleNonStreaming<
     teams,
     userTeams,
     sessionId,
-    executionId,
+    runId,
     externalAgentId,
     authMethod,
     authenticatedApp,
@@ -2279,7 +2278,7 @@ async function handleNonStreaming<
         authMethod,
         billingMode,
         authenticatedApp,
-        executionId,
+        runId,
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
@@ -2364,7 +2363,7 @@ async function handleNonStreaming<
       authMethod,
       billingMode,
       authenticatedApp,
-      executionId,
+      runId,
       userId,
       virtualKeyId,
       passthroughVirtualKeyId,

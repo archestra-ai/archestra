@@ -2715,17 +2715,17 @@ class AgentModel {
   }
 
   /**
-   * Update the server-managed secret bag behind Background execution.
+   * Update the server-managed secret bag behind Agent Runtime.
    * Credential values never travel through the generic Agent update body.
    */
-  static async setBackgroundExecutionSecretId(params: {
+  static async setAgentRuntimeSecretId(params: {
     id: string;
     secretId: string | null;
   }): Promise<boolean> {
     const updated = await db
       .update(schema.agentsTable)
       .set({
-        backgroundExecutionSecretId: params.secretId,
+        runtimeSecretId: params.secretId,
         updatedAt: new Date(),
       })
       .where(eq(schema.agentsTable.id, params.id))
@@ -3917,18 +3917,18 @@ class AgentModel {
       incomingEmailSecurityMode: row.incomingEmailSecurityMode,
       incomingEmailAllowedDomain: row.incomingEmailAllowedDomain ?? null,
       builtInAgentConfig: row.builtInAgentConfig ?? null,
-      backgroundExecution: row.backgroundExecution
+      runtime: row.runtime
         ? {
-            image: row.backgroundExecution.image,
-            command: row.backgroundExecution.command,
-            backend: row.backgroundExecution.backend,
-            steerMode: row.backgroundExecution.steerMode,
-            privileged: row.backgroundExecution.privileged,
-            resources: row.backgroundExecution.resources,
-            environmentKeys: (row.backgroundExecution.environment ?? [])
+            image: row.runtime.image,
+            command: row.runtime.command,
+            backend: row.runtime.backend,
+            steerMode: row.runtime.steerMode,
+            privileged: row.runtime.privileged,
+            resources: row.runtime.resources,
+            environmentKeys: (row.runtime.environment ?? [])
               .map((entry) => entry.key)
               .sort(),
-            credentials: (row.backgroundExecution.credentials ?? [])
+            credentials: (row.runtime.credentials ?? [])
               .map(({ key, credentialId, scope, label, required }) => ({
                 key,
                 credentialId: credentialId ?? null,
@@ -3937,15 +3937,14 @@ class AgentModel {
                 required,
               }))
               .sort((a, b) => a.key.localeCompare(b.key)),
-            ttlHours: row.backgroundExecution.ttlHours,
-            maxCostUsd: row.backgroundExecution.maxCostUsd ?? null,
-            idleTimeoutMinutes: row.backgroundExecution.idleTimeoutMinutes,
+            ttlHours: row.runtime.ttlHours,
+            maxCostUsd: row.runtime.maxCostUsd ?? null,
+            idleTimeoutMinutes: row.runtime.idleTimeoutMinutes,
           }
         : null,
       // A reference id is safe to audit and changes on every shared-secret
       // rotation, producing a non-empty diff without recording secret values.
-      backgroundExecutionCredentialRevision:
-        row.backgroundExecutionSecretId ?? null,
+      runtimeCredentialRevision: row.runtimeSecretId ?? null,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),

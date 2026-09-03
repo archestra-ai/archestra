@@ -104,7 +104,7 @@ export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
 /**
  * The sections of a record's own page, listed down its side the way the
  * settings surface lists its own. The first four are edited in place;
- * `connect` and `executions` are the two views onto a configured record.
+ * `connect` and `runs` are the two views onto a configured record.
  * `general` is the page's default and carries no `?section=`.
  */
 export type AgentDetailSection =
@@ -114,7 +114,7 @@ export type AgentDetailSection =
   | "advanced"
   | "settings"
   | "connect"
-  | "executions";
+  | "runs";
 
 /**
  * The form group a page section mounts, for the four that edit the record.

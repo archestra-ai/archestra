@@ -3,7 +3,7 @@
 import { Check, ChevronDown, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
-import { ExecutionCapableIndicator } from "@/components/chat/execution-capable-indicator";
+import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,7 @@ export type AgentSelectorAgent = {
   authorEmail?: string | null;
   description?: string | null;
   teams?: Array<{ name: string }>;
-  backgroundExecution?: unknown | null;
+  runtime?: unknown | null;
 };
 
 type AgentSelectorProps =
@@ -568,9 +568,7 @@ function AgentSelectorRow({
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate">{agent.name}</span>
-          {isOption && agent.backgroundExecution ? (
-            <ExecutionCapableIndicator />
-          ) : null}
+          {isOption && agent.runtime ? <RuntimeCapableIndicator /> : null}
         </span>
         {description && (
           <span className="block truncate text-xs text-muted-foreground">
@@ -583,8 +581,8 @@ function AgentSelectorRow({
           </span>
         )}
       </span>
-      {!isOption && agent.backgroundExecution ? (
-        <ExecutionCapableIndicator className="self-center" />
+      {!isOption && agent.runtime ? (
+        <RuntimeCapableIndicator className="self-center" />
       ) : null}
       {!isOption && agent.scope ? (
         <span className="shrink-0 self-center">

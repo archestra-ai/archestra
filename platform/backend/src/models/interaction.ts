@@ -381,11 +381,11 @@ function sessionIdMatchesConversation(): SQL {
 }
 
 class InteractionModel {
-  static async existsByExecutionId(executionId: string): Promise<boolean> {
+  static async existsByRunId(runId: string): Promise<boolean> {
     const [result] = await db
       .select({ id: schema.interactionsTable.id })
       .from(schema.interactionsTable)
-      .where(eq(schema.interactionsTable.executionId, executionId))
+      .where(eq(schema.interactionsTable.runId, runId))
       .limit(1);
     return result !== undefined;
   }

@@ -1,7 +1,7 @@
 import type { ServerWebSocketMessage } from "@archestra/shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS } from "ws";
-import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
+import { subagentRunTracker } from "@/agents/subagent-run-tracker";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import type { BrowserUserContext } from "@/features/browser-stream/services/browser-stream.service";
 import { browserStateManager } from "@/features/browser-stream/services/browser-stream.state-manager";
@@ -296,9 +296,7 @@ export class BrowserStreamSocketClientContext {
 
       // Skip screenshot while subagents are using the browser to prevent
       // flickering — the preview holds the last good screenshot instead.
-      if (
-        subagentExecutionTracker.hasActiveSubagents(subscription.conversationId)
-      ) {
+      if (subagentRunTracker.hasActiveSubagents(subscription.conversationId)) {
         subscription.wasBlockedBySubagent = true;
         return;
       }

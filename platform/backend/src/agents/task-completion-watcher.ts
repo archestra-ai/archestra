@@ -3,7 +3,7 @@ import { a2aTaskEventNotifier } from "@/agents/a2a/a2a-task-event-notifier";
 import { buildTaskCompletionNotification } from "@/agents/task-completion-notification";
 import logger from "@/logging";
 import { A2AArtifactModel, A2ATaskModel, AgentRunModel } from "@/models";
-import { reportRunnerCompletionDelivery } from "@/observability/metrics/runner";
+import { reportAgentRunCompletionDelivery } from "@/observability/metrics/agent-runtime";
 import { setSpanError } from "@/observability/tracing";
 import type { AgentRunCompletionTarget, IncomingEmail } from "@/types";
 
@@ -40,12 +40,12 @@ export async function watchTaskCompletion(params: {
                 text: notification,
               }),
           });
-          reportRunnerCompletionDelivery(params.target.type, "success");
+          reportAgentRunCompletionDelivery(params.target.type, "success");
           if (claimedExecution) {
             await AgentRunModel.markCompletionNotified(claimedExecution.id);
           }
         } catch (error) {
-          reportRunnerCompletionDelivery(params.target.type, "failed");
+          reportAgentRunCompletionDelivery(params.target.type, "failed");
           if (claimedExecution) {
             await AgentRunModel.releaseCompletionNotification(
               claimedExecution.id,

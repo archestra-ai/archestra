@@ -11,7 +11,7 @@ type InitialAgentListItem = Pick<
   | "description"
   | "icon"
   | "systemPrompt"
-  | "backgroundExecution"
+  | "runtime"
 >;
 
 export function filterAndSortInitialAgents(params: {

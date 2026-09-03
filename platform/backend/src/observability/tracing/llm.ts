@@ -19,8 +19,8 @@ import {
   ATTR_ARCHESTRA_APP_ID,
   ATTR_ARCHESTRA_APP_NAME,
   ATTR_ARCHESTRA_AUTH_METHOD,
-  ATTR_ARCHESTRA_EXECUTION_ID,
   ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
+  ATTR_ARCHESTRA_RUN_ID,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_GENAI_OPERATION_NAME,
   ATTR_GENAI_PROMPT,
@@ -61,7 +61,7 @@ const { captureContent } = config.observability.otel;
  * @param params.stream - Whether this is a streaming request
  * @param params.agent - The agent/profile object (optional)
  * @param params.sessionId - Conversation/session ID (optional)
- * @param params.executionId - Execution ID for tracking agent executions (optional)
+ * @param params.runId - Run ID for tracking Agent Runtime runs (optional)
  * @param params.externalAgentId - External agent ID from X-Archestra-Agent-Id header (optional)
  * @param params.source - The interaction source for trace filtering (optional)
  * @param params.serverAddress - The server address (base URL) of the LLM provider (optional)
@@ -78,7 +78,7 @@ export async function startActiveLlmSpan<T>(params: {
   teams?: SpanTeamInfo[];
   userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
-  executionId?: string;
+  runId?: string;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   authenticatedApp?: { id: string; name: string; clientId: string };
@@ -136,8 +136,8 @@ export async function startActiveLlmSpan<T>(params: {
     setTeamAttributes(span, params.userTeams, "user");
     setSessionId(span, params.sessionId);
 
-    if (params.executionId) {
-      span.setAttribute(ATTR_ARCHESTRA_EXECUTION_ID, params.executionId);
+    if (params.runId) {
+      span.setAttribute(ATTR_ARCHESTRA_RUN_ID, params.runId);
     }
     if (params.externalAgentId) {
       span.setAttribute(

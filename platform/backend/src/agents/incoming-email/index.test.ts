@@ -11,7 +11,7 @@ vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: vi.fn(),
 }));
 
-vi.mock("@/services/runners/start-task", () => ({
+vi.mock("@/services/agent-runtime/start-task", () => ({
   startDetachedAgentTask,
 }));
 
@@ -28,7 +28,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import ProcessedEmailModel from "@/models/processed-email";
 import { beforeEach, describe, expect, test } from "@/test";
-import type { AgentBackgroundExecution, IncomingEmail } from "@/types";
+import type { AgentRuntime, IncomingEmail } from "@/types";
 import { MAX_EMAIL_BODY_SIZE } from "./constants";
 import {
   buildEmailSessionId,
@@ -48,7 +48,7 @@ async function createTestInternalAgent(
     incomingEmailSecurityMode?: IncomingEmailSecurityMode;
     incomingEmailAllowedDomain?: string;
     scope?: "org" | "team" | "personal";
-    backgroundExecution?: AgentBackgroundExecution;
+    runtime?: AgentRuntime;
   },
 ) {
   const suffix = crypto.randomUUID().substring(0, 8);
@@ -65,7 +65,7 @@ async function createTestInternalAgent(
       incomingEmailSecurityMode:
         options?.incomingEmailSecurityMode ?? "private",
       incomingEmailAllowedDomain: options?.incomingEmailAllowedDomain ?? null,
-      backgroundExecution: options?.backgroundExecution ?? null,
+      runtime: options?.runtime ?? null,
     })
     .returning();
   return agent;
@@ -846,8 +846,8 @@ describe("processIncomingEmail with sendReply option", () => {
     makeTeam,
     makeMember,
   }) => {
-    const previousFeatureEnabled = config.agentBackgroundExecution.enabled;
-    config.agentBackgroundExecution.enabled = true;
+    const previousFeatureEnabled = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = true;
     try {
       const user = await makeUser();
       const org = await makeOrganization();
@@ -856,8 +856,8 @@ describe("processIncomingEmail with sendReply option", () => {
       const internalAgent = await createTestInternalAgent(org.id, {
         incomingEmailEnabled: true,
         incomingEmailSecurityMode: "public",
-        backgroundExecution: {
-          image: "example.invalid/background-agent:test",
+        runtime: {
+          image: "example.invalid/runtime-agent:test",
           command: null,
           inferenceProtocol: "openai_responses",
           backend: "kubernetes",
@@ -961,7 +961,7 @@ describe("processIncomingEmail with sendReply option", () => {
       });
       expect(mockSendReply).not.toHaveBeenCalled();
     } finally {
-      config.agentBackgroundExecution.enabled = previousFeatureEnabled;
+      config.agentRuntime.enabled = previousFeatureEnabled;
     }
   });
 

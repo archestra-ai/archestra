@@ -11,9 +11,9 @@ import { useFeature } from "@/lib/config/config.query";
  */
 export function AccountSectionNav() {
   const pathname = usePathname();
-  const executionEnabled = useFeature("agentBackgroundExecution");
+  const runtimeEnabled = useFeature("agentRuntime");
   const visibleSections = accountSections.filter(
-    (section) => !("feature" in section) || executionEnabled,
+    (section) => !("feature" in section) || runtimeEnabled,
   );
 
   // Longest match wins: every href starts with "/account", so a plain

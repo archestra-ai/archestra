@@ -499,7 +499,7 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
-# Jobs run Agent background executions. The control plane only needs to create,
+# Jobs run Agent Runtime workloads. The control plane only needs to create,
 # inspect, and remove them; it never mutates an existing Job or manages CronJobs.
 - apiGroups: ["batch"]
   resources: ["jobs"]

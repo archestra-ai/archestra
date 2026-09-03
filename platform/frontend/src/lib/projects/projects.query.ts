@@ -32,7 +32,7 @@ const {
   deleteSkillSandboxArtifact,
   getProject,
   getProjectConversations,
-  getProjectExecutions,
+  getProjectRuns,
   getProjectFiles,
   getProjectInstructions,
   getProjects,
@@ -135,15 +135,15 @@ export function useProjectConversations(
   });
 }
 
-export function useProjectExecutions(
+export function useProjectRuns(
   id: string | undefined,
   options?: { enabled?: boolean },
 ) {
   return useQuery({
-    queryKey: ["projects", id, "executions"],
+    queryKey: ["projects", id, "runs"],
     enabled: !!id && (options?.enabled ?? true),
     queryFn: async () => {
-      const { data, error } = await getProjectExecutions({
+      const { data, error } = await getProjectRuns({
         path: { id: id as string },
       });
       throwOnApiError(error, { allowNotFound: true });

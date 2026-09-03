@@ -3,7 +3,7 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2026-08-28
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -98,8 +98,8 @@ Archestra supports the following custom headers on LLM Proxy requests. All heade
 | `X-Archestra-User-Id`      | Associates the request with a specific Archestra user. Automatically included when using the built-in Archestra Chat.                                                                                                                                | `123e4567-e89b-12d3-a456-426614174000` |
 | `X-Archestra-Virtual-Key`  | Authenticates the acting Archestra user with a [passthrough virtual key](/docs/platform-llm-proxy-authentication#passthrough-virtual-keys) when the provider credential in `Authorization` is passed straight through. Unlike `X-Archestra-User-Id`, it is authenticated. | `arch_abc123def456...`                 |
 | `X-Archestra-Session-Id`   | Groups related LLM requests into a session - included in [trace attributes](/docs/platform-observability#distributed-tracing) as `gen_ai.conversation.id`.                                                                                           | `session-abc-123`                      |
-| `X-Archestra-Execution-Id` | Associates the request with a specific execution run. Used for the `agent_executions_total` Prometheus metric which counts unique executions. See [Observability](/docs/platform-observability).                                                     | `exec-run-456`                         |
-| `X-Archestra-Meta`         | Composite header combining agent ID, execution ID, and session ID in one value. Format: `<agent-id>/<execution-id>/<session-id>`. Any segment can be empty. Individual headers take precedence over meta header values. Values must not contain `/`. | `my-agent/exec-123/session-456`        |
+| `X-Archestra-Run-Id` | Associates the request with a specific run. Used for the `agent_runs_total` Prometheus metric, which counts unique runs. See [Observability](/docs/platform-observability).                                                     | `run-456`                         |
+| `X-Archestra-Meta`         | Composite header combining agent ID, run ID, and session ID in one value. Format: `<agent-id>/<run-id>/<session-id>`. Any segment can be empty. Individual headers take precedence over meta header values. Values must not contain `/`. | `my-agent/run-123/session-456`        |
 
 ### Usage
 

@@ -87,7 +87,7 @@ export const ATTR_GENAI_COMPLETION = "gen_ai.completion";
 // --- archestra custom ---
 export const ATTR_ARCHESTRA_AGENT_TYPE = "archestra.agent.type";
 export const ATTR_ARCHESTRA_COST = "archestra.cost";
-export const ATTR_ARCHESTRA_EXECUTION_ID = "archestra.execution.id";
+export const ATTR_ARCHESTRA_RUN_ID = "archestra.run.id";
 export const ATTR_ARCHESTRA_EXTERNAL_AGENT_ID = "archestra.external_agent_id";
 export const ATTR_ARCHESTRA_TRIGGER_SOURCE = "archestra.trigger.source";
 export const ATTR_ARCHESTRA_AUTH_METHOD = "archestra.auth.method";

@@ -34,7 +34,7 @@ export const accountSections = [
     label: "Connections",
     href: "/account/connections",
     Icon: PlugZap,
-    feature: "agentBackgroundExecution" as const,
+    feature: "agentRuntime" as const,
   },
   {
     id: "gateway-token",

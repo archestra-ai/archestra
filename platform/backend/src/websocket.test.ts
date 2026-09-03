@@ -23,8 +23,8 @@ import {
   AgentRunShareModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { projectService } from "@/services/project";
-import { agentRunTranscriptStore } from "@/services/runners/transcript-store";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import websocketService from "@/websocket";
 
@@ -318,7 +318,7 @@ describe("websocket Agent run authorization and cleanup", () => {
       actorKind: "user",
       actorId: owner.id,
       actorUserId: owner.id,
-      deploymentName: `agent-run-${task.id}`,
+      workloadName: `agent-run-${task.id}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
@@ -387,7 +387,7 @@ describe("websocket Agent run authorization and cleanup", () => {
       actorKind: "user",
       actorId: owner.id,
       actorUserId: owner.id,
-      deploymentName: `agent-run-${task.id}`,
+      workloadName: `agent-run-${task.id}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
@@ -498,7 +498,7 @@ describe("websocket Agent run authorization and cleanup", () => {
       actorId: owner.id,
       actorUserId: owner.id,
       projectId: project.id,
-      deploymentName: `agent-run-${task.id}`,
+      workloadName: `agent-run-${task.id}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
@@ -543,7 +543,7 @@ describe("websocket Agent run authorization and cleanup", () => {
     );
   });
 
-  test("returns retained logs after an Agent execution pod is removed", async ({
+  test("returns retained logs after an Agent run pod is removed", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -574,7 +574,7 @@ describe("websocket Agent run authorization and cleanup", () => {
       actorKind: "user",
       actorId: owner.id,
       actorUserId: owner.id,
-      deploymentName: `agent-run-${task.id}`,
+      workloadName: `agent-run-${task.id}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
@@ -657,7 +657,7 @@ describe("websocket Agent run authorization and cleanup", () => {
       actorKind: "user",
       actorId: owner.id,
       actorUserId: owner.id,
-      deploymentName: `agent-run-${task.id}`,
+      workloadName: `agent-run-${task.id}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
@@ -741,7 +741,7 @@ describe("websocket Agent run authorization and cleanup", () => {
       actorKind: "user",
       actorId: owner.id,
       actorUserId: owner.id,
-      deploymentName: `agent-run-${task.id}`,
+      workloadName: `agent-run-${task.id}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
       virtualApiKeyId: null,

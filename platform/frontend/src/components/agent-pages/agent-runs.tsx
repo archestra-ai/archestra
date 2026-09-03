@@ -1,13 +1,12 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { ScrollText, TerminalSquare } from "lucide-react";
+import { TerminalSquare } from "lucide-react";
 import { useState } from "react";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
-import { DeploymentConsoleTabList } from "@/components/deployment-console";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +17,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { type AgentRun, useAgentRuns } from "@/lib/agent-runtime.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
@@ -130,79 +128,63 @@ export function AgentRuns({ agentId }: { agentId: string }) {
           key={selected.taskId}
           run={selected}
           canAttach={selected.actorUserId === session?.user.id}
+          onClosed={() => void refetch()}
         />
       )}
     </div>
   );
 }
 
-function RunDetails({ run, canAttach }: { run: AgentRun; canAttach: boolean }) {
+function RunDetails({
+  run,
+  canAttach,
+  onClosed,
+}: {
+  run: AgentRun;
+  canAttach: boolean;
+  onClosed: () => void;
+}) {
   const active = !run.endedAt;
-  const defaultTab = active && canAttach ? "shell" : "logs";
-  const [tab, setTab] = useState(defaultTab);
 
   return (
-    <Tabs
-      value={tab}
-      onValueChange={setTab}
-      className="flex min-h-0 flex-col gap-0"
-    >
-      <section className="flex min-h-0 flex-1 flex-col">
-        <div className="flex flex-shrink-0 items-center justify-between gap-4 border-b px-5 py-3.5">
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <h2 className="truncate text-sm font-medium">{run.title}</h2>
-              <AgentRunState
-                state={run.state}
-                statusReason={run.statusReason}
-                lastModelActivityAt={run.lastModelActivityAt}
-                startedAt={run.startedAt}
-                endedAt={run.endedAt}
-                compact
-              />
-            </div>
-            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
-              <span className="font-mono">{shortTaskId(run.taskId)}</span>
-              <span aria-hidden>·</span>
-              <span>{new Date(run.startedAt).toLocaleString()}</span>
-            </p>
-          </div>
-          <DeploymentConsoleTabList
-            variant="compact"
-            tabs={[
-              {
-                value: "logs",
-                label: "Output",
-                icon: <ScrollText className="size-3" />,
-              },
-              {
-                value: "shell",
-                label: "Terminal",
-                icon: <TerminalSquare className="size-3" />,
-                disabled: !active || !canAttach,
-                disabledReason: !active
-                  ? "The terminal is available only while the run is running"
-                  : "Only the person who started this run can open its terminal",
-              },
-            ]}
-          />
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-          {active && <AgentRunLiveness run={run} />}
-          <TabsContent value="logs" className="flex min-h-0 flex-1 flex-col">
-            <AgentRunLogs run={run} title="" />
-          </TabsContent>
-          <TabsContent value="shell" className="flex min-h-0 flex-1 flex-col">
-            <AgentRunTerminal
-              taskId={run.taskId}
-              active={tab === "shell" && active && canAttach}
-              title=""
+    <section className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-shrink-0 items-center gap-4 border-b px-5 py-3.5">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-sm font-medium">{run.title}</h2>
+            <AgentRunState
+              state={run.state}
+              statusReason={run.statusReason}
+              lastModelActivityAt={run.lastModelActivityAt}
+              startedAt={run.startedAt}
+              endedAt={run.endedAt}
+              compact
             />
-          </TabsContent>
+          </div>
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+            <span className="font-mono">{shortTaskId(run.taskId)}</span>
+            <span aria-hidden>·</span>
+            <span>{new Date(run.startedAt).toLocaleString()}</span>
+          </p>
         </div>
-      </section>
-    </Tabs>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        {active && <AgentRunLiveness run={run} />}
+        {active && canAttach ? (
+          <AgentRunTerminal
+            taskId={run.taskId}
+            active
+            title=""
+            showDisconnectedStatus={false}
+            onError={onClosed}
+            onClosed={onClosed}
+          />
+        ) : (
+          <AgentRunLogs run={run} title="" />
+        )}
+      </div>
+    </section>
   );
 }
 

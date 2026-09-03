@@ -167,6 +167,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
               setConnectionCommand(command);
               if (command) setLiveTerminalTaskId(taskId);
             }}
+            onError={() => void query.refetch()}
             onClosed={() => void query.refetch()}
           />
         ) : run ? (

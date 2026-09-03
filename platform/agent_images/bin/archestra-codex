@@ -7,6 +7,7 @@ if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
 fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 export CODEX_HOME="${runtime_dir}/codex"
 mkdir -p "${CODEX_HOME}"
 attention_hook="${runtime_dir}/codex-attention-hook.sh"
@@ -54,6 +55,36 @@ jq -n --arg cmd "${attention_hook}" '{hooks:{
   SessionEnd:[{hooks:[{type:"command",command:$cmd,timeout:3}]}]
 }}' > "${CODEX_HOME}/hooks.json"
 chmod 0600 "${CODEX_HOME}/hooks.json"
+notify_config=""
+if [[ "${runtime_mode}" == "one_shot" ]] \
+  && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
+  notify_script="${runtime_dir}/codex-notify.sh"
+  cat > "${notify_script}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+payload="${1:-}"
+if [[ -z "${payload}" ]]; then
+  exit 0
+fi
+task="$(cat "${runtime_dir}/task.md" 2>/dev/null || true)"
+answer="$(jq -r --arg task "${task}" '
+  if .type == "agent-turn-complete"
+    and ((.["input-messages"] // []) | index($task)) != null
+  then
+    .["last-assistant-message"] // empty
+  else
+    empty
+  end
+' <<<"${payload}")"
+if [[ -n "${answer}" ]]; then
+  printf '%s\n' "${answer}" > "${runtime_dir}/final-answer.txt"
+  touch "${runtime_dir}/turn-complete"
+fi
+HOOK
+  chmod 0700 "${notify_script}"
+  notify_config="notify = [$(jq -Rn --arg value "${notify_script}" '$value')]"
+fi
 developer_instructions="$({
   printf '%s\n\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
   printf '%s' "Complete the delegated task fully in this isolated runner. Use the local shell and file tools directly. Do not stop after announcing a plan. Verify the work and report the concrete result."
@@ -64,6 +95,7 @@ model_provider = "archestra"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 developer_instructions = ${developer_instructions}
+${notify_config}
 
 [model_providers.archestra]
 name = "Archestra"
@@ -98,7 +130,7 @@ common_args=(
   --config model_provider='"archestra"'
 )
 
-case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
+case "${runtime_mode}" in
   interactive)
     # No subcommand means Codex's native full-screen TUI. The positional prompt
     # starts the first turn; subsequent terminal input stays in the same Codex
@@ -106,11 +138,19 @@ case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
     exec codex "${common_args[@]}" -- "$(cat "${task_file}")"
     ;;
   one_shot)
-    exec codex exec \
-      "${common_args[@]}" \
-      --skip-git-repo-check \
-      --color always \
-      -- "$(cat "${task_file}")"
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
+      exec codex exec \
+        "${common_args[@]}" \
+        --skip-git-repo-check \
+        --color always \
+        -- "$(cat "${task_file}")"
+    fi
+
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    exec "${script_dir}/archestra-tui-run" \
+      "${runtime_dir}/turn-complete" \
+      "${runtime_dir}/final-answer.txt" \
+      codex "${common_args[@]}" -- "$(cat "${task_file}")"
     ;;
   *)
     echo "archestra: unknown Agent Runtime mode" >&2

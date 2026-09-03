@@ -474,7 +474,7 @@ export function AssignedToolsTable({
       },
       {
         id: "callPolicy",
-        size: 230,
+        size: 150,
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -498,7 +498,9 @@ export function AssignedToolsTable({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-[200px] justify-start bg-muted px-3 text-xs"
+                // 119px is the exact width of the call policy picker this
+                // stands in for, so the column reads as one stack of controls.
+                className="h-8 w-[119px] justify-start bg-muted px-3 text-xs"
                 onClick={(event) => {
                   event.stopPropagation();
                   onToolClick(row.original);
@@ -533,7 +535,7 @@ export function AssignedToolsTable({
                       )
                     }
                     disabled={isUpdating || !hasPermission}
-                    size="table"
+                    size="sm"
                   />
                   {isUpdating && (
                     <LoadingState className="ml-1" variant="inline" />

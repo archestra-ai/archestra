@@ -105,11 +105,11 @@ function buildAgentRuntimeBootstrapScript(): string {
     // mirror down before it is copied out — the durable transcript (and the
     // completion message built from it) arrives empty while the pane showed a
     // full answer.
-    `printf '%s\n' '/bin/sh ${AGENT_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; echo; echo "[agent-runtime] agent session exited"; sleep 2; exit "$status"' > ${AGENT_RUNTIME_DIR}/session.sh`,
+    `printf '%s\n' '/bin/sh ${AGENT_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; sleep 2; exit "$status"' > ${AGENT_RUNTIME_DIR}/session.sh`,
     // Create the pane before starting the Agent so its output cannot race the
     // pipe setup. A fast one-shot client used to finish before pipe-pane was
     // attached, leaving its durable transcript empty.
-    `tmux new-session -d -s ${AGENT_RUNTIME_TMUX_SESSION} 'while :; do sleep 1; done'`,
+    `tmux new-session -d -x 120 -y 40 -s ${AGENT_RUNTIME_TMUX_SESSION} 'while :; do sleep 1; done'`,
     // Let browser terminals send wheel events to tmux. Its WheelUpPane binding
     // enters copy mode and scrolls tmux's own history; without mouse mode,
     // xterm falls back to cursor-key sequences that get typed into the pane.

@@ -76,6 +76,17 @@ describe("extractFinalAnswer", () => {
     expect(extractFinalAnswer(transcript)).toBe("the real answer");
   });
 
+  test("stops at the end fence before the preserved final TUI frame", () => {
+    const transcript = [
+      "===ARCHESTRA-FINAL-ANSWER===",
+      "the durable answer",
+      "===ARCHESTRA-FINAL-ANSWER-END===",
+      "\u001b[2J\u001b[H╭─ Codex ─╮",
+      "│ completed │",
+    ].join("\n");
+    expect(extractFinalAnswer(transcript)).toBe("the durable answer\n");
+  });
+
   test("falls back to the transcript when the fence has nothing after it", () => {
     // The runtime died mid-write; a partial recording beats an empty answer.
     const transcript = "some output\n===ARCHESTRA-FINAL-ANSWER===\n";

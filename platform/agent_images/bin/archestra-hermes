@@ -7,6 +7,7 @@ if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_chat" ]]; then
 fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 export HERMES_HOME="${runtime_dir}/hermes"
 mkdir -p "${HERMES_HOME}"
 attention_plugin_dir="${HERMES_HOME}/plugins/archestra-attention"
@@ -86,6 +87,37 @@ def _attention(action: str, label: str = "") -> None:
     except (OSError, subprocess.SubprocessError):
         pass
 PLUGIN
+completion_hook=""
+if [[ "${runtime_mode}" == "one_shot" ]] \
+  && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
+  completion_hook="${runtime_dir}/hermes-completion-hook.sh"
+  cat > "${completion_hook}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+payload="$(cat)"
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+session_id="$(jq -r '.session_id // empty' <<<"${payload}")"
+session_file="${runtime_dir}/hermes-main-session"
+if [[ "${event}" == "on_session_start" ]]; then
+  if [[ -n "${session_id}" && ! -e "${session_file}" ]]; then
+    printf '%s\n' "${session_id}" > "${session_file}"
+  fi
+  exit 0
+fi
+if [[ "${event}" != "post_llm_call" ]] \
+  || [[ ! -s "${session_file}" ]] \
+  || [[ "${session_id}" != "$(cat "${session_file}")" ]]; then
+  exit 0
+fi
+answer="$(jq -r '.extra.assistant_response // empty' <<<"${payload}")"
+if [[ -n "${answer}" ]]; then
+  printf '%s\n' "${answer}" > "${runtime_dir}/final-answer.txt"
+  touch "${runtime_dir}/turn-complete"
+fi
+HOOK
+  chmod 0700 "${completion_hook}"
+fi
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" \
@@ -93,7 +125,8 @@ jq -n \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg gateway_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg system_prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" \
-  '{
+  --arg completion_hook "${completion_hook}" \
+  '({
     providers:{archestra:{
       name:"Archestra",
       base_url:$base_url,
@@ -119,7 +152,13 @@ jq -n \
         "X-Archestra-Session-Id":$task_id
       }
     }}
-  }' > "${HERMES_HOME}/config.yaml"
+  } + if $completion_hook == "" then {} else {
+    hooks_auto_accept:true,
+    hooks:{
+      on_session_start:[{command:$completion_hook}],
+      post_llm_call:[{command:$completion_hook}]
+    }
+  } end)' > "${HERMES_HOME}/config.yaml"
 chmod 0600 "${HERMES_HOME}/config.yaml"
 
 # Hermes reads its ordinary config from ~/.hermes.
@@ -128,13 +167,68 @@ ln -sf "${HERMES_HOME}/config.yaml" "${HOME}/.hermes/config.yaml"
 task_file="${runtime_dir}/task.md"
 printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 
+completion_watcher="${runtime_dir}/hermes-completion-watch.py"
+cat > "${completion_watcher}" <<'PYTHON'
+import sqlite3
+import sys
+import time
+from pathlib import Path
+
+database_path = Path(sys.argv[1])
+task = sys.argv[2]
+answer_path = Path(sys.argv[3])
+done_path = Path(sys.argv[4])
+
+while not done_path.exists():
+    try:
+        if database_path.exists():
+            with sqlite3.connect(database_path, timeout=0.2) as database:
+                session = database.execute(
+                    """
+                    SELECT sessions.id
+                    FROM sessions
+                    JOIN messages ON messages.session_id = sessions.id
+                    WHERE sessions.source = 'tui'
+                      AND sessions.parent_session_id IS NULL
+                      AND messages.role = 'user'
+                      AND messages.content = ?
+                    ORDER BY sessions.started_at DESC
+                    LIMIT 1
+                    """,
+                    (task,),
+                ).fetchone()
+                if session:
+                    assistant = database.execute(
+                        """
+                        SELECT content
+                        FROM messages
+                        WHERE session_id = ?
+                          AND role = 'assistant'
+                          AND active = 1
+                          AND finish_reason IS NOT NULL
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (session[0],),
+                    ).fetchone()
+                    if assistant and assistant[0].strip():
+                        answer_path.write_text(f"{assistant[0].strip()}\n", encoding="utf-8")
+                        done_path.touch()
+                        break
+    except (OSError, sqlite3.Error):
+        pass
+    time.sleep(0.2)
+PYTHON
+chmod 0600 "${completion_watcher}"
+
 common_args=(
   --provider archestra
   --model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
   --yolo
+  --accept-hooks
 )
 
-case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
+case "${runtime_mode}" in
   interactive)
     exec hermes chat \
       "${common_args[@]}" \
@@ -142,16 +236,34 @@ case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
       --query "$(cat "${task_file}")"
     ;;
   one_shot)
-    set +e
-    hermes chat \
-      "${common_args[@]}" \
-      --query "$(cat "${task_file}")" \
-      2>&1 | tee "${runtime_dir}/hermes-output.log"
-    status=${PIPESTATUS[0]}
-    set -e
-    if [[ ${status} -ne 0 ]] || grep -Eq 'HTTP [45][0-9]{2}:|Traceback \(most recent call last\)|LLM request failed|api_validation_error|Context length exceeded|\[exit [1-9][0-9]*\]|Failed to ' "${runtime_dir}/hermes-output.log"; then
-      exit 1
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
+      set +e
+      hermes chat \
+        "${common_args[@]}" \
+        --query "$(cat "${task_file}")" \
+        2>&1 | tee "${runtime_dir}/hermes-output.log"
+      status=${PIPESTATUS[0]}
+      set -e
+      if [[ ${status} -ne 0 ]] || grep -Eq 'HTTP [45][0-9]{2}:|Traceback \(most recent call last\)|LLM request failed|api_validation_error|Context length exceeded|\[exit [1-9][0-9]*\]|Failed to ' "${runtime_dir}/hermes-output.log"; then
+        exit 1
+      fi
+      exit 0
     fi
+
+    python3 "${completion_watcher}" \
+      "${HERMES_HOME}/state.db" \
+      "$(cat "${task_file}")" \
+      "${runtime_dir}/final-answer.txt" \
+      "${runtime_dir}/turn-complete" &
+
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    exec "${script_dir}/archestra-tui-run" \
+      "${runtime_dir}/turn-complete" \
+      "${runtime_dir}/final-answer.txt" \
+      hermes chat \
+        "${common_args[@]}" \
+        --tui \
+        --query "$(cat "${task_file}")"
     ;;
   *)
     echo "archestra: unknown Agent Runtime mode" >&2

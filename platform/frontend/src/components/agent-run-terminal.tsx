@@ -22,6 +22,7 @@ export function AgentRunTerminal({
   showManualCommand,
   showDisconnectedStatus,
   onCommandChange,
+  onError,
   onClosed,
 }: {
   taskId: string;
@@ -30,6 +31,7 @@ export function AgentRunTerminal({
   showManualCommand?: boolean;
   showDisconnectedStatus?: boolean;
   onCommandChange?: (command: string | null) => void;
+  onError?: () => void;
   onClosed?: () => void;
 }) {
   const transport = useMemo<ExecSessionTransport>(
@@ -47,6 +49,7 @@ export function AgentRunTerminal({
       showManualCommand={showManualCommand}
       showDisconnectedStatus={showDisconnectedStatus}
       onCommandChange={onCommandChange}
+      onError={onError}
       onClosed={onClosed}
     />
   );

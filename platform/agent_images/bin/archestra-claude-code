@@ -162,34 +162,11 @@ HOOK
       "${settings_file}" > "${settings_tmp}"
     mv "${settings_tmp}" "${settings_file}"
 
-    claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" &
-    claude_pid=$!
-
-    # Bounded by the run's own lifetime: the pod's TTL and the platform's
-    # cancellation both outrank this loop, so it never becomes the reason a
-    # session hangs. A vanished process without a marker means Claude Code
-    # exited on its own — normal for an error path.
-    while kill -0 "${claude_pid}" 2>/dev/null; do
-      if [[ -f "${done_marker}" ]]; then
-        # Let the pane settle on the finished frame before tearing it down,
-        # then end the session the way a person would.
-        sleep 2
-        kill -TERM "${claude_pid}" 2>/dev/null || true
-        break
-      fi
-      sleep 2
-    done
-    wait "${claude_pid}" 2>/dev/null || true
-
-    # The fence tells the platform where the prose starts; without it the
-    # "answer" would be a recording of the TUI redrawing itself.
-    printf '\n===ARCHESTRA-FINAL-ANSWER===\n'
-    if [[ -s "${answer_file}" ]]; then
-      cat "${answer_file}"
-    else
-      echo "The session ended without producing a final message."
-    fi
-    printf '\n'
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    exec "${script_dir}/archestra-tui-run" \
+      "${done_marker}" \
+      "${answer_file}" \
+      claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
     ;;
   *)
     echo "archestra: unknown Agent Runtime mode" >&2

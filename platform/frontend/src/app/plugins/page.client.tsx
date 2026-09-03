@@ -497,7 +497,7 @@ function PluginsList() {
     },
     {
       id: "source",
-      size: 250,
+      size: 180,
       header: "Source",
       cell: ({ row }) => {
         const plugin = row.original;
@@ -922,6 +922,7 @@ function PluginsList() {
                     fixedWidthColumnIds={[
                       "compatibility",
                       "visibility",
+                      "source",
                       "updatedAt",
                     ]}
                     flexibleColumnIds={["displayName"]}

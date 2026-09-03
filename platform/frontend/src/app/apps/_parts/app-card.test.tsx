@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAppAccess } from "@/lib/apps/use-app-access";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppCard } from "./app-card";
 
@@ -30,7 +30,10 @@ vi.mock("@/lib/app.query", () => ({
   useApp: () => ({ data: undefined }),
 }));
 
-vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/apps/use-app-access", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/apps/use-app-access")>()),
+  useAppAccess: vi.fn(),
+}));
 
 // The card reads the locked-chat flag to decide whether to offer "Open as
 // locked chat". Off here: these tests are about the card's ordinary actions.
@@ -68,12 +71,14 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     children,
     onSelect,
     variant,
+    ...props
   }: {
     children: ReactNode;
     onSelect?: (e: { preventDefault: () => void }) => void;
     variant?: string;
-  }) => (
+  } & React.HTMLAttributes<HTMLDivElement>) => (
     <div
+      {...props}
       role="menuitem"
       data-variant={variant}
       tabIndex={0}
@@ -93,15 +98,18 @@ beforeEach(() => {
   vi.mocked(useRouter).mockReturnValue({
     push: pushMock,
   } as unknown as ReturnType<typeof useRouter>);
-  vi.mocked(useHasPermissions).mockReturnValue({
-    data: true,
-  } as ReturnType<typeof useHasPermissions>);
-  // The card now derives "is this someone else's app" from the server-computed
-  // viewerRole, not the session, but useSession is still mocked so the shared
-  // auth.query mock resolves cleanly.
-  vi.mocked(useSession).mockReturnValue({
-    data: { user: { id: "user-1" } },
-  } as ReturnType<typeof useSession>);
+  vi.mocked(useAppAccess).mockReturnValue({
+    isAdmin: true,
+    isTeamAdmin: true,
+    canUpdate: true,
+    canDelete: true,
+    currentUserId: "user-1",
+    userTeamIds: new Set(),
+    isPending: false,
+    canModify: true,
+    canEdit: true,
+    canDeleteApp: true,
+  } as ReturnType<typeof useAppAccess>);
 });
 
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
@@ -277,6 +285,39 @@ describe("OwnedAppCard", () => {
     expect(screen.getByTestId("delete-dialog")).toHaveTextContent(
       "Delete My Owned App",
     );
+  });
+
+  it("disables settings and delete with the scope reason when the app is outside the caller's scope", () => {
+    const onOpenSettings = vi.fn();
+    vi.mocked(useAppAccess).mockReturnValue({
+      isAdmin: false,
+      isTeamAdmin: false,
+      canUpdate: true,
+      canDelete: true,
+      currentUserId: "user-2",
+      userTeamIds: new Set(),
+      isPending: false,
+      canModify: false,
+      canEdit: false,
+      canDeleteApp: false,
+    } as ReturnType<typeof useAppAccess>);
+
+    render(<AppCard app={ownedApp} onOpenSettings={onOpenSettings} />);
+
+    const settings = screen.getByRole("menuitem", { name: "Settings" });
+    const deleteAction = screen.getByRole("menuitem", { name: "Delete" });
+    expect(settings).toHaveAttribute("aria-disabled", "true");
+    expect(deleteAction).toHaveAttribute("aria-disabled", "true");
+    expect(
+      document.getElementById(
+        settings.getAttribute("aria-describedby") as string,
+      ),
+    ).toHaveTextContent("Only an admin can change this org-wide app");
+
+    fireEvent.click(settings);
+    fireEvent.click(deleteAction);
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("delete-dialog")).not.toBeInTheDocument();
   });
 
   it("folds team names into the scope pill's label", () => {

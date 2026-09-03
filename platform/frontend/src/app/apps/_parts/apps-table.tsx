@@ -32,6 +32,11 @@ import {
   useOpenExternalAppInChat,
   usePinApp,
 } from "@/lib/app.query";
+import {
+  appActionDisabledReason,
+  computeAppAccess,
+  useAppAccessContext,
+} from "@/lib/apps/use-app-access";
 import type { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppTypeIcon } from "./app-card";
@@ -61,6 +66,7 @@ export function AppsTable({
   const openOwnedApp = useOpenAppInChat();
   const openExternalApp = useOpenExternalAppInChat();
   const pinApp = usePinApp();
+  const accessContext = useAppAccessContext();
   // Row-scoped "Opening…" indicator; mirrors the card overlay. Stays set
   // through the redirect (the table unmounts on success); only a failure
   // resets it.
@@ -113,9 +119,16 @@ export function AppsTable({
     createSelectColumn<AppListItem>({
       rowLabel: (app) => `Select ${app.name}`,
       allLabel: "Select all apps on this page",
-      canSelect: (app) => app.source === "owned",
-      disabledReason: () =>
-        "Installed apps are managed through their MCP server",
+      canSelect: (app) =>
+        app.source === "owned" && computeAppAccess(app, accessContext).canEdit,
+      disabledReason: (app) =>
+        app.source === "owned"
+          ? (appActionDisabledReason({
+              app,
+              access: computeAppAccess(app, accessContext),
+              action: "update",
+            }) ?? "You do not have permission to modify this app")
+          : "Installed apps are managed through their MCP server",
     }),
     {
       id: "name",
@@ -146,7 +159,7 @@ export function AppsTable({
     },
     {
       id: "sharing",
-      size: 180,
+      size: 160,
       header: "Sharing",
       cell: ({ row }) => {
         const app = row.original;
@@ -208,25 +221,43 @@ export function AppsTable({
     },
   ];
 
-  const ownedAppActions = (app: OwnedApp): TableRowAction[] => [
-    {
-      icon: <Settings className="h-4 w-4" />,
-      label: "Settings",
-      onClick: () => onOpenSettings({ id: app.id }),
-    },
-    {
-      icon: <SquareArrowOutUpRight className="h-4 w-4" />,
-      label: "Open in new tab",
-      onClick: () => window.open(`/a/${app.id}`, "_blank", "noreferrer"),
-    },
-    {
-      icon: <Trash2 className="h-4 w-4" />,
-      label: "Delete",
-      variant: "destructive",
-      permissions: { app: ["delete"] },
-      onClick: () => setDeletingApp(app),
-    },
-  ];
+  const ownedAppActions = (app: OwnedApp): TableRowAction[] => {
+    const access = computeAppAccess(app, accessContext);
+    const settingsDisabledReason = appActionDisabledReason({
+      app,
+      access,
+      action: "update",
+    });
+    const deleteDisabledReason = appActionDisabledReason({
+      app,
+      access,
+      action: "delete",
+    });
+    return [
+      {
+        icon: <Settings className="h-4 w-4" />,
+        label: "Settings",
+        permissions: { app: ["update"] },
+        disabled: !!settingsDisabledReason,
+        disabledTooltip: settingsDisabledReason,
+        onClick: () => onOpenSettings({ id: app.id }),
+      },
+      {
+        icon: <SquareArrowOutUpRight className="h-4 w-4" />,
+        label: "Open in new tab",
+        onClick: () => window.open(`/a/${app.id}`, "_blank", "noreferrer"),
+      },
+      {
+        icon: <Trash2 className="h-4 w-4" />,
+        label: "Delete",
+        permissions: { app: ["delete"] },
+        disabled: !!deleteDisabledReason,
+        disabledTooltip: deleteDisabledReason,
+        variant: "destructive" as const,
+        onClick: () => setDeletingApp(app),
+      },
+    ];
+  };
 
   const externalAppActions = (
     app: Extract<AppListItem, { source: "external" }>,
@@ -269,6 +300,8 @@ export function AppsTable({
         emptyIcon={AppWindow}
         emptyMessage="No apps here yet"
         hidePaginationWhenSinglePage
+        fixedWidthColumnIds={["sharing"]}
+        flexibleColumnIds={["name"]}
       />
 
       {deletingApp && (

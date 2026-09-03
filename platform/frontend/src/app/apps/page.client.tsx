@@ -22,6 +22,7 @@ import {
 } from "@/components/label-select";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
+import { AppTeamAccessWarning } from "@/components/mcp-app/app-team-access-warning";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -53,6 +54,10 @@ import {
   useBulkUpdateAppVisibility,
 } from "@/lib/app.query";
 import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
+import {
+  computeAppAccess,
+  useAppAccessContext,
+} from "@/lib/apps/use-app-access";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
@@ -333,6 +338,12 @@ export function AppSection({
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const bulkDelete = useBulkDeleteApps();
   const bulkVisibility = useBulkUpdateAppVisibility();
+  const accessContext = useAppAccessContext();
+  const canSelect = useCallback(
+    (app: AppListItem) =>
+      app.source === "owned" && computeAppAccess(app, accessContext).canEdit,
+    [accessContext],
+  );
   const {
     rowSelection,
     setRowSelection,
@@ -344,7 +355,7 @@ export function AppSection({
   } = useBulkSelection({
     rows: apps,
     getId: getAppRowKey,
-    canSelect: (app) => app.source === "owned",
+    canSelect,
     filterSignature: `${title}:${apps.map(getAppRowKey).join(",")}`,
     matchDescription: "were built here",
   });
@@ -353,7 +364,7 @@ export function AppSection({
     getRowId: getAppRowKey,
     rowSelection,
     setRowSelection,
-    canSelect: (app) => app.source === "owned",
+    canSelect,
     rangeSelection,
   });
   const selectedOwnedApps = selected.filter(
@@ -409,9 +420,7 @@ export function AppSection({
         }
         cards={
           <TableCardSelectionScope
-            rowIds={apps
-              .filter((app) => app.source === "owned")
-              .map(getAppRowKey)}
+            rowIds={apps.filter(canSelect).map(getAppRowKey)}
             onVisibleRowIdsChange={onPageRowIdsChange}
           >
             <TableCardGrid>
@@ -465,9 +474,20 @@ export function AppSection({
           items={selectedOwnedApps.map((app) => ({
             id: app.id,
             scope: app.scope,
-            teams: [],
-            users: [],
+            teams: app.teams,
+            users: app.users,
           }))}
+          renderTeamSelectionNotice={(teamIds) => (
+            <AppTeamAccessWarning
+              scope="team"
+              selectedTeamIds={teamIds}
+              isAppAdmin={accessContext.isAdmin}
+              userTeamIds={accessContext.userTeamIds}
+              subject={
+                selectedOwnedApps.length === 1 ? "this app" : "these apps"
+              }
+            />
+          )}
           onApply={async (change) => {
             const outcome = await bulkVisibility.mutateAsync({
               apps: selectedApps,

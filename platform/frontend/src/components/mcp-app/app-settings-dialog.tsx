@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useApp } from "@/lib/app.query";
+import { useAppAccess } from "@/lib/apps/use-app-access";
 
 // Ties the footer's Save button to the settings form via the HTML `form` attr.
 // Only one settings dialog is open at a time, so a single id is safe.
@@ -42,6 +43,7 @@ export function AppSettingsDialog({
     isLoadingError,
     refetch,
   } = useApp(open ? appId : null, { toastOnError: false });
+  const access = useAppAccess(app);
   const [status, setStatus] = useState({ saving: false, disabled: false });
 
   return (
@@ -91,9 +93,9 @@ export function AppSettingsDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            Cancel
+            {app && !access.isPending && !access.canEdit ? "Close" : "Cancel"}
           </Button>
-          {app ? (
+          {app && !access.isPending && access.canEdit ? (
             <Button
               type="submit"
               form={APP_SETTINGS_FORM_ID}

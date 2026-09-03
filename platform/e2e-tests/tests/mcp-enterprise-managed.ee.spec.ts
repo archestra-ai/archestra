@@ -509,7 +509,7 @@ async function waitForCatalogTool(params: {
     const response = await makeApiRequest({
       request: params.request,
       method: "get",
-      urlSuffix: "/api/tools?limit=200",
+      urlSuffix: "/api/tools?limit=100",
     });
     const data = (await response.json()) as
       | Array<{ id: string; name: string }>

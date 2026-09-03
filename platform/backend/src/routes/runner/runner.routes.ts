@@ -1,4 +1,8 @@
-import { RouteId } from "@archestra/shared";
+import {
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -354,8 +358,9 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         operationId: RouteId.GetMyAgentExecutions,
         description: "List Background executions started by this user",
         tags: ["Agents"],
+        querystring: PaginationQuerySchema,
         response: constructResponseSchema(
-          z.array(SelectAgentExecutionSessionSchema),
+          createPaginatedResponseSchema(SelectAgentExecutionSessionSchema),
         ),
       },
     },
@@ -364,6 +369,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         await AgentRunModel.listForActor({
           actorUserId: request.user.id,
           organizationId: request.organizationId,
+          pagination: request.query,
         }),
       );
     },

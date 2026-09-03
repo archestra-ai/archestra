@@ -106,6 +106,7 @@ function makeSessionSummary(
     unattributedReason: null,
     virtualKeys: [],
     lastUserMessagePreview: null,
+    lastInteractionId: null,
     lastInteractionType: null,
     conversationTitle: null,
     claudeCodeTitle: null,

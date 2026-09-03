@@ -49,6 +49,7 @@ import type {
   InsertInteraction,
   Interaction,
   InteractionAuthMethod,
+  InteractionSummary,
   InteractionVirtualKey,
   SessionSummary,
   SessionUnattributedReason,
@@ -623,6 +624,127 @@ class InteractionModel {
         requestType: "main" | "subagent";
         externalAgentIdLabel: string | null;
       })[],
+      Number(total),
+      pagination,
+    );
+  }
+
+  /**
+   * Paginated interaction metadata for list views. Content columns are
+   * deliberately absent: they dominate row size and require decryption and
+   * delta reconstruction, while list rows render only scalar usage metadata.
+   */
+  static async findSummariesPaginated(params: {
+    pagination: PaginationQuery;
+    sorting?: SortingQuery;
+    requestingUserId?: string;
+    isAgentAdmin?: boolean;
+    filters?: {
+      profileId?: string;
+      externalAgentId?: string;
+      userId?: string;
+      sessionId?: string;
+      startDate?: Date;
+      endDate?: Date;
+    };
+  }): Promise<PaginatedResult<InteractionSummary>> {
+    const { pagination, sorting, requestingUserId, isAgentAdmin, filters } =
+      params;
+    const conditions: SQL[] = [];
+    if (requestingUserId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        requestingUserId,
+        false,
+      );
+      if (accessibleAgentIds.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+      conditions.push(
+        inArray(schema.interactionsTable.profileId, accessibleAgentIds),
+      );
+    }
+    if (filters?.profileId) {
+      conditions.push(
+        eq(schema.interactionsTable.profileId, filters.profileId),
+      );
+    }
+    if (filters?.externalAgentId) {
+      conditions.push(
+        eq(schema.interactionsTable.externalAgentId, filters.externalAgentId),
+      );
+    }
+    if (filters?.userId) {
+      conditions.push(eq(schema.interactionsTable.userId, filters.userId));
+    }
+    if (filters?.sessionId) {
+      conditions.push(
+        eq(schema.interactionsTable.sessionId, filters.sessionId),
+      );
+    }
+    if (filters?.startDate) {
+      conditions.push(
+        gte(schema.interactionsTable.createdAt, filters.startDate),
+      );
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(schema.interactionsTable.createdAt, filters.endDate));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const [rows, [{ total }]] = await Promise.all([
+      db
+        .select({
+          id: schema.interactionsTable.id,
+          profileId: schema.agentsTable.id,
+          externalAgentId: schema.interactionsTable.externalAgentId,
+          sessionId: schema.interactionsTable.sessionId,
+          type: schema.interactionsTable.type,
+          model: schema.interactionsTable.model,
+          baselineModel: schema.interactionsTable.baselineModel,
+          billingMode: schema.interactionsTable.billingMode,
+          inputTokens: schema.interactionsTable.inputTokens,
+          outputTokens: schema.interactionsTable.outputTokens,
+          cacheReadTokens: schema.interactionsTable.cacheReadTokens,
+          cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,
+          cost: schema.interactionsTable.cost,
+          baselineCost: schema.interactionsTable.baselineCost,
+          toonTokensBefore: schema.interactionsTable.toonTokensBefore,
+          toonTokensAfter: schema.interactionsTable.toonTokensAfter,
+          toonCostSavings: schema.interactionsTable.toonCostSavings,
+          toonSkipReason: schema.interactionsTable.toonSkipReason,
+          createdAt: schema.interactionsTable.createdAt,
+        })
+        .from(schema.interactionsTable)
+        .leftJoin(
+          schema.agentsTable,
+          and(
+            eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+            notDeleted(schema.agentsTable),
+          ),
+        )
+        .where(whereClause)
+        .orderBy(InteractionModel.getOrderByClause(sorting))
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.interactionsTable)
+        .where(whereClause),
+    ]);
+
+    const agentNamesMap = await getAgentNamesById(
+      extractAllAgentIdsFromExternalAgentIds(
+        rows.map((row) => row.externalAgentId),
+      ),
+    );
+    return createPaginatedResult(
+      rows.map((row) => ({
+        ...row,
+        externalAgentIdLabel: resolveExternalAgentIdLabel(
+          row.externalAgentId,
+          agentNamesMap,
+        ),
+      })),
       Number(total),
       pagination,
     );
@@ -1797,6 +1919,7 @@ class InteractionModel {
           .filter((key): key is InteractionVirtualKey => key !== undefined)
           .sort((a, b) => a.name.localeCompare(b.name)),
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
+        lastInteractionId: lastInteraction?.lastInteractionId ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
@@ -1907,6 +2030,7 @@ class InteractionModel {
       string,
       {
         lastUserMessagePreview: string | null;
+        lastInteractionId: string | null;
         lastInteractionType: string | null;
         claudeCodeTitle: string | null;
       }
@@ -1949,6 +2073,7 @@ class InteractionModel {
       string,
       {
         lastUserMessagePreview: string | null;
+        lastInteractionId: string | null;
         lastInteractionType: string | null;
         claudeCodeTitle: string | null;
       }
@@ -2098,6 +2223,7 @@ class InteractionModel {
         lastUserMessagePreview: lastMainInteraction
           ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
           : null,
+        lastInteractionId: lastMainInteraction?.id ?? null,
         lastInteractionType: lastMainInteraction?.type ?? null,
         claudeCodeTitle: claudeCodeTitle ?? null,
       });

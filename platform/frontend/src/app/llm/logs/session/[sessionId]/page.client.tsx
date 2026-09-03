@@ -15,7 +15,6 @@ import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { SourceBadge } from "@/components/source-badge";
-import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,13 +29,13 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
-import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { typeRole } from "@/lib/design/type-scale";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useExportSessionInteractions,
+  useInteraction,
   useInteractionSessions,
-  useInteractions,
+  useInteractionSummaries,
 } from "@/lib/interactions/interaction.query";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -52,7 +51,7 @@ export default function SessionDetailPage({
     useDataTableQueryParams();
 
   const { data: interactionsResponse, isLoading: interactionsLoading } =
-    useInteractions({
+    useInteractionSummaries({
       sessionId: sessionId,
       limit: pageSize,
       offset,
@@ -66,25 +65,15 @@ export default function SessionDetailPage({
     limit: 1,
   });
 
-  // Fetch the most recent interactions for the inline "Latest Conversation"
-  // block. This is intentionally decoupled from the table's pagination: offset
-  // is always 0, and the limit is a fixed small window (not the user-selectable
-  // pageSize) so changing rows-per-page never alters this query. We fetch a
-  // window rather than a single row because the block shows the latest *main*
-  // request, and the newest interactions by createdAt may be subagent calls
-  // (see lastMainRequest find below) — requestType isn't filterable server-side.
-  const { data: latestConversationResponse } = useInteractions({
-    sessionId: sessionId,
-    limit: DEFAULT_TABLE_LIMIT,
-    offset: 0,
-    sortBy: "createdAt",
-    sortDirection: "desc",
-  });
-
   const interactions = interactionsResponse?.data ?? [];
   const paginationMeta = interactionsResponse?.pagination;
   const sessionData = sessionResponse?.data?.[0];
-  const latestInteractions = latestConversationResponse?.data ?? [];
+  const latestInteractionId = sessionData?.lastInteractionId ?? undefined;
+  const { data: lastMainRequest } = useInteraction({
+    interactionId: latestInteractionId,
+    refetchInterval: null,
+    enabled: latestInteractionId !== undefined,
+  });
 
   // Use session data from API for accurate totals, fall back to page data
   const totalInputTokens =
@@ -121,55 +110,16 @@ export default function SessionDetailPage({
   const profileName = sessionData?.profileName;
   const userNames = sessionData?.userNames ?? [];
 
-  // Session title: prefer claudeCodeTitle or conversationTitle, fall back to first user message
+  // Session title: prefer a generated title, then the bounded session preview.
   const getSessionTitle = () => {
     if (sessionData?.claudeCodeTitle) return sessionData.claudeCodeTitle;
     if (sessionData?.conversationTitle) return sessionData.conversationTitle;
-
-    // Fall back to first meaningful user message from current page
-    const sortedInteractions = [...interactions].sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-
-    for (const interaction of sortedInteractions) {
-      const dynamicInteraction = new DynamicInteraction(interaction);
-      const userMessage = dynamicInteraction.getLastUserMessage();
-      if (
-        userMessage &&
-        !userMessage.includes("Please write a 5-10 word title") &&
-        userMessage.length > 10
-      ) {
-        return userMessage.length > 100
-          ? `${userMessage.slice(0, 100)}...`
-          : userMessage;
-      }
-    }
-    return null;
+    return sessionData?.lastUserMessagePreview ?? null;
   };
 
   const sessionTitle = getSessionTitle();
 
   const exportSession = useExportSessionInteractions();
-
-  // Find the last main request (requestType === "main" or first in delegation
-  // chain) from the most recent interactions. This drives the inline
-  // "Latest Conversation" block.
-  const lastMainRequest = latestInteractions.find((interaction) => {
-    const requestType =
-      "requestType" in interaction
-        ? (interaction.requestType ?? "main")
-        : "main";
-    const externalAgentIdLabel =
-      "externalAgentIdLabel" in interaction
-        ? interaction.externalAgentIdLabel
-        : undefined;
-    // Main request or has no delegation (externalAgentIdLabel without "→")
-    return (
-      requestType === "main" ||
-      (externalAgentIdLabel && !externalAgentIdLabel.includes("→"))
-    );
-  });
 
   // Build the conversation thread for the latest main interaction.
   const lastMainInteraction = lastMainRequest
@@ -355,16 +305,15 @@ export default function SessionDetailPage({
                   <TableHead className="w-[120px]">Time</TableHead>
                   <TableHead className="w-[115px]">Agent</TableHead>
                   <TableHead className="w-[140px]">Model</TableHead>
-                  <TableHead className="w-[140px]">Cost</TableHead>
-                  <TableHead className="w-[30%]">User Message</TableHead>
-                  <TableHead className="w-[120px]">Tools</TableHead>
+                  <TableHead className="w-[160px]">Tokens</TableHead>
+                  <TableHead className="w-[160px]">Cost</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {interactions.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={5}
                       className="text-center text-muted-foreground"
                     >
                       No interactions found for this session
@@ -372,24 +321,12 @@ export default function SessionDetailPage({
                   </TableRow>
                 ) : (
                   interactions.map((interaction) => {
-                    const dynamicInteraction = new DynamicInteraction(
-                      interaction,
-                    );
-                    const userMessage = dynamicInteraction.getLastUserMessage();
-                    const toolsUsed = dynamicInteraction.getToolNamesUsed();
-                    const requestType =
-                      "requestType" in interaction
-                        ? (interaction.requestType ?? "main")
-                        : "main";
                     const externalAgentIdLabel =
-                      "externalAgentIdLabel" in interaction
-                        ? interaction.externalAgentIdLabel
-                        : undefined;
-                    // Show prompt name if available, fall back to raw externalAgentId, then Main/Subagent
+                      interaction.externalAgentIdLabel ?? undefined;
                     const typeLabel =
                       externalAgentIdLabel ||
                       interaction.externalAgentId ||
-                      (requestType === "main" ? "Main" : "Subagent");
+                      "Main";
 
                     return (
                       <TableRow
@@ -400,7 +337,7 @@ export default function SessionDetailPage({
                         }
                       >
                         <TableCell className="font-mono text-xs">
-                          {formatDate({ date: dynamicInteraction.createdAt })}
+                          {formatDate({ date: interaction.createdAt })}
                         </TableCell>
                         <TableCell className="overflow-hidden">
                           <Badge
@@ -419,14 +356,13 @@ export default function SessionDetailPage({
                               variant="secondary"
                               className="text-xs max-w-full inline-flex truncate"
                             >
-                              {dynamicInteraction.modelName}
+                              {interaction.model ?? "Unknown"}
                             </Badge>
-                            {dynamicInteraction.hasErrorResponse() && (
-                              <Badge variant="destructive" className="text-xs">
-                                Error
-                              </Badge>
-                            )}
                           </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {(interaction.inputTokens ?? 0).toLocaleString()} in /{" "}
+                          {(interaction.outputTokens ?? 0).toLocaleString()} out
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           <TooltipProvider>
@@ -449,35 +385,6 @@ export default function SessionDetailPage({
                               actualModel={interaction.model}
                             />
                           </TooltipProvider>
-                        </TableCell>
-                        <TableCell className="text-xs overflow-hidden">
-                          <TruncatedText
-                            message={userMessage}
-                            maxLength={80}
-                            showTooltip={false}
-                          />
-                        </TableCell>
-                        <TableCell className="text-xs overflow-hidden">
-                          {toolsUsed.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {toolsUsed.slice(0, 2).map((tool) => (
-                                <Badge
-                                  key={tool}
-                                  variant="outline"
-                                  className="text-xs max-w-[65px] inline-block truncate"
-                                >
-                                  {tool}
-                                </Badge>
-                              ))}
-                              {toolsUsed.length > 2 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{toolsUsed.length - 2}
-                                </Badge>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
                         </TableCell>
                       </TableRow>
                     );

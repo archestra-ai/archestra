@@ -219,11 +219,15 @@ export function AppsTable({
   const ownedAppActions = (app: OwnedApp): TableRowAction[] => {
     const access = computeAppAccess(app, accessContext);
     return [
-      {
-        icon: <Settings className="h-4 w-4" />,
-        label: access.canEdit ? "Settings" : "View settings",
-        onClick: () => onOpenSettings({ id: app.id }),
-      },
+      ...(access.canEdit
+        ? [
+            {
+              icon: <Settings className="h-4 w-4" />,
+              label: "Settings",
+              onClick: () => onOpenSettings({ id: app.id }),
+            },
+          ]
+        : []),
       {
         icon: <SquareArrowOutUpRight className="h-4 w-4" />,
         label: "Open in new tab",

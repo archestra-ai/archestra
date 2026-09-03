@@ -274,7 +274,7 @@ describe("OwnedAppCard", () => {
     );
   });
 
-  it("offers view-only settings without delete when the app is outside the caller's scope", () => {
+  it("hides settings and delete when the app is outside the caller's scope", () => {
     vi.mocked(useAppAccess).mockReturnValue({
       canEdit: false,
       canDeleteApp: false,
@@ -282,9 +282,7 @@ describe("OwnedAppCard", () => {
 
     render(<AppCard app={ownedApp} />);
 
-    expect(
-      screen.getByRole("menuitem", { name: "View settings" }),
-    ).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "Settings" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
   });
 

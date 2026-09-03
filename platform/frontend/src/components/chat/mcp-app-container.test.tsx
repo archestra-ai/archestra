@@ -78,7 +78,7 @@ vi.mock("@/lib/app.query", () => ({
 }));
 
 vi.mock("@/lib/apps/use-app-access", () => ({
-  useAppAccess: () => ({ canEdit: true, isPending: false }),
+  useAppAccess: vi.fn(() => ({ canEdit: true, isPending: false })),
 }));
 
 // Session-recording hooks pull TanStack Query mutations; this suite renders
@@ -111,6 +111,7 @@ vi.mock("@/components/mcp-app/app-settings-form", () => ({
 import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
 import { useApp } from "@/lib/app.query";
+import { useAppAccess } from "@/lib/apps/use-app-access";
 import {
   clearAllAppDiagnostics,
   reportAppDiagnostic,
@@ -120,12 +121,17 @@ import { AppsProvider, type PanelApp, useApps } from "./apps-context";
 import { McpAppSection } from "./mcp-app-container";
 
 const mockUseApp = vi.mocked(useApp);
+const mockUseAppAccess = vi.mocked(useAppAccess);
 
 // `vi.clearAllMocks()` clears recorded calls but keeps a `mockReturnValue` an
 // earlier test set, so re-seed the default here: one test's owned-app fixture
 // (a name, a fullscreen-by-default flag) must not leak into the next.
 beforeEach(() => {
   mockUseApp.mockReturnValue({ data: undefined } as ReturnType<typeof useApp>);
+  mockUseAppAccess.mockReturnValue({
+    canEdit: true,
+    isPending: false,
+  } as ReturnType<typeof useAppAccess>);
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1603,6 +1609,20 @@ describe("McpAppSection owned-app panel chrome", () => {
     expect(
       screen.getByRole("button", { name: /^settings$/i }),
     ).toBeInTheDocument();
+  });
+
+  it("hides app settings when the viewer cannot edit the app", async () => {
+    mockUseAppAccess.mockReturnValue({
+      canEdit: false,
+      isPending: false,
+    } as ReturnType<typeof useAppAccess>);
+
+    await renderOwnedPanel();
+
+    expect(
+      screen.queryByRole("button", { name: /^settings$/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-form")).not.toBeInTheDocument();
   });
 
   it("closes settings when a newly rendered app takes the panel", async () => {

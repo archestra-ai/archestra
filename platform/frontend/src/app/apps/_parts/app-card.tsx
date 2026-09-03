@@ -329,10 +329,12 @@ function OwnedAppCard({
               pinned={!!app.pinnedAt}
               target={{ source: "owned", appId: app.id }}
             />
-            <DropdownMenuItem onSelect={() => onOpenSettings?.(app)}>
-              <Settings className="h-4 w-4" />
-              <span>{access.canEdit ? "Settings" : "View settings"}</span>
-            </DropdownMenuItem>
+            {access.canEdit ? (
+              <DropdownMenuItem onSelect={() => onOpenSettings?.(app)}>
+                <Settings className="h-4 w-4" />
+                <span>Settings</span>
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem asChild>
               <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
                 <SquareArrowOutUpRight className="h-4 w-4" />

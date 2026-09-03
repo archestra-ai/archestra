@@ -36,6 +36,7 @@ import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/app.query";
+import { useAppAccess } from "@/lib/apps/use-app-access";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
@@ -334,6 +335,7 @@ export function McpAppEntryContent({
   // render time) and to seed the settings dialog.
   const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp, isSuccess: ownedAppResolved } = useApp(appId ?? null);
+  const ownedAppAccess = useAppAccess(ownedApp);
   // An owned app this viewer cannot mount, which happens for two very different
   // reasons the API deliberately does not tell apart: the app was deleted, or it
   // is perfectly healthy and simply not theirs to open (the ordinary case for a
@@ -519,18 +521,22 @@ export function McpAppEntryContent({
             {headerName}
           </span>
           {isOwnedInPanel && !ownedApp.enabled ? (
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              title="Disabled — only you can see this app. Click to enable."
-            >
-              <Badge
-                variant="outline"
-                className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
+            ownedAppAccess.canEdit ? (
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                title="Disabled — only you can see this app. Click to enable."
               >
-                Disabled
-              </Badge>
-            </button>
+                <Badge
+                  variant="outline"
+                  className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  Disabled
+                </Badge>
+              </button>
+            ) : (
+              <Badge variant="outline">Disabled</Badge>
+            )
           ) : null}
         </>
       }
@@ -542,7 +548,7 @@ export function McpAppEntryContent({
               disabled={recorder.status !== "idle"}
             />
           ) : null}
-          {isOwnedInPanel ? (
+          {isOwnedInPanel && ownedAppAccess.canEdit ? (
             <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
           ) : null}
           {/* The bar is the only chrome the panel has, so it carries the way
@@ -591,7 +597,7 @@ export function McpAppEntryContent({
     return (
       <>
         {liveSurface}
-        {isOwnedInPanel ? (
+        {isOwnedInPanel && ownedAppAccess.canEdit ? (
           <AppSettingsDialog
             appId={appId}
             open={settingsOpen}

@@ -106,10 +106,14 @@ describe("BackgroundExecutionChatSession", () => {
 
     render(<BackgroundExecutionChatSession taskId="task-1" />);
 
-    // Rendered as a status line (like the attach loader), not a red error card.
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Only the person who started this run can attach to it.",
-    );
+    // Rendered as an informational terminal state, not a generic error card.
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("Terminal unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Only the person who started this run can attach to it.",
+      ),
+    ).toBeInTheDocument();
     // The old full-page error card is gone.
     expect(
       screen.queryByText("Couldn't load this execution"),
@@ -241,6 +245,7 @@ describe("BackgroundExecutionChatSession", () => {
     expect(
       screen.getByText(/viewing its terminal output in read-only mode/i),
     ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Read-only terminal");
     // None of the owner-only controls are rendered.
     expect(
       screen.queryByRole("button", { name: "Stop" }),

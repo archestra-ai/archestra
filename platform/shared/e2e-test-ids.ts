@@ -128,6 +128,7 @@ export const E2eTestId = {
   ManageProfilesChatApiKeyButton: "manage-profiles-chat-api-key-button",
   ChatApiKeyDefaultBadge: "chat-api-key-default-badge",
   SkillsBulkSelectionCount: "skills-bulk-selection-count",
+  SkillDetailSection: "skill-detail-section",
   BulkAssignChatApiKeysButton: "bulk-assign-chat-api-keys-button",
   BulkAssignChatApiKeysDialog: "bulk-assign-chat-api-keys-dialog",
   VirtualKeysPage: "virtual-keys-page",

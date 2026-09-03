@@ -15,11 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useOrganization } from "@/lib/organization.query";
@@ -34,31 +31,27 @@ import {
   type IndexedSkillSelection,
 } from "../_parts/import-skills-dialog";
 import { POPULAR_REPOS } from "../_parts/popular-repos";
-import { SkillAccessFields } from "../_parts/skill-access-fields";
-import {
-  SKILL_WIZARD_EDITOR_CLASS,
-  SkillContentEditor,
-} from "../_parts/skill-content-editor";
 import {
   blankSkillDraft,
   buildSkillSaveBody,
   type SkillDraft,
 } from "../_parts/skill-draft";
+import { SkillForm } from "../_parts/skill-form";
 import { SkillBackLink } from "../_parts/skill-page-shell";
 
-type CreateStep = "source" | "content" | "access";
+type CreateStep = "source" | "configure";
 
 const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
   { id: "source", title: "Source" },
-  { id: "content", title: "Content" },
-  { id: "access", title: "Access" },
+  { id: "configure", title: "Configure" },
 ];
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
   source: "Import from a GitHub repo or start from a blank template.",
-  content:
-    "Write the SKILL.md manifest and add any resource files the skill needs.",
-  access: "Choose who can use the skill and where.",
+  // The whole skill is on one page, so the sentence names the whole of it —
+  // and the skill's own page says the same thing over the same form.
+  configure:
+    "Write the SKILL.md manifest, add any resource files, and choose who can use it.",
 };
 
 export default function NewSkillPage() {
@@ -92,14 +85,12 @@ function NewSkillWizard() {
 
   const [step, setStep] = useState<CreateStep>("source");
   const effectiveStep: CreateStep =
-    catalogDisabled && step === "source" ? "content" : step;
+    catalogDisabled && step === "source" ? "configure" : step;
   const steps = catalogDisabled
     ? CREATE_STEPS.filter((s) => s.id !== "source")
     : CREATE_STEPS;
   const stepIndex = steps.findIndex((s) => s.id === effectiveStep);
 
-  // The draft outlives the steps: content is written on one, access on the
-  // next, and both go up together on create.
   const [draft, setDraft] = useState<SkillDraft>(blankSkillDraft);
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const patchDraft = (patch: Partial<SkillDraft>) =>
@@ -138,7 +129,7 @@ function NewSkillWizard() {
       },
     });
   const goToSkills = () => router.push("/skills");
-  const goToContentStep = () => setStep("content");
+  const goToConfigureStep = () => setStep("configure");
 
   const catalogSearch = useSearchSkillCatalog(search);
   const skillResults = catalogSearch.data?.results ?? [];
@@ -193,7 +184,7 @@ function NewSkillWizard() {
                       icon={<FileText className="size-5" />}
                       title="Blank template"
                       description="Write a SKILL.md manifest from scratch."
-                      onClick={goToContentStep}
+                      onClick={goToConfigureStep}
                     />
                   </div>
 
@@ -299,61 +290,19 @@ function NewSkillWizard() {
                 </div>
               )}
 
-              {effectiveStep === "content" && (
+              {effectiveStep === "configure" && (
                 <div className="flex flex-col gap-4">
-                  <div className="rounded-lg border p-6">
-                    <div className="mb-6 space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="skill-name">Skill name</Label>
-                        <Input
-                          id="skill-name"
-                          value={parsed.name ?? ""}
-                          onChange={(event) =>
-                            patchDraft({
-                              manifest: updateManifestFrontmatterField({
-                                manifest: draft.manifest,
-                                field: "name",
-                                value: event.target.value,
-                              }),
-                            })
-                          }
-                          placeholder="release-checklist"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="skill-description">Description</Label>
-                        <Textarea
-                          id="skill-description"
-                          value={parsed.description ?? ""}
-                          onChange={(event) =>
-                            patchDraft({
-                              manifest: updateManifestFrontmatterField({
-                                manifest: draft.manifest,
-                                field: "description",
-                                value: event.target.value,
-                              }),
-                            })
-                          }
-                          placeholder="What this skill teaches agents to do"
-                          rows={2}
-                          required
-                        />
-                      </div>
-                    </div>
-                    <SkillContentEditor
-                      manifest={draft.manifest}
-                      files={draft.files}
-                      onManifestChange={(manifest) => patchDraft({ manifest })}
-                      onFilesChange={(update) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          files: update(prev.files),
-                        }))
-                      }
-                      className={SKILL_WIZARD_EDITOR_CLASS}
-                    />
-                  </div>
+                  <SkillForm
+                    draft={draft}
+                    onChange={patchDraft}
+                    onFilesChange={(update) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        files: update(prev.files),
+                      }))
+                    }
+                    labelsRef={labelsRef}
+                  />
                   {/*
                    * No top rule. `WizardFooter` carries `sticky bottom-0
                    * border-t`, where the rule marks the edge the footer pins
@@ -362,8 +311,8 @@ function NewSkillWizard() {
                    * box the footer's nearest scrollport in *both* axes, and it
                    * never scrolls — the real scrolling happens further out. So
                    * the footer just flows with the content, and its rule only
-                   * ever reads as a second line stacked 16px under the card's
-                   * own bottom border. Dropped on both steps of this wizard.
+                   * ever reads as a second line stacked 16px under the last
+                   * panel's own bottom border.
                    */}
                   <WizardFooter className="border-t-0">
                     {catalogDisabled ? (
@@ -379,35 +328,6 @@ function NewSkillWizard() {
                         Back
                       </Button>
                     )}
-                    <Button
-                      disabled={!contentComplete}
-                      onClick={() => setStep("access")}
-                    >
-                      Continue
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </WizardFooter>
-                </div>
-              )}
-
-              {effectiveStep === "access" && (
-                <div className="flex flex-col gap-4">
-                  <div className="rounded-lg border p-6">
-                    <SkillAccessFields
-                      ref={labelsRef}
-                      draft={draft}
-                      onChange={patchDraft}
-                    />
-                  </div>
-                  {/* No top rule — see the content step's footer. */}
-                  <WizardFooter className="border-t-0">
-                    <Button
-                      variant="outline"
-                      onClick={() => setStep("content")}
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      Back
-                    </Button>
                     <PermissionButton
                       permissions={{ skill: ["create"] }}
                       disabled={!contentComplete || createSkill.isPending}
@@ -476,22 +396,4 @@ function SkillIndexResult({
       <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   );
-}
-
-function updateManifestFrontmatterField(params: {
-  manifest: string;
-  field: "name" | "description";
-  value: string;
-}): string {
-  const line = `${params.field}: ${JSON.stringify(params.value)}`;
-  const fieldPattern = new RegExp(`^${params.field}:.*$`, "m");
-  if (fieldPattern.test(params.manifest)) {
-    return params.manifest.replace(fieldPattern, line);
-  }
-
-  const closingFence = params.manifest.indexOf("\n---", 4);
-  if (params.manifest.startsWith("---\n") && closingFence >= 0) {
-    return `${params.manifest.slice(0, closingFence)}\n${line}${params.manifest.slice(closingFence)}`;
-  }
-  return `---\n${line}\n---\n\n${params.manifest}`;
 }

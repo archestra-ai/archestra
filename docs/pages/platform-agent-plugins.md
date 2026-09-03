@@ -24,6 +24,8 @@ You can start from a blank template or import a GitHub marketplace.
 
 A blank plugin starts with `hooks/hooks.json`. Hooks are optional. You can replace that file with any payload the target client supports.
 
+The plugin form is one page: what the plugin is, the files it installs, and who can discover it. Every plugin has a page of its own that shows the same form. Change anything there and **Save changes** — there is no separate edit screen to open.
+
 Every plugin targets one client: Claude Code, Codex, Copilot CLI, or Cursor. It also declares macOS/Linux, Windows, or both, so a setup command skips an incompatible payload.
 
 The platform stores plugin files without translating them.
@@ -33,6 +35,8 @@ The platform stores plugin files without translating them.
 Import from a popular marketplace, or paste a GitHub marketplace URL. Private repositories use a GitHub App or personal access token from **Settings → GitHub**.
 
 Select the plugins you want and preview their files. GitHub-owned files stay read-only here. Edit them in their repository.
+
+An imported plugin's page shows those files locked, with a **GitHub source** panel underneath. Change the repository, the ref, the check schedule, or the credential there.
 
 ## Reviewing Updates
 

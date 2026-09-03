@@ -50,6 +50,6 @@ Both commands are equivalent — the tilt resource wraps the same compose file �
 
 - Prometheus metrics `llm_request_duration_seconds` and `llm_tokens_total` include `provider`, `model`, `agent_id`, `agent_name`, `agent_type`, `source`, and dynamic agent labels as dimensions — deliberately NOT `external_agent_id`, which is client-supplied and unbounded and would explode series cardinality. Do not add it back.
 - `agent_id` is internal.
-- `external_agent_id` comes from the client-provided `X-Archestra-Agent-Id` header and is a label only on `agent_executions_total`.
+- `external_agent_id` comes from the client-provided `X-Archestra-Agent-Id` header and is a label only on `agent_runs_total`.
 - MCP metrics include `agent_id`, `agent_name`, and `agent_type`.
 - Metrics are reinitialized on startup with current label keys from the database.

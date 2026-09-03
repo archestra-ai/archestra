@@ -1,24 +1,21 @@
 "use client";
 
-import {
-  AlertTriangle,
-  Github,
-  History,
-  MoreHorizontal,
-  Pencil,
-  Trash2,
-} from "lucide-react";
-import Link from "next/link";
+import { E2eTestId } from "@archestra/shared";
+import { History, Info, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useId, useMemo, useState } from "react";
-import { AgentBadge } from "@/components/agent-badge";
-import { createdByFact } from "@/components/created-by-cell";
 import {
-  type MaybeOverviewFact,
-  OverviewSummary,
-} from "@/components/overview-summary";
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { AgentBadge } from "@/components/agent-badge";
+import type { ProfileLabelsRef } from "@/components/agent-labels";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { PageLayout } from "@/components/page-layout";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,35 +26,47 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useSession } from "@/lib/auth/auth.query";
+import {
+  UnsavedChangesDialog,
+  useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
+import { WizardFooter } from "@/components/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   backToListLabel,
   notYoursToChange,
 } from "@/lib/design/resource-lexicon";
-import { typeRole } from "@/lib/design/type-scale";
-import { useAppName } from "@/lib/hooks/use-app-name";
-import { composeManifest } from "@/lib/skills/manifest-compose";
-import { useSkill } from "@/lib/skills/skill.query";
+import { parseManifestFields } from "@/lib/skills/manifest-compose";
+import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
 import { useSkillAccess } from "@/lib/skills/use-skill-access";
-import { cn } from "@/lib/utils";
-import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ChatWithSkillButton } from "../_parts/chat-with-skill-button";
 import { DeleteSkillDialog } from "../_parts/delete-skill-dialog";
-import type { SkillDetail } from "../_parts/github-sync-panel";
+import {
+  GithubSnapshotNotice,
+  GithubSyncPanel,
+  type SkillDetail,
+} from "../_parts/github-sync-panel";
 import {
   getSkillActionModel,
   skillAction,
-  skillActionHref,
 } from "../_parts/skill-actions-model";
 import {
-  SKILL_DETAIL_EDITOR_CLASS,
-  SkillContentEditor,
-} from "../_parts/skill-content-editor";
-import { isSyncedGithubSkill } from "../_parts/skill-draft";
+  buildSkillSaveBody,
+  isSkillDraftDirty,
+  isSyncedGithubSkill,
+  type SkillDraft,
+  skillDraftFromSkill,
+} from "../_parts/skill-draft";
+import { SkillForm } from "../_parts/skill-form";
 import {
+  resolveSkillDetailSection,
   SKILL_DESCRIPTION_FALLBACK,
+  SKILL_DETAIL_SECTIONS,
+  SKILL_SECTION_LABELS,
+  type SkillDetailSection,
+  skillDetailHref,
   skillGithubSourceRepo,
 } from "../_parts/skill-page-config";
 import {
@@ -68,47 +77,72 @@ import {
 import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
 
+const SECTION_DESCRIPTIONS: Record<SkillDetailSection, string> = {
+  // Settings is the page's default and shows the skill's own description
+  // instead; this stands in only when the skill has none.
+  settings: SKILL_DESCRIPTION_FALLBACK,
+  usage: "Who has run this skill, and when.",
+};
+
 /**
- * `/skills/[id]` — the skill as it is: its facts, then its content, read-only.
- * Changing anything goes through the page header's Edit, which opens the
- * wizard (the create wizard's Content and Access steps on the existing
- * skill). Version history, usage, chat and delete sit in the header too.
+ * `/skills/[id]` — one skill's page. Its content and access are edited here,
+ * in sections, rather than behind an Edit button that opened a wizard on a
+ * second route: the skill's settings are the page, the way an agent's are.
  */
 export function SkillDetailPage({ id }: { id: string }) {
   const router = useRouter();
   const { data: skill, isPending } = useSkill(id);
+
+  // Hold the last skill this mount saw. Deleting it in another tab (or any
+  // background refetch that answers 404) turns `data` into null, and dropping
+  // the page on that would throw away whatever has been typed into the
+  // editor since. The page stays up on the held copy and says it is gone.
+  const heldSkillRef = useRef<SkillDetail | null>(null);
+  if (skill) heldSkillRef.current = skill;
+  const heldSkill = skill ?? heldSkillRef.current;
+  // A successful null after we had a skill — not a failed request, which
+  // leaves the previous data in place.
+  const isGone = !skill && !!heldSkillRef.current;
 
   // Deleting invalidates the skills queries, and the refetch resolves to null
   // before the navigation back to the list has finished — without the flag the
   // page would flash "Skill not found" for a delete that just succeeded.
   const [isLeavingAfterDelete, setIsLeavingAfterDelete] = useState(false);
 
-  if (isPending || (isLeavingAfterDelete && !skill))
-    return <SkillPageLoading />;
-  if (!skill) return <SkillNotFound />;
+  if (heldSkill && !isLeavingAfterDelete) {
+    return (
+      <SkillDetailView
+        skill={heldSkill}
+        isGone={isGone}
+        onDeleted={() => {
+          setIsLeavingAfterDelete(true);
+          router.push("/skills");
+        }}
+      />
+    );
+  }
 
-  return (
-    <SkillDetailView
-      skill={skill}
-      onDeleted={() => {
-        setIsLeavingAfterDelete(true);
-        router.push("/skills");
-      }}
-    />
-  );
+  if (isPending || isLeavingAfterDelete) return <SkillPageLoading />;
+  return <SkillNotFound />;
 }
 
 function SkillDetailView({
   skill,
+  isGone,
   onDeleted,
 }: {
   skill: SkillDetail;
+  /** The skill has since been deleted; this is the last copy we hold. */
+  isGone: boolean;
+  /** Owned by the page so it can suppress its not-found state on the way out. */
   onDeleted: () => void;
 }) {
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
-  // RBAC alone showed Edit and Delete to any `skill:update`/`skill:delete`
-  // holder, whoever the skill belonged to, and the save came back 403.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // `skill:update` alone is not enough: the backend also asks whose skill this
+  // is, so a holder of the permission editing somebody else's skill used to
+  // fill the whole form and collect a 403 from Save.
   const {
     canModify,
     canUpdate,
@@ -116,6 +150,15 @@ function SkillDetailView({
     canDelete,
     isPending: isAccessPending,
   } = useSkillAccess(skill);
+  // Undecided is not refused. Reading the permissions as "no" while they load
+  // would flash the read-only notice at the author of the skill.
+  const isReadOnly = !isAccessPending && !canEdit;
+  const updateSkill = useUpdateSkill();
+
+  const actionModel = getSkillActionModel(skill.id);
+  const historyAction = skillAction(actionModel, "history");
+  const deleteAction = skillAction(actionModel, "delete");
+
   // The sentence for a reader the scope check refused. A reader who holds no
   // `skill:update` at all is refused by RBAC instead, and `PermissionButton`
   // states that constraint, which is the one actually refusing them.
@@ -130,78 +173,127 @@ function SkillDetailView({
     : canModify
       ? formatPermissionConstraint({ skill: ["delete"] })
       : notYours;
-  const deleteReasonId = useId();
 
+  // A `?section=` this page has none of (a typo, or a section that has since
+  // been removed) silently resolves to the first. `?tab=usage` is the shape
+  // the Usage view shipped with and is still pasted around, so it is read as
+  // well; the URL is corrected to whichever section actually rendered, so a
+  // reload, a copied link or the back button does not keep asking for
+  // something else.
+  const sectionParam = searchParams.get("section") ?? searchParams.get("tab");
+  const section = resolveSkillDetailSection(sectionParam);
+  useEffect(() => {
+    if (searchParams.get("section") === section) return;
+    router.replace(skillDetailHref(skill.id, section), { scroll: false });
+  }, [searchParams, section, skill.id, router]);
+
+  // The draft is seeded from the loaded skill, and `base` records what it was
+  // seeded from: the content to diff against, and the version the edit is
+  // anchored to. They are kept in step with the *draft*, not with the query —
+  // this page is open for as long as someone is writing, and reads land under
+  // it unbidden (a window-focus refetch, a sync pull, another tab's save), so
+  // adopting every read would discard unsaved work and silently re-anchor the
+  // save to a head the author never saw.
+  const seed = useMemo(() => skillDraftFromSkill(skill), [skill]);
+  const [draft, setDraft] = useState<SkillDraft>(seed);
+  const [base, setBase] = useState<{ draft: SkillDraft; version: number }>({
+    draft: seed,
+    version: skill.latestVersion,
+  });
+  const labelsRef = useRef<ProfileLabelsRef>(null);
+  const isDirty = isSkillDraftDirty(draft, base.draft);
+
+  // Adopt a read only when there is nothing to lose and it is not older than
+  // what this page has already written. Both guards earn their keep:
+  // - while the draft is dirty the stale anchor is kept deliberately, so a
+  //   save composed against an overtaken head is rejected rather than burying
+  //   whoever moved it;
+  // - a save invalidates the skill and the refetch lands a moment later, so
+  //   the cached skill is briefly the pre-save one — adopting it would walk
+  //   the anchor backwards and make the next save 409 against a head this
+  //   page itself set.
+  useEffect(() => {
+    if (isDirty || skill.latestVersion < base.version) return;
+    setDraft(seed);
+    setBase({ draft: seed, version: skill.latestVersion });
+  }, [isDirty, seed, skill.latestVersion, base.version]);
+
+  const patchDraft = (patch: Partial<SkillDraft>) =>
+    setDraft((prev) => ({ ...prev, ...patch }));
+
+  // Discard is also the way out of a version conflict: the failed save has
+  // already invalidated the skill, so this picks up the latest content.
+  const discardChanges = () => {
+    setDraft(seed);
+    setBase({ draft: seed, version: skill.latestVersion });
+  };
+
+  const isSynced = isSyncedGithubSkill(skill);
   const isGithubSkill = skill.sourceType === "github";
-  // A team- or user-shared skill has names the scope badge cannot carry; a
-  // private one has nothing to add.
-  const isShared = skill.teams.length > 0 || (skill.users ?? []).length > 0;
-  const manifest = useMemo(() => composeManifest(skill), [skill]);
-  const actionModel = getSkillActionModel(skill.id);
-  const editAction = skillAction(actionModel, "edit");
-  const historyAction = skillAction(actionModel, "history");
-  const deleteAction = skillAction(actionModel, "delete");
+  const githubSourceRepo = skillGithubSourceRepo(skill);
 
-  // The values a reader scans this page for, in one row. The rest of the
-  // record is behind the same link the header's Edit uses.
-  const overviewFacts: MaybeOverviewFact[] = [
-    {
-      label: "Source",
-      value: <SourceFact skill={skill} />,
+  const parsed = useMemo(
+    () => parseManifestFields(draft.manifest),
+    [draft.manifest],
+  );
+  const contentComplete = parsed.hasName && parsed.hasDescription;
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    // The draft can move while the request is in flight, so what was sent is
+    // what the new base records — anything typed meanwhile stays unsaved
+    // rather than being counted as written.
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
+    const submitted = { ...draft, labels: finalLabels };
+    setIsSaving(true);
+    // A handled failure resolves to null and a rejection is reported by the
+    // mutation's own `onError`; both leave the draft intact so the author can
+    // retry without retyping.
+    const saved = await updateSkill
+      .mutateAsync({
+        id: skill.id,
+        body: buildSkillSaveBody(submitted, skill, base.version),
+      })
+      .catch(() => null);
+    setIsSaving(false);
+    if (!saved) return;
+    setBase({ draft: submitted, version: saved.latestVersion });
+  };
+
+  // Unsaved edits guard every way off the page that is not a save: another
+  // section, the back link, the sidebar. The pending destination is parked
+  // here and taken once the guard lets go.
+  useBeforeUnloadWhileDirty(isDirty);
+  const pendingHrefRef = useRef<string | null>(null);
+  const guard = useUnsavedChangesGuard({
+    isDirty,
+    onOpenChange: (open) => {
+      if (open) return;
+      const href = pendingHrefRef.current;
+      pendingHrefRef.current = null;
+      // A section change is the same page with another query, so it replaces
+      // rather than stacking a history entry per section.
+      if (href) {
+        if (href.startsWith(pathname)) router.replace(href, { scroll: false });
+        else router.push(href);
+      }
     },
-    { label: "Version", value: <span>v{skill.latestVersion}</span> },
-    createdByFact(skill.createdBy),
-    {
-      label: "Environment",
-      value:
-        skill.environments.length === 0 ? (
-          <span>All environments</span>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {skill.environments.map((environment) => (
-              <li key={environment.id}>
-                <Badge variant="outline" className="font-normal">
-                  {environment.name}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        ),
+  });
+  const requestNavigate = useCallback(
+    (href: string) => {
+      pendingHrefRef.current = href;
+      guard.requestClose();
     },
-    ...(isShared
-      ? [
-          {
-            label: "Shared with",
-            value: (
-              <ResourceVisibilityBadge
-                scope={skill.scope}
-                teams={skill.teams}
-                users={skill.users}
-                authorId={skill.authorId}
-                authorName={undefined}
-                currentUserId={currentUserId}
-                showSelfAsMe={false}
-              />
-            ),
-          },
-        ]
-      : []),
-  ];
+    [guard],
+  );
+  // Every in-app link, not only the ones this page renders: the editor is the
+  // page now, so the sidebar and anything else on screen would otherwise
+  // discard unsaved edits without asking.
+  useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
   const [historyOpen, setHistoryOpen] = useState(false);
-
-  // Which tab is showing lives in the URL, not in state: the skills list links
-  // straight at a skill's usage, and a tab someone is looking at should be a
-  // link they can send. Overview is the bare page and carries no `tab`, the
-  // same shape the MCP server detail page uses.
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const isUsageTab = searchParams.get("tab") === "usage";
-  const tabs = [
-    { label: "Overview", href: pathname, active: !isUsageTab },
-    { label: "Usage", href: `${pathname}?tab=usage`, active: isUsageTab },
-  ];
   const [deleteRequested, setDeleteRequested] = useState(false);
+  const deleteReasonId = useId();
 
   return (
     <PageLayout
@@ -209,12 +301,12 @@ function SkillDetailView({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{skill.name}</span>
           <AgentBadge type={skill.scope} className="font-normal" />
+          <Badge variant="outline" className="font-normal">
+            v{skill.latestVersion}
+          </Badge>
           {isGithubSkill && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              <Github className="h-3 w-3" />
-              {isSyncedGithubSkill(skill)
-                ? "Synced from GitHub"
-                : "Imported from GitHub"}
+            <Badge variant="secondary" className="font-normal">
+              {isSynced ? "Synced from GitHub" : "Imported from GitHub"}
             </Badge>
           )}
           {skill.sourceType === "built_in" && (
@@ -225,44 +317,43 @@ function SkillDetailView({
         </div>
       }
       documentTitle={skill.name}
-      description={skill.description || SKILL_DESCRIPTION_FALLBACK}
+      description={
+        section === "settings"
+          ? skill.description || SECTION_DESCRIPTIONS.settings
+          : SECTION_DESCRIPTIONS[section]
+      }
       backLink={
         <SkillBackLink href="/skills" label={backToListLabel("skill")} />
       }
       maxWidth="wizard"
-      tabs={tabs}
+      minWidth="phone"
+      tabs={SKILL_DETAIL_SECTIONS.map((entry) => ({
+        label: SKILL_SECTION_LABELS[entry],
+        href: skillDetailHref(skill.id, entry),
+        testId: `${E2eTestId.SkillDetailSection}-${entry}`,
+        selected: entry === section,
+      }))}
+      // Every section is a tab, so the mobile row keeps them all rather than
+      // folding the last one into an overflow popover.
+      mobileVisibleCount={SKILL_DETAIL_SECTIONS.length}
       actionButton={
-        // One primary (Edit), one secondary (Chat), everything else in the
-        // kebab with the destructive item under a divider. This header used to
-        // carry four buttons — Chat, History, Usage, Edit — where the agent
-        // pages carry two, which made the same header look like a different
-        // product on each page.
+        // Editing is the page itself now, so the header carries only what the
+        // page cannot: chatting with the skill, and the actions that act on it
+        // as a whole.
         <div className="flex shrink-0 items-center gap-2">
-          <ChatWithSkillButton skillId={skill.id} />
-          {/* Undecided is not refused: while the permission reads are in flight
-              the header holds the button's space rather than telling the
-              skill's own author it is not theirs. */}
-          {isAccessPending ? (
-            <Skeleton className="h-9 w-20" />
-          ) : canEdit ? (
-            <PermissionButton permissions={editAction.permissions} asChild>
-              <Link href={skillActionHref(editAction)}>
-                <Pencil className="h-4 w-4" />
-                {editAction.label}
-              </Link>
-            </PermissionButton>
-          ) : (
-            // Refused, not removed: a reader who simply cannot see Edit has no
-            // way to learn the skill is not theirs to change.
-            <PermissionButton
-              permissions={editAction.permissions}
-              disabled={canUpdate}
-              tooltip={canUpdate ? notYours : undefined}
-            >
-              <Pencil className="h-4 w-4" />
-              {editAction.label}
-            </PermissionButton>
+          {/* Who to ask about this skill. The facts row this used to sit in is
+              gone — the page is the skill's own settings, top to bottom — so
+              the creator sits in the header beside the actions. Dropped on
+              phones, where the header has no room to spare. A skill with no
+              creator recorded shows nothing rather than an empty label, which
+              would read as a name that failed to load. */}
+          {skill.createdBy && (
+            <p className="mr-1 hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
+              <span className="shrink-0">Created by</span>
+              <CreatedByCell createdBy={skill.createdBy} />
+            </p>
           )}
+          <ChatWithSkillButton skillId={skill.id} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon">
@@ -319,30 +410,94 @@ function SkillDetailView({
         </div>
       }
     >
-      {isUsageTab ? (
+      {section === "usage" ? (
         <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
       ) : (
-        <div className="space-y-10">
-          <OverviewSummary
-            headingId="skill-overview-heading"
-            facts={overviewFacts}
-            configHref={canEdit ? skillActionHref(editAction) : undefined}
+        <div className="flex flex-col gap-4">
+          {isGone ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                This skill is no longer available — it was deleted while you
+                were editing it. Your unsaved changes cannot be saved; copy
+                anything you need before leaving.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            isReadOnly && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  You can view this skill&apos;s configuration but not change
+                  it. {canUpdate ? `${notYours}.` : ""}
+                </AlertDescription>
+              </Alert>
+            )
+          )}
+
+          <SkillForm
+            draft={draft}
+            onChange={patchDraft}
+            onFilesChange={(update) =>
+              setDraft((prev) => ({ ...prev, files: update(prev.files) }))
+            }
+            labelsRef={labelsRef}
+            readOnly={isReadOnly}
+            // A synced skill's manifest and files belong to the repository;
+            // who may use it is still this organization's to decide.
+            contentReadOnly={isSynced}
+            contentNotice={
+              isSynced ? (
+                <GithubSyncPanel skill={skill} sourceRepo={githubSourceRepo} />
+              ) : isGithubSkill ? (
+                <GithubSnapshotNotice repo={githubSourceRepo} />
+              ) : null
+            }
           />
 
-          <SkillCard title="Instructions and files" spacious>
-            <SkillContentEditor
-              manifest={manifest}
-              files={skill.files}
-              onManifestChange={noop}
-              onFilesChange={noop}
-              readOnly
-              readOnlyMarker={false}
-              className={SKILL_DETAIL_EDITOR_CLASS}
-            />
-          </SkillCard>
+          {/* A reader who cannot change the skill has no save row at all — the
+              alert above already says why. No rule above it either: the panel
+              is already ruled off, and a second line right under it read as a
+              stray divider. */}
+          {!isReadOnly && (
+            <WizardFooter className="border-t-0 sm:justify-end">
+              <div className="flex items-center gap-2">
+                {isDirty && !isSaving && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={discardChanges}
+                  >
+                    Discard changes
+                  </Button>
+                )}
+                <PermissionButton
+                  permissions={{ skill: ["update"] }}
+                  disabled={!isDirty || !contentComplete || isGone || isSaving}
+                  onClick={handleSave}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save changes</span>
+                  )}
+                </PermissionButton>
+              </div>
+            </WizardFooter>
+          )}
         </div>
       )}
 
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={() => {
+          pendingHrefRef.current = null;
+          guard.keepEditing();
+        }}
+        onDiscard={guard.discardChanges}
+      />
       {historyOpen && (
         <SkillVersionHistoryDialog
           skillId={skill.id}
@@ -360,95 +515,4 @@ function SkillDetailView({
       )}
     </PageLayout>
   );
-}
-
-/** Where the skill's content comes from, and for a synced one, how it keeps up. */
-function SourceFact({ skill }: { skill: SkillDetail }) {
-  const appName = useAppName();
-  if (skill.sourceType === "built_in") {
-    return <span>Ships with {appName}</span>;
-  }
-  if (skill.sourceType !== "github") {
-    return <span>Written in {appName}</span>;
-  }
-  const repo = skillGithubSourceRepo(skill);
-  const synced = isSyncedGithubSkill(skill);
-  return (
-    <div className="space-y-1">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <Github className="size-4 shrink-0 text-muted-foreground" />
-        {repo ? (
-          <a
-            href={`https://github.com/${repo}${synced && skill.githubSyncRef ? `/tree/${skill.githubSyncRef}` : ""}`}
-            target="_blank"
-            rel="noreferrer"
-            className="min-w-0 truncate font-mono underline underline-offset-4 hover:text-primary"
-            title="Open on GitHub"
-          >
-            {repo}
-            {synced && skill.githubSyncRef ? (
-              <span className="text-muted-foreground">
-                {" "}
-                @ {skill.githubSyncRef}
-              </span>
-            ) : null}
-          </a>
-        ) : (
-          <span>GitHub</span>
-        )}
-      </div>
-      <p className={typeRole({ role: "meta" })}>
-        {synced ? (
-          skill.lastSyncError ? (
-            <span className="text-destructive">
-              <AlertTriangle className="mr-1 inline size-3 align-[-2px]" />
-              {`Synced ${syncIntervalLabel(skill.githubSyncInterval)} — last sync failed ${formatRelativeTimeFromNow(skill.lastSyncedAt).toLowerCase()}`}
-            </span>
-          ) : (
-            <span>
-              {`Synced ${syncIntervalLabel(skill.githubSyncInterval)} — last synced ${formatRelativeTimeFromNow(skill.lastSyncedAt, { neverLabel: "never" }).toLowerCase()}`}
-            </span>
-          )
-        ) : (
-          <span>Imported once; not kept in sync</span>
-        )}
-      </p>
-    </div>
-  );
-}
-
-/** One subject card. Editing starts from the page header, not each card. */
-function SkillCard({
-  title,
-  spacious = false,
-  children,
-}: {
-  title: string;
-  spacious?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <section
-      className={cn(
-        "space-y-4 rounded-lg border bg-card",
-        spacious ? "p-6" : "p-4",
-      )}
-    >
-      <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-const noop = () => {};
-
-// lowercase: these render mid-sentence ("Synced every hour — last synced …")
-const SYNC_INTERVAL_LABELS: Record<string, string> = {
-  "15m": "every 15 minutes",
-  "1h": "every hour",
-  "1d": "once a day",
-};
-
-function syncIntervalLabel(interval: string | null) {
-  return (interval && SYNC_INTERVAL_LABELS[interval]) || "on a schedule";
 }

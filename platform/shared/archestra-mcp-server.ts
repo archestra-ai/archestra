@@ -152,14 +152,14 @@ export const TOOL_DELETE_PLUGIN_SHORT_NAME = "delete_plugin";
 // code execution sandbox — implicit per-conversation sandbox; the create step
 // is hidden (lazy default).
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
-// Durable Agent tasks: delegated work uses Background execution when the
+// Durable Agent tasks: delegated work uses Agent Runtime when the
 // target Agent configured it; direct chat remains foreground. The MCP face of
 // the same task machinery the A2A v2 protocol exposes, so either kind of
 // client can drive the identical lifecycle.
 export const TOOL_START_TASK_SHORT_NAME = "start_task";
 export const TOOL_GET_TASK_SHORT_NAME = "get_task";
 export const TOOL_LIST_TASKS_SHORT_NAME = "list_tasks";
-export const TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME = "list_agent_executions";
+export const TOOL_LIST_AGENT_RUNS_SHORT_NAME = "list_agent_runs";
 export const TOOL_STEER_TASK_SHORT_NAME = "steer_task";
 export const TOOL_CANCEL_TASK_SHORT_NAME = "cancel_task";
 export const TOOL_POST_TASK_FILE_SHORT_NAME = "post_task_file";
@@ -295,7 +295,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_START_TASK_SHORT_NAME,
   TOOL_GET_TASK_SHORT_NAME,
   TOOL_LIST_TASKS_SHORT_NAME,
-  TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_STEER_TASK_SHORT_NAME,
   TOOL_CANCEL_TASK_SHORT_NAME,
   TOOL_POST_TASK_FILE_SHORT_NAME,
@@ -487,7 +487,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   start_task: "tasks",
   get_task: "tasks",
   list_tasks: "tasks",
-  list_agent_executions: "tasks",
+  list_agent_runs: "tasks",
   steer_task: "tasks",
   cancel_task: "tasks",
   post_task_file: "tasks",
@@ -690,8 +690,8 @@ export const TOOL_GET_TASK_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TASK_SHORT_NAME}` as const;
 export const TOOL_LIST_TASKS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_TASKS_SHORT_NAME}` as const;
-export const TOOL_LIST_AGENT_EXECUTIONS_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME}` as const;
+export const TOOL_LIST_AGENT_RUNS_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_AGENT_RUNS_SHORT_NAME}` as const;
 export const TOOL_STEER_TASK_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_STEER_TASK_SHORT_NAME}` as const;
 export const TOOL_CANCEL_TASK_FULL_NAME =

@@ -122,7 +122,7 @@ export function AgentCatalog({
   onStartFromScratch: () => void;
   onSelect: (template: AgentCatalogTemplate) => void;
 }) {
-  const configuredImage = useFeature("agentBackgroundExecutionBaseImage");
+  const configuredImage = useFeature("agentRuntimeBaseImage");
   const appName = useAppName();
   const resolvedAppIconLogo = useAppIconLogo();
   // SPDX-SnippetBegin
@@ -249,7 +249,7 @@ function template(params: {
   steerMode: "pipe" | "tmux_keys";
   requiredSubscriptionKind?: SubscriptionCredentialKind;
   additionalCredentials?: NonNullable<
-    NonNullable<AgentFormInitialValues["backgroundExecution"]>["credentials"]
+    NonNullable<AgentFormInitialValues["runtime"]>["credentials"]
   >;
 }): AgentCatalogTemplate {
   return {
@@ -264,7 +264,7 @@ function template(params: {
       systemPrompt: `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through ${params.platformName}, verify your work, and report the concrete result.`,
       accessAllTools: true,
       requiredSubscriptionKind: params.requiredSubscriptionKind,
-      backgroundExecution: {
+      runtime: {
         image: params.image,
         command: params.command,
         inferenceProtocol: params.inferenceProtocol,

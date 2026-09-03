@@ -9,7 +9,7 @@ const personalProxy: AgentSelectorAgent = {
   agentType: "llm_proxy",
   scope: "personal",
   authorEmail: "owner@example.com",
-  backgroundExecution: { credentials: [] },
+  runtime: { credentials: [] },
 };
 
 const orgProxy: AgentSelectorAgent = {
@@ -47,11 +47,11 @@ describe("AgentSelector (single, flat)", () => {
     expect(screen.getByText("My Proxy")).toBeInTheDocument();
     expect(screen.getByText("owner@example.com")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("combobox")).getByLabelText("Isolated execution"),
+      within(screen.getByRole("combobox")).getByLabelText("Dedicated runtime"),
     ).toBeInTheDocument();
   });
 
-  it("shows execution capability in the option as well as the closed trigger", async () => {
+  it("shows dedicated runtime capability in the option as well as the closed trigger", async () => {
     const user = userEvent.setup();
     render(
       <AgentSelector
@@ -67,7 +67,7 @@ describe("AgentSelector (single, flat)", () => {
 
     const option = await screen.findByRole("option", { name: /My Proxy/ });
     expect(
-      within(option).getByLabelText("Isolated execution"),
+      within(option).getByLabelText("Dedicated runtime"),
     ).toBeInTheDocument();
   });
 

@@ -102,6 +102,7 @@ import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
 import renderServiceRoutes from "@/services/apps/app-recording-render-service";
 import {
@@ -118,7 +119,6 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
-import { agentExecutionReconciler } from "@/services/runners/reconciler";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -1554,7 +1554,7 @@ const startWebServer = async () => {
     // (it also prunes terminal event logs), started here unconditionally so
     // orphaned tasks get settled even on pods that never start a run.
     a2aTaskRunService.startMaintenance();
-    agentExecutionReconciler.start();
+    agentRunReconciler.start();
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -1726,7 +1726,7 @@ function registerWebServerShutdown(
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
     activeChatRunService.beginShutdown();
-    agentExecutionReconciler.stop();
+    agentRunReconciler.stop();
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the
@@ -1893,7 +1893,7 @@ const startWorker = async () => {
 
     const labelKeys = await initializeObservabilityMetrics({
       includeMcpMetrics: true,
-      includeAgentExecutionMetrics: false,
+      includeAgentRunMetrics: false,
     });
 
     registerTaskHandlers(taskQueueService);

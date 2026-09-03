@@ -8,10 +8,10 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
-  AgentDeploymentBackend,
   AgentRunActorKind,
   AgentRunCompletionTarget,
-} from "@/types/runner";
+  AgentRuntimeBackend,
+} from "@/types/agent-runtime";
 import a2aTasksTable from "./a2a-task";
 import agentsTable from "./agent";
 import projectsTable from "./project";
@@ -23,7 +23,7 @@ import virtualApiKeysTable from "./virtual-api-key";
  *
  * Deliberately holds no state of its own: the task's own state machine is the
  * record of how the work is going, and a second one would only be a source of
- * disagreement. This row freezes which execution backend owns the task and
+ * disagreement. This row freezes which runtime backend owns the task and
  * whose credentials it uses, so reconciliation never depends on mutable Agent
  * configuration.
  */
@@ -32,7 +32,7 @@ const agentRunsTable = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
-    /** One isolated execution per task. */
+    /** One isolated run per task. */
     taskId: uuid("task_id")
       .notNull()
       .references(() => a2aTasksTable.id, { onDelete: "cascade" }),
@@ -47,7 +47,7 @@ const agentRunsTable = pgTable(
       onDelete: "cascade",
     }),
     /** Concise, user-editable label shown beside foreground conversations. */
-    title: text("title").notNull().default("Execution"),
+    title: text("title").notNull().default("Run"),
     /** Personal sidebar pin; the run is already owned by one initiating user. */
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     /** Project this session belongs to. It becomes ordinary work when detached. */
@@ -55,9 +55,9 @@ const agentRunsTable = pgTable(
       onDelete: "set null",
     }),
     /** Frozen at creation so a rename can never orphan the workload. */
-    deploymentName: text("deployment_name").notNull(),
+    workloadName: text("workload_name").notNull(),
     /** Frozen because a restart must re-adopt through the original backend. */
-    backend: text("backend").$type<AgentDeploymentBackend>().notNull(),
+    backend: text("backend").$type<AgentRuntimeBackend>().notNull(),
     /** Backend-owned placement scope, intentionally not Kubernetes-specific. */
     runtimeScope: text("runtime_scope").notNull(),
     /** Revoked when the session ends; a live key outliving its runtime keeps billing. */
@@ -65,7 +65,7 @@ const agentRunsTable = pgTable(
       () => virtualApiKeysTable.id,
       { onDelete: "set null" },
     ),
-    /** Optional channel callback for a detached execution's terminal result. */
+    /** Optional channel callback for a detached run's terminal result. */
     completionTarget:
       jsonb("completion_target").$type<AgentRunCompletionTarget>(),
     /** Reclaimable delivery lease; a crashed sender cannot strand the reply. */
@@ -75,14 +75,14 @@ const agentRunsTable = pgTable(
     ),
     /** Set after the provider accepts the terminal reply. */
     completionNotifiedAt: timestamp("completion_notified_at", { mode: "date" }),
-    /** Bounded tail of runtime output retained after the execution is removed. */
+    /** Bounded tail of runtime output retained after the run is removed. */
     logs: text("logs"),
     startedAt: timestamp("started_at", { mode: "date" }).notNull().defaultNow(),
     endedAt: timestamp("ended_at", { mode: "date" }),
   },
   (table) => [
     uniqueIndex("agent_runs_task_id_uidx").on(table.taskId),
-    uniqueIndex("agent_runs_deployment_name_uidx").on(table.deploymentName),
+    uniqueIndex("agent_runs_workload_name_uidx").on(table.workloadName),
     index("agent_runs_agent_id_idx").on(table.agentId),
     index("agent_runs_organization_id_idx").on(table.organizationId),
     index("agent_runs_actor_user_id_idx").on(table.actorUserId),

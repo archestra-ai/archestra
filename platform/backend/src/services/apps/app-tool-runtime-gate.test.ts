@@ -9,7 +9,7 @@ import {
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
-  TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_FILE_RAW_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
@@ -198,7 +198,7 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
     appId,
     organizationId,
     userId,
-    toolName: getArchestraToolFullName(TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME),
+    toolName: getArchestraToolFullName(TOOL_LIST_AGENT_RUNS_SHORT_NAME),
     toolInput: {},
     ...BASE,
   });

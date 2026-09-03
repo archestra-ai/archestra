@@ -171,10 +171,10 @@ describe("agent routes", () => {
       expect(agent.suggestedPrompts[0].prompt).toBe("Get me started");
     });
 
-    test("persists Background execution on an Agent", async () => {
-      const previous = config.agentBackgroundExecution.enabled;
-      config.agentBackgroundExecution.enabled = true;
-      const backgroundExecution = {
+    test("persists Agent Runtime on an Agent", async () => {
+      const previous = config.agentRuntime.enabled;
+      config.agentRuntime.enabled = true;
+      const runtime = {
         image: "example.com/coding-agent:latest",
         command: null,
         inferenceProtocol: "openai_responses",
@@ -198,22 +198,20 @@ describe("agent routes", () => {
             agentType: "agent",
             scope: "personal",
             teams: [],
-            backgroundExecution,
+            runtime,
           },
         });
 
         expect(response.statusCode).toBe(200);
-        expect(response.json().backgroundExecution).toEqual(
-          backgroundExecution,
-        );
+        expect(response.json().runtime).toEqual(runtime);
       } finally {
-        config.agentBackgroundExecution.enabled = previous;
+        config.agentRuntime.enabled = previous;
       }
     });
 
-    test("rejects Background execution configuration while the feature flag is disabled", async () => {
-      const previous = config.agentBackgroundExecution.enabled;
-      config.agentBackgroundExecution.enabled = false;
+    test("rejects Agent Runtime configuration while the feature flag is disabled", async () => {
+      const previous = config.agentRuntime.enabled;
+      config.agentRuntime.enabled = false;
       try {
         const response = await app.inject({
           method: "POST",
@@ -223,7 +221,7 @@ describe("agent routes", () => {
             agentType: "agent",
             scope: "personal",
             teams: [],
-            backgroundExecution: {
+            runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
               inferenceProtocol: "openai_responses",
@@ -241,16 +239,16 @@ describe("agent routes", () => {
 
         expect(response.statusCode).toBe(400);
         expect(response.json().error.message).toBe(
-          "Background execution is not enabled",
+          "Agent Runtime is not enabled",
         );
       } finally {
-        config.agentBackgroundExecution.enabled = previous;
+        config.agentRuntime.enabled = previous;
       }
     });
 
-    test("rejects Background execution on an MCP Gateway", async () => {
-      const previous = config.agentBackgroundExecution.enabled;
-      config.agentBackgroundExecution.enabled = true;
+    test("rejects Agent Runtime on an MCP Gateway", async () => {
+      const previous = config.agentRuntime.enabled;
+      config.agentRuntime.enabled = true;
       try {
         const response = await app.inject({
           method: "POST",
@@ -260,7 +258,7 @@ describe("agent routes", () => {
             agentType: "mcp_gateway",
             scope: "personal",
             teams: [],
-            backgroundExecution: {
+            runtime: {
               image: "example.com/coding-agent:latest",
               command: null,
               inferenceProtocol: "openai_responses",
@@ -281,16 +279,15 @@ describe("agent routes", () => {
           "can only be configured for Agents",
         );
       } finally {
-        config.agentBackgroundExecution.enabled = previous;
+        config.agentRuntime.enabled = previous;
       }
     });
 
-    test("requires deployment-operator approval for privileged Background execution", async () => {
-      const previousEnabled = config.agentBackgroundExecution.enabled;
-      const previousAllowPrivileged =
-        config.agentBackgroundExecution.allowPrivileged;
-      config.agentBackgroundExecution.enabled = true;
-      config.agentBackgroundExecution.allowPrivileged = false;
+    test("requires deployment-operator approval for privileged Agent Runtime", async () => {
+      const previousEnabled = config.agentRuntime.enabled;
+      const previousAllowPrivileged = config.agentRuntime.allowPrivileged;
+      config.agentRuntime.enabled = true;
+      config.agentRuntime.allowPrivileged = false;
       try {
         const response = await app.inject({
           method: "POST",
@@ -300,7 +297,7 @@ describe("agent routes", () => {
             agentType: "agent",
             scope: "personal",
             teams: [],
-            backgroundExecution: {
+            runtime: {
               image: "example.com/coding-agent:1.0.0",
               command: null,
               inferenceProtocol: "openai_responses",
@@ -321,9 +318,8 @@ describe("agent routes", () => {
           "disabled by the deployment operator",
         );
       } finally {
-        config.agentBackgroundExecution.enabled = previousEnabled;
-        config.agentBackgroundExecution.allowPrivileged =
-          previousAllowPrivileged;
+        config.agentRuntime.enabled = previousEnabled;
+        config.agentRuntime.allowPrivileged = previousAllowPrivileged;
       }
     });
 

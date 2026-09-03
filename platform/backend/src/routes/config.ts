@@ -28,7 +28,7 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
-import { isAnyRunnerBackendEnabled } from "@/services/runners/backends";
+import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
@@ -91,15 +91,15 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // SPDX-SnippetEnd
               sandbox: z.boolean(),
               /**
-               * Delegated Agent tasks in dedicated deployments.
+               * Delegated Agent tasks in dedicated runtimes.
                * True only when the feature is switched on AND the Kubernetes
                * runtime is configured — the UI must not offer to start a
-               * deployment nothing can schedule.
+               * runtime nothing can schedule.
                */
-              agentBackgroundExecution: z.boolean(),
-              agentBackgroundExecutionBaseImage: z.string(),
-              /** Operator-owned defaults and health for the execution backend. */
-              agentBackgroundExecutionBackend: z
+              agentRuntime: z.boolean(),
+              agentRuntimeBaseImage: z.string(),
+              /** Operator-owned defaults and health for the runtime backend. */
+              agentRuntimeBackend: z
                 .object({
                   name: z.literal("kubernetes"),
                   available: z.boolean(),
@@ -246,22 +246,18 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sandbox: skillSandboxRuntimeService.isEnabled,
           // The same predicate the routes gate on, so the UI can never offer
           // a feature whose endpoints answer 404.
-          agentBackgroundExecution: isAnyRunnerBackendEnabled(),
-          agentBackgroundExecutionBaseImage:
-            config.agentBackgroundExecution.defaultImage,
-          agentBackgroundExecutionBackend: config.agentBackgroundExecution
-            .enabled
+          agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
+          agentRuntimeBaseImage: config.agentRuntime.defaultImage,
+          agentRuntimeBackend: config.agentRuntime.enabled
             ? {
                 name: "kubernetes" as const,
-                available: isAnyRunnerBackendEnabled(),
-                defaultImage: config.agentBackgroundExecution.defaultImage,
-                defaultTtlHours:
-                  config.agentBackgroundExecution.defaultTtlHours,
+                available: isAnyAgentRuntimeBackendDriverEnabled(),
+                defaultImage: config.agentRuntime.defaultImage,
+                defaultTtlHours: config.agentRuntime.defaultTtlHours,
                 defaultIdleTimeoutMinutes:
-                  config.agentBackgroundExecution.defaultIdleTimeoutMinutes,
-                allowPrivileged:
-                  config.agentBackgroundExecution.allowPrivileged,
-                resources: config.agentBackgroundExecution.resources,
+                  config.agentRuntime.defaultIdleTimeoutMinutes,
+                allowPrivileged: config.agentRuntime.allowPrivileged,
+                resources: config.agentRuntime.resources,
               }
             : null,
           plugins: config.plugins.enabled,

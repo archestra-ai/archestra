@@ -12,8 +12,8 @@ import ProcessedEmailModel from "@/models/processed-email";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
-import { resolveAgentDeployment } from "@/services/runners/pod-execution";
-import { startDetachedAgentTask } from "@/services/runners/start-task";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -797,8 +797,8 @@ ${formattedHistory}
   // to match a user, so they cannot consume that user's personal credentials.
   const emailUser = userId === "system" ? null : senderUser;
 
-  const deployment = resolveAgentDeployment(agent);
-  if (deployment) {
+  const runtime = resolveAgentRuntime(agent);
+  if (runtime) {
     try {
       const task = await startDetachedAgentTask({
         actor: emailUser
@@ -847,7 +847,7 @@ ${formattedHistory}
       }
       logger.info(
         { agentId, taskId: task.id, originalMessageId: email.messageId },
-        "[IncomingEmail] Started background execution for email",
+        "[IncomingEmail] Started Agent Runtime for email",
       );
       return undefined;
     } catch (error) {
@@ -904,7 +904,7 @@ ${formattedHistory}
         agentId,
         error: error instanceof Error ? error.message : String(error),
       },
-      "[IncomingEmail] Agent execution failed; released processed marker so a redelivery can retry",
+      "[IncomingEmail] Agent run failed; released processed marker so a redelivery can retry",
     );
     throw error;
   }
@@ -916,7 +916,7 @@ ${formattedHistory}
       responseLength: result.text.length,
       finishReason: result.finishReason,
     },
-    "[IncomingEmail] Agent execution completed",
+    "[IncomingEmail] Agent run completed",
   );
 
   // Optionally send the agent's response back via email reply

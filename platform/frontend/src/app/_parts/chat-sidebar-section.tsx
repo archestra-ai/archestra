@@ -25,8 +25,8 @@ import { ConversationProjectActions } from "@/app/_parts/conversation-project-ac
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
-import { ExecutionStateIcon } from "@/components/chat/execution-state-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
@@ -59,11 +59,11 @@ import {
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import {
-  useCancelAgentExecution,
-  useDeleteAgentExecution,
-  useMyAgentExecutions,
-  useUpdateAgentExecution,
-} from "@/lib/agent-background-execution.query";
+  useCancelAgentRun,
+  useDeleteAgentRun,
+  useMyAgentRuns,
+  useUpdateAgentRun,
+} from "@/lib/agent-runtime.query";
 import {
   useApps,
   useOpenAppInChat,
@@ -143,17 +143,13 @@ export function ChatSidebarSection({
   const { data: conversations = [], isLoading } = useConversations({
     enabled: isAuthenticated && canReadConversation === true,
   });
-  const backgroundExecutionEnabled =
-    useFeature("agentBackgroundExecution") === true;
-  const { data: executionSessions = [], isLoading: executionsLoading } =
-    useMyAgentExecutions(
-      isAuthenticated &&
-        canReadConversation === true &&
-        backgroundExecutionEnabled,
-    );
-  const updateExecutionMutation = useUpdateAgentExecution();
-  const cancelExecutionMutation = useCancelAgentExecution();
-  const deleteExecutionMutation = useDeleteAgentExecution();
+  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const { data: runs = [], isLoading: runsLoading } = useMyAgentRuns(
+    isAuthenticated && canReadConversation === true && runtimeEnabled,
+  );
+  const updateRunMutation = useUpdateAgentRun();
+  const cancelRunMutation = useCancelAgentRun();
+  const deleteRunMutation = useDeleteAgentRun();
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
   const generateTitleMutation = useGenerateConversationTitle();
@@ -163,14 +159,10 @@ export function ChatSidebarSection({
   const [editingTitle, setEditingTitle] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [editingExecutionId, setEditingExecutionId] = useState<string | null>(
-    null,
-  );
-  const [editingExecutionTitle, setEditingExecutionTitle] = useState("");
-  const [stopExecutionId, setStopExecutionId] = useState<string | null>(null);
-  const [deleteExecutionId, setDeleteExecutionId] = useState<string | null>(
-    null,
-  );
+  const [editingRunId, setEditingRunId] = useState<string | null>(null);
+  const [editingRunTitle, setEditingRunTitle] = useState("");
+  const [stopRunId, setStopRunId] = useState<string | null>(null);
+  const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: canUpdateConversation } = useHasPermissions({
@@ -197,19 +189,17 @@ export function ChatSidebarSection({
   const { isMobile, setOpenMobile } = useSidebar();
 
   const currentConversationId =
-    pathname.startsWith("/chat/") && !pathname.startsWith("/chat/executions/")
+    pathname.startsWith("/chat/") && !pathname.startsWith("/chat/runs/")
       ? (pathname.split("/").at(-1) ?? null)
       : null;
-  const currentExecutionTaskId = pathname.startsWith("/chat/executions/")
+  const currentRunTaskId = pathname.startsWith("/chat/runs/")
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
   const recentUnpinnedChats = conversations.filter(
     (c) => !c.pinnedAt && !isScheduledRunConversation(c),
   );
-  const recentUnpinnedExecutions = executionSessions.filter(
-    (execution) => !execution.pinnedAt,
-  );
+  const recentUnpinnedRuns = runs.filter((run) => !run.pinnedAt);
 
   // /api/projects requires project:read; skip the fetch for roles without it
   // so the sidebar doesn't 403 (and toast) on every chat page.
@@ -229,15 +219,15 @@ export function ChatSidebarSection({
     chats: conversations.filter((c) => !isScheduledRunConversation(c)),
     projects: pinnedProjects,
     apps: pinnedApps,
-    executions: executionSessions,
+    runs,
   });
 
   useEffect(() => {
-    if ((editingId || editingExecutionId) && inputRef.current) {
+    if ((editingId || editingRunId) && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [editingId, editingExecutionId]);
+  }, [editingId, editingRunId]);
 
   const handleSelectConversation = (id: string) => {
     if (isMobile) {
@@ -276,17 +266,17 @@ export function ChatSidebarSection({
     setEditingTitle("");
   };
 
-  const handleSaveExecutionTitle = async (taskId: string) => {
-    const title = editingExecutionTitle.trim();
+  const handleSaveRunTitle = async (taskId: string) => {
+    const title = editingRunTitle.trim();
     if (!title) {
-      setEditingExecutionId(null);
-      setEditingExecutionTitle("");
+      setEditingRunId(null);
+      setEditingRunTitle("");
       return;
     }
     try {
-      await updateExecutionMutation.mutateAsync({ taskId, title });
-      setEditingExecutionId(null);
-      setEditingExecutionTitle("");
+      await updateRunMutation.mutateAsync({ taskId, title });
+      setEditingRunId(null);
+      setEditingRunTitle("");
     } catch {
       // Error is handled by the mutation's onError callback.
     }
@@ -324,8 +314,8 @@ export function ChatSidebarSection({
     pinConversationMutation.mutate({ id, pinned: !isPinned });
   };
 
-  const handleToggleExecutionPin = (taskId: string, isPinned: boolean) => {
-    updateExecutionMutation.mutate({
+  const handleToggleRunPin = (taskId: string, isPinned: boolean) => {
+    updateRunMutation.mutate({
       taskId,
       pinnedAt: isPinned ? null : new Date().toISOString(),
     });
@@ -346,12 +336,12 @@ export function ChatSidebarSection({
     }
   };
 
-  const handleChangeExecutionProject = async (
+  const handleChangeRunProject = async (
     taskId: string,
     projectId: string | null,
   ) => {
     try {
-      await updateExecutionMutation.mutateAsync({ taskId, projectId });
+      await updateRunMutation.mutateAsync({ taskId, projectId });
       setOpenMenuId(null);
     } catch {
       // Error is handled by the mutation's onError callback.
@@ -703,31 +693,29 @@ export function ChatSidebarSection({
     );
   };
 
-  const renderExecutionItem = (
-    execution: (typeof executionSessions)[number],
-  ) => {
-    const active = currentExecutionTaskId === execution.taskId;
-    const menuKey = `execution:${execution.taskId}`;
+  const renderRunItem = (run: (typeof runs)[number]) => {
+    const active = currentRunTaskId === run.taskId;
+    const menuKey = `run:${run.taskId}`;
     const isMenuOpen = openMenuId === menuKey;
-    const isEditing = editingExecutionId === execution.taskId;
-    const live = execution.endedAt === null;
-    const isPinned = !!execution.pinnedAt;
+    const isEditing = editingRunId === run.taskId;
+    const live = run.endedAt === null;
+    const isPinned = !!run.pinnedAt;
     return (
       <SidebarMenuSubItem key={menuKey}>
         <div className="flex w-full items-center justify-between gap-1">
           {isEditing ? (
             <Input
               ref={inputRef}
-              aria-label="Execution title"
-              value={editingExecutionTitle}
-              onChange={(event) => setEditingExecutionTitle(event.target.value)}
-              onBlur={() => handleSaveExecutionTitle(execution.taskId)}
+              aria-label="Run title"
+              value={editingRunTitle}
+              onChange={(event) => setEditingRunTitle(event.target.value)}
+              onBlur={() => handleSaveRunTitle(run.taskId)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
-                  handleSaveExecutionTitle(execution.taskId);
+                  handleSaveRunTitle(run.taskId);
                 } else if (event.key === "Escape") {
-                  setEditingExecutionId(null);
-                  setEditingExecutionTitle("");
+                  setEditingRunId(null);
+                  setEditingRunTitle("");
                 }
               }}
               className="h-7 flex-1 text-sm"
@@ -736,18 +724,15 @@ export function ChatSidebarSection({
             <SidebarMenuButton
               onClick={() => {
                 if (isMobile) setOpenMobile(false);
-                router.push(`/chat/executions/${execution.taskId}`);
+                router.push(`/chat/runs/${run.taskId}`);
               }}
               isActive={active}
               className="cursor-pointer flex-1"
             >
               <span className="flex min-w-0 flex-1 items-center gap-2">
-                <ExecutionStateIcon
-                  state={execution.state}
-                  className="size-3.5"
-                />
+                <RunStateIcon state={run.state} className="size-3.5" />
                 <TruncatedText
-                  message={execution.title}
+                  message={run.title}
                   maxLength={MAX_TITLE_LENGTH}
                   className="truncate"
                   showTooltip={false}
@@ -755,11 +740,11 @@ export function ChatSidebarSection({
               </span>
             </SidebarMenuButton>
           )}
-          {!isEditing && execution.projectId && execution.projectName && (
+          {!isEditing && run.projectId && run.projectName && (
             <ProjectBadgeButton
-              projectId={execution.projectId}
-              projectName={execution.projectName}
-              projectIcon={execution.projectIcon}
+              projectId={run.projectId}
+              projectName={run.projectName}
+              projectIcon={run.projectIcon}
               compact
               onNavigate={(projectId) => {
                 if (isMobile) setOpenMobile(false);
@@ -775,7 +760,7 @@ export function ChatSidebarSection({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  aria-label="Execution actions"
+                  aria-label="Run actions"
                   className={cn(
                     "shrink-0 transition-opacity",
                     isMenuOpen
@@ -788,9 +773,7 @@ export function ChatSidebarSection({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right">
                 <DropdownMenuItem
-                  onClick={() =>
-                    handleToggleExecutionPin(execution.taskId, isPinned)
-                  }
+                  onClick={() => handleToggleRunPin(run.taskId, isPinned)}
                 >
                   {isPinned ? (
                     <>
@@ -806,8 +789,8 @@ export function ChatSidebarSection({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    setEditingExecutionId(execution.taskId);
-                    setEditingExecutionTitle(execution.title);
+                    setEditingRunId(run.taskId);
+                    setEditingRunTitle(run.title);
                   }}
                 >
                   <Pencil className="mr-2 size-4" />
@@ -815,25 +798,23 @@ export function ChatSidebarSection({
                 </DropdownMenuItem>
                 {canReadProjects === true && (
                   <ConversationProjectActions
-                    projectId={execution.projectId}
+                    projectId={run.projectId}
                     projects={projectsData ?? []}
-                    isPending={updateExecutionMutation.isPending}
+                    isPending={updateRunMutation.isPending}
                     onProjectChange={(projectId) =>
-                      handleChangeExecutionProject(execution.taskId, projectId)
+                      handleChangeRunProject(run.taskId, projectId)
                     }
                   />
                 )}
                 {live ? (
-                  <DropdownMenuItem
-                    onClick={() => setStopExecutionId(execution.taskId)}
-                  >
+                  <DropdownMenuItem onClick={() => setStopRunId(run.taskId)}>
                     <Square className="mr-2 size-4" />
                     Stop
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
-                    onClick={() => setDeleteExecutionId(execution.taskId)}
+                    onClick={() => setDeleteRunId(run.taskId)}
                   >
                     <Trash2 className="mr-2 size-4" />
                     Delete
@@ -988,9 +969,9 @@ export function ChatSidebarSection({
 
   if (
     !isLoading &&
-    !executionsLoading &&
+    !runsLoading &&
     conversations.length === 0 &&
-    executionSessions.length === 0 &&
+    runs.length === 0 &&
     pinnedProjects.length === 0 &&
     pinnedApps.length === 0
   ) {
@@ -1004,8 +985,8 @@ export function ChatSidebarSection({
       item,
       timestamp: item.lastMessageAt,
     })),
-    ...recentUnpinnedExecutions.map((item) => ({
-      kind: "execution" as const,
+    ...recentUnpinnedRuns.map((item) => ({
+      kind: "run" as const,
       item,
       timestamp: item.stateChangedAt ?? item.startedAt,
     })),
@@ -1013,10 +994,10 @@ export function ChatSidebarSection({
     (left, right) =>
       new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
   );
-  // Executions are operational sessions, so keep every one of them visible
+  // Runs are operational sessions, so keep every one of them visible
   // instead of counting them against the chat slots — the rows still sort
   // into the same timeline.
-  const visibleSlots = slots + recentUnpinnedExecutions.length;
+  const visibleSlots = slots + recentUnpinnedRuns.length;
   const showMore = recentUnpinnedChats.length > slots;
 
   // The list arrives sorted by lastMessageAt desc, so grouping the visible
@@ -1028,7 +1009,7 @@ export function ChatSidebarSection({
 
   return (
     <>
-      {isLoading || executionsLoading ? (
+      {isLoading || runsLoading ? (
         <ChatListSkeleton subClass={subClass} />
       ) : (
         <ChatListFadeIn fadeIn={fadeIn}>
@@ -1048,7 +1029,7 @@ export function ChatSidebarSection({
                             ? renderProjectItem(it.item)
                             : it.type === "app"
                               ? renderAppItem(it.item)
-                              : renderExecutionItem(it.item),
+                              : renderRunItem(it.item),
                       )}
                     </SidebarMenuSub>
                   </SidebarMenuItem>
@@ -1069,7 +1050,7 @@ export function ChatSidebarSection({
                       {group.chats.map((entry) =>
                         entry.kind === "conversation"
                           ? renderConversationItem(entry.item)
-                          : renderExecutionItem(entry.item),
+                          : renderRunItem(entry.item),
                       )}
                       {showMore &&
                         groupIndex === recentChatGroups.length - 1 && (
@@ -1109,35 +1090,35 @@ export function ChatSidebarSection({
       />
 
       <DeleteConfirmDialog
-        open={stopExecutionId !== null}
-        onOpenChange={(open) => !open && setStopExecutionId(null)}
-        title="Stop this execution?"
+        open={stopRunId !== null}
+        onOpenChange={(open) => !open && setStopRunId(null)}
+        title="Stop this run?"
         description="The Agent process will stop and its terminal output will be retained."
-        isPending={cancelExecutionMutation.isPending}
-        confirmLabel="Stop execution"
+        isPending={cancelRunMutation.isPending}
+        confirmLabel="Stop run"
         pendingLabel="Stopping…"
         onConfirm={async () => {
-          if (!stopExecutionId) return;
-          await cancelExecutionMutation.mutateAsync(stopExecutionId);
-          setStopExecutionId(null);
+          if (!stopRunId) return;
+          await cancelRunMutation.mutateAsync(stopRunId);
+          setStopRunId(null);
         }}
       />
 
       <DeleteConfirmDialog
-        open={deleteExecutionId !== null}
-        onOpenChange={(open) => !open && setDeleteExecutionId(null)}
-        title="Delete execution?"
+        open={deleteRunId !== null}
+        onOpenChange={(open) => !open && setDeleteRunId(null)}
+        title="Delete run?"
         description="This removes the session and its retained output. This action cannot be undone."
-        isPending={deleteExecutionMutation.isPending}
+        isPending={deleteRunMutation.isPending}
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         onConfirm={async () => {
-          if (!deleteExecutionId) return;
-          if (currentExecutionTaskId === deleteExecutionId) {
+          if (!deleteRunId) return;
+          if (currentRunTaskId === deleteRunId) {
             router.push("/chat");
           }
-          await deleteExecutionMutation.mutateAsync(deleteExecutionId);
-          setDeleteExecutionId(null);
+          await deleteRunMutation.mutateAsync(deleteRunId);
+          setDeleteRunId(null);
         }}
       />
 

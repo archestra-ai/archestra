@@ -22,7 +22,7 @@ vi.mock("@/lib/agent.query", () => ({
         description: null,
         icon: null,
         systemPrompt: null,
-        backgroundExecution: null,
+        runtime: null,
         accessAllTools: true,
       },
       {
@@ -34,7 +34,7 @@ vi.mock("@/lib/agent.query", () => ({
         description: null,
         icon: null,
         systemPrompt: null,
-        backgroundExecution: null,
+        runtime: null,
         accessAllTools: true,
       },
       {
@@ -46,7 +46,7 @@ vi.mock("@/lib/agent.query", () => ({
         description: null,
         icon: null,
         systemPrompt: null,
-        backgroundExecution: null,
+        runtime: null,
         accessAllTools: true,
       },
     ],

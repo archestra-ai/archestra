@@ -8,7 +8,11 @@ export const CLIENT_LABELS: Record<string, string> = {
 };
 
 export const pluginDetailHref = (id: string) => `/plugins/${id}`;
-export const pluginEditHref = (id: string) => `/plugins/${id}/edit`;
+/**
+ * Where "edit this plugin" lands. Editing is not a page of its own any more —
+ * the plugin's page *is* its settings — so every edit link resolves there.
+ */
+export const pluginEditHref = (id: string) => pluginDetailHref(id);
 
 /**
  * Attribution shown on the vendor's own plugin. Deliberately not
@@ -102,15 +106,4 @@ export function resolvePluginInstallSelection(
         ? "Selected plugins have no common platform"
         : null,
   };
-}
-
-export const PLUGIN_EDIT_STEPS = [
-  { id: "content", title: "Content" },
-  { id: "access", title: "Access" },
-] as const;
-
-export type PluginEditStepId = (typeof PLUGIN_EDIT_STEPS)[number]["id"];
-
-export function resolvePluginEditStep(raw: string | null): PluginEditStepId {
-  return raw === "access" ? "access" : "content";
 }

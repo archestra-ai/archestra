@@ -18,8 +18,8 @@ import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { ExecutionCredentialsSection } from "@/components/settings/execution-credentials-section";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
+import { RuntimeCredentialsSection } from "@/components/settings/runtime-credentials-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
@@ -95,7 +95,7 @@ export default function AgentSettingsPage() {
   // switch on. Past the closing date the whole section goes rather than
   // lingering as a switch that no longer changes anything.
   const hackathonOffered = useAppsHackathonOffered();
-  const executionBackend = useFeature("agentBackgroundExecutionBackend");
+  const runtimeBackend = useFeature("agentRuntimeBackend");
 
   const {
     data: allModels,
@@ -461,35 +461,33 @@ export default function AgentSettingsPage() {
         emptyMessage="No channels found."
         savedMessage="Available messaging channels updated"
       />
-      {executionBackend && (
+      {runtimeBackend && (
         <>
-          <ExecutionCredentialsSection />
-          <ExecutionBackendSection executionBackend={executionBackend} />
+          <RuntimeCredentialsSection />
+          <RuntimeBackendSection runtimeBackend={runtimeBackend} />
         </>
       )}
     </SettingsSectionStack>
   );
 }
 
-type ExecutionBackend = NonNullable<
-  FeaturesResponse["agentBackgroundExecutionBackend"]
->;
+type RuntimeBackend = NonNullable<FeaturesResponse["agentRuntimeBackend"]>;
 
-function ExecutionBackendSection({
-  executionBackend,
+function RuntimeBackendSection({
+  runtimeBackend,
 }: {
-  executionBackend: ExecutionBackend;
+  runtimeBackend: RuntimeBackend;
 }) {
   return (
     <SettingsBlock
-      id="execution-backend"
-      title="Execution backend"
+      id="runtime-backend"
+      title="Runtime backend"
       description={
         <>
-          Execution backends provide the isolated environment where delegated
+          Runtime backends provide the isolated environment where delegated
           Agent tasks run.{" "}
           <ExternalDocsLink
-            href={getDocsUrl(DocsPage.PlatformAgentBackgroundExecution)}
+            href={getDocsUrl(DocsPage.PlatformAgentRuntime)}
             className="whitespace-nowrap"
           >
             Learn more
@@ -501,14 +499,14 @@ function ExecutionBackendSection({
           type="button"
           size="sm"
           disabled
-          disabledText="Additional execution backends are coming soon."
+          disabledText="Additional runtime backends are coming soon."
         >
           <Plus className="size-4" />
           <span>Add backend</span>
         </ButtonWithTooltip>
       }
       notice={
-        !executionBackend.available
+        !runtimeBackend.available
           ? "The feature is enabled, but the Kubernetes backend is unreachable. Check the orchestrator configuration."
           : undefined
       }

@@ -12,10 +12,10 @@ export { default as AgentExcludedConnectorModel } from "./agent-excluded-connect
 export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";
 export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent";
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
-export { default as AgentExecutionInputModel } from "./agent-execution-input";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentRunModel } from "./agent-run";
+export { default as AgentRunInputModel } from "./agent-run-input";
 export { default as AgentRunShareModel } from "./agent-run-share";
 export { default as AgentRunTranscriptModel } from "./agent-run-transcript";
 export { default as AgentSkillModel } from "./agent-skill";
@@ -65,8 +65,6 @@ export {
 export { default as EnvironmentModel } from "./environment";
 export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
 export { default as EnvironmentResourceDefaultModel } from "./environment-resource-default";
-export { default as ExecutionCredentialConnectionModel } from "./execution-credential-connection";
-export { default as ExecutionCredentialDefinitionModel } from "./execution-credential-definition";
 export { default as ExternalMcpSkillUsageEventModel } from "./external-mcp-skill-usage-event";
 export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
@@ -128,6 +126,8 @@ export {
 } from "./project";
 export { default as ProjectPinModel } from "./project-pin";
 export { default as ProjectShareModel } from "./project-share";
+export { default as RuntimeCredentialConnectionModel } from "./runtime-credential-connection";
+export { default as RuntimeCredentialDefinitionModel } from "./runtime-credential-definition";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */

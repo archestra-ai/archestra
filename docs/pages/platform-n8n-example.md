@@ -2,7 +2,7 @@
 title: Secure Agent with N8N
 category: Examples
 order: 4
-lastUpdated: 2026-08-24
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -141,7 +141,7 @@ Here, [Archestra's AI tool guardrails](/docs/platform-ai-tool-guardrails) reduce
 
 ### 5. Tracking N8N Executions (Optional)
 
-It's also possible to track the number of N8N agent executions flowing through Archestra.
+It's also possible to track the number of N8N agent runs flowing through Archestra.
 
 N8N assigns a unique execution ID to every workflow run. To make Archestra aware of it, pass it via a custom header:
 
@@ -155,10 +155,10 @@ Configure the custom header in N8N:
 n8n-support-agent/{{ $execution.id }}/
 ```
 
-The [`X-Archestra-Meta`](/docs/platform-llm-proxy#custom-headers) header format is `<agent-id>/<execution-id>/<session-id>`. Here, `{{ $execution.id }}` is an N8N expression that resolves to the current workflow execution ID.
+The [`X-Archestra-Meta`](/docs/platform-llm-proxy#custom-headers) header format is `<agent-id>/<run-id>/<session-id>`. Here, `{{ $execution.id }}` is an N8N expression that resolves to the current workflow execution ID.
 
-Archestra will then export the `agent_executions_total` Prometheus metric — a counter of unique executions grouped by `agent_id`.
+Archestra will then export the `agent_runs_total` Prometheus metric — a counter of unique executions grouped by `agent_id`.
 
-This is also useful for attributing costs. Archestra already exports `llm_cost_total`, which tracks LLM inference spending per agent. Combined with `agent_executions_total`, you can calculate the full operating cost of each agent (inference + per-execution fees). The built-in [GenAI Observability dashboard](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/genai-observability.json) includes this in the main **Cost** section, with execution-level totals grouped separately under **External Agent Executions**. See [Observability](/docs/platform-observability) for setup.
+This is also useful for attributing costs. Archestra already exports `llm_cost_total`, which tracks LLM inference spending per agent. Combined with `agent_runs_total`, you can calculate the full operating cost of each agent (inference + per-run fees). The built-in [GenAI Observability dashboard](https://github.com/archestra-ai/archestra/blob/main/platform/dev/grafana/dashboards/genai-observability.json) includes this in the main **Cost** section, with execution-level totals grouped separately under **External Agent Runs**. See [Observability](/docs/platform-observability) for setup.
 
 ![Inference Cost per Agent](/docs/automated_screenshots/platform_n8n_inference_costs.webp)

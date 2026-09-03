@@ -460,35 +460,33 @@ export const RouteId = {
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",
 
-  // Agent Background execution
-  GetAgentBackgroundExecutionPreflight: "getAgentBackgroundExecutionPreflight",
-  SetAgentBackgroundExecutionCredential:
-    "setAgentBackgroundExecutionCredential",
-  DeleteAgentBackgroundExecutionCredential:
-    "deleteAgentBackgroundExecutionCredential",
-  ListExecutionCredentials: "listExecutionCredentials",
-  CreateExecutionCredential: "createExecutionCredential",
-  GetExecutionCredentialUsage: "getExecutionCredentialUsage",
-  UpdateExecutionCredential: "updateExecutionCredential",
-  DeleteExecutionCredential: "deleteExecutionCredential",
-  SetPersonalExecutionCredentialConnection:
-    "setPersonalExecutionCredentialConnection",
-  DeletePersonalExecutionCredentialConnection:
-    "deletePersonalExecutionCredentialConnection",
-  SetOrganizationExecutionCredentialConnection:
-    "setOrganizationExecutionCredentialConnection",
-  DeleteOrganizationExecutionCredentialConnection:
-    "deleteOrganizationExecutionCredentialConnection",
-  GetAgentExecutions: "getAgentExecutions",
-  StartAgentExecution: "startAgentExecution",
-  GetMyAgentExecutions: "getMyAgentExecutions",
-  GetMyAgentExecution: "getMyAgentExecution",
-  UpdateAgentExecution: "updateAgentExecution",
-  CancelAgentExecution: "cancelAgentExecution",
-  DeleteAgentExecution: "deleteAgentExecution",
-  GetAgentExecutionShare: "getAgentExecutionShare",
-  ShareAgentExecution: "shareAgentExecution",
-  UnshareAgentExecution: "unshareAgentExecution",
+  // Agent Runtime
+  GetAgentRuntimePreflight: "getAgentRuntimePreflight",
+  SetAgentRuntimeCredential: "setAgentRuntimeCredential",
+  DeleteAgentRuntimeCredential: "deleteAgentRuntimeCredential",
+  ListRuntimeCredentials: "listRuntimeCredentials",
+  CreateRuntimeCredential: "createRuntimeCredential",
+  GetRuntimeCredentialUsage: "getRuntimeCredentialUsage",
+  UpdateRuntimeCredential: "updateRuntimeCredential",
+  DeleteRuntimeCredential: "deleteRuntimeCredential",
+  SetPersonalRuntimeCredentialConnection:
+    "setPersonalRuntimeCredentialConnection",
+  DeletePersonalRuntimeCredentialConnection:
+    "deletePersonalRuntimeCredentialConnection",
+  SetOrganizationRuntimeCredentialConnection:
+    "setOrganizationRuntimeCredentialConnection",
+  DeleteOrganizationRuntimeCredentialConnection:
+    "deleteOrganizationRuntimeCredentialConnection",
+  GetAgentRuns: "getAgentRuns",
+  StartAgentRun: "startAgentRun",
+  GetMyAgentRuns: "getMyAgentRuns",
+  GetMyAgentRun: "getMyAgentRun",
+  UpdateAgentRun: "updateAgentRun",
+  CancelAgentRun: "cancelAgentRun",
+  DeleteAgentRun: "deleteAgentRun",
+  GetAgentRunShare: "getAgentRunShare",
+  ShareAgentRun: "shareAgentRun",
+  UnshareAgentRun: "unshareAgentRun",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -837,7 +835,7 @@ export const RouteId = {
   RestoreProject: "restoreProject",
   PermanentlyDeleteProject: "permanentlyDeleteProject",
   GetProjectConversations: "getProjectConversations",
-  GetProjectExecutions: "getProjectExecutions",
+  GetProjectRuns: "getProjectRuns",
   GetProjectFiles: "getProjectFiles",
   UploadProjectFiles: "uploadProjectFiles",
   GetProjectInstructions: "getProjectInstructions",

@@ -61,7 +61,7 @@ describe("buildTaskCompletionNotification", () => {
         state: "TASK_STATE_COMPLETED",
         statusReason: null,
         output: [
-          "Background execution run for Coding Agent (agent-1)",
+          "Agent Runtime run for Coding Agent (agent-1)",
           "Model example-model via the proxy.",
           "4 tools available.",
           "Finished the requested work.",

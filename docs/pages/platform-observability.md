@@ -2,6 +2,7 @@
 title: Observability
 category: Archestra Platform
 order: 4
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -200,7 +201,7 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.agent.name` - Internal Archestra agent name (`LLM Proxy` for LLM Proxy requests)
 - `gen_ai.conversation.id` - Session ID for grouping related LLM calls (from [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.agent.type` - Agent type (`agent`, `llm_proxy`, `mcp_gateway`, `profile`)
-- `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
+- `archestra.run.id` - Run ID (from the [`X-Archestra-Run-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.auth.method` - How the request authenticated: `provider_key`, `virtual_key`, `passthrough_virtual_key`, `jwks`, `oauth_client_credentials`, `oauth_user`, or `internal`
 - `archestra.app.id` - ID of the [app](platform-apps) that made the call, when an app authenticated the request
@@ -328,12 +329,12 @@ This same unified tracing applies to all agent invocation paths:
 | MS Teams        | `chatops`        | `ms-teams`                 |
 | Email           | `email`          | `email`                    |
 
-The `archestra.trigger.source` span attribute lets you filter traces by invocation channel (e.g., find all agent executions triggered from MS Teams).
+The `archestra.trigger.source` span attribute lets you filter traces by invocation channel (e.g., find all agent runs triggered from MS Teams).
 
-Background execution model and MCP calls retain the same Agent, user, route,
-and execution correlation attributes. Terminal replies sent back to ChatOps or
+Agent Runtime model and MCP calls retain the same Agent, user, route,
+and run correlation attributes. Terminal replies sent back to ChatOps or
 email produce `send_completion` messaging spans. The
-`runner_completion_deliveries_total` metric counts successful and failed
+`agent_runtime_completion_deliveries_total` metric counts successful and failed
 deliveries by the closed `interface` label (`chatops` or `email`). Task IDs are
 kept out of Prometheus labels.
 

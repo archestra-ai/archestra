@@ -11,16 +11,16 @@ frontend_int_tests_port = os.getenv('ARCHESTRA_FRONTEND_INT_TESTS_PORT', '3010')
 # in another, and the port-forwarder watches a third.
 mcp_namespace = os.getenv('ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE', 'default')
 
-# Curated Agent catalog images. Dynamically-created Background execution Jobs
+# Curated Agent catalog images. Dynamically-created Agent Runtime Jobs
 # are not part of Tilt's rendered YAML, so tiny sleeping deployments anchor
 # the images and make Tilt build/load them before the backend can schedule one.
-background_execution_enabled = os.getenv('ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED') == 'true'
+agent_runtime_enabled = os.getenv('ARCHESTRA_AGENT_RUNTIME_ENABLED') == 'true'
 # The public GAR images are the normal local-development path. Build and anchor
 # local targets only when the configured catalog base image explicitly selects
 # the stable :dev tag used by dynamically-created Jobs.
 build_agent_catalog_images_locally = (
-  background_execution_enabled and
-  os.getenv('ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE', '').strip() == 'agent-archestra:dev'
+  agent_runtime_enabled and
+  os.getenv('ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE', '').strip() == 'agent-archestra:dev'
 )
 agent_catalog_images = [
   'agent-archestra',

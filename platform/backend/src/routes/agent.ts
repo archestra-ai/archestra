@@ -56,10 +56,10 @@ import {
 } from "@/services/environments/environment";
 import {
   type Agent,
-  type AgentBackgroundExecution,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
+  type AgentRuntime,
   type AgentScope,
   AgentScopeFilterSchema,
   AgentScopeSchema,
@@ -503,9 +503,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       checker.require(agentType, "create");
-      requireBackgroundExecutionPermission({
+      requireAgentRuntimePermission({
         agentType,
-        backgroundExecution: body.backgroundExecution,
+        runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
       });
 
@@ -1466,9 +1466,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
-      requireBackgroundExecutionPermission({
+      requireAgentRuntimePermission({
         agentType: existingAgent.agentType,
-        backgroundExecution: body.backgroundExecution,
+        runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
       });
 
@@ -2694,31 +2694,25 @@ const AGENT_READ_FORBIDDEN_MESSAGE =
 const LLM_PROXY_MANAGED_MESSAGE =
   "The LLM Proxy is managed on the LLM Proxy page.";
 
-function requireBackgroundExecutionPermission(params: {
+function requireAgentRuntimePermission(params: {
   agentType: AgentType;
-  backgroundExecution?: AgentBackgroundExecution | null;
+  runtime?: AgentRuntime | null;
   isAdmin: boolean;
 }): void {
-  if (params.backgroundExecution == null) return;
-  if (!config.agentBackgroundExecution.enabled) {
-    throw new ApiError(400, "Background execution is not enabled");
+  if (params.runtime == null) return;
+  if (!config.agentRuntime.enabled) {
+    throw new ApiError(400, "Agent Runtime is not enabled");
   }
   if (params.agentType !== "agent") {
-    throw new ApiError(
-      400,
-      "Background execution can only be configured for Agents",
-    );
+    throw new ApiError(400, "Agent Runtime can only be configured for Agents");
   }
-  if (params.backgroundExecution.privileged && !params.isAdmin) {
+  if (params.runtime.privileged && !params.isAdmin) {
     throw new ApiError(
       403,
       "Only Agent administrators can enable a privileged background deployment",
     );
   }
-  if (
-    params.backgroundExecution.privileged &&
-    !config.agentBackgroundExecution.allowPrivileged
-  ) {
+  if (params.runtime.privileged && !config.agentRuntime.allowPrivileged) {
     throw new ApiError(
       403,
       "Privileged background deployments are disabled by the deployment operator",

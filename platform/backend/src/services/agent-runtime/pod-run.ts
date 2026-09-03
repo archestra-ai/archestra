@@ -105,6 +105,7 @@ async function startAgentRunSession(params: {
     workloadName: spec.frozenName,
     backend: backend.name,
     runtimeScope,
+    activeDeadlineSeconds: spec.activeDeadlineSeconds,
     virtualApiKeyId,
     completionTarget: params.completionTarget,
   });

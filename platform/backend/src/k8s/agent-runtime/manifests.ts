@@ -114,6 +114,11 @@ function buildAgentRuntimeBootstrapScript(): string {
     // enters copy mode and scrolls tmux's own history; without mouse mode,
     // xterm falls back to cursor-key sequences that get typed into the pane.
     `tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on`,
+    // A maintained CLI may set these user options from a native lifecycle
+    // hook. Keeping the indicator in tmux makes it visible to every attached
+    // client without screen-scraping or coupling the platform to one TUI.
+    `tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} @archestra_attention 0`,
+    `tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} status-left '#{?#{==:#{@archestra_attention},1},#[fg=yellow,bold]#{@archestra_attention_label}#[default] ,}[#S] '`,
     // Mirror the pane to the container's stdout. tmux gives the agent a pty,
     // so without this its output exists only inside the pane: kubectl logs
     // shows nothing, and the platform's log-follower streams an empty task.

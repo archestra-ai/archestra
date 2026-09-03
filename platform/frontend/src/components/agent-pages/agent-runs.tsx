@@ -3,6 +3,7 @@
 import { formatDistanceToNow } from "date-fns";
 import { TerminalSquare } from "lucide-react";
 import { useState } from "react";
+import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
@@ -94,7 +95,14 @@ export function AgentRuns({ agentId }: { agentId: string }) {
                       >
                         {run.title}
                       </span>
-                      <AgentRunState state={run.state} compact iconOnly />
+                      <AgentRunState
+                        state={run.state}
+                        lastModelActivityAt={run.lastModelActivityAt}
+                        startedAt={run.startedAt}
+                        endedAt={run.endedAt}
+                        compact
+                        iconOnly
+                      />
                     </span>
                     <span className="flex items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
                       <span className="font-mono">
@@ -147,6 +155,9 @@ function RunDetails({
             <AgentRunState
               state={run.state}
               statusReason={run.statusReason}
+              lastModelActivityAt={run.lastModelActivityAt}
+              startedAt={run.startedAt}
+              endedAt={run.endedAt}
               compact
             />
           </div>
@@ -158,7 +169,8 @@ function RunDetails({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        {active && <AgentRunLiveness run={run} />}
         {active && canAttach ? (
           <AgentRunTerminal
             taskId={run.taskId}

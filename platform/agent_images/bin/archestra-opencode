@@ -11,6 +11,7 @@ runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 config_file="${runtime_dir}/opencode.json"
 instructions_file="${runtime_dir}/opencode-instructions.md"
 task_file="${runtime_dir}/task.md"
+attention_plugin="${runtime_dir}/opencode-attention.js"
 model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
 context_length="${ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH:-32768}"
 output_length="${ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH:-8192}"
@@ -24,6 +25,63 @@ export OPENCODE_CONFIG="${config_file}"
 export OPENCODE_CONFIG_DIR="${runtime_dir}/config"
 export OPENCODE_DISABLE_AUTOUPDATE=1
 export OPENCODE_DISABLE_PROJECT_CONFIG=1
+# OpenCode's event firehose exposes explicit question, permission, and turn
+# lifecycle events. Load only this generated plugin: project config discovery
+# remains disabled, so a checked-out repository cannot contribute plugins.
+cat > "${attention_plugin}" <<'PLUGIN'
+export const ArchestraAttention = async () => {
+  let primarySessionID;
+
+  const update = async (...args) => {
+    try {
+      const command = process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention";
+      const child = Bun.spawn([command, ...args], { stdout: "ignore", stderr: "ignore" });
+      await child.exited;
+    } catch {
+      // Attention reporting is best-effort and must never interrupt a run.
+    }
+  };
+
+  return {
+    event: async ({ event }) => {
+      if (event.type === "question.asked") {
+        await update("set", "Input requested");
+        return;
+      }
+      if (event.type === "permission.asked") {
+        await update("set", "Permission needed");
+        return;
+      }
+      if (
+        event.type === "question.replied" ||
+        event.type === "question.rejected" ||
+        event.type === "permission.replied" ||
+        event.type === "session.error"
+      ) {
+        await update("clear");
+        return;
+      }
+      if (event.type !== "session.status") return;
+
+      if (event.properties.status.type === "busy") {
+        primarySessionID ??= event.properties.sessionID;
+        if (event.properties.sessionID === primarySessionID) await update("clear");
+        return;
+      }
+      if (event.properties.sessionID !== primarySessionID) return;
+      if (
+        event.properties.status.type === "idle" &&
+        process.env.ARCHESTRA_AGENT_RUNTIME_MODE === "interactive"
+      ) {
+        await update("set", "Waiting for input");
+      } else {
+        await update("clear");
+      }
+    },
+  };
+};
+PLUGIN
+chmod 0600 "${attention_plugin}"
 
 printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" > "${instructions_file}"
 printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
@@ -79,12 +137,14 @@ jq -n \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg mcp_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg instructions_file "${instructions_file}" \
+  --arg attention_plugin "${attention_plugin}" \
   --arg completion_plugin "${completion_plugin}" \
   --argjson context_length "${context_length}" \
   --argjson output_length "${output_length}" \
-  '({
+  '{
     "$schema":"https://opencode.ai/config.json",
     autoupdate:false,
+    plugin:([$attention_plugin] + if $completion_plugin == "" then [] else [("file://" + $completion_plugin)] end),
     model:("archestra/" + $model),
     permission:"allow",
     instructions:[$instructions_file],
@@ -116,16 +176,12 @@ jq -n \
         "X-Archestra-Session-Id":$task_id
       }
     }}
-  } + if $completion_plugin == "" then {} else {
-    plugin:[("file://" + $completion_plugin)]
-  } end)' > "${config_file}"
+  }' > "${config_file}"
 chmod 0600 "${config_file}" "${instructions_file}" "${task_file}"
 
 case "${runtime_mode}" in
   interactive)
-    export OPENCODE_PURE=1
     exec opencode \
-      --pure \
       --auto \
       --model "archestra/${model}" \
       --prompt "$(cat "${task_file}")"

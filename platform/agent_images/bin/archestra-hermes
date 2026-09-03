@@ -10,6 +10,83 @@ runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 export HERMES_HOME="${runtime_dir}/hermes"
 mkdir -p "${HERMES_HOME}"
+attention_plugin_dir="${HERMES_HOME}/plugins/archestra-attention"
+mkdir -p "${attention_plugin_dir}"
+cat > "${attention_plugin_dir}/plugin.yaml" <<'PLUGIN_MANIFEST'
+name: archestra-attention
+version: 1.0.0
+description: Report Hermes input and permission waits to Archestra Agent Runtime.
+author: Archestra
+hooks:
+  - on_session_start
+  - pre_llm_call
+  - pre_tool_call
+  - post_tool_call
+  - pre_approval_request
+  - post_approval_response
+  - on_session_end
+PLUGIN_MANIFEST
+cat > "${attention_plugin_dir}/__init__.py" <<'PLUGIN'
+from __future__ import annotations
+
+import os
+import subprocess
+from typing import Any
+
+
+def register(ctx: Any) -> None:
+    ctx.register_hook("on_session_start", _clear)
+    ctx.register_hook("pre_llm_call", _clear)
+    ctx.register_hook("pre_tool_call", _pre_tool_call)
+    ctx.register_hook("post_tool_call", _post_tool_call)
+    ctx.register_hook("pre_approval_request", _pre_approval_request)
+    ctx.register_hook("post_approval_response", _clear)
+    ctx.register_hook("on_session_end", _on_session_end)
+
+
+def _pre_tool_call(tool_name: str = "", **_: Any) -> None:
+    if tool_name == "clarify":
+        _attention("set", "Input requested")
+
+
+def _post_tool_call(tool_name: str = "", **_: Any) -> None:
+    if tool_name == "clarify":
+        _attention("clear")
+
+
+def _pre_approval_request(**_: Any) -> None:
+    _attention("set", "Permission needed")
+
+
+def _on_session_end(completed: bool = False, **_: Any) -> None:
+    if os.environ.get("ARCHESTRA_AGENT_RUNTIME_MODE", "one_shot") == "interactive" and completed:
+        _attention("set", "Waiting for input")
+    else:
+        _attention("clear")
+
+
+def _clear(**_: Any) -> None:
+    _attention("clear")
+
+
+def _attention(action: str, label: str = "") -> None:
+    command = os.environ.get(
+        "ARCHESTRA_AGENT_ATTENTION_COMMAND", "archestra-agent-attention"
+    )
+    args = [command, action]
+    if label:
+        args.append(label)
+    try:
+        subprocess.run(
+            args,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+PLUGIN
 completion_hook=""
 if [[ "${runtime_mode}" == "one_shot" ]] \
   && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
@@ -58,6 +135,7 @@ jq -n \
       transport:"openai_chat"
     }},
     agent:{system_prompt:$system_prompt},
+    plugins:{enabled:["archestra-attention"]},
     model:{
       max_tokens:16384,
       context_length:1047576,

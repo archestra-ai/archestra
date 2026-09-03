@@ -60,31 +60,42 @@ fi
 `,
       );
 
+      const attentionCommand = path.join(bin, "attention");
+      await writeExecutable(
+        attentionCommand,
+        `#!/bin/sh
+printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
+`,
+      );
+
+      const env = {
+        ...process.env,
+        HOME: home,
+        PATH: `${bin}:${process.env.PATH}`,
+        ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_chat",
+        ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+        ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
+        ARCHESTRA_AGENT_RUNTIME_TASK_ID: "12345678-abcd-4000-8000-123456789abc",
+        ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
+        ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
+          "Follow the configured Agent instructions.",
+        ARCHESTRA_AGENT_RUNTIME_MODE: mode,
+        ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
+        ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
+        ARCHESTRA_AGENT_ATTENTION_COMMAND: attentionCommand,
+        OPENAI_API_KEY: "test-key",
+        OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
+      };
+
       const result = await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
-        env: {
-          ...process.env,
-          HOME: home,
-          PATH: `${bin}:${process.env.PATH}`,
-          ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_chat",
-          ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
-          ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
-          ARCHESTRA_AGENT_RUNTIME_TASK_ID:
-            "12345678-abcd-4000-8000-123456789abc",
-          ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
-          ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
-            "Follow the configured Agent instructions.",
-          ARCHESTRA_AGENT_RUNTIME_MODE: mode,
-          ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
-          ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
-          OPENAI_API_KEY: "test-key",
-          OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
-        },
+        env,
       });
 
       const config = JSON.parse(
         await readFile(path.join(runtime, "hermes", "config.yaml"), "utf8"),
       );
+      expect(config.plugins.enabled).toEqual(["archestra-attention"]);
       expect(config.providers.archestra.transport).toBe("openai_chat");
       expect(config.mcp_servers.archestra.headers.Authorization).toBe(
         "Bearer test-token",
@@ -101,6 +112,19 @@ fi
         expect(result.stdout).toContain("Hermes finished the task.");
       } else {
         expect(config.hooks).toBeUndefined();
+        const plugin = path.join(
+          runtime,
+          "hermes",
+          "plugins",
+          "archestra-attention",
+          "__init__.py",
+        );
+        await runPluginCallbacks({ plugin, env });
+        expect(
+          await readFile(path.join(runtime, "attention-calls"), "utf8"),
+        ).toBe(
+          "set Input requested\nclear\nset Permission needed\nclear\nclear\nset Waiting for input\n",
+        );
       }
 
       const args = (await readFile(path.join(runtime, "captured-args"), "utf8"))
@@ -108,6 +132,7 @@ fi
         .split("\n");
       expect(args[0]).toBe("chat");
       expect(args).toContain("--tui");
+      expect(args).toContain("--accept-hooks");
       expect(args.at(-1)).toBe("Run the task.");
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -129,4 +154,34 @@ fi
 async function writeExecutable(file: string, contents: string): Promise<void> {
   await writeFile(file, contents, "utf8");
   await chmod(file, 0o755);
+}
+
+async function runPluginCallbacks(params: {
+  plugin: string;
+  env: NodeJS.ProcessEnv;
+}): Promise<void> {
+  const harness = `
+import importlib.util
+import sys
+
+spec = importlib.util.spec_from_file_location("archestra_attention", sys.argv[1])
+plugin = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plugin)
+
+callbacks = {}
+class Context:
+    def register_hook(self, name, callback):
+        callbacks[name] = callback
+
+plugin.register(Context())
+callbacks["pre_tool_call"](tool_name="clarify")
+callbacks["post_tool_call"](tool_name="clarify")
+callbacks["pre_approval_request"]()
+callbacks["post_approval_response"]()
+callbacks["pre_llm_call"]()
+callbacks["on_session_end"](completed=True)
+`;
+  await execFileAsync("python3", ["-c", harness, params.plugin], {
+    env: params.env,
+  });
 }

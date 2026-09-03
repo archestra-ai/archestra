@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+action="${1:-}"
+label="${2:-}"
+target="${TMUX_PANE:-agent}"
+
+report_attention() {
+  local attention_state="${1:-}"
+  if ! command -v curl >/dev/null 2>&1; then
+    return
+  fi
+
+  local body
+  if [[ -n "${attention_state}" ]]; then
+    body="$(jq -cn \
+      --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
+      --arg attention_state "${attention_state}" \
+      '{taskId:$task_id,attentionState:$attention_state}')"
+  else
+    body="$(jq -cn \
+      --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
+      '{taskId:$task_id,attentionState:null}')"
+  fi
+  curl --fail --silent --show-error --max-time 2 \
+    -H "Authorization: Bearer ${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
+    -H "Content-Type: application/json" \
+    --data-binary "${body}" \
+    "${ARCHESTRA_MCP_GATEWAY_URL:?}/runtime-status" >/dev/null 2>&1 || true
+}
+
+current="$(tmux show-option -t "${target}" -qv @archestra_attention 2>/dev/null || true)"
+current_label="$(tmux show-option -t "${target}" -qv @archestra_attention_label 2>/dev/null || true)"
+
+case "${action}" in
+  set)
+    if [[ -z "${label}" ]]; then
+      echo "usage: archestra-agent-attention set <label>" >&2
+      exit 64
+    fi
+    tmux set-option -t "${target}" @archestra_attention 1 >/dev/null 2>&1 || true
+    tmux set-option -t "${target}" @archestra_attention_label "${label}" >/dev/null 2>&1 || true
+    if [[ "${current}" != "1" || "${current_label}" != "${label}" ]]; then
+      report_attention "input_required"
+    fi
+    ;;
+  clear)
+    tmux set-option -t "${target}" @archestra_attention 0 >/dev/null 2>&1 || true
+    tmux set-option -t "${target}" @archestra_attention_label "" >/dev/null 2>&1 || true
+    if [[ "${current}" == "1" ]]; then
+      report_attention ""
+    fi
+    ;;
+  *)
+    echo "usage: archestra-agent-attention {set <label>|clear}" >&2
+    exit 64
+    ;;
+esac

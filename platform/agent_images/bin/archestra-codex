@@ -10,6 +10,51 @@ runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 export CODEX_HOME="${runtime_dir}/codex"
 mkdir -p "${CODEX_HOME}"
+attention_hook="${runtime_dir}/codex-attention-hook.sh"
+cat > "${attention_hook}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+payload="$(cat)"
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+tool="$(jq -r '.tool_name // empty' <<<"${payload}")"
+attention_command="${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}"
+
+case "${event}:${tool}" in
+  PermissionRequest:*)
+    "${attention_command}" set "Permission needed"
+    ;;
+  PreToolUse:request_user_input)
+    "${attention_command}" set "Input requested"
+    ;;
+  Stop:*)
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "interactive" ]]; then
+      "${attention_command}" set "Waiting for input"
+    else
+      "${attention_command}" clear
+    fi
+    ;;
+  *)
+    "${attention_command}" clear
+    ;;
+esac
+
+# Codex accepts an empty object as a successful, non-mutating hook result.
+printf '{}\n'
+HOOK
+chmod 0700 "${attention_hook}"
+jq -n --arg cmd "${attention_hook}" '{hooks:{
+  SessionStart:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
+  UserPromptSubmit:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
+  PermissionRequest:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
+  PreToolUse:[{
+    matcher:"^request_user_input$",
+    hooks:[{type:"command",command:$cmd,timeout:3}]
+  }],
+  PostToolUse:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
+  Stop:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
+  SessionEnd:[{hooks:[{type:"command",command:$cmd,timeout:3}]}]
+}}' > "${CODEX_HOME}/hooks.json"
+chmod 0600 "${CODEX_HOME}/hooks.json"
 notify_config=""
 if [[ "${runtime_mode}" == "one_shot" ]] \
   && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
@@ -80,6 +125,7 @@ printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 
 common_args=(
   --dangerously-bypass-approvals-and-sandbox
+  --dangerously-bypass-hook-trust
   --model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL}"
   --config model_provider='"archestra"'
 )

@@ -12,6 +12,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
@@ -43,6 +44,23 @@ class AgentRunModel {
       .where(eq(schema.agentRunsTable.taskId, taskId))
       .limit(1);
     return run ?? null;
+  }
+
+  static async updateAttentionState(params: {
+    taskId: string;
+    attentionState: AgentRunRecord["attentionState"];
+  }): Promise<boolean> {
+    const updated = await db
+      .update(schema.agentRunsTable)
+      .set({ attentionState: params.attentionState })
+      .where(
+        and(
+          eq(schema.agentRunsTable.taskId, params.taskId),
+          isNull(schema.agentRunsTable.endedAt),
+        ),
+      )
+      .returning({ id: schema.agentRunsTable.id });
+    return updated.length > 0;
   }
 
   /** Sessions whose pod should still exist, across every organization. */
@@ -80,6 +98,7 @@ class AgentRunModel {
       completionTarget: _completionTarget,
       completionNotificationClaimedAt: _completionNotificationClaimedAt,
       completionNotifiedAt: _completionNotifiedAt,
+      activeDeadlineSeconds: _activeDeadlineSeconds,
       ...runColumns
     } = getTableColumns(schema.agentRunsTable);
     return db
@@ -88,11 +107,17 @@ class AgentRunModel {
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
+        hardDeadlineAt: hardDeadlineAtExpression(),
+        lastModelActivityAt: lastModelActivityAtExpression(),
       })
       .from(schema.agentRunsTable)
       .innerJoin(
         schema.a2aTasksTable,
         eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
       )
       .where(
         and(
@@ -123,6 +148,9 @@ class AgentRunModel {
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
+        hardDeadlineAt: hardDeadlineAtExpression(),
+        lastModelActivityAt: lastModelActivityAtExpression(),
+        attentionState: schema.agentRunsTable.attentionState,
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
         agentIcon: schema.agentsTable.icon,
@@ -306,7 +334,7 @@ class AgentRunModel {
   static async close(params: { id: string; logs?: string }): Promise<boolean> {
     const closed = await db
       .update(schema.agentRunsTable)
-      .set({ endedAt: new Date(), logs: params.logs })
+      .set({ endedAt: new Date(), logs: params.logs, attentionState: null })
       .where(
         and(
           eq(schema.agentRunsTable.id, params.id),
@@ -404,6 +432,7 @@ class AgentRunModel {
       completionTarget: _completionTarget,
       completionNotificationClaimedAt: _completionNotificationClaimedAt,
       completionNotifiedAt: _completionNotifiedAt,
+      activeDeadlineSeconds: _activeDeadlineSeconds,
       ...runColumns
     } = getTableColumns(schema.agentRunsTable);
     const query = db
@@ -412,6 +441,8 @@ class AgentRunModel {
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
+        hardDeadlineAt: hardDeadlineAtExpression(),
+        lastModelActivityAt: lastModelActivityAtExpression(),
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -472,4 +503,27 @@ function extractPrompt(parts: unknown[]): string {
     )
     .join("")
     .trim();
+}
+
+function hardDeadlineAtExpression(): SQL<Date> {
+  return sql<Date>`
+    ${schema.agentRunsTable.startedAt} +
+    COALESCE(
+      ${schema.agentRunsTable.activeDeadlineSeconds},
+      COALESCE(
+        (${schema.agentsTable.runtime}->>'ttlHours')::integer,
+        ${config.agentRuntime.defaultTtlHours}
+      ) * 60 * 60
+    ) * interval '1 second'
+  `.mapWith(schema.agentRunsTable.startedAt);
+}
+
+function lastModelActivityAtExpression(): SQL<Date | null> {
+  return sql<Date | null>`(
+    SELECT ${schema.interactionsTable.createdAt}
+    FROM ${schema.interactionsTable}
+    WHERE ${schema.interactionsTable.runId} = ${schema.agentRunsTable.taskId}::text
+    ORDER BY ${schema.interactionsTable.createdAt} DESC
+    LIMIT 1
+  )`.mapWith(schema.agentRunsTable.startedAt);
 }

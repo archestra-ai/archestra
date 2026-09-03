@@ -12,31 +12,112 @@ esac
 
 resolve_docker_desktop_url() {
   local url="$1"
+  local hostname
   local ipv6
 
-  if [[ "${url}" != http://host.internal:* ]]; then
-    printf '%s\n' "${url}"
-    return
-  fi
+  case "${url}" in
+    http://host.internal:*) hostname="host.internal" ;;
+    http://host.orb.internal:*) hostname="host.orb.internal" ;;
+    *)
+      printf '%s\n' "${url}"
+      return
+      ;;
+  esac
 
-  ipv6="$(getent ahostsv6 host.internal 2>/dev/null | awk 'NR == 1 { print $1 }')"
+  ipv6="$(getent ahostsv6 "${hostname}" 2>/dev/null | awk 'NR == 1 { print $1 }')"
   if [[ -z "${ipv6}" ]]; then
     printf '%s\n' "${url}"
     return
   fi
 
-  printf '%s\n' "${url/\/\/host.internal/\/\/\[${ipv6}\]}"
+  printf '%s\n' "${url/\/\/${hostname}/\/\/\[${ipv6}\]}"
 }
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
 config_file="${runtime_dir}/openclaw.json"
 task_file="${runtime_dir}/task.md"
+attention_plugin_dir="${runtime_dir}/openclaw-attention"
+attention_plugin="${attention_plugin_dir}/index.cjs"
 model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
 runtime_instructions="${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
 export OPENCLAW_STATE_DIR="${runtime_dir}/openclaw-state"
 export OPENCLAW_CONFIG_PATH="${config_file}"
-mkdir -p "${OPENCLAW_STATE_DIR}"
+mkdir -p "${OPENCLAW_STATE_DIR}" "${attention_plugin_dir}"
+
+# OpenClaw exposes typed lifecycle hooks to local plugins. The plugin is loaded
+# from this generated, runtime-owned path and only reports state transitions.
+cat > "${attention_plugin}" <<'PLUGIN'
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+
+const execFileAsync = promisify(execFile);
+
+async function update(...args) {
+  try {
+    const command = process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention";
+    await execFileAsync(command, args, { timeout: 2500 });
+  } catch {
+    // Attention reporting is best-effort and must never interrupt a run.
+  }
+}
+
+module.exports = {
+  id: "archestra-runtime-attention",
+  name: "Archestra runtime attention",
+  description: "Reports when this agent run is waiting for input.",
+  register(api) {
+    api.on("before_agent_run", async () => {
+      await update("clear");
+    });
+    api.on("before_tool_call", async (event) => {
+      if (event.toolName === "ask_user") await update("set", "Input requested");
+    });
+    api.on("after_tool_call", async (event) => {
+      if (event.toolName === "ask_user") await update("clear");
+    });
+    api.on("agent_end", async (event) => {
+      if (
+        event.success &&
+        process.env.ARCHESTRA_AGENT_RUNTIME_MODE === "interactive"
+      ) {
+        await update("set", "Waiting for input");
+      } else {
+        await update("clear");
+      }
+    });
+    api.on("session_end", async () => {
+      await update("clear");
+    });
+  },
+};
+PLUGIN
+chmod 0600 "${attention_plugin}"
+cat > "${attention_plugin_dir}/openclaw.plugin.json" <<'MANIFEST'
+{
+  "id": "archestra-runtime-attention",
+  "name": "Archestra runtime attention",
+  "description": "Reports when this agent run is waiting for input.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
+MANIFEST
+cat > "${attention_plugin_dir}/package.json" <<'PACKAGE'
+{
+  "name": "archestra-runtime-attention",
+  "private": true,
+  "type": "commonjs",
+  "openclaw": {
+    "extensions": ["./index.cjs"]
+  }
+}
+PACKAGE
+chmod 0600 \
+  "${attention_plugin_dir}/openclaw.plugin.json" \
+  "${attention_plugin_dir}/package.json"
 
 completion_plugin_dir=""
 if [[ "${runtime_mode}" == "one_shot" ]] \
@@ -174,9 +255,27 @@ jq -n \
   --arg mcp_url "${openclaw_mcp_url}" \
   --arg api "${openclaw_api}" \
   --arg workspace "${PWD}" \
+  --arg attention_plugin_dir "${attention_plugin_dir}" \
   --arg completion_plugin_dir "${completion_plugin_dir}" \
   '({
     logging:{level:"error",consoleLevel:"silent"},
+    plugins:{
+      enabled:true,
+      bundledDiscovery:"allowlist",
+      allow:(["archestra-runtime-attention"] + if $completion_plugin_dir == "" then [] else ["archestra-completion"] end),
+      load:{paths:([$attention_plugin_dir] + if $completion_plugin_dir == "" then [] else [$completion_plugin_dir] end)},
+      entries:({
+        "archestra-runtime-attention":{
+          enabled:true,
+          hooks:{allowConversationAccess:true,timeoutMs:3000}
+        }
+      } + if $completion_plugin_dir == "" then {} else {
+        "archestra-completion":{
+          enabled:true,
+          hooks:{allowConversationAccess:true}
+        }
+      } end)
+    },
     models:{
       mode:"replace",
       providers:{
@@ -210,18 +309,7 @@ jq -n \
         }
       }
     }
-  } + if $completion_plugin_dir == "" then {} else {
-    plugins:{
-      allow:["archestra-completion"],
-      load:{paths:[$completion_plugin_dir]},
-      entries:{
-        "archestra-completion":{
-          enabled:true,
-          hooks:{allowConversationAccess:true}
-        }
-      }
-    }
-  } end)' > "${config_file}"
+  })' > "${config_file}"
 chmod 0600 "${config_file}"
 if [[ -n "${runtime_instructions}" && "${soul_created}" != true ]]; then
   printf '%s\n\n# Delegated task\n\n%s\n' \

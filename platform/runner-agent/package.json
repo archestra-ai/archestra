@@ -22,7 +22,7 @@
     "@ai-sdk/openai": "^3.0.41",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "ai": "catalog:",
-    "zod": "^4.1.13"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

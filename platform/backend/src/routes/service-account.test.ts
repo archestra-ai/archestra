@@ -476,4 +476,115 @@ describe("service account API authentication", () => {
     });
     expect(stored?.userId).toBe(`service-account:${serviceAccount.id}`);
   });
+
+  test("applies cost and log scopes to service account tokens", async ({
+    makeAgent,
+    makeCustomRole,
+    makeInteraction,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      scope: "org",
+    });
+    await makeInteraction(agent.id, {
+      userId: user.id,
+      inputTokens: 80,
+      outputTokens: 20,
+      model: "gpt-4o",
+    });
+
+    const ownDataRole = await makeCustomRole(organization.id, {
+      permission: { llmCost: ["read"], log: ["read"] },
+    });
+    const ownDataAccount = await ServiceAccountModel.create({
+      organizationId: organization.id,
+      name: "Cost automation",
+      role: ownDataRole.role,
+      createdBy: null,
+    });
+    const ownDataToken = await ServiceAccountModel.createToken({
+      serviceAccountId: ownDataAccount.id,
+      organizationId: organization.id,
+      name: "Cost token",
+    });
+
+    const organizationDataRole = await makeCustomRole(organization.id, {
+      permission: {
+        llmCost: ["read"],
+        log: ["read", "admin"],
+        member: ["read"],
+      },
+    });
+    const organizationDataAccount = await ServiceAccountModel.create({
+      organizationId: organization.id,
+      name: "Reporting automation",
+      role: organizationDataRole.role,
+      createdBy: null,
+    });
+    const organizationDataToken = await ServiceAccountModel.createToken({
+      serviceAccountId: organizationDataAccount.id,
+      organizationId: organization.id,
+      name: "Reporting token",
+    });
+
+    const { default: interactionRoutes } = await import("./interaction");
+    const { default: statisticsRoutes } = await import("./statistics");
+    await app.register(interactionRoutes);
+    await app.register(statisticsRoutes);
+
+    const authorization = (token: string) => ({ authorization: token });
+    const [overview, ownLogs, ownUsage, ownUserStatistics, allLogs, allUsers] =
+      await Promise.all([
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/overview?timeframe=24h",
+          headers: authorization(ownDataToken.token),
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/interactions?limit=10&offset=0",
+          headers: authorization(ownDataToken.token),
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/me?timeframe=24h",
+          headers: authorization(ownDataToken.token),
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/users?timeframe=24h",
+          headers: authorization(ownDataToken.token),
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/interactions?limit=10&offset=0",
+          headers: authorization(organizationDataToken.token),
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/users?timeframe=24h",
+          headers: authorization(organizationDataToken.token),
+        }),
+      ]);
+
+    expect(overview.statusCode).toBe(200);
+    expect(overview.json().totalRequests).toBe(1);
+    expect(ownLogs.statusCode).toBe(200);
+    expect(ownLogs.json().data).toEqual([]);
+    expect(ownUsage.statusCode).toBe(200);
+    expect(ownUsage.json().requests).toBe(0);
+    expect(ownUserStatistics.statusCode).toBe(200);
+    expect(ownUserStatistics.json().data).toEqual([]);
+    expect(allLogs.statusCode).toBe(200);
+    expect(allLogs.json().data).toHaveLength(1);
+    expect(allUsers.statusCode).toBe(200);
+    expect(allUsers.json().data).toEqual([
+      expect.objectContaining({ userId: user.id }),
+    ]);
+  });
 });

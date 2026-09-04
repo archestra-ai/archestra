@@ -215,6 +215,8 @@ function generateLlmApiPermissionsSection(): string {
 | Skill cost statistics | \`llmCost:read\` and \`skill:read\` | Skills visible to the caller; \`skill:admin\` includes all skills |
 | LLM and MCP logs for the caller | \`log:read\` | Records attributed to the caller |
 | All LLM and MCP logs | \`log:read\` and \`log:admin\` | All records in the active organization, including unattributed traffic |
+
+Service accounts use their assigned role for these APIs. A service account has no personal usage or caller-attributed log rows. Grant \`llmCost:read\` for organization-wide cost exports. Grant both \`log:read\` and \`log:admin\` for organization-wide log exports. Add \`member:read\` to include per-user cost statistics.
 `;
 }
 

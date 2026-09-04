@@ -84,8 +84,16 @@ export function EnvironmentSelector({
     (environment) => !environment.restricted || canDeployRestricted,
   );
   const hasCustomEnvironmentOptions = accessibleEnvironments.length > 0;
+  const selectedValue = value ?? DEFAULT_ENVIRONMENT_VALUE;
+  const isDefaultSelected = selectedValue === DEFAULT_ENVIRONMENT_VALUE;
 
-  if (hideWhenOnlyDefault && !hasCustomEnvironmentOptions) return null;
+  if (
+    hideWhenOnlyDefault &&
+    !hasCustomEnvironmentOptions &&
+    isDefaultSelected
+  ) {
+    return null;
+  }
 
   const options = [
     {
@@ -99,10 +107,23 @@ export function EnvironmentSelector({
       description: environment.description ?? "",
     })),
   ];
-  const selectedValue = value ?? DEFAULT_ENVIRONMENT_VALUE;
-  const selectedDescription = options.find(
-    (option) => option.value === selectedValue,
-  )?.description;
+  // A saved restricted environment remains the record's current value even
+  // when this user cannot assign it to another record. Keep it out of the
+  // selectable options, but still name it in the trigger so edit forms never
+  // render a valid persisted environment as a blank field.
+  const selectedEnvironment = environments.find(
+    (environment) => environment.id === selectedValue,
+  );
+  const selectedOption =
+    options.find((option) => option.value === selectedValue) ??
+    (selectedEnvironment
+      ? {
+          value: selectedEnvironment.id,
+          label: selectedEnvironment.name,
+          description: selectedEnvironment.description ?? "",
+        }
+      : undefined);
+  const selectedDescription = selectedOption?.description;
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -133,7 +154,9 @@ export function EnvironmentSelector({
       )}
       <Select
         value={selectedValue}
-        disabled={disabled || !hasCustomEnvironmentOptions}
+        disabled={
+          disabled || (!hasCustomEnvironmentOptions && isDefaultSelected)
+        }
         onValueChange={(next) =>
           onChange(next === DEFAULT_ENVIRONMENT_VALUE ? null : next)
         }
@@ -143,7 +166,9 @@ export function EnvironmentSelector({
           className="w-full"
           data-testid={E2eTestId.SelectEnvironment}
         >
-          <SelectValue />
+          <SelectValue>
+            {selectedOption ? <span>{selectedOption.label}</span> : null}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent position="popper">
           {options.map((option) => (

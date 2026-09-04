@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LoadingState } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -68,7 +67,7 @@ export default function SkillsSettingsPage() {
   };
 
   if (isPending) {
-    return <LoadingState variant="page" />;
+    return null;
   }
 
   return (

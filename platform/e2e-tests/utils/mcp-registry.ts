@@ -173,6 +173,7 @@ export async function waitForMcpServerAbsent(
 export async function waitForMcpServerToolsDiscovered(
   page: Page,
   catalogItemName?: string,
+  options?: { timeoutMs?: number },
 ): Promise<void> {
   const scope = catalogItemName
     ? page.getByTestId(`${E2eTestId.McpServerCard}-${catalogItemName}`)
@@ -202,7 +203,10 @@ export async function waitForMcpServerToolsDiscovered(
 
         return { state: "pending" as const };
       },
-      { timeout: 120_000, intervals: [500, 1000, 2000, 5000] },
+      {
+        timeout: options?.timeoutMs ?? 120_000,
+        intervals: [500, 1000, 2000, 5000],
+      },
     )
     .toMatchObject({ state: "ready" });
 }

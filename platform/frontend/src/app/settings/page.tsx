@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { LoadingState } from "@/components/loading";
 import { useSettingsTabs } from "./settings-tabs";
 
 // Landing page: settings has no content of its own, so forward to the first
@@ -19,5 +18,5 @@ export default function SettingsIndexPage() {
     }
   }, [firstTab, router]);
 
-  return <LoadingState variant="page" />;
+  return null;
 }

@@ -20,7 +20,7 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { AppTeamAccessWarning } from "@/components/mcp-app/app-team-access-warning";
 import { PageLayout } from "@/components/page-layout";
@@ -234,7 +234,7 @@ export default function AppsPage() {
 
         <LoadingWrapper
           isPending={(isPending || isFetching) && filtered.length === 0}
-          loadingFallback={<LoadingState variant="page" />}
+          loadingFallback={null}
         >
           {isLoadingError ? (
             <QueryLoadError

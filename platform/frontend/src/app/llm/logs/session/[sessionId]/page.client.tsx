@@ -10,7 +10,6 @@ import { use } from "react";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
-import { LoadingState } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -295,9 +294,7 @@ export default function SessionDetailPage({
         )}
 
         {/* Interactions Table */}
-        {interactionsLoading ? (
-          <LoadingState label="Loading session logs…" />
-        ) : (
+        {interactionsLoading ? null : (
           <div className="rounded-md border overflow-x-auto">
             <Table className="table-fixed w-full min-w-[700px]">
               <TableHeader>

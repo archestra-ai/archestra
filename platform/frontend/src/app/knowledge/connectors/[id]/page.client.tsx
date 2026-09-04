@@ -456,7 +456,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   );
 
   if (isPending) {
-    return <LoadingState label="Loading connector…" variant="viewport" />;
+    return null;
   }
 
   if (isLoadingError) {
@@ -830,7 +830,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
               isPending={
                 (isRunsPending || isRunsFetching) && runRows.length === 0
               }
-              loadingFallback={<LoadingState />}
+              loadingFallback={null}
             >
               {runRows.length === 0 ? (
                 <div className="text-muted-foreground">

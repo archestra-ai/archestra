@@ -19,7 +19,6 @@ import {
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LabelTags } from "@/components/label-tags";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RoleFilterSelect } from "@/components/role-filter-select";
 import { SearchInput } from "@/components/search-input";
@@ -385,191 +384,193 @@ export default function ServiceAccountsSettingsPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        <LoadingWrapper
-          isPending={(isPending || isFetching) && serviceAccounts.length === 0}
-          loadingFallback={<LoadingState variant="page" />}
-        >
-          <TableCardView storageKey="archestra-service-accounts-view">
-            <div>
-              <CollectionFilters>
-                <FilterBar
-                  actions={<TableCardViewToggle />}
-                  onClearFilters={hasActiveFilters ? clearFilters : undefined}
-                >
-                  <SearchInput
-                    objectNamePlural="service accounts"
-                    searchFields={["name"]}
-                    className={filterSearchClass}
-                  />
-                  <RoleFilterSelect
-                    value={roleFilter}
-                    onValueChange={(value) =>
-                      updateQueryParams({
-                        role: value === ALL ? null : value,
-                        page: "1",
-                      })
-                    }
-                    allOptionValue={ALL}
-                  />
-                  <FilterSelect
-                    value={statusFilter}
-                    onValueChange={(value) =>
-                      updateQueryParams({
-                        status: value === ALL ? null : value,
-                        page: "1",
-                      })
-                    }
-                    placeholder="Filter by status"
-                    items={[
-                      { value: ALL, label: "All statuses" },
-                      ...STATUS_FILTERS.map((health) => ({
-                        value: health,
-                        label: ACCOUNT_HEALTH_LABELS[health],
-                      })),
-                    ]}
-                  />
-                  <EntityLabelFilter
-                    useLabelKeys={useServiceAccountLabelKeys}
-                    useLabelValues={useServiceAccountLabelValues}
-                    className={filterControlClass({
-                      active: Boolean(labelsFilter),
-                    })}
-                  />
-                </FilterBar>
-              </CollectionFilters>
-              {isServiceAccountsLoadError ? (
-                <QueryLoadError
-                  title="Couldn't load your service accounts"
-                  onRetry={() => refetchServiceAccounts()}
+        /* The filters and the table report their own first load rather than
+           being replaced by a centred loader. Swapping a full-height indicator
+           out for the whole view meant the toolbar and headers arrived a beat
+           after the wait had visibly ended, so one navigation read as loader,
+           then components, then content. */
+        <TableCardView storageKey="archestra-service-accounts-view">
+          <div>
+            <CollectionFilters>
+              <FilterBar
+                actions={<TableCardViewToggle />}
+                onClearFilters={hasActiveFilters ? clearFilters : undefined}
+              >
+                <SearchInput
+                  objectNamePlural="service accounts"
+                  searchFields={["name"]}
+                  className={filterSearchClass}
                 />
-              ) : (
-                <>
-                  <BulkActions
-                    count={selectedAccounts.length}
-                    noun="service account"
-                    onClear={clearSelection}
-                    busy={bulkDelete.isPending || bulkSetDisabled.isPending}
-                    selectAllMatching={selectAllMatching}
+                <RoleFilterSelect
+                  value={roleFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      role: value === ALL ? null : value,
+                      page: "1",
+                    })
+                  }
+                  allOptionValue={ALL}
+                />
+                <FilterSelect
+                  value={statusFilter}
+                  onValueChange={(value) =>
+                    updateQueryParams({
+                      status: value === ALL ? null : value,
+                      page: "1",
+                    })
+                  }
+                  placeholder="Filter by status"
+                  items={[
+                    { value: ALL, label: "All statuses" },
+                    ...STATUS_FILTERS.map((health) => ({
+                      value: health,
+                      label: ACCOUNT_HEALTH_LABELS[health],
+                    })),
+                  ]}
+                />
+                <EntityLabelFilter
+                  useLabelKeys={useServiceAccountLabelKeys}
+                  useLabelValues={useServiceAccountLabelValues}
+                  className={filterControlClass({
+                    active: Boolean(labelsFilter),
+                  })}
+                />
+              </FilterBar>
+            </CollectionFilters>
+            {isServiceAccountsLoadError ? (
+              <QueryLoadError
+                title="Couldn't load your service accounts"
+                onRetry={() => refetchServiceAccounts()}
+              />
+            ) : (
+              <>
+                <BulkActions
+                  count={selectedAccounts.length}
+                  noun="service account"
+                  onClear={clearSelection}
+                  busy={bulkDelete.isPending || bulkSetDisabled.isPending}
+                  selectAllMatching={selectAllMatching}
+                >
+                  <PermissionButton
+                    permissions={{ serviceAccount: ["update"] }}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyBulkDisabled(false)}
                   >
-                    <PermissionButton
-                      permissions={{ serviceAccount: ["update"] }}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => applyBulkDisabled(false)}
+                    <Power className="h-4 w-4" />
+                    <span>Enable</span>
+                  </PermissionButton>
+                  <PermissionButton
+                    permissions={{ serviceAccount: ["update"] }}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyBulkDisabled(true)}
+                  >
+                    <PowerOff className="h-4 w-4" />
+                    <span>Disable</span>
+                  </PermissionButton>
+                  <PermissionButton
+                    permissions={{ serviceAccount: ["delete"] }}
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </PermissionButton>
+                </BulkActions>
+                <TableCardViewContent
+                  cards={
+                    <TableCardList
+                      itemCount={filteredServiceAccounts.length}
+                      isLoading={isPending}
+                      emptyIcon={Bot}
+                      emptyMessage="No service accounts yet"
+                      emptyDescription="Service accounts are organization-owned identities that let scripts and integrations call the platform API."
+                      hasActiveFilters={hasActiveFilters}
+                      filteredEmptyMessage="No service accounts match your filters"
+                      onClearFilters={clearFilters}
                     >
-                      <Power className="h-4 w-4" />
-                      <span>Enable</span>
-                    </PermissionButton>
-                    <PermissionButton
-                      permissions={{ serviceAccount: ["update"] }}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => applyBulkDisabled(true)}
-                    >
-                      <PowerOff className="h-4 w-4" />
-                      <span>Disable</span>
-                    </PermissionButton>
-                    <PermissionButton
-                      permissions={{ serviceAccount: ["delete"] }}
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setBulkDeleteOpen(true)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span>Delete</span>
-                    </PermissionButton>
-                  </BulkActions>
-                  <TableCardViewContent
-                    cards={
-                      <TableCardList
-                        itemCount={filteredServiceAccounts.length}
-                        isLoading={isPending}
-                        emptyIcon={Bot}
-                        emptyMessage="No service accounts yet"
-                        emptyDescription="Service accounts are organization-owned identities that let scripts and integrations call the platform API."
-                        hasActiveFilters={hasActiveFilters}
-                        filteredEmptyMessage="No service accounts match your filters"
-                        onClearFilters={clearFilters}
-                      >
-                        {filteredServiceAccounts.map((account) => (
-                          <TableCard
-                            key={account.id}
-                            icon={<Bot className="h-5 w-5" />}
-                            title={
-                              <span className="flex items-center gap-1.5">
-                                <Link
-                                  className="hover:underline"
-                                  href={`/settings/service-accounts/${account.id}`}
-                                >
-                                  {account.name}
-                                </Link>
-                                <LabelTags labels={account.labels} />
-                              </span>
-                            }
-                            description={formatRoleName(account.role)}
-                            actions={renderRowActions(account)}
-                            {...cardSelection(account)}
-                            footer={
-                              <div className="flex items-center justify-between gap-3">
-                                <span>
-                                  Created{" "}
-                                  {formatRelativeTimeFromNow(account.createdAt)}
-                                </span>
-                                <LastUsed account={account} prefix="Used " />
-                              </div>
-                            }
-                          >
+                      {filteredServiceAccounts.map((account) => (
+                        <TableCard
+                          key={account.id}
+                          icon={<Bot className="h-5 w-5" />}
+                          title={
+                            <span className="flex items-center gap-1.5">
+                              <Link
+                                className="hover:underline"
+                                href={`/settings/service-accounts/${account.id}`}
+                              >
+                                {account.name}
+                              </Link>
+                              <LabelTags labels={account.labels} />
+                            </span>
+                          }
+                          description={formatRoleName(account.role)}
+                          actions={renderRowActions(account)}
+                          {...cardSelection(account)}
+                          footer={
                             <div className="flex items-center justify-between gap-3">
-                              <AccountHealthBadge
-                                health={getAccountHealth(account)}
-                              />
-                              <span className="text-muted-foreground">
-                                <KeyCount account={account} withLabel />
+                              <span>
+                                Created{" "}
+                                {formatRelativeTimeFromNow(account.createdAt)}
                               </span>
+                              <LastUsed account={account} prefix="Used " />
                             </div>
-                          </TableCard>
-                        ))}
-                      </TableCardList>
-                    }
-                    table={
-                      <DataTable
-                        columns={columns}
-                        data={filteredServiceAccounts}
-                        getRowId={(row) => row.id}
-                        rowSelection={rowSelection}
-                        onRowSelectionChange={setRowSelection}
-                        onPageRowIdsChange={onPageRowIdsChange}
-                        hideSelectedCount
-                        onRowClick={(account, event) => {
-                          const target = event.target as HTMLElement;
-                          if (target.closest("a,button")) return;
-                          router.push(
-                            `/settings/service-accounts/${account.id}`,
-                          );
-                        }}
-                        emptyIcon={Bot}
-                        emptyMessage="No service accounts yet"
-                        emptyDescription="Service accounts are organization-owned identities that let scripts and integrations call the platform API."
-                        hasActiveFilters={hasActiveFilters}
-                        filteredEmptyMessage="No service accounts match your filters"
-                        onClearFilters={clearFilters}
-                        hidePaginationWhenSinglePage
-                        fixedWidthColumnIds={[
-                          "role",
-                          "disabled",
-                          "tokenCount",
-                          "lastUsedAt",
-                          "actions",
-                        ]}
-                        flexibleColumnIds={["name"]}
-                      />
-                    }
-                  />
-                </>
-              )}
-            </div>
-          </TableCardView>
-        </LoadingWrapper>
+                          }
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <AccountHealthBadge
+                              health={getAccountHealth(account)}
+                            />
+                            <span className="text-muted-foreground">
+                              <KeyCount account={account} withLabel />
+                            </span>
+                          </div>
+                        </TableCard>
+                      ))}
+                    </TableCardList>
+                  }
+                  table={
+                    <DataTable
+                      columns={columns}
+                      data={filteredServiceAccounts}
+                      isLoading={
+                        (isPending || isFetching) &&
+                        serviceAccounts.length === 0
+                      }
+                      getRowId={(row) => row.id}
+                      rowSelection={rowSelection}
+                      onRowSelectionChange={setRowSelection}
+                      onPageRowIdsChange={onPageRowIdsChange}
+                      hideSelectedCount
+                      onRowClick={(account, event) => {
+                        const target = event.target as HTMLElement;
+                        if (target.closest("a,button")) return;
+                        router.push(`/settings/service-accounts/${account.id}`);
+                      }}
+                      emptyIcon={Bot}
+                      emptyMessage="No service accounts yet"
+                      emptyDescription="Service accounts are organization-owned identities that let scripts and integrations call the platform API."
+                      hasActiveFilters={hasActiveFilters}
+                      filteredEmptyMessage="No service accounts match your filters"
+                      onClearFilters={clearFilters}
+                      hidePaginationWhenSinglePage
+                      fixedWidthColumnIds={[
+                        "role",
+                        "disabled",
+                        "tokenCount",
+                        "lastUsedAt",
+                        "actions",
+                      ]}
+                      flexibleColumnIds={["name"]}
+                    />
+                  }
+                />
+              </>
+            )}
+          </div>
+        </TableCardView>
       )}
 
       {bulkDeleteOpen && (

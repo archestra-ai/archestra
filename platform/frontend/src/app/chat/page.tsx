@@ -78,7 +78,6 @@ import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
-import { LoadingState } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
@@ -3105,11 +3104,7 @@ export function ChatPageContent({
   //   (`isPlaywrightSetupNeeded`) reaches the composer, so the setup card
   //   appears when the check lands rather than while it runs.
   if (isLoadingApiKeyCheck) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <LoadingState />
-      </div>
-    );
+    return <div className="flex items-center justify-center h-full">null</div>;
   }
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).

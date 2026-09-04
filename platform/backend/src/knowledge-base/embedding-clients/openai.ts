@@ -25,8 +25,9 @@ export async function callOpenAIEmbedding(params: {
   apiKey: string;
   baseUrl?: string | null;
   dimensions?: number;
+  headers?: Record<string, string>;
 }): Promise<EmbeddingApiResponse> {
-  const { inputs, model, apiKey, baseUrl, dimensions } = params;
+  const { inputs, model, apiKey, baseUrl, dimensions, headers } = params;
   // OpenAI-compatible APIs are text-only: reject non-text inputs.
   // Images should never reach here because connectors only ingest images when
   // the embedding model's inputModalities includes "image", which OpenAI models don't.
@@ -42,6 +43,7 @@ export async function callOpenAIEmbedding(params: {
   const client = new OpenAI({
     apiKey,
     baseURL: baseUrl ?? undefined,
+    defaultHeaders: headers,
   });
 
   try {

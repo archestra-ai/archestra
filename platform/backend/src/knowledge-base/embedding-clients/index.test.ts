@@ -221,6 +221,45 @@ describe("callEmbedding dimensions handling", () => {
   });
 });
 
+describe("OpenRouter embedding attribution", () => {
+  const BASE_URL = "https://openrouter-embedding.example.com/v1";
+  let capturedHeaders: Headers;
+  useMswServer(
+    http.post(`${BASE_URL}/embeddings`, ({ request }) => {
+      capturedHeaders = request.headers;
+      return HttpResponse.json({
+        object: "list",
+        data: [
+          {
+            object: "embedding",
+            embedding: encodeEmbedding([0.1, 0.2]),
+            index: 0,
+          },
+        ],
+        model: "openai/text-embedding-3-small",
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      });
+    }),
+  );
+
+  test("attributes direct embedding requests to Archestra", async () => {
+    await callEmbedding({
+      inputs: ["hello"],
+      model: "openai/text-embedding-3-small",
+      apiKey: "k",
+      baseUrl: BASE_URL,
+      provider: "openrouter",
+    });
+
+    expect(capturedHeaders.get("HTTP-Referer")).toBe("https://archestra.ai");
+    expect(capturedHeaders.get("X-OpenRouter-Title")).toBe("Archestra");
+    expect(capturedHeaders.get("X-OpenRouter-Categories")).toBe(
+      "general-chat,personal-agent",
+    );
+    expect(capturedHeaders.get("X-Title")).toBe("Archestra");
+  });
+});
+
 describe("callEmbedding response validation", () => {
   const BASE_URL = "https://embed-validate.example.com/v1";
   let responseBody: Record<string, unknown>;

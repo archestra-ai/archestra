@@ -263,10 +263,7 @@ export const openrouterAdapterFactory: LLMProvider<
       apiKey: rawApiKey,
       baseURL: options.baseUrl ?? config.llm.openrouter.baseUrl,
       fetch: customFetch,
-      defaultHeaders: {
-        ...openRouterAttributionHeaders(),
-        ...(options.defaultHeaders ?? {}),
-      },
+      defaultHeaders: openRouterAttributionHeaders(options.defaultHeaders),
     });
   },
 

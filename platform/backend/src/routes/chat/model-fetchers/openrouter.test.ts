@@ -42,7 +42,11 @@ describe("fetchOpenrouterModels", () => {
     const models = await fetchOpenrouterModels(
       "test-api-key",
       "https://openrouter.example/api/v1",
-      { "HTTP-Referer": "https://app.example" },
+      {
+        "X-Custom-Auth": "keep-me",
+        "HTTP-Referer": "https://caller.example",
+        "X-OpenRouter-Title": "Caller",
+      },
     );
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -51,7 +55,10 @@ describe("fetchOpenrouterModels", () => {
       "https://openrouter.example/api/v1/models",
       {
         headers: {
-          "HTTP-Referer": "https://app.example",
+          "X-Custom-Auth": "keep-me",
+          "HTTP-Referer": "https://caller.example",
+          "X-OpenRouter-Title": "Caller",
+          "X-OpenRouter-Categories": "general-chat,personal-agent",
           Authorization: "Bearer test-api-key",
         },
       },
@@ -61,7 +68,10 @@ describe("fetchOpenrouterModels", () => {
       "https://openrouter.example/api/v1/embeddings/models",
       {
         headers: {
-          "HTTP-Referer": "https://app.example",
+          "X-Custom-Auth": "keep-me",
+          "HTTP-Referer": "https://caller.example",
+          "X-OpenRouter-Title": "Caller",
+          "X-OpenRouter-Categories": "general-chat,personal-agent",
           Authorization: "Bearer test-api-key",
         },
       },

@@ -1203,6 +1203,10 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(Object.keys(call.tools ?? {})).toEqual(
       expect.arrayContaining([searchToolsName, runToolName]),
     );
+    expect(mockCompactMessagesForChat).toHaveBeenCalledTimes(1);
+    expect(
+      Object.keys(mockCompactMessagesForChat.mock.calls[0]?.[0].tools),
+    ).toEqual(expect.arrayContaining([searchToolsName, runToolName]));
   });
 
   test("omits tools from streamText when the conversation model doesn't support tool calling", async ({

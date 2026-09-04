@@ -1,10 +1,18 @@
 import type { SupportedProvider } from "@archestra/shared";
 import type { ChatMessage } from "@/types";
 
+const BASE64_MARKER = ";base64,";
+const MiB = 1024 * 1024;
+
 // Anthropic's documented request-size limits, including Amazon Bedrock's 20 MB
 // cap (the direct Claude API allows 32 MB).
 const REQUEST_SIZE_LIMITS_DOC_URL =
   "https://platform.claude.com/docs/en/api/overview#request-size-limits";
+
+// Bedrock validates the base64-encoded image carried by the Converse JSON
+// request against a 5 MiB ceiling. Base64 expands three input bytes into four
+// wire bytes, so the largest raw image that can pass is 3.75 MiB.
+const BEDROCK_IMAGE_LIMIT_BYTES = (5 * MiB * 3) / 4;
 
 /**
  * Per-provider maximum attachment size. These are the providers' documented
@@ -32,9 +40,12 @@ export function providerAttachmentLimitBytes(
   return PROVIDER_ATTACHMENT_LIMIT_BYTES[provider];
 }
 
-const BASE64_MARKER = ";base64,";
-
-const MiB = 1024 * 1024;
+/** Maximum decoded size of one inline image for providers with such a limit. */
+export function providerImageAttachmentLimitBytes(
+  provider: SupportedProvider,
+): number | undefined {
+  return provider === "bedrock" ? BEDROCK_IMAGE_LIMIT_BYTES : undefined;
+}
 
 export class RequestTooLargeError extends Error {
   readonly provider: SupportedProvider;
@@ -72,7 +83,26 @@ export function assertRequestWithinProviderPayloadLimit(params: {
     return;
   }
 
-  const { fileBytes, fileCount } = measureInlineAttachments(params.messages);
+  const { fileBytes, fileCount, attachments } = measureInlineAttachments(
+    params.messages,
+  );
+  const imageLimitBytes = providerImageAttachmentLimitBytes(params.provider);
+  if (imageLimitBytes !== undefined) {
+    const oversizedImage = attachments.find(
+      (attachment) =>
+        attachment.mediaType.startsWith("image/") &&
+        attachment.fileBytes > imageLimitBytes,
+    );
+    if (oversizedImage) {
+      throw new RequestTooLargeError({
+        provider: params.provider,
+        fileBytes: oversizedImage.fileBytes,
+        limitBytes: imageLimitBytes,
+        fileCount: 1,
+      });
+    }
+  }
+
   // Compare in whole MB — the unit shown to the user — so a file that rounds to
   // the cap is not rejected with a self-contradictory "20 MB, max 20 MB".
   if (Math.round(fileBytes / MiB) > Math.floor(limitBytes / MiB)) {
@@ -88,9 +118,11 @@ export function assertRequestWithinProviderPayloadLimit(params: {
 function measureInlineAttachments(messages: ChatMessage[]): {
   fileBytes: number;
   fileCount: number;
+  attachments: Array<{ fileBytes: number; mediaType: string }>;
 } {
   let fileBytes = 0;
   let fileCount = 0;
+  const attachments: Array<{ fileBytes: number; mediaType: string }> = [];
   for (const message of messages) {
     if (!message.parts?.length) {
       continue;
@@ -109,13 +141,24 @@ function measureInlineAttachments(messages: ChatMessage[]): {
       }
       // Attachments are carried inline as base64; the decoded file is 3/4 of
       // that length — the size the user recognizes and what the message reports.
-      const base64Length =
-        part.url.length - (markerIndex + BASE64_MARKER.length);
-      fileBytes += Math.floor((base64Length * 3) / 4);
+      const payload = part.url.slice(markerIndex + BASE64_MARKER.length);
+      const paddingBytes = payload.endsWith("==")
+        ? 2
+        : payload.endsWith("=")
+          ? 1
+          : 0;
+      const attachmentBytes =
+        Math.floor((payload.length * 3) / 4) - paddingBytes;
+      const mediaType =
+        typeof part.mediaType === "string" && part.mediaType.length > 0
+          ? part.mediaType
+          : part.url.slice(5, part.url.indexOf(";"));
+      fileBytes += attachmentBytes;
       fileCount += 1;
+      attachments.push({ fileBytes: attachmentBytes, mediaType });
     }
   }
-  return { fileBytes, fileCount };
+  return { fileBytes, fileCount, attachments };
 }
 
 function formatRequestTooLargeMessage(params: {
@@ -124,8 +167,8 @@ function formatRequestTooLargeMessage(params: {
   limitBytes: number;
   fileCount: number;
 }): string {
-  const fileMB = Math.round(params.fileBytes / MiB);
-  const limitMB = Math.floor(params.limitBytes / MiB);
+  const fileMB = formatMegabytes(params.fileBytes, true);
+  const limitMB = formatMegabytes(params.limitBytes, false);
   const label = providerLabel(params.provider);
   const subject =
     params.fileCount > 1
@@ -140,6 +183,14 @@ function formatRequestTooLargeMessage(params: {
     `The most you can send is ${limitMB} MB. ${fix}\n` +
     REQUEST_SIZE_LIMITS_DOC_URL
   );
+}
+
+function formatMegabytes(bytes: number, roundUp: boolean): string {
+  const megabytes = bytes / MiB;
+  const hundredths = roundUp
+    ? Math.ceil(megabytes * 100)
+    : Math.floor(megabytes * 100);
+  return String(hundredths / 100);
 }
 
 function providerLabel(provider: SupportedProvider): string {

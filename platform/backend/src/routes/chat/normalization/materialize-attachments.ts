@@ -59,6 +59,10 @@ export async function materializeAttachments({
   // in the Files panel (and the sandbox, when it fits) instead of inflating the
   // request past what the provider accepts. Unbounded when omitted.
   inlineByteLimit = Number.POSITIVE_INFINITY,
+  // Some providers impose a tighter per-image ceiling than their overall
+  // request limit. Keep an oversized image in the Files panel instead of
+  // sending a request the provider will reject.
+  inlineImageByteLimit = inlineByteLimit,
   // The locked chat's browser-held key. Its attachment rows hold sealed bytes
   // and filenames, so rehydrating one for the provider needs the key; null for
   // an ordinary chat, whose rows are plaintext.
@@ -71,6 +75,7 @@ export async function materializeAttachments({
   rerouteBinaryDocsToSandbox?: boolean;
   sandboxAvailable?: boolean;
   inlineByteLimit?: number;
+  inlineImageByteLimit?: number;
   conversationKey?: ConversationContentKey | null;
 }): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
@@ -103,6 +108,7 @@ export async function materializeAttachments({
     rerouteBinaryDocsToSandbox,
     sandboxAvailable,
     inlineByteLimit,
+    inlineImageByteLimit,
   };
 
   const inlinedIds = Array.from(byId.values())
@@ -133,6 +139,7 @@ type MaterializePolicy = {
   rerouteBinaryDocsToSandbox: boolean;
   sandboxAvailable: boolean;
   inlineByteLimit: number;
+  inlineImageByteLimit: number;
 };
 
 /**
@@ -149,8 +156,12 @@ function bypassReason(
   attachment: Attachment,
   policy: MaterializePolicy,
 ): "unreadable" | "too_large_to_send" | null {
-  const { ingestibleMimeTypes, rerouteBinaryDocsToSandbox, inlineByteLimit } =
-    policy;
+  const {
+    ingestibleMimeTypes,
+    rerouteBinaryDocsToSandbox,
+    inlineByteLimit,
+    inlineImageByteLimit,
+  } = policy;
   const modelCannotRead =
     ingestibleMimeTypes !== undefined &&
     !ingestibleMimeTypes.has(attachment.mimeType);
@@ -161,10 +172,13 @@ function bypassReason(
 
   // Text has a tighter budget than binary: an over-budget text document would
   // blow the context window even though the provider would accept the bytes.
-  const textBudget = isInlineableTextMimeType(attachment.mimeType)
-    ? Math.min(INLINE_TEXT_MAX_BYTES, inlineByteLimit)
+  const attachmentBudget = attachment.mimeType.startsWith("image/")
+    ? Math.min(inlineByteLimit, inlineImageByteLimit)
     : inlineByteLimit;
-  return attachment.fileSize > textBudget ? "too_large_to_send" : null;
+  const effectiveBudget = isInlineableTextMimeType(attachment.mimeType)
+    ? Math.min(INLINE_TEXT_MAX_BYTES, attachmentBudget)
+    : attachmentBudget;
+  return attachment.fileSize > effectiveBudget ? "too_large_to_send" : null;
 }
 
 function collectRefIds(messages: ChatMessage[]): string[] {

@@ -272,6 +272,101 @@ function inlinePdfMessage(base64Length: number): ChatMessage[] {
   ];
 }
 
+function inlineImageMessage(decodedBytes: number): ChatMessage[] {
+  const base64 = Buffer.alloc(decodedBytes).toString("base64");
+  return [
+    {
+      role: "user",
+      parts: [
+        { type: "text", text: "Describe this image." },
+        {
+          type: "file",
+          url: `data:image/png;base64,${base64}`,
+          mediaType: "image/png",
+          filename: "image.png",
+        },
+      ],
+    },
+  ];
+}
+
+test("bedrock: an oversized stored image stays out of the provider request", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("small fixture bytes", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "oversized.png",
+    mimeType: "image/png",
+    // Bedrock's 5 MiB encoded-image ceiling allows at most 3.75 MiB of raw
+    // image bytes. The metadata size drives the decision without allocating a
+    // multi-megabyte test fixture.
+    fileSize: 4 * 1024 * 1024,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages: [
+      {
+        role: "user",
+        parts: [
+          { type: "text", text: "Describe this image." },
+          {
+            type: "file",
+            url: `/api/chat/attachments/${row.id}/content`,
+            mediaType: "image/png",
+            filename: "oversized.png",
+          },
+        ],
+      },
+    ],
+    provider: "bedrock",
+    conversationId: conversation.id,
+    ingestibleMimeTypes: new Set(["image/png"]),
+    sandboxAvailable: false,
+  });
+
+  expect(hasFilePart(modelMessages)).toBe(false);
+  expect(textContent(modelMessages)).toContain(
+    "too large to send to this model",
+  );
+  expect(textContent(modelMessages)).toContain("Files panel");
+});
+
+test("bedrock: an oversized legacy inline image is rejected before the provider call", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  const error = await __test
+    .buildModelMessagesForProvider({
+      messages: inlineImageMessage(4 * 1024 * 1024),
+      provider: "bedrock",
+      conversationId: conversation.id,
+      sandboxAvailable: false,
+    })
+    .then(
+      () => null,
+      (caught) => caught,
+    );
+
+  expect(error).toBeInstanceOf(Error);
+  expect(error.message).toContain("AWS Bedrock");
+  expect(error.message).toContain("3.75 MB");
+});
+
 test("bedrock: an inline PDF whose payload exceeds the provider limit is rejected, reporting the decoded file size", async ({
   makeAgent,
   makeConversation,

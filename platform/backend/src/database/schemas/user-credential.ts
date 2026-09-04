@@ -12,7 +12,7 @@ import usersTable from "./user";
 
 /**
  * A credential one user has deposited for one Agent deployment — the `per_user` half of
- * its declared Background execution credentials.
+ * its declared Agent Runtime credentials.
  *
  * Exists because some deployments cannot act on a person's behalf with a shared
  * organization credential: a Claude Code subscription token, a personal GitHub
@@ -30,7 +30,7 @@ const userCredentialsTable = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    /** Agent whose background-execution declaration this credential satisfies. */
+    /** Agent whose agent-runtime declaration this credential satisfies. */
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),

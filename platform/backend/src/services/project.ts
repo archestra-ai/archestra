@@ -29,7 +29,7 @@ import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
   AgentScope,
-  GetAgentExecutionResponse,
+  GetAgentRunResponse,
   LabelWithDetails,
   Project,
   ProjectConversationItem,
@@ -55,7 +55,7 @@ type ProjectShareAudience = {
 };
 
 /**
- * Projects: named collections of chats and execution sessions that own a set of result files
+ * Projects: named collections of chats and run sessions that own a set of result files
  * (`files.project_id`). Mutations are owner-only; access to the project (and so
  * its files) is governed by the project share (see ProjectShareModel).
  */
@@ -1060,7 +1060,7 @@ class ProjectService {
     id: string;
     organizationId: string;
     userId: string;
-  }): Promise<GetAgentExecutionResponse[]> {
+  }): Promise<GetAgentRunResponse[]> {
     const project = await this.requireReadable(params);
     const canReadAll = await this.callerCanReadAllProjectSessions(params);
     const rows = await AgentRunModel.listForProject({

@@ -82,6 +82,7 @@ function setup(options: {
     hasCustomSelection: boolean;
     enabledToolIds: string[];
   } | null;
+  enabled?: boolean;
 }) {
   const {
     installState,
@@ -119,7 +120,10 @@ function setup(options: {
   mockUseAgentDelegations.mockReturnValue({ data: [], isLoading: false });
 
   return renderHook(
-    () => usePlaywrightSetupRequired(AGENT_ID, CONVERSATION_ID),
+    () =>
+      usePlaywrightSetupRequired(AGENT_ID, CONVERSATION_ID, {
+        enabled: options.enabled,
+      }),
     { wrapper },
   );
 }
@@ -212,5 +216,24 @@ describe("usePlaywrightSetupRequired", () => {
     });
 
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it("keeps browser setup queries disabled until chat initialization finishes", () => {
+    setup({ installState: "not-installed", enabled: false });
+
+    expect(mockUseProfileToolsWithIds).toHaveBeenCalledWith(AGENT_ID, {
+      enabled: false,
+    });
+    expect(mockUseConversationEnabledTools).toHaveBeenCalledWith(
+      CONVERSATION_ID,
+      { enabled: false },
+    );
+    expect(mockUseAgentDelegations).toHaveBeenCalledWith(AGENT_ID, {
+      enabled: false,
+    });
+    expect(mockUseMcpServers).toHaveBeenCalledWith({
+      catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+      enabled: false,
+    });
   });
 });

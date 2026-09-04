@@ -7,6 +7,7 @@ import { Skeleton } from "./ui/skeleton";
 type LoadingStateVariant =
   | "viewport"
   | "page"
+  | "fill"
   | "content"
   | "compact"
   | "inline"
@@ -15,6 +16,7 @@ type LoadingStateVariant =
 const INDICATOR_SIZE_BY_VARIANT: Record<LoadingStateVariant, string> = {
   viewport: "size-8",
   page: "size-8",
+  fill: "size-8",
   content: "size-8",
   compact: "size-6",
   inline: "size-4",
@@ -55,6 +57,12 @@ export function LoadingState({
   /**
    * Controls the centered loading area's height and indicator size.
    *
+   * `fill` centres inside whatever box its parent gives it, rather than
+   * deriving a height from the viewport. Use it wherever the surrounding
+   * layout already owns the height — notably surfaces with no app header or
+   * page header, where `page`'s `100dvh - 12rem` describes chrome that is not
+   * there and lands the indicator above centre.
+   *
    * `quiet` holds the area open and announces itself to assistive tech while
    * drawing nothing. Use it where a visible indicator would be a flash rather
    * than information — a boot step short enough that the eye reads the spinner
@@ -73,6 +81,10 @@ export function LoadingState({
         variant === "viewport" && "min-h-app-viewport",
         variant === "page" &&
           "min-h-[calc(var(--visual-viewport-height,100dvh)-12rem)] animate-in fade-in-0 duration-200 [animation-delay:150ms] [animation-fill-mode:backwards] motion-reduce:animate-none",
+        // No enter-delay: `fill` takes over from an indicator that is already
+        // on screen (the session gate's), so fading in late would blank the
+        // area at the handover instead of covering a fresh wait.
+        variant === "fill" && "h-full min-h-0 flex-1",
         variant === "content" && "min-h-48 py-10",
         variant === "compact" && "min-h-24 py-4",
         variant === "inline" && "inline-flex min-h-0 p-0 align-middle",

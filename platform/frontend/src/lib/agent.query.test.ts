@@ -1,10 +1,14 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useCreateProfile, useUpdateProfile } from "@/lib/agent.query";
+import {
+  useChatAgents,
+  useCreateProfile,
+  useUpdateProfile,
+} from "@/lib/agent.query";
 import { isReportedApiError } from "@/lib/utils";
 
 // Partial: `@/consts` (pulled in by agent.query.ts) reads real exports of this
@@ -16,6 +20,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     archestraApiSdk: {
       ...actual.archestraApiSdk,
       createAgent: vi.fn(),
+      getAllAgents: vi.fn(),
       updateAgent: vi.fn(),
     },
   };
@@ -119,5 +124,30 @@ describe("agent write mutations", () => {
     });
 
     expect(toast.success).toHaveBeenCalledWith("System prompt saved");
+  });
+});
+
+describe("chat agent roster", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("requests the compact chat view without tool payloads", async () => {
+    sdk.getAllAgents.mockResolvedValue({
+      data: [{ id: "agent-1", name: "Agent" }],
+      error: undefined,
+    } as never);
+
+    const { result } = setup(() => useChatAgents());
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(sdk.getAllAgents).toHaveBeenCalledWith({
+      query: {
+        agentType: "agent",
+        excludeBuiltIn: true,
+        includeTools: false,
+        view: "chat",
+      },
+    });
   });
 });

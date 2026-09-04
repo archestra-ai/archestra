@@ -370,8 +370,8 @@ importers:
         specifier: ^4.2.2
         version: 4.2.2
       '@toon-format/toon':
-        specifier: ^2.1.0
-        version: 2.1.0
+        specifier: ^2.3.1
+        version: 2.3.1
       '@types/pdf-parse':
         specifier: ^1.1.5
         version: 1.1.5
@@ -942,7 +942,7 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(@typescript/typescript6@6.0.1))(vite@7.3.5(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4))
 
-  runner-agent:
+  runtime-agent:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.58
@@ -5865,8 +5865,8 @@ packages:
   '@tokenizer/token@0.3.0':
     resolution: {integrity: sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A==}
 
-  '@toon-format/toon@2.1.0':
-    resolution: {integrity: sha512-JwWptdF5eOA0HaQxbKAzkpQtR4wSWTEfDlEy/y3/4okmOAX1qwnpLZMmtEWr+ncAhTTY1raCKH0kteHhSXnQqg==}
+  '@toon-format/toon@2.3.1':
+    resolution: {integrity: sha512-sWqEMeAJGMda9qRrfPKrX3C4c33CO9SJuvJzzrcBEn5sbDB+k6pSLkDsfN0rVnLQwR97MV3sDgVbcxQNsq8xVw==}
 
   '@turbo/darwin-64@2.9.14':
     resolution: {integrity: sha512-t7QiPflaEyBE4oayeZtSmu4mEfjgIrcNlNNl1z1dmIVPqEdtA7+CfTf8d7KXsOGPh6aNgWjKxyvQg9uGfDQF+A==}
@@ -16547,7 +16547,7 @@ snapshots:
 
   '@tokenizer/token@0.3.0': {}
 
-  '@toon-format/toon@2.1.0': {}
+  '@toon-format/toon@2.3.1': {}
 
   '@turbo/darwin-64@2.9.14':
     optional: true

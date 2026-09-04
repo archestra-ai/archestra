@@ -19,8 +19,14 @@ const RESOURCES = Object.keys(RESOURCE_LEXICON) as ResourceKey[];
  * of the same date.
  */
 describe("resource lexicon", () => {
-  it("covers the four entity surfaces", () => {
-    expect(RESOURCES).toEqual(["agent", "mcp_gateway", "skill", "mcp_server"]);
+  it("covers the five entity surfaces", () => {
+    expect(RESOURCES).toEqual([
+      "agent",
+      "mcp_gateway",
+      "skill",
+      "mcp_server",
+      "app",
+    ]);
   });
 
   it("takes the agent-shaped names from the route configs rather than repeating them", () => {
@@ -59,7 +65,7 @@ describe("resource lexicon", () => {
       "Only this skill's author or an admin can change it",
     );
     expect(notYoursToChange({ resource: "skill", scope: "team" })).toBe(
-      "Only this skill's author, a team admin of the teams it is shared with, or an admin can change it",
+      "Only a team admin who belongs to one of the teams this skill is shared with, or an admin, can change it",
     );
     expect(notYoursToChange({ resource: "skill", scope: "org" })).toBe(
       "Only an admin can change this org-wide skill",

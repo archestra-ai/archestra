@@ -14,7 +14,7 @@ export type ExecSessionProgress = {
 };
 
 /**
- * Startup progress for a background execution's terminal.
+ * Startup progress for an Agent Runtime run's terminal.
  *
  * Replaces an unqualified "Connecting…" that could sit for minutes while a pod
  * was scheduled and its image pulled. Every line here comes from the run's

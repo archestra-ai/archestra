@@ -12,18 +12,18 @@ fi
 # Prefer that alias so a fresh pod opens directly into the native TUI.
 unset ANTHROPIC_API_KEY
 
-runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 mcp_config="${runtime_dir}/claude-mcp.json"
 jq -n \
   --arg url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
-  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
   '{mcpServers:{archestra:{
     type:"http",
     url:$url,
     headers:{
       Authorization:("Bearer " + $token),
-      "X-Archestra-Execution-Id":$task_id,
+      "X-Archestra-Run-Id":$task_id,
       "X-Archestra-Session-Id":$task_id
     }
   }}}' \
@@ -50,21 +50,63 @@ printf '%s\n' "${merged}" > "${claude_json}"
 chmod 0600 "${claude_json}"
 
 args=(
-  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+  --model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
   --permission-mode bypassPermissions
   --mcp-config "${mcp_config}"
   --strict-mcp-config
 )
-if [[ -n "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}" ]]; then
-  args+=(--append-system-prompt "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT}")
+if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
+  args+=(--append-system-prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT}")
 fi
 
-case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+# Claude Code knows when it is waiting for a person. Reflect its native hook
+# events in tmux rather than guessing from terminal contents. The platform's
+# tmux status-left format reads these user options for every attached client.
+attention_hook="${runtime_dir}/attention-hook.sh"
+settings_file="${runtime_dir}/claude-settings.json"
+cat > "${attention_hook}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+payload="$(cat)"
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+notification="$(jq -r '.notification_type // empty' <<<"${payload}")"
+attention_command="${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}"
+
+case "${event}:${notification}" in
+  Notification:permission_prompt)
+    label="Permission needed"
+    ;;
+  Notification:idle_prompt)
+    label="Waiting for input"
+    ;;
+  Notification:elicitation_dialog)
+    label="Input requested"
+    ;;
+  *)
+    "${attention_command}" clear
+    exit 0
+    ;;
+esac
+
+"${attention_command}" set "${label}"
+HOOK
+chmod 0700 "${attention_hook}"
+jq -n --arg cmd "${attention_hook}" '{hooks:{
+  Notification:[{
+    matcher:"permission_prompt|idle_prompt|elicitation_dialog|elicitation_complete|elicitation_response|auth_success",
+    hooks:[{type:"command",command:$cmd}]
+  }],
+  UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$cmd}]}],
+  PostToolUse:[{matcher:"",hooks:[{type:"command",command:$cmd}]}]
+}}' > "${settings_file}"
+args+=(--settings "${settings_file}")
+
+case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
     # A Chat execution owns a real pty. Start Claude Code's native TUI with the
     # first prompt already submitted, then leave the process alive for the
     # person's follow-up turns.
-    exec claude "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}"
+    exec claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
     ;;
   one_shot)
     # Delegation has nobody attached to exit a TUI, which is why this mode
@@ -79,16 +121,16 @@ case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
     # platform's fence — so the task still settles on one clean terminal
     # result while the pane shows the native interface throughout.
     #
-    # ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLAIN=1 forces the old print mode.
-    if [[ "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLAIN:-0}" == "1" ]] \
+    # ARCHESTRA_AGENT_RUNTIME_PLAIN=1 forces the old print mode.
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]] \
       || ! command -v jq >/dev/null 2>&1; then
-      exec claude --print "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}"
+      exec claude --print "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
     fi
 
     answer_file="${runtime_dir}/final-answer.txt"
     done_marker="${runtime_dir}/turn-complete"
     hook_script="${runtime_dir}/stop-hook.sh"
-    settings_file="${runtime_dir}/claude-settings.json"
+    settings_tmp="${runtime_dir}/claude-settings.tmp.json"
     rm -f "${answer_file}" "${done_marker}"
 
     # The hook is handed the session JSON on stdin, including the transcript
@@ -98,9 +140,12 @@ case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
     cat > "${hook_script}" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
-runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 payload="$(cat)"
 transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
+printf '%s\n' '{"hook_event_name":"Stop"}' \
+  | "${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}/attention-hook.sh" \
+  >/dev/null 2>&1 || true
 if [[ -n "${transcript}" && -r "${transcript}" ]]; then
   jq -rs '[.[]
       | select(.type == "assistant")
@@ -112,42 +157,19 @@ fi
 touch "${runtime_dir}/turn-complete"
 HOOK
     chmod 0700 "${hook_script}"
-    jq -n --arg cmd "${hook_script}" \
-      '{hooks:{Stop:[{matcher:"",hooks:[{type:"command",command:$cmd}]}]}}' \
-      > "${settings_file}"
-    args+=(--settings "${settings_file}")
+    jq --arg cmd "${hook_script}" \
+      '.hooks.Stop=[{matcher:"",hooks:[{type:"command",command:$cmd}]}]' \
+      "${settings_file}" > "${settings_tmp}"
+    mv "${settings_tmp}" "${settings_file}"
 
-    claude "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" &
-    claude_pid=$!
-
-    # Bounded by the run's own lifetime: the pod's TTL and the platform's
-    # cancellation both outrank this loop, so it never becomes the reason a
-    # session hangs. A vanished process without a marker means Claude Code
-    # exited on its own — normal for an error path.
-    while kill -0 "${claude_pid}" 2>/dev/null; do
-      if [[ -f "${done_marker}" ]]; then
-        # Let the pane settle on the finished frame before tearing it down,
-        # then end the session the way a person would.
-        sleep 2
-        kill -TERM "${claude_pid}" 2>/dev/null || true
-        break
-      fi
-      sleep 2
-    done
-    wait "${claude_pid}" 2>/dev/null || true
-
-    # The fence tells the platform where the prose starts; without it the
-    # "answer" would be a recording of the TUI redrawing itself.
-    printf '\n===ARCHESTRA-FINAL-ANSWER===\n'
-    if [[ -s "${answer_file}" ]]; then
-      cat "${answer_file}"
-    else
-      echo "The session ended without producing a final message."
-    fi
-    printf '\n'
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    exec "${script_dir}/archestra-tui-run" \
+      "${done_marker}" \
+      "${answer_file}" \
+      claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
     ;;
   *)
-    echo "archestra: unknown Background execution mode" >&2
+    echo "archestra: unknown Agent Runtime mode" >&2
     exit 78
     ;;
 esac

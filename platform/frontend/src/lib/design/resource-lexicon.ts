@@ -32,7 +32,7 @@ import {
  * resource that cannot actually happen. Naming is a separate axis, so it gets
  * a separate key.
  */
-export type ResourceKey = AgentPageKind | "skill" | "mcp_server";
+export type ResourceKey = AgentPageKind | "skill" | "mcp_server" | "app";
 
 export interface ResourceNames {
   /** Title case: a page title, or a button's object ("Create Agent"). */
@@ -55,6 +55,11 @@ export const RESOURCE_LEXICON: Record<ResourceKey, ResourceNames> = {
     singular: "MCP Server",
     singularInSentence: "MCP server",
     plural: "MCP Servers",
+  },
+  app: {
+    singular: "App",
+    singularInSentence: "app",
+    plural: "Apps",
   },
 };
 
@@ -135,7 +140,7 @@ export function notYoursToChange({
     case "personal":
       return `Only this ${name}'s author or an admin can change it`;
     case "team":
-      return `Only this ${name}'s author, a team admin of the teams it is shared with, or an admin can change it`;
+      return `Only a team admin who belongs to one of the teams this ${name} is shared with, or an admin, can change it`;
     case "org":
       return `Only an admin can change this org-wide ${name}`;
   }

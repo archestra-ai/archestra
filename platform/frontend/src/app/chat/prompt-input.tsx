@@ -221,9 +221,9 @@ export interface ArchestraPromptInputProps
   onRestoreExternalMcpSkillAttachment?: (
     skill: ChatExternalMcpSkillMetadata,
   ) => void;
-  /** Render the new-chat composer as an isolated execution launcher. */
-  executionMode?: boolean;
-  executionAgentName?: string;
+  /** Render the new-chat composer as a dedicated runtime launcher. */
+  runtimeMode?: boolean;
+  runtimeAgentName?: string;
 }
 
 type SlashCommand = {
@@ -288,8 +288,8 @@ const PromptInputContent = ({
   externalMcpSkillAttachment,
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
-  executionMode = false,
-  executionAgentName,
+  runtimeMode = false,
+  runtimeAgentName,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -357,9 +357,16 @@ const PromptInputContent = ({
   const skillSlashCommandsEnabled = orgData?.skillToolsEnabled ?? false;
   // Scoped to the conversation agent's environment: a slash command must not
   // offer a skill the backend's activation gate would refuse.
+  // The catalog can be hundreds of kilobytes and a blank composer has no use
+  // for it. Start the query only when the draft can actually be a command.
+  const isSkillCommandDraft = controller.textInput.value
+    .trimStart()
+    .startsWith("/");
   const { data: skillsData } = useSkillsPaginated(
     { limit: 100, forAgentId: agentId ?? undefined },
-    { enabled: skillSlashCommandsEnabled && !!agentId },
+    {
+      enabled: skillSlashCommandsEnabled && !!agentId && isSkillCommandDraft,
+    },
   );
   const skillCommands = useMemo<SkillCommand[]>(() => {
     if (!skillSlashCommandsEnabled || !skillsData?.data) {
@@ -422,7 +429,7 @@ const PromptInputContent = ({
   // Restore draft on mount or conversation change
   useEffect(() => {
     isRestored.current = false;
-    const savedDraft = localStorage.getItem(storageKey);
+    const savedDraft = getRestorableDraft(localStorage, storageKey);
     if (savedDraft) {
       controller.textInput.setInput(savedDraft);
     } else {
@@ -998,16 +1005,16 @@ const PromptInputContent = ({
           edge, carrying the explanation that used to live in the toggle's
           tooltip. Paired with the dashed composer border below so an
           locked chat is unmistakable while composing. */}
-      {executionMode && (
+      {runtimeMode && (
         <div className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2">
           <TerminalSquare className="size-3.5 text-primary" />
           <span>
-            Starts {executionAgentName ?? "this Agent"} in an isolated
-            execution. This becomes its live terminal when ready.
+            Starts {runtimeAgentName ?? "this Agent"} in its dedicated runtime.
+            This becomes its live terminal when ready.
           </span>
         </div>
       )}
-      {lockedChatActive && !executionMode && (
+      {lockedChatActive && !runtimeMode && (
         <div
           data-testid={E2eTestId.LockedChatNotice}
           className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
@@ -1027,7 +1034,7 @@ const PromptInputContent = ({
         maxFileSize={storageByteLimit}
         onError={handleFileError}
         className={cn(
-          executionMode &&
+          runtimeMode &&
             "[&_[data-slot=input-group]]:border-primary/50 [&_[data-slot=input-group]]:bg-primary/[0.025] [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-primary",
           lockedChatActive &&
             // The dashed border replaces the composer's ring outright (both
@@ -1051,7 +1058,7 @@ const PromptInputContent = ({
           ) : (
             <PromptInputTextarea
               placeholder={
-                executionMode
+                runtimeMode
                   ? "Describe the task to run..."
                   : conversationId
                     ? "Ask a follow-up..."
@@ -1097,7 +1104,7 @@ const PromptInputContent = ({
             modelSource={modelSource}
             toolsUnavailable={toolsUnavailable}
             notRecommendedForAgents={notRecommendedForAgents}
-            executionMode={executionMode}
+            runtimeMode={runtimeMode}
             onResetModelOverride={onResetModelOverride}
             thinkingEffort={thinkingEffort}
             onThinkingEffortChange={onThinkingEffortChange}
@@ -1118,7 +1125,7 @@ const PromptInputContent = ({
               folds the inline tools into a menu (freeing space for the pinned
               recorder pill) rather than squeezing the send button. */}
           <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
-            {!executionMode && (
+            {!runtimeMode && (
               <PromptInputSpeechButton
                 textareaRef={textareaRef}
                 onTranscriptionChange={handleTranscriptionChange}
@@ -1222,8 +1229,8 @@ const ArchestraPromptInput = ({
   externalMcpSkillAttachment,
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
-  executionMode,
-  executionAgentName,
+  runtimeMode,
+  runtimeAgentName,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId ?? undefined);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -1334,8 +1341,8 @@ const ArchestraPromptInput = ({
           sandboxAvailable={sandboxAvailable}
           lockedChat={lockedChat}
           onLockedChatChange={onLockedChatChange}
-          executionMode={executionMode}
-          executionAgentName={executionAgentName}
+          runtimeMode={runtimeMode}
+          runtimeAgentName={runtimeAgentName}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
           externalMcpSkillAttachment={externalMcpSkillAttachment}
@@ -1352,3 +1359,19 @@ const ArchestraPromptInput = ({
 };
 
 export default ArchestraPromptInput;
+
+// Older clients could leave serialized nullish sentinels in prompt storage.
+// They are state markers, not user drafts, and briefly painting one into the
+// controlled textarea exposes the literal word during chat initialization.
+function getRestorableDraft(storage: Storage, key: string): string | null {
+  const draft = storage.getItem(key);
+  if (!draft) return null;
+
+  const normalized = draft.trim().toLowerCase();
+  if (normalized === "null" || normalized === "undefined") {
+    storage.removeItem(key);
+    return null;
+  }
+
+  return draft;
+}

@@ -54,10 +54,10 @@ export { default as agentExcludedConnectorsTable } from "./agent-excluded-connec
 export { default as agentExcludedSkillsTable } from "./agent-excluded-skill";
 export { default as agentExcludedSubagentsTable } from "./agent-excluded-subagent";
 export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
-export { default as agentExecutionInputsTable } from "./agent-execution-input";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentRunsTable } from "./agent-run";
+export { default as agentRunInputsTable } from "./agent-run-input";
 export {
   agentRunShareTeamsTable,
   agentRunShareUsersTable,
@@ -115,8 +115,6 @@ export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
 export { default as environmentLabelsTable } from "./environment-label";
 export { default as environmentResourceDefaultsTable } from "./environment-resource-default";
-export { default as executionCredentialConnectionsTable } from "./execution-credential-connection";
-export { default as executionCredentialDefinitionsTable } from "./execution-credential-definition";
 export { default as externalMcpSkillUsageEventsTable } from "./external-mcp-skill-usage-event";
 export { default as filesTable } from "./file";
 export { default as githubAppConfigsTable } from "./github-app-config";
@@ -201,6 +199,8 @@ export {
 } from "./project";
 export { default as projectLabelsTable } from "./project-label";
 export { default as projectPinsTable } from "./project-pin";
+export { default as runtimeCredentialConnectionsTable } from "./runtime-credential-connection";
+export { default as runtimeCredentialDefinitionsTable } from "./runtime-credential-definition";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";

@@ -1,3 +1,4 @@
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createCerebras } from "@ai-sdk/cerebras";
 import { createCohere } from "@ai-sdk/cohere";
@@ -57,6 +58,7 @@ import {
 } from "@/clients/azure-url";
 import {
   buildBedrockProvider,
+  getBedrockRegion,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import {
@@ -1067,10 +1069,16 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   bedrock: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      buildBedrockProvider({ apiKey, baseUrl: baseURL, headers, fetch })(
-        modelName,
-      ),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) =>
+      (direct
+        ? buildBedrockProvider({ apiKey, baseUrl: baseURL, headers, fetch })
+        : createAmazonBedrock({
+            apiKey,
+            region: getBedrockRegion(),
+            baseURL,
+            headers,
+            fetch,
+          }))(modelName),
     defaultBaseUrl: config.llm.bedrock.baseUrl,
     apiKeyRequiredMessage: isBedrockIamAuthEnabled()
       ? undefined

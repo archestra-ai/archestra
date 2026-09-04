@@ -106,6 +106,13 @@ export function isScriptClient(
  * control the install does not have. Sharing a fixed subset is what a snapshot
  * link is for.
  */
+/**
+ * How long the review step's skill list waits before it starts fetching.
+ * Long enough for the setup command above it to render and settle, short
+ * enough that the list is there by the time anyone scrolls to it.
+ */
+const CONNECT_SKILLS_DEFER_MS = 750;
+
 function useConnectSkills(llmProxyId: string | null): {
   eligible: boolean;
   skills: ConnectSkill[];
@@ -116,6 +123,9 @@ function useConnectSkills(llmProxyId: string | null): {
   const { data: skills } = useAllSkills({
     enabled: canReadSkills === true,
     forAgentId: llmProxyId,
+    // Step 2's content, not step 1's: let the part of the page the user acts
+    // on first render before walking the catalogue.
+    deferMs: CONNECT_SKILLS_DEFER_MS,
   });
   return {
     eligible: canReadSkills === true && (skills ?? []).length > 0,

@@ -34,7 +34,7 @@ import {
 import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
-import { AgentExecutionCredentialPrompt } from "@/components/agent-execution-credential-prompt";
+import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
@@ -78,7 +78,6 @@ import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
-import { LoadingState } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
@@ -103,11 +102,11 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
-import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
 import {
-  useAgentBackgroundExecutionPreflight,
-  useStartAgentExecution,
-} from "@/lib/agent-background-execution.query";
+  useAgentRuntimePreflight,
+  useStartAgentRun,
+} from "@/lib/agent-runtime.query";
 import { trackEvent } from "@/lib/analytics";
 import { useApp } from "@/lib/app.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -435,13 +434,12 @@ export function ChatPageContent({
   const canUseProviderSettings =
     canReadLlmProvider === true && canReadLlmModels === true;
 
-  // Fetch internal agents for dialog editing
+  // Fetch the compact roster needed to resolve the new-chat agent.
   const { data: internalAgents = [], isPending: isLoadingAgents } =
-    useInternalAgents({ enabled: hasChatAccess });
+    useChatAgents({ enabled: hasChatAccess });
   const { data: defaultAgentId } = useDefaultAgentId();
-  const backgroundExecutionEnabled =
-    useFeature("agentBackgroundExecution") === true;
-  const startAgentExecutionMutation = useStartAgentExecution();
+  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const startAgentRunMutation = useStartAgentRun();
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
@@ -496,16 +494,15 @@ export function ChatPageContent({
     isProjectLoading: !!newChatProjectId && isNewChatProjectPending,
     routeConversationId,
   });
-  const initialExecutionAgent = backgroundExecutionEnabled
+  const initialRuntimeAgent = runtimeEnabled
     ? internalAgents.find(
-        (agent) =>
-          agent.id === initialAgentId && agent.backgroundExecution !== null,
+        (agent) => agent.id === initialAgentId && agent.runtime !== null,
       )
     : undefined;
-  const isInitialExecutionMode = !!initialExecutionAgent;
-  const executionPreflight = useAgentBackgroundExecutionPreflight(
+  const isInitialRuntimeMode = !!initialRuntimeAgent;
+  const runtimePreflight = useAgentRuntimePreflight(
     initialAgentId ?? "",
-    isInitialExecutionMode,
+    isInitialRuntimeMode,
   );
 
   // Whether the NEXT chat created from the new-chat composer is a locked chat.
@@ -1854,6 +1851,14 @@ export function ChatPageContent({
       ? (conversationAgentId ?? promptAgentId ?? undefined)
       : (initialAgentId ?? undefined);
 
+  // Browser setup fans out through the agent's tools, delegations, enabled
+  // subagents, and installation state. On a new chat none of that can affect
+  // the first useful composer render, so let the roster and model settle first
+  // instead of making those requests compete with initialization.
+  const shouldCheckBrowserTools =
+    !!browserToolsAgentId &&
+    (Boolean(conversationId) || (!isLoadingAgents && !isModelsLoading));
+
   const playwrightSetupAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
@@ -1861,7 +1866,9 @@ export function ChatPageContent({
       : (initialAgentId ?? undefined);
 
   const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
-    useHasPlaywrightMcpTools(browserToolsAgentId, conversationToolsStateId);
+    useHasPlaywrightMcpTools(browserToolsAgentId, conversationToolsStateId, {
+      enabled: shouldCheckBrowserTools,
+    });
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
@@ -1879,7 +1886,10 @@ export function ChatPageContent({
     conversationToolsStateId,
     {
       enabled:
-        !isReadOnlyConversation && hasChatAccess && canUpdateAgent !== false,
+        shouldCheckBrowserTools &&
+        !isReadOnlyConversation &&
+        hasChatAccess &&
+        canUpdateAgent !== false,
     },
   );
   // Two different answers, and they must not be spelled the same way.
@@ -2855,22 +2865,20 @@ export function ChatPageContent({
           // Throw to keep the textarea and draft intact (onSubmit contract).
           throw new Error("offline-not-submit");
         }
-        if (isInitialExecutionMode && initialAgentId) {
+        if (isInitialRuntimeMode && initialAgentId) {
           const text = message.text?.trim() ?? "";
           if (!text) return;
           if (options) {
-            toast.error(
-              "Chat commands aren't available in an execution launcher.",
-            );
-            throw new Error("execution-input-not-supported");
+            toast.error("Chat commands aren't available in a run launcher.");
+            throw new Error("run-input-not-supported");
           }
-          const started = await startAgentExecutionMutation.mutateAsync({
+          const started = await startAgentRunMutation.mutateAsync({
             agentId: initialAgentId,
             message: text,
             files: message.files,
           });
-          if (!started) throw new Error("execution-not-started");
-          router.push(`/chat/executions/${started.taskId}`);
+          if (!started) throw new Error("run-not-started");
+          router.push(`/chat/runs/${started.taskId}`);
           return;
         }
         submitInitialMessage(message, options);
@@ -2879,9 +2887,9 @@ export function ChatPageContent({
         submitInitialMessage,
         connectivity.state,
         initialAgentId,
-        isInitialExecutionMode,
+        isInitialRuntimeMode,
         router,
-        startAgentExecutionMutation,
+        startAgentRunMutation,
       ],
     );
 
@@ -3109,11 +3117,7 @@ export function ChatPageContent({
   //   (`isPlaywrightSetupNeeded`) reaches the composer, so the setup card
   //   appears when the check lands rather than while it runs.
   if (isLoadingApiKeyCheck) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <LoadingState />
-      </div>
-    );
+    return <div className="flex items-center justify-center h-full">null</div>;
   }
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).
@@ -3138,7 +3142,7 @@ export function ChatPageContent({
   // A review chat is exempt: the read-only replay plays without a key, so we
   // render the full layout (docked replay) and prompt for a key inline in the
   // composer slot instead of short-circuiting the whole page.
-  if (!hasAnyApiKey && !hasReviewContext && !isInitialExecutionMode) {
+  if (!hasAnyApiKey && !hasReviewContext && !isInitialRuntimeMode) {
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
@@ -3512,7 +3516,7 @@ export function ChatPageContent({
                     </div>
                   ) : isAppOversight ||
                     isResolvingOversightApp ? null : !hasAnyApiKey &&
-                    !isInitialExecutionMode ? (
+                    !isInitialRuntimeMode ? (
                     /* Review chat with no LLM key: the replay plays in the panel
                        without a key, but chatting needs one — prompt for it here
                        instead of the composer (which assumes a selected model). */
@@ -3703,7 +3707,7 @@ export function ChatPageContent({
                         <AppLogo />
                       </div>
                       {(() => {
-                        if (isInitialExecutionMode) return null;
+                        if (isInitialRuntimeMode) return null;
                         const currentAgent = internalAgents.find(
                           (a) => a.id === initialAgentId,
                         );
@@ -3744,7 +3748,7 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="w-full">
-                            {!hasAnyApiKey && !isInitialExecutionMode ? (
+                            {!hasAnyApiKey && !isInitialRuntimeMode ? (
                               /* Review deep link reached the splash without a key
                                    (only review chats get here — non-review no-key
                                    chats short-circuit above). Prompt for a key
@@ -3754,7 +3758,7 @@ export function ChatPageContent({
                               />
                             ) : (
                               <>
-                                {newChatAgentId && !isInitialExecutionMode && (
+                                {newChatAgentId && !isInitialRuntimeMode && (
                                   <div className="mb-3">
                                     <AgentConnectionNotice
                                       agentId={newChatAgentId}
@@ -3769,7 +3773,7 @@ export function ChatPageContent({
                                   }
                                   status={
                                     createConversationMutation.isPending ||
-                                    startAgentExecutionMutation.isPending
+                                    startAgentRunMutation.isPending
                                       ? "submitted"
                                       : "ready"
                                   }
@@ -3814,12 +3818,11 @@ export function ChatPageContent({
                                   sendDisabled={
                                     !initialAgentId ||
                                     isPlaywrightSetupVisible ||
-                                    (!isInitialExecutionMode &&
+                                    (!isInitialRuntimeMode &&
                                       isAgentSubscriptionMetadataPending) ||
-                                    (isInitialExecutionMode &&
-                                      (executionPreflight.isPending ||
-                                        executionPreflight.data?.ready !==
-                                          true))
+                                    (isInitialRuntimeMode &&
+                                      (runtimePreflight.isPending ||
+                                        runtimePreflight.data?.ready !== true))
                                   }
                                   subscriptionConnectRequired={
                                     initialPerUserConnect.needsConnect
@@ -3833,12 +3836,12 @@ export function ChatPageContent({
                                   selectorAgentId={initialAgentId}
                                   onAgentChange={handleInitialAgentChange}
                                   lockedChat={
-                                    isInitialExecutionMode
+                                    isInitialRuntimeMode
                                       ? false
                                       : isLockedChatDraft
                                   }
                                   onLockedChatChange={
-                                    isInitialExecutionMode
+                                    isInitialRuntimeMode
                                       ? undefined
                                       : setIsLockedChatDraft
                                   }
@@ -3873,27 +3876,23 @@ export function ChatPageContent({
                                   onRestoreExternalMcpSkillAttachment={
                                     setExternalMcpSkillAttachment
                                   }
-                                  executionMode={isInitialExecutionMode}
-                                  executionAgentName={
-                                    initialExecutionAgent?.name
-                                  }
+                                  runtimeMode={isInitialRuntimeMode}
+                                  runtimeAgentName={initialRuntimeAgent?.name}
                                 />
-                                {isInitialExecutionMode &&
-                                  executionPreflight.data?.ready === false && (
-                                    <AgentExecutionCredentialPrompt
+                                {isInitialRuntimeMode &&
+                                  runtimePreflight.data?.ready === false && (
+                                    <AgentRuntimeCredentialPrompt
                                       agentId={initialAgentId ?? ""}
                                       missing={[
-                                        ...executionPreflight.data.missing,
-                                        ...executionPreflight.data
-                                          .misconfigured,
+                                        ...runtimePreflight.data.missing,
+                                        ...runtimePreflight.data.misconfigured,
                                       ]}
                                       declarations={
-                                        initialExecutionAgent
-                                          ?.backgroundExecution?.credentials ??
-                                        []
+                                        initialRuntimeAgent?.runtime
+                                          ?.credentials ?? []
                                       }
                                       onConnected={() =>
-                                        executionPreflight.refetch()
+                                        runtimePreflight.refetch()
                                       }
                                     />
                                   )}

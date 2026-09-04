@@ -182,11 +182,11 @@ export const TOOL_PERMISSIONS: Record<
   upload_file: { resource: "sandbox", action: "execute" },
 
   // Tasks are an Agent capability, including when an Agent opts into
-  // Background execution. Per-task ownership stays in the handlers.
+  // Agent Runtime. Per-task ownership stays in the handlers.
   start_task: { resource: "agent", action: "read" },
   get_task: { resource: "agent", action: "read" },
   list_tasks: { resource: "agent", action: "read" },
-  list_agent_executions: { resource: "agent", action: "read" },
+  list_agent_runs: { resource: "agent", action: "read" },
   steer_task: { resource: "agent", action: "read" },
   cancel_task: { resource: "agent", action: "read" },
   post_task_file: { resource: "agent", action: "read" },
@@ -211,8 +211,10 @@ export const TOOL_PERMISSIONS: Record<
   // refine mutates the app head (persists its spec), mirroring edit_app.
   refine_app: { resource: "app", action: "update" },
   list_apps: { resource: "app", action: "read" },
+  list_app_versions: { resource: "app", action: "read" },
   render_app: { resource: "app", action: "read" },
   read_app: { resource: "app", action: "read" },
+  restore_app_version: { resource: "app", action: "update" },
   edit_app: { resource: "app", action: "update" },
   // set_app_tools replaces an app's assigned tool set; assertCallerMayModifyApp
   // is the real authority, app:update is the floor (mirrors edit_app).

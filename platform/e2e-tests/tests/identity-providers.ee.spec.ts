@@ -749,10 +749,13 @@ test.describe("Identity Provider Team Sync E2E", () => {
       actionName: "Edit",
     });
 
-    // Wait for the dialog and switch to the External Group Sync section
+    // Wait for the dialog and switch to the External Group Sync section.
+    // Scope to the section navigation: the Members info box renders an inline
+    // "External Group Sync" jump button with the same accessible name.
     const teamDialog = page.getByRole("dialog");
     await expect(teamDialog).toBeVisible();
     await teamDialog
+      .getByRole("navigation")
       .getByRole("button", { name: "External Group Sync" })
       .click();
 

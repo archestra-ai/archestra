@@ -26,18 +26,18 @@ vi.mock("@/app/chat/prompt-input", () => ({
           })
         }
       >
-        Submit execution
+        Submit run
       </button>
     );
   },
 }));
 
-vi.mock("@/components/agent-execution-credential-prompt", () => ({
-  AgentExecutionCredentialPrompt: () => <div>Credentials required</div>,
+vi.mock("@/components/agent-runtime-credential-prompt", () => ({
+  AgentRuntimeCredentialPrompt: () => <div>Credentials required</div>,
 }));
 
-vi.mock("@/lib/agent-background-execution.query", () => ({
-  useAgentBackgroundExecutionPreflight: () => ({
+vi.mock("@/lib/agent-runtime.query", () => ({
+  useAgentRuntimePreflight: () => ({
     data: { ready: true, missing: [], misconfigured: [] },
     isPending: false,
     refetch: vi.fn(),
@@ -46,12 +46,12 @@ vi.mock("@/lib/agent-background-execution.query", () => ({
 
 vi.mock("@/lib/agent.query", () => ({
   useDefaultAgentId: () => ({ data: null }),
-  useInternalAgents: () => ({
+  useChatAgents: () => ({
     data: [
       {
-        id: "execution-agent",
+        id: "runtime-agent",
         name: "Builder",
-        backgroundExecution: { credentials: [] },
+        runtime: { credentials: [] },
         llmApiKeyId: null,
       },
     ],
@@ -64,7 +64,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
 
 vi.mock("@/lib/chat/use-initial-chat-model-state.hook", () => ({
   useInitialChatModelState: () => ({
-    agentId: "execution-agent",
+    agentId: "runtime-agent",
     modelId: "model-1",
     apiKeyId: null,
     provider: "openai",
@@ -109,20 +109,20 @@ describe("NewChatComposer", () => {
     state.promptProps = null;
   });
 
-  it("submits a background execution agent with its files and execution mode", () => {
+  it("submits an Agent Runtime agent with its files and runtime mode", () => {
     const onSubmit = vi.fn();
     render(<NewChatComposer onSubmit={onSubmit} />);
 
     expect(state.promptProps).toMatchObject({
-      executionMode: true,
-      executionAgentName: "Builder",
+      runtimeMode: true,
+      runtimeAgentName: "Builder",
       sendDisabled: false,
     });
-    fireEvent.click(screen.getByRole("button", { name: "Submit execution" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit run" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       text: "Run the project task",
-      agentId: "execution-agent",
+      agentId: "runtime-agent",
       modelId: "model-1",
       apiKeyId: null,
       files: [
@@ -133,7 +133,7 @@ describe("NewChatComposer", () => {
           url: "data:text/plain;base64,YnJpZWY=",
         },
       ],
-      executionMode: true,
+      runtimeMode: true,
     });
   });
 });

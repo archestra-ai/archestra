@@ -17,7 +17,7 @@ import type {
   MissingCredentialBehavior,
   ToolExposureMode,
 } from "@/types/agent";
-import type { AgentBackgroundExecution } from "@/types/runner";
+import type { AgentRuntime } from "@/types/agent-runtime";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
@@ -128,16 +128,15 @@ const agentsTable = softDeletablePgTable(
     ),
 
     /**
-     * Optional deployment used for durable/background work. Invocation
-     * surfaces decide whether to request a foreground message or durable task.
+     * Optional dedicated runtime for durable and delegated work. Invocation
+     * surfaces decide whether to use the foreground loop or start a run.
      */
-    backgroundExecution: jsonb(
-      "background_execution",
-    ).$type<AgentBackgroundExecution>(),
-    /** Bag holding shared credential values declared by backgroundExecution. */
-    backgroundExecutionSecretId: uuid(
-      "background_execution_secret_id",
-    ).references(() => secretsTable.id, { onDelete: "set null" }),
+    runtime: jsonb("runtime").$type<AgentRuntime>(),
+    /** Bag holding shared credential values declared by runtime. */
+    runtimeSecretId: uuid("runtime_secret_id").references(
+      () => secretsTable.id,
+      { onDelete: "set null" },
+    ),
 
     /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
     passthroughHeaders: text("passthrough_headers").array(),

@@ -3,7 +3,7 @@ name: Platform E2E Tests
 # Runs automatically in merge queue as the required E2E gate.
 # Trusted same-repo PR updates prebuild the Platform and MCP images so a
 # later merge-group run can retag them instead of compiling on the queue
-# critical path. Fork PRs keep the placeholder checks. Add the "run-e2e"
+# critical path. Untrusted PRs keep the placeholder checks. Add the "run-e2e"
 # label to trigger the full E2E suite on demand. Remove and re-add the
 # label to re-trigger after new commits.
 #
@@ -52,6 +52,9 @@ env:
   PLATFORM_IMAGE_NAME: platform
   MCP_SERVER_BASE_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
+  # Dependabot PRs use the same restricted secret context as forks even though
+  # their branches live in this repository and report head.repo.fork=false.
+  UNTRUSTED_PR: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') }}
 
 jobs:
   # NOTE: there are deliberately NO same-named "placeholder" jobs for the
@@ -76,8 +79,8 @@ jobs:
     # build must not also run this placeholder under the same check names (the
     # duplicate-name masking hazard the NOTE above forbids re-adding). Every
     # trusted same-repo PR event runs the real builder instead; this placeholder
-    # remains only for ordinary fork events that cannot access the registry.
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true && (github.event.action != 'labeled' || (github.event.label.name != 'run-e2e' && github.event.label.name != 'run-e2e-hibernation')) }}
+    # remains only for ordinary untrusted events that cannot access the registry.
+    if: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') && (github.event.action != 'labeled' || (github.event.label.name != 'run-e2e' && github.event.label.name != 'run-e2e-hibernation')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -89,11 +92,11 @@ jobs:
   # Build Docker images for e2e tests (platform and MCP server base).
   # Trusted PRs and merge queue runs push the platform image to Artifact Registry so
   # the e2e jobs can pull layers directly instead of downloading a tarball artifact.
-  # Fork PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
+  # Untrusted PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -142,7 +145,7 @@ jobs:
       # sets use-build-action: false and never ran this step.)
 
       - name: Build Platform image
-        if: ${{ matrix.use-build-action && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR == 'true' }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
@@ -154,13 +157,13 @@ jobs:
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          # Read-only caches: forks have no registry credentials to export back.
+          # Read-only caches: untrusted PRs have no registry credentials to export back.
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
 
       - name: Authenticate to Google Artifact Registry
-        if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
         uses: ./.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
@@ -173,11 +176,11 @@ jobs:
       # context plus the workflow/action files that define the build command.
       # On a hit we do a registry-side manifest copy to the commit-SHA e2e
       # tag, so the test jobs' existing `:${sha}-e2e` pull contract is
-      # unchanged and no rebuild runs. Registry path only: fork PRs have no
+      # unchanged and no rebuild runs. Registry path only: untrusted PRs have no
       # OIDC/registry access and fall through to the artifact build below.
       - name: Resolve platform image reuse
         id: platform-reuse
-        if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
         shell: bash
         env:
           IMAGE_REPO: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}
@@ -228,7 +231,7 @@ jobs:
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
       - name: Build Platform image and push to Artifact Registry
-        if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
@@ -271,7 +274,7 @@ jobs:
       # the builder cache from the full build above, so this push takes
       # seconds.
       - name: Build slim Platform image (K8s job, no Dagger engine tar) and push
-        if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
+        if: ${{ matrix.use-build-action && env.UNTRUSTED_PR != 'true' && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
@@ -296,7 +299,7 @@ jobs:
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
 
       - name: Authenticate to Google Artifact Registry
-        if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
         uses: ./.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
@@ -307,7 +310,7 @@ jobs:
       # seconds-long registry retag replaces the ~100s rebuild.
       - name: Resolve MCP server base image reuse
         id: mcp-base-reuse
-        if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ !matrix.use-build-action && env.UNTRUSTED_PR != 'true' }}
         shell: bash
         env:
           IMAGE_REPO: ${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}
@@ -338,20 +341,20 @@ jobs:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          push: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
-          load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
-          # Non-fork pushes tag both the commit SHA (what the jobs pull) and the
+          push: ${{ env.UNTRUSTED_PR != 'true' && 'true' || 'false' }}
+          load: ${{ env.UNTRUSTED_PR == 'true' && 'true' || 'false' }}
+          # Trusted pushes tag both the commit SHA (what the jobs pull) and the
           # input-hash tag (what the reuse step above checks next time).
-          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.input_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          tags: ${{ env.UNTRUSTED_PR != 'true' && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.input_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
           cache-from: type=registry,ref=${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}:buildcache
-          # Forks have no registry credentials to export the cache back.
-          cache-to: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('type=registry,ref={0}/{1}:buildcache,mode=max', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || '' }}
+          # Untrusted PRs have no registry credentials to export the cache back.
+          cache-to: ${{ env.UNTRUSTED_PR != 'true' && format('type=registry,ref={0}/{1}:buildcache,mode=max', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || '' }}
 
-      # Export as artifact for fast co-located downloads in E2E jobs. Fork PRs
-      # only: they are the sole consumer (test jobs use source=artifact for forks,
-      # registry otherwise), and only the fork path loads a local tag to save.
+      # Export as artifact for fast co-located downloads in E2E jobs. Untrusted
+      # PRs only: they are the sole consumer (test jobs use source=artifact for
+      # untrusted PRs, registry otherwise), and only that path loads a local tag.
       - name: Export Docker image as tarball
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+        if: ${{ env.UNTRUSTED_PR == 'true' }}
         env:
           GIT_SHA: ${{ github.sha }}
           LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
@@ -364,7 +367,7 @@ jobs:
           ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+        if: ${{ env.UNTRUSTED_PR == 'true' }}
         uses: ./.github/actions/github-upload-artifact
         with:
           name: ${{ matrix.artifact-name }}
@@ -494,7 +497,7 @@ jobs:
     # the image build and does all image-independent setup (checkout, pnpm, Kind
     # cluster, MCP dependency images) while the build runs. Setup Archestra
     # Platform then polls the registry (image-pull-timeout-seconds) until the
-    # freshly pushed image appears; fork PRs poll for the build artifact in the
+    # freshly pushed image appears; untrusted PRs poll for the build artifact in the
     # load steps below. This overlap takes ~2.5 min off the merge-queue critical
     # path. Trade-off: if the build fails, this job burns the poll deadline
     # instead of being skipped — the merge is still blocked either way by the
@@ -507,7 +510,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
-      actions: read # Required to poll for build artifacts on fork PRs (wait-timeout-seconds).
+      actions: read # Required to poll for build artifacts on untrusted PRs (wait-timeout-seconds).
     steps:
       # See the reclaim note in the build job.
       - name: Reclaim disk space (background)
@@ -524,20 +527,20 @@ jobs:
         with:
           working-directory: ./platform
 
-      # Fork PRs only: the platform image travels as a workflow artifact (forks
-      # get no OIDC-backed registry access), so wait for the build job to upload
+      # Untrusted PRs only: the platform image travels as a workflow artifact
+      # because they get no OIDC-backed registry access, so wait for the build job to upload
       # it. Trusted runs skip these steps entirely — Setup Archestra Platform
       # pulls from the registry itself, after the image-independent setup.
-      - name: Load platform image (fork PRs, from artifact)
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+      - name: Load platform image (untrusted PRs, from artifact)
+        if: ${{ env.UNTRUSTED_PR == 'true' }}
         uses: ./.github/actions/load-platform-image
         with:
           source: artifact
           image-tag: archestra-platform:${{ github.sha }}
           wait-timeout-seconds: "900"
 
-      - name: Load MCP server base image (fork PRs, from artifact)
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+      - name: Load MCP server base image (untrusted PRs, from artifact)
+        if: ${{ env.UNTRUSTED_PR == 'true' }}
         uses: ./.github/actions/load-mcp-server-base-image
         with:
           source: artifact
@@ -562,15 +565,15 @@ jobs:
           e2e-dependencies-wait-for-vault: "true"
           build-platform-image: "false"
           # Trusted runs pull the -slim variant (no ~352MB dagger-engine.tar —
-          # only the quickstart job consumes it); fork PRs load the full image from the
+          # only the quickstart job consumes it); untrusted PRs load the full image from the
           # build artifact since only one variant travels as an artifact.
-          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          platform-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
           # Trusted runs: the Kind node pulls the (public) registry image
           # itself when the pod schedules — no host pull, no ~77s kind-load.
-          # Fork PRs load a local artifact tag, which must be kind-loaded.
-          platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
-          mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          # Untrusted PRs load a local artifact tag, which must be kind-loaded.
+          platform-image-in-cluster-pull: ${{ env.UNTRUSTED_PR == 'true' && 'false' || 'true' }}
+          mcp-server-base-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
           # Must cover the platform image build this job deliberately does not
           # `needs`: warm registry-cache builds finish well inside this, but a
           # fully cold build (empty buildcache after a cache-invalidating
@@ -693,7 +696,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
-      actions: read # Required to poll for build artifacts on fork PRs (wait-timeout-seconds).
+      actions: read # Required to poll for build artifacts on untrusted PRs (wait-timeout-seconds).
     steps:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
@@ -709,16 +712,16 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Load platform image (fork PRs, from artifact)
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+      - name: Load platform image (untrusted PRs, from artifact)
+        if: ${{ env.UNTRUSTED_PR == 'true' }}
         uses: ./.github/actions/load-platform-image
         with:
           source: artifact
           image-tag: archestra-platform:${{ github.sha }}
           wait-timeout-seconds: "900"
 
-      - name: Load MCP server base image (fork PRs, from artifact)
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+      - name: Load MCP server base image (untrusted PRs, from artifact)
+        if: ${{ env.UNTRUSTED_PR == 'true' }}
         uses: ./.github/actions/load-mcp-server-base-image
         with:
           source: artifact
@@ -738,10 +741,10 @@ jobs:
           e2e-dependencies-wait-for-vault: "true"
           e2e-dependencies-minimal: "true"
           build-platform-image: "false"
-          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          platform-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
-          platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
-          mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          platform-image-in-cluster-pull: ${{ env.UNTRUSTED_PR == 'true' && 'false' || 'true' }}
+          mcp-server-base-image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
           image-pull-timeout-seconds: "1500"
           # Production retains its 120s safety floor. ENABLE_E2E_TEST_ENDPOINTS
           # gates this isolated cluster's accelerated 8s timing profile.
@@ -867,9 +870,9 @@ jobs:
       - name: Pre-pull Lite images (background)
         env:
           TRUSTED_PLATFORM_IMAGE: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
-          IS_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+          IS_UNTRUSTED_PR: ${{ env.UNTRUSTED_PR }}
         run: |
-          if [ "$IS_FORK" != "true" ]; then
+          if [ "$IS_UNTRUSTED_PR" != "true" ]; then
             docker pull "$TRUSTED_PLATFORM_IMAGE" >"${RUNNER_TEMP}/lite-platform-pull.log" 2>&1 &
           fi
           version=$(jq -r '.devDependencies["@playwright/test"]' platform/e2e-tests/package.json | sed 's/^[\^~]//')
@@ -882,25 +885,25 @@ jobs:
 
       # The -slim variant: this environment runs with the code runtime
       # disabled (see e2e-lite-platform.env), so the ~352MB Dagger engine tar
-      # is dead weight here. Fork PRs get the full image — only one variant
-      # travels as a build artifact.
+      # is dead weight here. Untrusted PRs get the full image — only one
+      # variant travels as a build artifact.
       - name: Load platform image
         id: load-platform-image
         uses: ./.github/actions/load-platform-image
         with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       - name: Start lite e2e stack
         env:
           PLATFORM_IMAGE: ${{ steps.load-platform-image.outputs.image-tag }}
           # The embedded Kind cluster pulls the MCP server base image straight
           # from the (anonymous-pull) registry, so trusted runs can use the
-          # image this workflow just built. Fork PRs don't push to the
+          # image this workflow just built. Untrusted PRs don't push to the
           # registry — they fall back to the script's published :latest
           # default (host-loaded images are invisible to the embedded Kind).
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
-          MCP_SERVER_BASE_IMAGE: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Create e2e test env file
@@ -995,8 +998,8 @@ jobs:
         id: load-platform-image
         uses: ./.github/actions/load-platform-image
         with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
 
       # Note: We intentionally don't load/use a custom MCP server base image for quickstart tests.
       # The embedded Kind cluster inside the quickstart container cannot easily access images

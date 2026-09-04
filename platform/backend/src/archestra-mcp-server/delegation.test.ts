@@ -105,15 +105,15 @@ describe("delegation tool execution", () => {
     expect(text).toContain("Do not guess delegation names");
   });
 
-  test("runs an ordinary delegation as a durable task when the target has Background execution", async ({
+  test("runs an ordinary delegation as a durable task when the target has Agent Runtime", async ({
     makeAgent,
     makeAgentTool,
   }) => {
-    const previous = config.agentBackgroundExecution.enabled;
-    config.agentBackgroundExecution.enabled = true;
+    const previous = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = true;
     const targetAgent = await makeAgent({
       name: "Background Worker",
-      backgroundExecution: {
+      runtime: {
         image: "example.invalid/background-worker:test",
         command: null,
         inferenceProtocol: "openai_responses",
@@ -158,20 +158,20 @@ describe("delegation tool execution", () => {
       });
       expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
     } finally {
-      config.agentBackgroundExecution.enabled = previous;
+      config.agentRuntime.enabled = previous;
     }
   });
 
-  test("lets a foreground router hand a nested delegation to a Background execution worker", async ({
+  test("lets a foreground router hand a nested delegation to an Agent Runtime worker", async ({
     makeAgent,
     makeAgentTool,
   }) => {
-    const previous = config.agentBackgroundExecution.enabled;
-    config.agentBackgroundExecution.enabled = true;
+    const previous = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = true;
     const router = await makeAgent({ name: "Coding Task Router" });
     const worker = await makeAgent({
       name: "Selected Coding Worker",
-      backgroundExecution: {
+      runtime: {
         image: "example.invalid/coding-worker:test",
         command: ["coding-worker"],
         inferenceProtocol: "openai_responses",
@@ -256,7 +256,7 @@ describe("delegation tool execution", () => {
         }),
       });
     } finally {
-      config.agentBackgroundExecution.enabled = previous;
+      config.agentRuntime.enabled = previous;
     }
   });
 

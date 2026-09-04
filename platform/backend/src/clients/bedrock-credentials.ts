@@ -159,8 +159,9 @@ export function buildBedrockProvider(params: {
 export function buildBedrockClient(params: {
   apiKey?: string | null;
   baseUrl?: string | null;
+  fetch?: typeof globalThis.fetch;
 }): BedrockClient {
-  const { apiKey, baseUrl } = params;
+  const { apiKey, baseUrl, fetch } = params;
   const resolvedBaseUrl = getBedrockBaseUrl(baseUrl);
   const region = getBedrockRegion(resolvedBaseUrl);
 
@@ -169,6 +170,7 @@ export function buildBedrockClient(params: {
       baseUrl: resolvedBaseUrl,
       region,
       credentialProvider: getBedrockCredentialProvider(),
+      fetch,
     });
   }
 
@@ -180,6 +182,7 @@ export function buildBedrockClient(params: {
       accessKeyId: sigV4.accessKeyId,
       secretAccessKey: sigV4.secretAccessKey,
       sessionToken: sigV4.sessionToken,
+      fetch,
     });
   }
 
@@ -187,5 +190,6 @@ export function buildBedrockClient(params: {
     baseUrl: resolvedBaseUrl,
     region,
     apiKey: apiKey ?? undefined,
+    fetch,
   });
 }

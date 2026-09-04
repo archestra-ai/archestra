@@ -7,8 +7,11 @@ import {
   parseFullToolName,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_LIST_APP_VERSIONS_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
+  TOOL_RESTORE_APP_VERSION_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
@@ -637,6 +640,15 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
   const scaffoldAppName = archestraMcpBranding.getToolName(
     TOOL_SCAFFOLD_APP_SHORT_NAME,
   );
+  const listAppsName = archestraMcpBranding.getToolName(
+    TOOL_LIST_APPS_SHORT_NAME,
+  );
+  const listAppVersionsName = archestraMcpBranding.getToolName(
+    TOOL_LIST_APP_VERSIONS_SHORT_NAME,
+  );
+  const restoreAppVersionName = archestraMcpBranding.getToolName(
+    TOOL_RESTORE_APP_VERSION_SHORT_NAME,
+  );
 
   const base = `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. \`${searchToolsName}\` matches your query against what tools are and do, so search it by capability — \`search users\`, \`create issue\` — never with the specific value you are looking up (a name, id, or search term); that value is an argument to the tool you eventually run, not a search query. If you already have a tool's exact name — returned by an earlier \`${searchToolsName}\`, used in a call you already made, or written verbatim in these instructions — call \`${runToolName}\` with it directly instead of searching again. Only pass \`${runToolName}\` a name you obtained one of those ways; if you do not have an exact name, call \`${searchToolsName}\` first. Do not repeat a \`${searchToolsName}\` call you have already made with the same query.
 
@@ -644,5 +656,7 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
 
   return `${base}
 
-When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`. Open with the tool call itself — no lead-in sentence first.`;
+When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`. Open with the tool call itself — no lead-in sentence first.
+
+When the user asks to roll an app back or restore an existing historical version, call \`${runToolName}\` with \`tool_name: "${listAppsName}"\` to resolve the app id when needed. If the user did not provide an exact version number, call it with \`tool_name: "${listAppVersionsName}"\` to list the available versions without reading their HTML. Then call it with \`tool_name: "${restoreAppVersionName}"\`, passing \`appId\`, the selected \`version\`, and the current \`latestVersion\` as \`baseVersion\`. Never call \`read_app\` or reproduce historical HTML through \`edit_app\` for a rollback.`;
 }

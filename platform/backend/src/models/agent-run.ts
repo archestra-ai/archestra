@@ -12,13 +12,14 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
-  AgentExecution,
-  AgentExecutionSession,
   AgentRun,
-  InsertAgentRun,
+  AgentRunRecord,
+  AgentRunSession,
+  InsertAgentRunRecord,
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
 import A2AMessageModel from "./a2a/message";
@@ -28,7 +29,7 @@ import A2AMessageModel from "./a2a/message";
  * task's state machine is the record of how the work is going.
  */
 class AgentRunModel {
-  static async create(run: InsertAgentRun): Promise<AgentRun> {
+  static async create(run: InsertAgentRunRecord): Promise<AgentRunRecord> {
     const [created] = await db
       .insert(schema.agentRunsTable)
       .values(run)
@@ -36,7 +37,7 @@ class AgentRunModel {
     return created;
   }
 
-  static async findByTaskId(taskId: string): Promise<AgentRun | null> {
+  static async findByTaskId(taskId: string): Promise<AgentRunRecord | null> {
     const [run] = await db
       .select()
       .from(schema.agentRunsTable)
@@ -45,16 +46,33 @@ class AgentRunModel {
     return run ?? null;
   }
 
+  static async updateAttentionState(params: {
+    taskId: string;
+    attentionState: AgentRunRecord["attentionState"];
+  }): Promise<boolean> {
+    const updated = await db
+      .update(schema.agentRunsTable)
+      .set({ attentionState: params.attentionState })
+      .where(
+        and(
+          eq(schema.agentRunsTable.taskId, params.taskId),
+          isNull(schema.agentRunsTable.endedAt),
+        ),
+      )
+      .returning({ id: schema.agentRunsTable.id });
+    return updated.length > 0;
+  }
+
   /** Sessions whose pod should still exist, across every organization. */
-  static async listOpen(): Promise<AgentRun[]> {
+  static async listOpen(): Promise<AgentRunRecord[]> {
     return db
       .select()
       .from(schema.agentRunsTable)
       .where(isNull(schema.agentRunsTable.endedAt));
   }
 
-  /** Terminal executions whose channel completion reply is still pending. */
-  static async listPendingCompletionNotifications(): Promise<AgentRun[]> {
+  /** Terminal runs whose channel completion reply is still pending. */
+  static async listPendingCompletionNotifications(): Promise<AgentRunRecord[]> {
     return db
       .select(getTableColumns(schema.agentRunsTable))
       .from(schema.agentRunsTable)
@@ -74,12 +92,13 @@ class AgentRunModel {
   static async listForAgent(params: {
     agentId: string;
     organizationId: string;
-  }): Promise<AgentExecution[]> {
+  }): Promise<AgentRun[]> {
     const {
       logs: _logs,
       completionTarget: _completionTarget,
       completionNotificationClaimedAt: _completionNotificationClaimedAt,
       completionNotifiedAt: _completionNotifiedAt,
+      activeDeadlineSeconds: _activeDeadlineSeconds,
       ...runColumns
     } = getTableColumns(schema.agentRunsTable);
     return db
@@ -88,11 +107,17 @@ class AgentRunModel {
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
+        hardDeadlineAt: hardDeadlineAtExpression(),
+        lastModelActivityAt: lastModelActivityAtExpression(),
       })
       .from(schema.agentRunsTable)
       .innerJoin(
         schema.a2aTasksTable,
         eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
       )
       .where(
         and(
@@ -103,7 +128,7 @@ class AgentRunModel {
       .orderBy(desc(schema.agentRunsTable.startedAt));
   }
 
-  /** Read-only fleet rows for execution dashboards, newest first. */
+  /** Read-only fleet rows for run dashboards, newest first. */
   static async listDashboard(params: {
     agentIds: string[];
     organizationId: string;
@@ -123,6 +148,9 @@ class AgentRunModel {
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
+        hardDeadlineAt: hardDeadlineAtExpression(),
+        lastModelActivityAt: lastModelActivityAtExpression(),
+        attentionState: schema.agentRunsTable.attentionState,
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
         agentIcon: schema.agentsTable.icon,
@@ -178,7 +206,7 @@ class AgentRunModel {
     }));
   }
 
-  /** Chat execution sessions started by one user, newest first. */
+  /** Chat run sessions started by one user, newest first. */
   static async listForActor(params: {
     actorUserId: string;
     organizationId: string;
@@ -190,7 +218,7 @@ class AgentRunModel {
       eq(schema.agentRunsTable.organizationId, params.organizationId),
     ];
     const [rows, [{ total }]] = await Promise.all([
-      AgentRunModel.selectExecutionSessionsWhere({
+      AgentRunModel.selectRunSessionsWhere({
         conditions,
         pagination: params.pagination,
       }),
@@ -200,7 +228,7 @@ class AgentRunModel {
         .where(and(...conditions)),
     ]);
     return createPaginatedResult(
-      await AgentRunModel.addExecutionPrompts(rows),
+      await AgentRunModel.addRunPrompts(rows),
       Number(total),
       params.pagination,
     );
@@ -210,14 +238,14 @@ class AgentRunModel {
     taskId: string;
     actorUserId: string;
     organizationId: string;
-  }): Promise<AgentExecutionSession | null> {
-    const rows = await AgentRunModel.selectExecutionSessions(params);
-    const [session] = await AgentRunModel.addExecutionPrompts(rows);
+  }): Promise<AgentRunSession | null> {
+    const rows = await AgentRunModel.selectRunSessions(params);
+    const [session] = await AgentRunModel.addRunPrompts(rows);
     return session ?? null;
   }
 
   /**
-   * A single execution session by task, scoped only to the organization — not
+   * A single run session by task, scoped only to the organization — not
    * to the actor who started it. Used to serve shared (read-only) viewers, whose
    * access is authorized separately via {@link AgentRunShareModel}. Callers must
    * verify share access before exposing the result.
@@ -225,24 +253,24 @@ class AgentRunModel {
   static async findSessionByTaskId(params: {
     taskId: string;
     organizationId: string;
-  }): Promise<AgentExecutionSession | null> {
-    const rows = await AgentRunModel.selectExecutionSessionsWhere({
+  }): Promise<AgentRunSession | null> {
+    const rows = await AgentRunModel.selectRunSessionsWhere({
       conditions: [
         eq(schema.agentRunsTable.taskId, params.taskId),
         eq(schema.agentRunsTable.organizationId, params.organizationId),
       ],
     });
-    const [session] = await AgentRunModel.addExecutionPrompts(rows);
+    const [session] = await AgentRunModel.addRunPrompts(rows);
     return session ?? null;
   }
 
-  /** Execution sessions assigned to one project, newest first. */
+  /** Run sessions assigned to one project, newest first. */
   static async listForProject(params: {
     projectId: string;
     organizationId: string;
     actorUserId?: string;
-  }): Promise<AgentExecutionSession[]> {
-    const rows = await AgentRunModel.selectExecutionSessionsWhere({
+  }): Promise<AgentRunSession[]> {
+    const rows = await AgentRunModel.selectRunSessionsWhere({
       conditions: [
         eq(schema.agentRunsTable.projectId, params.projectId),
         eq(schema.agentRunsTable.organizationId, params.organizationId),
@@ -251,7 +279,7 @@ class AgentRunModel {
           : []),
       ],
     });
-    return await AgentRunModel.addExecutionPrompts(rows);
+    return await AgentRunModel.addRunPrompts(rows);
   }
 
   static async updateTitleIfCurrent(params: {
@@ -279,7 +307,7 @@ class AgentRunModel {
     title?: string;
     pinnedAt?: Date | null;
     projectId?: string | null;
-  }): Promise<AgentExecutionSession | null> {
+  }): Promise<AgentRunSession | null> {
     const updated = await db
       .update(schema.agentRunsTable)
       .set({
@@ -306,7 +334,7 @@ class AgentRunModel {
   static async close(params: { id: string; logs?: string }): Promise<boolean> {
     const closed = await db
       .update(schema.agentRunsTable)
-      .set({ endedAt: new Date(), logs: params.logs })
+      .set({ endedAt: new Date(), logs: params.logs, attentionState: null })
       .where(
         and(
           eq(schema.agentRunsTable.id, params.id),
@@ -327,7 +355,7 @@ class AgentRunModel {
   /** Claim delivery, including a claim abandoned by a crashed sender. */
   static async claimCompletionNotification(
     taskId: string,
-  ): Promise<AgentRun | null> {
+  ): Promise<AgentRunRecord | null> {
     const staleBefore = new Date(Date.now() - NOTIFICATION_CLAIM_TTL_MS);
     const [claimed] = await db
       .update(schema.agentRunsTable)
@@ -378,12 +406,12 @@ class AgentRunModel {
 
   // === Internal helpers ===
 
-  private static async selectExecutionSessions(params: {
+  private static async selectRunSessions(params: {
     actorUserId: string;
     organizationId: string;
     taskId?: string;
   }) {
-    return AgentRunModel.selectExecutionSessionsWhere({
+    return AgentRunModel.selectRunSessionsWhere({
       conditions: [
         eq(schema.agentRunsTable.actorKind, "user"),
         eq(schema.agentRunsTable.actorId, params.actorUserId),
@@ -395,7 +423,7 @@ class AgentRunModel {
     });
   }
 
-  private static async selectExecutionSessionsWhere(params: {
+  private static async selectRunSessionsWhere(params: {
     conditions: SQL[];
     pagination?: PaginationQuery;
   }) {
@@ -404,6 +432,7 @@ class AgentRunModel {
       completionTarget: _completionTarget,
       completionNotificationClaimedAt: _completionNotificationClaimedAt,
       completionNotifiedAt: _completionNotifiedAt,
+      activeDeadlineSeconds: _activeDeadlineSeconds,
       ...runColumns
     } = getTableColumns(schema.agentRunsTable);
     const query = db
@@ -412,6 +441,8 @@ class AgentRunModel {
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
+        hardDeadlineAt: hardDeadlineAtExpression(),
+        lastModelActivityAt: lastModelActivityAtExpression(),
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -444,9 +475,9 @@ class AgentRunModel {
       : await query;
   }
 
-  private static async addExecutionPrompts(
-    rows: Awaited<ReturnType<typeof AgentRunModel.selectExecutionSessions>>,
-  ): Promise<AgentExecutionSession[]> {
+  private static async addRunPrompts(
+    rows: Awaited<ReturnType<typeof AgentRunModel.selectRunSessions>>,
+  ): Promise<AgentRunSession[]> {
     const prompts = await A2AMessageModel.findFirstUserPartsByTaskIds(
       rows.map((row) => row.taskId),
     );
@@ -472,4 +503,27 @@ function extractPrompt(parts: unknown[]): string {
     )
     .join("")
     .trim();
+}
+
+function hardDeadlineAtExpression(): SQL<Date> {
+  return sql<Date>`
+    ${schema.agentRunsTable.startedAt} +
+    COALESCE(
+      ${schema.agentRunsTable.activeDeadlineSeconds},
+      COALESCE(
+        (${schema.agentsTable.runtime}->>'ttlHours')::integer,
+        ${config.agentRuntime.defaultTtlHours}
+      ) * 60 * 60
+    ) * interval '1 second'
+  `.mapWith(schema.agentRunsTable.startedAt);
+}
+
+function lastModelActivityAtExpression(): SQL<Date | null> {
+  return sql<Date | null>`(
+    SELECT ${schema.interactionsTable.createdAt}
+    FROM ${schema.interactionsTable}
+    WHERE ${schema.interactionsTable.runId} = ${schema.agentRunsTable.taskId}::text
+    ORDER BY ${schema.interactionsTable.createdAt} DESC
+    LIMIT 1
+  )`.mapWith(schema.agentRunsTable.startedAt);
 }

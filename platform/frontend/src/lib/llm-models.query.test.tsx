@@ -7,6 +7,7 @@ import {
   LAZY_MODEL_SYNC_REFETCH_DELAY_MS,
   useLlmModels,
 } from "./llm-models.query";
+import { PERSISTED_QUERY_META } from "./query-persistence";
 
 vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
@@ -75,6 +76,25 @@ describe("useLlmModels", () => {
     });
     expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(1);
   });
+
+  it("marks the model catalog for session restoration", async () => {
+    vi.mocked(archestraApiSdk.getLlmModels).mockResolvedValue(
+      makeGetLlmModelsResult([makeModel()]),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    renderHook(() => useLlmModels(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await flushQuery();
+
+    expect(
+      queryClient.getQueryCache().find({ queryKey: ["llm-models", null] })
+        ?.meta,
+    ).toEqual(PERSISTED_QUERY_META);
+  });
 });
 
 async function flushQuery() {
@@ -83,10 +103,11 @@ async function flushQuery() {
   });
 }
 
-function createWrapper() {
-  const queryClient = new QueryClient({
+function createWrapper(
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  }),
+) {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );

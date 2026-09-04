@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,6 +25,7 @@ import {
   usePlugin,
   usePreviewGithubPluginUpdate,
   useTriggerPluginGithubSync,
+  useUpdatePlugin,
   useUpdatePluginGithubSync,
 } from "@/lib/plugins/plugin.query";
 import PluginDetailPage from "./page.client";
@@ -150,44 +151,91 @@ beforeEach(() => {
   vi.mocked(useUpdatePluginGithubSync).mockReturnValue(
     mutationStub as unknown as ReturnType<typeof useUpdatePluginGithubSync>,
   );
+  updateMutateAsync.mockResolvedValue({ id: "plugin-1" });
+  vi.mocked(useUpdatePlugin).mockReturnValue({
+    mutateAsync: updateMutateAsync,
+    isPending: false,
+  } as unknown as ReturnType<typeof useUpdatePlugin>);
 });
 
+const updateMutateAsync = vi.fn();
+
 describe("PluginDetailPage", () => {
-  it("states the key facts without a click and keeps the payload primary", () => {
+  it("is the plugin's settings rather than a read-only view of them", async () => {
+    const user = userEvent.setup();
     renderPage(BASE_PLUGIN);
 
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
-    expect(screen.getByText("Accessible to")).toBeVisible();
-    expect(screen.getByText("Client")).toBeVisible();
-    expect(screen.getByText("Platforms")).toBeVisible();
-    // The record's slim row, not a second copy of the form.
-    expect(screen.queryByText("Plugin identity")).not.toBeInTheDocument();
-    expect(screen.queryByText("Content hash")).not.toBeInTheDocument();
-    const contentHeading = screen.getByRole("heading", {
-      name: "Payload files",
-    });
-    const content = within(contentHeading.closest("section") as HTMLElement);
-    expect(content.getByText("hooks/hooks.json")).toBeVisible();
-    expect(content.getByRole("textbox", { name: "File contents" })).toHaveValue(
-      "{}",
+    // Metadata is fields, not facts, and the payload is editable beneath them.
+    expect(screen.getByLabelText("Display name")).toHaveValue("Session guard");
+    expect(screen.getByLabelText("Description")).toHaveValue(
+      "Blocks risky commands.",
     );
+    expect(screen.getByText("hooks/hooks.json")).toBeVisible();
+    const file = screen.getByRole("textbox", { name: "File contents" });
+    expect(file).toHaveValue("{}");
+    expect(file).not.toHaveAttribute("readonly");
+
+    // Who can discover it is the end of the same page, not a second route.
+    expect(screen.getByText("Who can discover this plugin")).toBeVisible();
+
+    // Nothing sends the reader anywhere to edit: this is where editing happens.
     expect(
-      content.getByRole("textbox", { name: "File contents" }),
-    ).toHaveAttribute("readonly");
-    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
-      "href",
-      `/plugins/${BASE_PLUGIN.id}/edit`,
-    );
+      screen.queryByRole("link", { name: "Edit" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Connect" }),
+      screen.queryByRole("link", { name: /Configuration/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Install" })).toBeVisible();
+    // A manual plugin has no source to point at, so no such panel.
     expect(screen.queryByText("GitHub source")).not.toBeInTheDocument();
-    // Overview leads to the same place the header's Edit does.
-    expect(screen.getByRole("link", { name: /Configuration/ })).toHaveAttribute(
-      "href",
-      `/plugins/${BASE_PLUGIN.id}/edit`,
+
+    // Clean: there is nothing to write yet.
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await user.clear(screen.getByLabelText("Display name"));
+    await user.type(screen.getByLabelText("Display name"), "Session sentry");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "Session sentry" }),
     );
+  });
+
+  it("locks a repository-owned plugin and says where to change it instead", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      ...BASE_PLUGIN,
+      sourceKind: "github",
+      sourceRepo: "acme/hooks",
+      githubSyncInterval: "1d",
+    });
+
+    expect(
+      screen.getByRole("textbox", { name: "File contents" }),
+    ).toHaveAttribute("readonly");
+    // The source that owns those bytes is editable, directly under them.
+    expect(screen.getByText("GitHub source")).toBeVisible();
+    expect(screen.getByLabelText("Repository URL")).toHaveValue("acme/hooks");
+
+    // A field that silently refuses keystrokes reads as broken, so the reason
+    // is on the field itself.
+    await user.hover(screen.getByLabelText("Display name"));
+    // Radix renders the reason twice — once visibly, once for screen readers.
+    expect(
+      (await screen.findAllByText(/synced from GitHub/i))[0],
+    ).toBeVisible();
+  });
+
+  it("offers no save row to someone who may not change this plugin", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    renderPage(BASE_PLUGIN);
+
+    expect(
+      screen.queryByRole("button", { name: "Save changes" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/view this plugin's configuration but not change it/i),
+    ).toBeVisible();
   });
 
   it("keeps GitHub update controls in a compact header dialog", async () => {
@@ -202,10 +250,7 @@ describe("PluginDetailPage", () => {
       pendingDetectedAt: "2026-08-20T00:00:00.000Z",
     });
 
-    expect(screen.getByRole("link", { name: /acme\/hooks/ })).toBeVisible();
-    expect(
-      screen.queryByRole("link", { name: "View source" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Repository URL")).toHaveValue("acme/hooks");
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(screen.getByRole("menuitem", { name: "Review update" }));
     expect(
@@ -216,7 +261,6 @@ describe("PluginDetailPage", () => {
     ).toBeVisible();
     expect(screen.getByText("Update ready for review")).toBeVisible();
     expect(screen.getByText("Checked against GitHub")).toBeVisible();
-    expect(screen.queryByText("GitHub source")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Update candidate ready for review"),
     ).not.toBeInTheDocument();

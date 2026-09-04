@@ -18,7 +18,10 @@ export function SignOutWithIdpLogout() {
     performSignOut();
   }, []);
 
-  return <LoadingState label="Signing out…" variant="page" />;
+  // Rendered inside the auth card column, which owns no height of its own —
+  // so this is sized like the other in-card waits (see GuardShell) rather than
+  // stretched to a container that would not give it one.
+  return <LoadingState label="Signing out…" />;
 }
 
 async function performSignOut() {

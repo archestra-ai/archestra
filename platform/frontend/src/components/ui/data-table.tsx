@@ -17,7 +17,6 @@ import {
 } from "@tanstack/react-table";
 import { type LucideIcon, Search } from "lucide-react";
 import React, { useState } from "react";
-
 import { EmptyState } from "@/components/empty-state";
 import {
   Table,
@@ -452,7 +451,11 @@ export function DataTable<TData, TValue>({
                       replacing it with rows a moment later is the flash this
                       area used to produce. The row keeps its height either
                       way, so the rows arrive without shifting the pagination
-                      controls underneath. */}
+                      controls underneath.
+
+                      It draws no indicator of its own either. The sidebar
+                      toggle is the one place the app reports that it is
+                      loading; a placeholder here would be a second. */}
                     <div className="flex min-h-[164px] flex-col items-center justify-center text-center">
                       {!isLoading && (
                         <EmptyState
@@ -520,7 +523,7 @@ function TableLoadingBar() {
       // across it, and rounded to match the corner it tucks into.
       className="pointer-events-none absolute inset-x-px top-px z-10 h-[3px] overflow-hidden rounded-t-[5px] bg-primary/15 animate-in fade-in-0 duration-200 [animation-delay:150ms] [animation-fill-mode:backwards] motion-reduce:animate-none"
     >
-      <div className="archestra-table-loading-sweep h-full rounded-full bg-primary" />
+      <div className="archestra-loading-sweep h-full rounded-full bg-primary" />
     </div>
   );
 }

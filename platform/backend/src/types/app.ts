@@ -305,6 +305,12 @@ export const SelectAppVersionSchema = createSelectSchema(
     spec: AppSpecSchema.nullable(),
   },
 );
+export const AppVersionSummarySchema = SelectAppVersionSchema.pick({
+  id: true,
+  appId: true,
+  version: true,
+  createdAt: true,
+});
 export const SelectAppToolSchema = createSelectSchema(schema.appToolsTable, {
   credentialResolutionMode: CredentialResolutionModeSchema,
 });
@@ -454,6 +460,7 @@ export { AppSpecSchema } from "./app-spec";
 export type App = z.infer<typeof SelectAppSchema>;
 export type InsertApp = z.infer<typeof InsertAppSchema>;
 export type AppVersion = z.infer<typeof SelectAppVersionSchema>;
+export type AppVersionSummary = z.infer<typeof AppVersionSummarySchema>;
 export type AppTool = z.infer<typeof SelectAppToolSchema>;
 export type InsertAppTool = z.infer<typeof InsertAppToolSchema>;
 export type CreateApp = z.infer<typeof CreateAppSchema>;

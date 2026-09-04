@@ -47,10 +47,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import {
-  AgentBackgroundExecutionFields,
-  type BackgroundExecutionConfig,
-} from "@/components/agent-background-execution-fields";
 import { AgentChatAppsEditor } from "@/components/agent-chat-apps";
 import {
   AgentHooksEditor,
@@ -63,6 +59,10 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
+import {
+  type AgentRuntimeConfig,
+  AgentRuntimeFields,
+} from "@/components/agent-runtime-fields";
 import {
   AgentSkillsEditor,
   type EditableSkill,
@@ -213,7 +213,7 @@ import {
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-form.utils";
-import { AgentBackgroundExecutionCard } from "./agent-pages/agent-background-execution-card";
+import { AgentRuntimeCredentialCard } from "./agent-pages/agent-runtime-credential-card";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
@@ -461,6 +461,12 @@ interface SubagentsEditorProps {
   // (disabled-subagents) role only narrows an existing set, so it omits it.
   showCreateAction?: boolean;
   tone?: "delegate" | "exclude";
+  /**
+   * What an empty delegation set means for this record. An agent runs the task
+   * itself; a gateway simply advertises no delegation tool, and never had a
+   * task of its own to hand on.
+   */
+  emptyDescription?: string;
 }
 
 function SubagentsEditor({
@@ -471,6 +477,7 @@ function SubagentsEditor({
   placeholder = "Search agents...",
   showCreateAction = true,
   tone = "delegate",
+  emptyDescription = "Every task is handled here, with nothing handed on.",
 }: SubagentsEditorProps) {
   // Filter out the current agent, and the advisor: its own switch below owns
   // that decision, and listing it here would offer a second way to change the
@@ -515,9 +522,7 @@ function SubagentsEditor({
       {isEmpty && (
         <div className="space-y-0.5">
           <p className="text-sm font-medium">No subagents assigned</p>
-          <p className="text-xs text-muted-foreground">
-            Every task is handled here, with nothing handed on.
-          </p>
+          <p className="text-xs text-muted-foreground">{emptyDescription}</p>
         </div>
       )}
       {selectedAgents.map((agent) => (
@@ -791,7 +796,7 @@ export function AccessLevelSelector({
  *   agent.
  * - `tools`: everything the agent reaches — tools and knowledge sources,
  *   subagents, published skills, and hooks.
- * - `advanced`: background execution, security, passthrough headers, identity
+ * - `advanced`: Agent Runtime, security, passthrough headers, identity
  *   provider, and labels.
  */
 /**
@@ -842,7 +847,7 @@ export interface AgentFormInitialValues {
   icon?: string | null;
   description?: string;
   systemPrompt?: string;
-  backgroundExecution?: BackgroundExecutionConfig | null;
+  runtime?: AgentRuntimeConfig | null;
   accessAllTools?: boolean;
   /** Catalog runtimes that must bill an acting user's own subscription. */
   requiredSubscriptionKind?: SubscriptionCredentialKind;
@@ -932,10 +937,31 @@ export function AgentForm({
     showConfigurationSections || showToolsSections || showAdvancedSections;
   const isActiveSection = (group: AgentFormSection) =>
     activeSection === undefined || activeSection === group;
-  const supportsSubagents = agentType === "agent";
+  // Which records can delegate at all, mirroring the backend's
+  // `DELEGATING_AGENT_TYPES` (services/agent-subagent-exclusions.ts): only an
+  // `llm_proxy` is excluded, because it has no MCP surface to advertise a
+  // delegation tool on. A gateway does — `routes/mcp-gateway/utils.ts` resolves
+  // the Auto/Custom subagent seam through `getAgentTools` and splices the
+  // result into every `tools/list` it answers — so narrowing this to `agent`
+  // left a gateway with a live delegation surface and no control over it, while
+  // its list page kept a Subagents column reporting on the set.
+  const supportsSubagents =
+    agentType === "agent" ||
+    agentType === "mcp_gateway" ||
+    agentType === "profile";
   const shouldLoadIdentityProviders =
     agentType === "mcp_gateway" || agentType === "agent";
-  const shouldLoadKnowledgeSources = true;
+  // The knowledge-source picker lives in the tools panel, so its three
+  // requests — knowledge bases, connectors and this agent's exclusions — only
+  // matter when that panel is mounted. Left unconditional, they fired on every
+  // agent opened and every agent created, including the create form, where
+  // there is no agent to have exclusions in the first place.
+  //
+  // Nothing downstream is stranded by switching them off: the exclusion save
+  // block already refuses to run until `knowledgeSourceExclusionsLoaded`, so a
+  // form without this panel leaves the stored exclusions untouched rather than
+  // overwriting them with the empty default.
+  const shouldLoadKnowledgeSources = showToolsSections;
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
@@ -1190,8 +1216,7 @@ export function AgentForm({
     String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
   );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
-  const [backgroundExecution, setBackgroundExecution] =
-    useState<BackgroundExecutionConfig | null>(null);
+  const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
   // Takes the id to write against: on create it is the one the record was just
   // given, which does not exist when the handler is registered.
@@ -1332,8 +1357,7 @@ export function AgentForm({
       : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
-  const agentBackgroundExecutionEnabled =
-    useFeature("agentBackgroundExecution") === true;
+  const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   // "Auto" (implicit access to all tools) is the default for new agents; admins
   // can switch an agent to "Custom" (explicitly assigned tools). Implicit access
   // is scoped to tools/knowledge visible to the user AND in the agent's
@@ -1554,9 +1578,7 @@ export function AgentForm({
                 ? String(agentData.builtInAgentConfig.maxRounds)
                 : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
-            backgroundExecution:
-              (agentData.backgroundExecution as BackgroundExecutionConfig | null) ??
-              null,
+            runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
               agentData.missingCredentialBehavior ?? "allow",
@@ -1588,7 +1610,7 @@ export function AgentForm({
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
-            backgroundExecution: initialValues?.backgroundExecution ?? null,
+            runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
@@ -1615,7 +1637,7 @@ export function AgentForm({
       setConnectorIds(nextValues.connectorIds);
       setScope(nextValues.scope);
       setPassthroughHeaders(nextValues.passthroughHeaders);
-      setBackgroundExecution(nextValues.backgroundExecution);
+      setAgentRuntime(nextValues.runtime);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
@@ -2136,8 +2158,8 @@ export function AgentForm({
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
-              ...(agentBackgroundExecutionEnabled && {
-                backgroundExecution,
+              ...(agentRuntimeEnabled && {
+                runtime,
               }),
             }),
             // The tools group: what the agent may reach, and how.
@@ -2199,8 +2221,8 @@ export function AgentForm({
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
           }),
-          ...(agentBackgroundExecutionEnabled && {
-            backgroundExecution,
+          ...(agentRuntimeEnabled && {
+            runtime,
           }),
         });
         if (!created) return false;
@@ -2441,8 +2463,8 @@ export function AgentForm({
     accessAllSubagents,
     supportsEnvironment,
     supportsSubagents,
-    agentBackgroundExecutionEnabled,
-    backgroundExecution,
+    agentRuntimeEnabled,
+    runtime,
     channelAssignmentsDirty,
   ]);
 
@@ -2530,7 +2552,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
-    backgroundExecution,
+    runtime,
   });
   const isDirty =
     !readOnly &&
@@ -3242,7 +3264,15 @@ export function AgentForm({
               {showSubagents && (
                 <SettingsSection
                   title="Subagents"
-                  description="Other agents this one may hand a task to."
+                  // An agent hands the task over itself. A gateway does not
+                  // run anything — it advertises each subagent as a delegation
+                  // tool and its client decides when to call one — so saying it
+                  // "hands a task over" would describe the wrong actor.
+                  description={
+                    isInternalAgent
+                      ? "Other agents this one may hand a task to."
+                      : `Agents this ${agentTypeDisplayName[agentType] || "agent"} offers its clients as delegation tools.`
+                  }
                 >
                   {!subagentSetsLoaded ? (
                     <p className="text-sm text-muted-foreground">
@@ -3285,6 +3315,11 @@ export function AgentForm({
                             selectedAgentIds={selectedDelegationTargetIds}
                             onSelectionChange={setSelectedDelegationTargetIds}
                             currentAgentId={agent?.id}
+                            emptyDescription={
+                              isInternalAgent
+                                ? undefined
+                                : "No delegation tools appear in this gateway's tool list."
+                            }
                           />
                         </div>
                       )}
@@ -3318,9 +3353,13 @@ export function AgentForm({
                               </Badge>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              {advisorEnabled
-                                ? "Gets a second opinion from the Advisor before answering."
-                                : "Answers without consulting the Advisor."}{" "}
+                              {isInternalAgent
+                                ? advisorEnabled
+                                  ? "Gets a second opinion from the Advisor before answering."
+                                  : "Answers without consulting the Advisor."
+                                : advisorEnabled
+                                  ? "Reachable through this gateway, alongside its other subagents."
+                                  : "Not reachable through this gateway."}{" "}
                               <ExternalDocsLink
                                 href={advisorDocsUrl}
                                 className="underline"
@@ -3393,7 +3432,7 @@ export function AgentForm({
             </SettingsSectionGroup>
           )}
 
-          {/* The Advanced step: background execution, security, passthrough
+          {/* The Advanced step: Agent Runtime, security, passthrough
               headers, the identity provider, and labels. A built-in agent has
               none. */}
           {showAdvancedSections && !isBuiltIn && (
@@ -3681,19 +3720,19 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
-              {agentType === "agent" && agentBackgroundExecutionEnabled && (
+              {agentType === "agent" && agentRuntimeEnabled && (
                 <SettingsSection
-                  title="Background execution"
+                  title="Agent Runtime"
                   description="Whether this agent may run on its own, and the credentials it runs with."
                 >
-                  <AgentBackgroundExecutionFields
-                    value={backgroundExecution}
-                    onChange={setBackgroundExecution}
+                  <AgentRuntimeFields
+                    value={runtime}
+                    onChange={setAgentRuntime}
                   />
-                  {agent?.backgroundExecution?.credentials && (
-                    <AgentBackgroundExecutionCard
+                  {agent?.runtime?.credentials && (
+                    <AgentRuntimeCredentialCard
                       agentId={agent.id}
-                      credentials={agent.backgroundExecution.credentials}
+                      credentials={agent.runtime.credentials}
                     />
                   )}
                 </SettingsSection>
@@ -3971,7 +4010,7 @@ type AgentFormFields = {
   autoConfigureOnToolDiscovery: boolean;
   dualLlmMaxRounds: string;
   passthroughHeaders: string[];
-  backgroundExecution: BackgroundExecutionConfig | null;
+  runtime: AgentRuntimeConfig | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;
   accessAllTools: boolean;

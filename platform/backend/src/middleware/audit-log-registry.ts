@@ -8,7 +8,6 @@ import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
-import ExecutionCredentialDefinitionModel from "@/models/execution-credential-definition";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -27,6 +26,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -145,50 +145,50 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agent",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
-  "/api/agents/:id/background-execution/credentials/:key": {
+  "/api/agents/:id/runtime/credentials/:key": {
     resourceType: "agent",
     action: "agent.updated",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
-  "/api/execution-credentials": {
-    resourceType: "executionCredential",
+  "/api/runtime-credentials": {
+    resourceType: "runtimeCredential",
     fetchById: (id, orgId) =>
-      ExecutionCredentialDefinitionModel.findByIdForAudit(id, orgId),
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
-  "/api/execution-credentials/:key": {
-    resourceType: "executionCredential",
+  "/api/runtime-credentials/:key": {
+    resourceType: "runtimeCredential",
     resourceIdParam: "key",
     fetchById: (key, orgId) =>
-      ExecutionCredentialDefinitionModel.findByKeyForAudit(key, orgId),
+      RuntimeCredentialDefinitionModel.findByKeyForAudit(key, orgId),
   },
-  "/api/execution-credentials/:key/organization": {
-    resourceType: "executionCredential",
+  "/api/runtime-credentials/:key/organization": {
+    resourceType: "runtimeCredential",
     resourceIdParam: "key",
-    action: "executionCredential.updated",
+    action: "runtimeCredential.updated",
     onlyWhenChanged: true,
   },
-  "/api/agents/:id/executions": {
-    resourceType: "agentExecution",
-    action: "agentExecution.created",
+  "/api/agents/:id/runs": {
+    resourceType: "agentRun",
+    action: "agentRun.created",
   },
-  "/api/agent-executions/:taskId/cancel": {
-    resourceType: "agentExecution",
+  "/api/agent-runs/:taskId/cancel": {
+    resourceType: "agentRun",
     resourceIdParam: "taskId",
-    action: "agentExecution.canceled",
+    action: "agentRun.canceled",
   },
-  "/api/agent-executions/:taskId": {
-    resourceType: "agentExecution",
+  "/api/agent-runs/:taskId": {
+    resourceType: "agentRun",
     resourceIdParam: "taskId",
   },
   // Registered explicitly so the DELETE (unshare) is not mislabeled as
-  // `agentExecution.deleted` by the walk-up to `/api/agent-executions/:taskId`.
-  "/api/agent-executions/:taskId/share": {
-    resourceType: "agentExecution",
+  // `agentRun.deleted` by the walk-up to `/api/agent-runs/:taskId`.
+  "/api/agent-runs/:taskId/share": {
+    resourceType: "agentRun",
     resourceIdParam: "taskId",
     actionByMethod: {
-      PUT: "agentExecution.shared",
-      DELETE: "agentExecution.unshared",
+      PUT: "agentRun.shared",
+      DELETE: "agentRun.unshared",
     },
   },
   "/api/agents/:id/restore": {
@@ -257,6 +257,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/apps/:appId": {
     resourceType: "app",
     resourceIdParam: "appId",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
+  // A version restore is a write-forward update, not a new app. Register the
+  // POST explicitly so it cannot be discarded as a walk-up create.
+  "/api/apps/:appId/versions/:version/restore": {
+    resourceType: "app",
+    resourceIdParam: "appId",
+    action: "app.updated",
     fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
   },
   // Tool assignment changes the app's effective tool surface; appToolsTable is

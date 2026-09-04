@@ -471,6 +471,12 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     idFromArgs: (a) => str(a.appId),
     fetchById: appFetch,
   },
+  restore_app_version: {
+    resourceType: "app",
+    action: "app.updated",
+    idFromArgs: (a) => str(a.appId),
+    fetchById: appFetch,
+  },
   refine_app: {
     resourceType: "app",
     action: "app.updated",

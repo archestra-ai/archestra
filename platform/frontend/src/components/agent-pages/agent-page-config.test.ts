@@ -95,9 +95,9 @@ describe("resolveAgentDetailSection", () => {
   });
 
   it("falls back to the first section for one this record does not have", () => {
-    // A gateway sent to `?section=executions`, or a typo: the page corrects
+    // A gateway sent to `?section=runs`, or a typo: the page corrects
     // the URL to what it actually rendered rather than showing a blank pane.
-    expect(resolveAgentDetailSection(sections, "executions")).toBe("general");
+    expect(resolveAgentDetailSection(sections, "runs")).toBe("general");
     expect(resolveAgentDetailSection(sections, null)).toBe("general");
   });
 });

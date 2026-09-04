@@ -2,7 +2,7 @@
 
 import type { Permissions } from "@archestra/shared";
 import { Plus } from "lucide-react";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -32,10 +32,7 @@ export function KnowledgePageLayout({
   const isKnowledgeBaseConfigured = useIsKnowledgeBaseConfigured();
 
   return (
-    <LoadingWrapper
-      isPending={isPending}
-      loadingFallback={<LoadingState variant="viewport" />}
-    >
+    <LoadingWrapper isPending={isPending} loadingFallback={null}>
       <PageLayout
         title={
           <span className="flex items-center gap-2">

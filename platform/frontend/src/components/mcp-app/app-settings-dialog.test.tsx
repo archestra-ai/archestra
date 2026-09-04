@@ -65,6 +65,11 @@ const userPermissions = {
   ...adminPermissionsSeed,
   app: ["read", "update", "admin", "team-admin"],
 } satisfies Permissions;
+const teamViewerPermissions = {
+  ...adminPermissionsSeed,
+  app: ["read", "update", "delete"],
+  team: ["read"],
+} satisfies Permissions;
 
 const server = setupServer(
   http.get(`${API_ORIGIN}/api/teams`, () => HttpResponse.json(teamsSeed)),
@@ -73,6 +78,9 @@ const server = setupServer(
   ),
   http.get(`${API_ORIGIN}/api/organization`, () =>
     HttpResponse.json(organizationSeed),
+  ),
+  http.get(`${API_ORIGIN}/api/organization/members`, () =>
+    HttpResponse.json([]),
   ),
   http.get(`${API_ORIGIN}/api/internal_mcp_catalog`, () =>
     HttpResponse.json([]),
@@ -218,6 +226,29 @@ describe("AppSettingsDialog", () => {
       app.name,
     );
   });
+
+  it("shows team members settings without edit controls when they cannot manage the app", async () => {
+    server.use(
+      http.get(APP_URL, () =>
+        HttpResponse.json({
+          ...app,
+          scope: "team",
+          teams: [{ id: "team-1", name: "Design" }],
+          viewerRole: "shared",
+        } satisfies archestraApiTypes.GetAppResponses["200"]),
+      ),
+    );
+
+    renderDialog(createQueryClient(teamViewerPermissions));
+
+    expect(await screen.findByText("View-only settings")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Name *" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Close" })[0]).toBeEnabled();
+    expect(
+      screen.getByText(/only a team admin who belongs to one of the teams/i),
+    ).toBeVisible();
+  });
 });
 
 function renderDialog(queryClient = createQueryClient()): void {
@@ -251,12 +282,14 @@ function renderControlledDialog(): void {
   );
 }
 
-function createQueryClient(): QueryClient {
+function createQueryClient(
+  permissions: Permissions = userPermissions,
+): QueryClient {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
   });
   queryClient.setQueryData(authQueryKeys.session(), sessionSeed);
-  queryClient.setQueryData(authQueryKeys.userPermissions(), userPermissions);
+  queryClient.setQueryData(authQueryKeys.userPermissions(), permissions);
   return queryClient;
 }
 

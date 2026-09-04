@@ -70,7 +70,6 @@ import { useEnvironments } from "@/lib/environment.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { agentAction, getAgentActionModel } from "./agent-actions-model";
 import { AgentConnectContent } from "./agent-connect-content";
-import { AgentExecutions } from "./agent-executions";
 import {
   AGENT_PAGE_CONFIGS,
   AGENT_SECTION_FORM_GROUPS,
@@ -84,6 +83,7 @@ import {
   isAgentTypeAllowedOnPage,
   resolveAgentDetailSection,
 } from "./agent-page-config";
+import { AgentRuns } from "./agent-runs";
 import { useAgentAccess } from "./use-agent-access";
 
 /**
@@ -266,16 +266,13 @@ function AgentDetails({
   });
 
   const showConnect = connectAction.visible;
-  const backgroundExecutionEnabled =
-    useFeature("agentBackgroundExecution") === true;
-  const hasBackgroundExecution =
-    backgroundExecutionEnabled &&
-    kind === "agent" &&
-    agent.backgroundExecution != null;
+  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const hasAgentRuntime =
+    runtimeEnabled && kind === "agent" && agent.runtime != null;
 
   // The record's own sections, listed down the side of its page. The setup
   // wizard's steps supply the editable ones, in the order it walks them, with
-  // the messaging channels between Tools and Advanced; Connect and Executions
+  // the messaging channels between Tools and Advanced; Connect and Runs
   // are the two views onto a configured record and follow them.
   const steps = getAgentSetupSteps({
     agentType: agent.agentType,
@@ -308,11 +305,11 @@ function AgentDetails({
             : []),
         ]),
     ...(showConnect && !connectFirst ? (["connect"] as const) : []),
-    ...(hasBackgroundExecution ? (["executions"] as const) : []),
+    ...(hasAgentRuntime ? (["runs"] as const) : []),
   ];
   const sectionParam = searchParams.get("section");
   const section = resolveAgentDetailSection(sections, sectionParam);
-  // Which form group is on screen, if any. Connect and Executions are not the
+  // Which form group is on screen, if any. Connect and Runs are not the
   // form's, so they answer undefined and it is not mounted at all.
   const activeFormGroups: readonly AgentFormSection[] =
     section in AGENT_SECTION_FORM_GROUPS
@@ -322,7 +319,7 @@ function AgentDetails({
       : [];
 
   // A `?section=` this record has none of (a gateway sent to
-  // `?section=executions`, or a typo) silently resolves to the first one.
+  // `?section=runs`, or a typo) silently resolves to the first one.
   // Correct the URL to match, so a reload, a copied link or the back button
   // does not keep asking for a section that is not on this page.
   useEffect(() => {
@@ -592,8 +589,8 @@ function AgentDetails({
       }
     >
       <div className="min-w-0">
-        {section === "executions" ? (
-          <AgentExecutions agentId={agent.id} />
+        {section === "runs" ? (
+          <AgentRuns agentId={agent.id} />
         ) : section === "connect" ? (
           <AgentConnectContent kind={kind} agent={agent} />
         ) : (
@@ -815,7 +812,7 @@ const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
   messaging: "Messaging Channels",
   advanced: "Advanced",
   connect: "Connect",
-  executions: "Executions",
+  runs: "Runs",
 };
 
 function DetailPageSkeleton() {

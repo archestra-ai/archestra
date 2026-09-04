@@ -3,7 +3,7 @@
 // hook pipelines, error handling, metric emission, and tool-cache gating.
 // Mocks sit only at process boundaries: the MCP SDK client (gateway transport),
 // mcpClient.executeToolCallForOwner (gateway network call), executeA2AMessage
-// (child-agent execution), hookDispatcherService.fire (hook scripts run in
+// (child-agent run), hookDispatcherService.fire (hook scripts run in
 // Dagger sandbox containers), the browser-stream feature (browser pods), and
 // the external-IdP session token resolver (IdP network call).
 import {

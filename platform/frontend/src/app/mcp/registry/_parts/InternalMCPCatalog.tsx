@@ -26,7 +26,6 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
-import { LoadingState } from "@/components/loading";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
@@ -1155,7 +1154,7 @@ export function InternalMCPCatalog({
     (isCatalogPending || isCatalogFetching) &&
     (catalogItems?.length ?? 0) === 0
   ) {
-    return <LoadingState label="Loading MCP servers…" variant="page" />;
+    return null;
   }
 
   return (

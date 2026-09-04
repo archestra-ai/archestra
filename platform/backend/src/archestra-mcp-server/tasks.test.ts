@@ -1,6 +1,6 @@
 import {
   TOOL_GET_TASK_FULL_NAME,
-  TOOL_LIST_AGENT_EXECUTIONS_FULL_NAME,
+  TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_POST_TASK_FILE_FULL_NAME,
   TOOL_START_TASK_FULL_NAME,
 } from "@archestra/shared";
@@ -198,7 +198,7 @@ describe("task tools", () => {
       actorKind: "user",
       actorId: params.actorUserId,
       actorUserId: params.actorUserId,
-      deploymentName: `test-${task.id.slice(0, 8)}`,
+      workloadName: `test-${task.id.slice(0, 8)}`,
       backend: "kubernetes",
       runtimeScope: "test",
       completionTarget: params.withTarget
@@ -213,7 +213,7 @@ describe("task tools", () => {
     return task;
   }
 
-  test("lists accessible Agent executions with live and thread links", async () => {
+  test("lists accessible Agent runs with live and thread links", async () => {
     const binding = await ChatOpsChannelBindingModel.create({
       organizationId,
       provider: "slack",
@@ -231,7 +231,7 @@ describe("task tools", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_LIST_AGENT_EXECUTIONS_FULL_NAME,
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
       { agent_ids: [callingAgent.id], limit: 20 },
       context,
     );
@@ -239,11 +239,14 @@ describe("task tools", () => {
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toMatchObject({
       summary: { total: 1, active: 1, by_state: { TASK_STATE_WORKING: 1 } },
-      executions: [
+      runs: [
         {
           task_id: task.id,
           prompt: "Add a character counter.",
           state: "TASK_STATE_WORKING",
+          hard_deadline_at: expect.any(String),
+          last_model_activity_at: null,
+          attention_state: null,
           agent: { id: callingAgent.id, name: callingAgent.name },
           requester: { kind: "user", id: actorId },
           thread: {
@@ -259,13 +262,13 @@ describe("task tools", () => {
     expect(
       (
         result.structuredContent as {
-          executions: Array<{ execution_url: string }>;
+          runs: Array<{ run_url: string }>;
         }
-      ).executions[0]?.execution_url,
-    ).toMatch(new RegExp(`/chat/executions/${task.id}$`));
+      ).runs[0]?.run_url,
+    ).toMatch(new RegExp(`/chat/runs/${task.id}$`));
   });
 
-  test("does not reveal executions for an inaccessible Agent", async ({
+  test("does not reveal runs for an inaccessible Agent", async ({
     makeAgent,
     makeUser,
   }) => {
@@ -278,7 +281,7 @@ describe("task tools", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_LIST_AGENT_EXECUTIONS_FULL_NAME,
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
       { agent_ids: [privateAgent.id] },
       context,
     );
@@ -345,7 +348,7 @@ describe("task tools", () => {
     upload.mockRestore();
   });
 
-  test("post_task_file only serves the person the execution acts as", async ({
+  test("post_task_file only serves the person the run acts as", async ({
     makeUser,
     makeMember,
   }) => {

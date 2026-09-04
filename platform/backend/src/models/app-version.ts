@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
-import type { AppUiPermissions, AppVersion } from "@/types/app";
+import type {
+  AppUiPermissions,
+  AppVersion,
+  AppVersionSummary,
+} from "@/types/app";
 import type { AppSpec } from "@/types/app-spec";
 
 /** The canonical, hashable payload of an app version. */
@@ -95,10 +99,26 @@ class AppVersionModel {
     return row ?? null;
   }
 
-  /** All versions of an app, newest first. */
+  /** All complete versions of an app, newest first. */
   static async listForApp(appId: string): Promise<AppVersion[]> {
     return await db
       .select()
+      .from(schema.appVersionsTable)
+      .where(eq(schema.appVersionsTable.appId, appId))
+      .orderBy(desc(schema.appVersionsTable.version));
+  }
+
+  /** Lightweight version history for list UIs that do not need the artifacts. */
+  static async listSummariesForApp(
+    appId: string,
+  ): Promise<AppVersionSummary[]> {
+    return await db
+      .select({
+        id: schema.appVersionsTable.id,
+        appId: schema.appVersionsTable.appId,
+        version: schema.appVersionsTable.version,
+        createdAt: schema.appVersionsTable.createdAt,
+      })
       .from(schema.appVersionsTable)
       .where(eq(schema.appVersionsTable.appId, appId))
       .orderBy(desc(schema.appVersionsTable.version));

@@ -81,7 +81,12 @@ interface ExecTerminalProps {
   disconnectedLabel?: string;
   /** Whether a closed PTY should add a status banner above its retained frame. */
   showDisconnectedStatus?: boolean;
+  /** Snapshot shown immediately while the live transport catches up. */
+  initialProgress?: ExecSessionProgress | null;
+  /** Stable start time for the elapsed counter, such as the run's start. */
+  progressStartedAt?: number;
   onCommandChange?: (command: string | null) => void;
+  onError?: () => void;
   onClosed?: () => void;
 }
 
@@ -94,15 +99,23 @@ export function ExecTerminal({
   showManualCommand = true,
   disconnectedLabel = "Session terminated",
   showDisconnectedStatus = true,
+  initialProgress = null,
+  progressStartedAt,
   onCommandChange,
+  onError,
   onClosed,
 }: ExecTerminalProps) {
   // Read through a ref so a new transport object on every render cannot
   // retrigger the effect; `sessionKey` is the reconnect signal.
   const transportRef = useRef(transport);
   transportRef.current = transport;
+  const initialProgressRef = useRef(initialProgress);
+  initialProgressRef.current = initialProgress;
+  const hasTransportProgressRef = useRef(false);
   const onClosedRef = useRef(onClosed);
   onClosedRef.current = onClosed;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
   const onCommandChangeRef = useRef(onCommandChange);
   onCommandChangeRef.current = onCommandChange;
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -201,7 +214,8 @@ export function ExecTerminal({
         }
 
         setStatus("connecting");
-        setProgress(null);
+        hasTransportProgressRef.current = false;
+        setProgress(initialProgressRef.current);
         setConnectingSince(Date.now());
         setErrorMessage(null);
 
@@ -211,6 +225,7 @@ export function ExecTerminal({
         closeSession = transportRef.current.open({
           onProgress: (sessionProgress) => {
             if (disposed) return;
+            hasTransportProgressRef.current = true;
             setProgress(sessionProgress);
           },
           onStarted: (startedCommand) => {
@@ -236,6 +251,7 @@ export function ExecTerminal({
             if (disposed) return;
             setStatus("error");
             setErrorMessage(message);
+            onErrorRef.current?.();
           },
           onClosed: (reason) => {
             if (disposed) return;
@@ -293,6 +309,12 @@ export function ExecTerminal({
     };
   }, [isActive, sessionKey, cleanup]);
 
+  useEffect(() => {
+    if (status === "connecting" && !hasTransportProgressRef.current) {
+      setProgress(initialProgress);
+    }
+  }, [initialProgress, status]);
+
   const [commandCopied, setCommandCopied] = useState(false);
 
   const handleCopyCommand = useCallback(async () => {
@@ -318,7 +340,7 @@ export function ExecTerminal({
             (progress ? (
               <ExecTerminalProgress
                 progress={progress}
-                startedAt={connectingSince}
+                startedAt={progressStartedAt ?? connectingSince}
               />
             ) : (
               <ExecTerminalStatus

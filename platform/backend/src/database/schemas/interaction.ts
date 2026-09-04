@@ -47,10 +47,10 @@ const interactionsTable = pgTable(
      */
     externalAgentId: varchar("external_agent_id"),
     /**
-     * Optional execution ID passed via X-Archestra-Execution-Id header.
-     * This allows clients to associate interactions with a specific execution run.
+     * Optional run ID passed via X-Archestra-Run-Id header.
+     * This allows clients to associate interactions with a specific run.
      */
-    executionId: varchar("execution_id"),
+    runId: varchar("run_id"),
     /**
      * Optional user ID passed via X-Archestra-User-Id header.
      * This allows clients to associate interactions with a specific Archestra user.
@@ -272,9 +272,7 @@ const interactionsTable = pgTable(
     externalAgentIdIdx: index("interactions_external_agent_id_idx").on(
       table.externalAgentId,
     ),
-    executionIdIdx: index("interactions_execution_id_idx").on(
-      table.executionId,
-    ),
+    runIdIdx: index("interactions_run_id_idx").on(table.runId),
     userIdIdx: index("interactions_user_id_idx").on(table.userId),
     environmentIdIdx: index("interactions_environment_id_idx").on(
       table.environmentId,

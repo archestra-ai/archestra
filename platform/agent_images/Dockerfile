@@ -16,14 +16,14 @@ RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 WORKDIR /opt/archestra
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY patches ./patches
-COPY runner-agent/package.json ./runner-agent/package.json
-RUN pnpm install --filter @archestra/runner-agent --frozen-lockfile \
+COPY runtime-agent/package.json ./runtime-agent/package.json
+RUN pnpm install --filter @archestra/runtime-agent --frozen-lockfile \
       --ignore-scripts
-COPY runner-agent/tsconfig.json ./runner-agent/tsconfig.json
-COPY runner-agent/src ./runner-agent/src
-RUN pnpm --filter @archestra/runner-agent build \
- && chmod +x /opt/archestra/runner-agent/dist/index.js \
- && ln -s /opt/archestra/runner-agent/dist/index.js /usr/local/bin/archestra-runner-agent
+COPY runtime-agent/tsconfig.json ./runtime-agent/tsconfig.json
+COPY runtime-agent/src ./runtime-agent/src
+RUN pnpm --filter @archestra/runtime-agent build \
+ && chmod +x /opt/archestra/runtime-agent/dist/index.js \
+ && ln -s /opt/archestra/runtime-agent/dist/index.js /usr/local/bin/archestra-runtime-agent
 
 COPY agent_images/bin /usr/local/bin
 RUN chmod 0755 /usr/local/bin/archestra-*

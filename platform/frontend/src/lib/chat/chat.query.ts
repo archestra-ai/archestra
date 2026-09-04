@@ -915,6 +915,7 @@ export async function fetchConversationEnabledTools(conversationId: string) {
  */
 export function useConversationEnabledTools(
   conversationId: string | undefined,
+  options?: { enabled?: boolean },
 ) {
   return useQuery({
     queryKey: ["conversation", conversationId, "enabled-tools"],
@@ -931,7 +932,7 @@ export function useConversationEnabledTools(
       }
       return result.data;
     },
-    enabled: !!conversationId,
+    enabled: !!conversationId && (options?.enabled ?? true),
     staleTime: 30 * 1000, // 30 seconds
     gcTime: 5 * 60 * 1000,
   });
@@ -1002,11 +1003,14 @@ export async function fetchAgentMcpTools(agentId: string | undefined) {
  * Get profile tools with IDs (for the manage tools dialog)
  * Returns full tool objects including IDs needed for enabled tools junction table
  */
-export function useProfileToolsWithIds(agentId: string | undefined) {
+export function useProfileToolsWithIds(
+  agentId: string | undefined,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ["agents", agentId, "tools", "mcp-only"],
     queryFn: () => fetchAgentMcpTools(agentId),
-    enabled: !!agentId,
+    enabled: !!agentId && (options?.enabled ?? true),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
     placeholderData: keepPreviousData,
@@ -1142,9 +1146,11 @@ function useBrowserInstallation(onInstallComplete?: (agentId: string) => void) {
 export function useHasPlaywrightMcpTools(
   agentId: string | undefined,
   conversationId?: string,
-  options?: { autoAssignAfterInstall?: boolean },
+  options?: { autoAssignAfterInstall?: boolean; enabled?: boolean },
 ) {
-  const toolsQuery = useProfileToolsWithIds(agentId);
+  const toolsQuery = useProfileToolsWithIds(agentId, {
+    enabled: options?.enabled,
+  });
   const queryClient = useQueryClient();
   const conversationIdRef = useRef(conversationId);
   conversationIdRef.current = conversationId;
@@ -1215,6 +1221,7 @@ export function useHasPlaywrightMcpTools(
   // Fetch user's Playwright server to check reinstallRequired
   const playwrightServersQuery = useMcpServers({
     catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+    enabled: options?.enabled,
   });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;

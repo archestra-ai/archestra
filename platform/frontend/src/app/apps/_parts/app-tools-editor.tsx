@@ -56,6 +56,7 @@ export function AppToolsEditor({
   environmentId,
   selectedToolIds,
   onSelectionChange,
+  readOnly = false,
 }: {
   appId: string;
   /**
@@ -73,11 +74,14 @@ export function AppToolsEditor({
    */
   selectedToolIds?: Set<string>;
   onSelectionChange?: (next: Set<string>) => void;
+  /** Force the assigned-tools summary even when the caller has app:update. */
+  readOnly?: boolean;
 }) {
   const { data: app } = useApp(environmentId === undefined ? appId : null);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();
-  const { data: canEdit } = useHasPermissions({ app: ["update"] });
+  const { data: hasUpdatePermission } = useHasPermissions({ app: ["update"] });
+  const canEdit = hasUpdatePermission === true && !readOnly;
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
 
@@ -175,7 +179,7 @@ export function AppToolsEditor({
     queries: candidates.map((c) => ({
       queryKey: ["mcp-catalog", c.id, "tools"] as const,
       queryFn: () => fetchCatalogTools(c.id),
-      enabled: canEdit === true,
+      enabled: canEdit,
     })),
   });
 
@@ -327,7 +331,7 @@ export function AppToolsEditor({
     [candidates, toolsByCatalog, selectedByCatalog],
   );
 
-  if (canEdit !== true) {
+  if (!canEdit) {
     return (
       <AssignedToolsReadOnly
         isPending={isPending && !assigned}

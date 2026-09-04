@@ -23,7 +23,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading";
 import { OverviewSummary } from "@/components/overview-summary";
 import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -431,7 +431,7 @@ export default function ServiceAccountDetailPage({
   return (
     <LoadingWrapper
       isPending={(isPending || isFetching) && !serviceAccount}
-      loadingFallback={<LoadingState variant="page" />}
+      loadingFallback={null}
     >
       {isLoadingError ? (
         <QueryLoadError

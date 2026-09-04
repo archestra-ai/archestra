@@ -3,7 +3,7 @@ title: Secure Agent with Microsoft Foundry
 category: Examples
 order: 8
 description: How deterministic policies stop a prompt-injection attack that Foundry's probabilistic guardrails miss
-lastUpdated: 2026-07-03
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -56,7 +56,7 @@ The agent followed the injected instructions. With Foundry's "Indirect prompt in
 2. Created a new unauthorized issue in the archestra repository
 3. Posted sensitive information from a private repository into that issue
 
-![Agent execution showing it following the malicious instructions](/docs/platform-foundry-03.webp)
+![Agent run showing it following the malicious instructions](/docs/platform-foundry-03.webp)
 
 All three trifecta risks materialized:
 

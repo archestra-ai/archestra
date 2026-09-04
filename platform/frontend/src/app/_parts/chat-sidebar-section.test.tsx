@@ -14,11 +14,10 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 const mockRouterPush = vi.fn();
-const { mockUpdateExecutionMutate, mockUpdateExecutionMutateAsync } =
-  vi.hoisted(() => ({
-    mockUpdateExecutionMutate: vi.fn(),
-    mockUpdateExecutionMutateAsync: vi.fn().mockResolvedValue(undefined),
-  }));
+const { mockUpdateRunMutate, mockUpdateRunMutateAsync } = vi.hoisted(() => ({
+  mockUpdateRunMutate: vi.fn(),
+  mockUpdateRunMutateAsync: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Mutable holder so the status-indicator matrix can vary the viewed route, the
 // per-conversation session status, and the unread set per test (object props
@@ -87,22 +86,22 @@ let mockApps: Array<{
   pinnedAt: string | null;
 }> = [];
 
-let mockExecutions: Array<Record<string, unknown>> = [];
+let mockRuns: Array<Record<string, unknown>> = [];
 
-vi.mock("@/lib/agent-background-execution.query", () => ({
-  useMyAgentExecutions: () => ({
-    data: mockExecutions,
+vi.mock("@/lib/agent-runtime.query", () => ({
+  useMyAgentRuns: () => ({
+    data: mockRuns,
     isLoading: false,
   }),
-  useUpdateAgentExecution: () => ({
-    mutate: mockUpdateExecutionMutate,
-    mutateAsync: mockUpdateExecutionMutateAsync,
+  useUpdateAgentRun: () => ({
+    mutate: mockUpdateRunMutate,
+    mutateAsync: mockUpdateRunMutateAsync,
   }),
-  useCancelAgentExecution: () => ({
+  useCancelAgentRun: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
-  useDeleteAgentExecution: () => ({
+  useDeleteAgentRun: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
@@ -393,7 +392,7 @@ describe("ChatSidebarSection", () => {
     mockConversations = [];
     mockProjects = [];
     mockApps = [];
-    mockExecutions = [];
+    mockRuns = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });
@@ -404,14 +403,14 @@ describe("ChatSidebarSection", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("interweaves a durable execution with chats and opens its terminal", () => {
+  it("interweaves a durable run with chats and opens its terminal", () => {
     mockConversations = [
       makeConv("c1", "Earlier chat", {
         updatedAt: "2026-07-16T09:00:00Z",
         lastMessageAt: "2026-07-16T09:00:00Z",
       }),
     ];
-    mockExecutions = [
+    mockRuns = [
       {
         id: "run-1",
         taskId: "task-1",
@@ -424,10 +423,12 @@ describe("ChatSidebarSection", () => {
         backend: "kubernetes",
         runtimeScope: "archestra-dev",
         virtualApiKeyId: null,
-        startedAt: "2026-07-16T10:00:00Z",
+        startedAt: new Date(Date.now() - 30 * 60_000).toISOString(),
         endedAt: null,
         state: "TASK_STATE_WORKING",
         stateChangedAt: "2026-07-16T10:00:00Z",
+        hardDeadlineAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        lastModelActivityAt: new Date(Date.now() - 20 * 60_000).toISOString(),
         statusReason: null,
         prompt: "Add the export command",
         agent: { id: "agent-1", name: "Codex", icon: null },
@@ -437,18 +438,18 @@ describe("ChatSidebarSection", () => {
     render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     expect(screen.getByText("Add export command")).toBeInTheDocument();
-    expect(screen.getByLabelText("Execution running")).toBeInTheDocument();
-    expect(screen.getByLabelText("Execution actions")).toBeInTheDocument();
+    expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
+    expect(screen.getByLabelText("Run actions")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Add export command"));
-    expect(mockRouterPush).toHaveBeenCalledWith("/chat/executions/task-1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/task-1");
   });
 
-  it("requests a durable pin from an execution's sidebar menu", () => {
-    mockExecutions = [
+  it("requests a durable pin from a run's sidebar menu", () => {
+    mockRuns = [
       {
         id: "run-1",
         taskId: "task-1",
-        title: "Keep this execution handy",
+        title: "Keep this run handy",
         pinnedAt: null,
         startedAt: "2026-07-16T10:00:00Z",
         endedAt: null,
@@ -460,13 +461,13 @@ describe("ChatSidebarSection", () => {
     render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Pin" }));
-    expect(mockUpdateExecutionMutate).toHaveBeenCalledWith({
+    expect(mockUpdateRunMutate).toHaveBeenCalledWith({
       taskId: "task-1",
       pinnedAt: new Date().toISOString(),
     });
   });
 
-  it("moves an execution into and out of a project from its sidebar menu", () => {
+  it("moves a run into and out of a project from its sidebar menu", () => {
     mockProjects = [
       {
         id: "project-1",
@@ -475,11 +476,11 @@ describe("ChatSidebarSection", () => {
         pinnedAt: null,
       },
     ];
-    mockExecutions = [
+    mockRuns = [
       {
         id: "run-1",
         taskId: "task-1",
-        title: "Project execution",
+        title: "Project run",
         projectId: null,
         projectName: null,
         pinnedAt: null,
@@ -492,14 +493,14 @@ describe("ChatSidebarSection", () => {
 
     const { rerender } = render(<ChatSidebarSection fadeIn={fadeIn} />);
     fireEvent.click(screen.getByRole("button", { name: "Add to project" }));
-    expect(mockUpdateExecutionMutateAsync).toHaveBeenCalledWith({
+    expect(mockUpdateRunMutateAsync).toHaveBeenCalledWith({
       taskId: "task-1",
       projectId: "project-1",
     });
 
-    mockExecutions = [
+    mockRuns = [
       {
-        ...mockExecutions[0],
+        ...mockRuns[0],
         projectId: "project-1",
         projectName: "Release work",
       },
@@ -513,18 +514,18 @@ describe("ChatSidebarSection", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Remove from project" }),
     );
-    expect(mockUpdateExecutionMutateAsync).toHaveBeenLastCalledWith({
+    expect(mockUpdateRunMutateAsync).toHaveBeenLastCalledWith({
       taskId: "task-1",
       projectId: null,
     });
   });
 
-  it("renders a pinned execution outside the recent timeline and can unpin it", () => {
-    mockExecutions = [
+  it("renders a pinned run outside the recent timeline and can unpin it", () => {
+    mockRuns = [
       {
         id: "run-1",
         taskId: "task-1",
-        title: "Pinned execution",
+        title: "Pinned run",
         pinnedAt: "2026-07-16T11:00:00Z",
         startedAt: "2026-07-16T10:00:00Z",
         endedAt: null,
@@ -536,10 +537,10 @@ describe("ChatSidebarSection", () => {
     render(<ChatSidebarSection fadeIn={fadeIn} />);
 
     expect(screen.getByText("Pinned")).toBeInTheDocument();
-    expect(screen.getByText("Pinned execution")).toBeInTheDocument();
+    expect(screen.getByText("Pinned run")).toBeInTheDocument();
     expect(screen.queryByText("Today")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Unpin" }));
-    expect(mockUpdateExecutionMutate).toHaveBeenCalledWith({
+    expect(mockUpdateRunMutate).toHaveBeenCalledWith({
       taskId: "task-1",
       pinnedAt: null,
     });
@@ -868,7 +869,7 @@ describe("ChatSidebarSection status indicators", () => {
     mockConversations = [];
     mockProjects = [];
     mockApps = [];
-    mockExecutions = [];
+    mockRuns = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });

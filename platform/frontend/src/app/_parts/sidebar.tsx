@@ -83,6 +83,7 @@ import { useOnce } from "@/lib/hooks/use-once";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { cn } from "@/lib/utils";
+import { getSettingsNavigationUrl } from "./settings-navigation";
 
 type SidebarMode = "chats" | "studio";
 
@@ -542,11 +543,18 @@ export function AppSidebar() {
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
-          .map((item) =>
-            item.url === "/llm/costs"
-              ? { ...item, url: getCostsNavigationUrl(permissionMap) }
-              : item,
-          ),
+          .map((item) => {
+            if (item.url === "/llm/costs") {
+              return { ...item, url: getCostsNavigationUrl(permissionMap) };
+            }
+            // Same reason one row over: /settings is a stub that forwards to
+            // the first permitted tab, so following it costs a second route
+            // load for every click.
+            if (item.url === "/settings") {
+              return { ...item, url: getSettingsNavigationUrl(permissionMap) };
+            }
+            return item;
+          }),
       })),
     [pluginsEnabled, permissionMap],
   );

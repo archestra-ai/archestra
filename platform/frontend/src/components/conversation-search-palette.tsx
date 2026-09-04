@@ -9,8 +9,8 @@ import {
   contentNavGroups,
   isNavItemPermitted,
 } from "@/app/_parts/studio-nav";
-import { ExecutionStateIcon } from "@/components/chat/execution-state-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,7 +37,7 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/consts";
-import { useMyAgentExecutions } from "@/lib/agent-background-execution.query";
+import { useMyAgentRuns } from "@/lib/agent-runtime.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import {
@@ -193,16 +193,12 @@ export function ConversationSearchPalette({
     search: debouncedSearch,
   });
 
-  // Background execution sessions live in the same sidebar timeline as chats,
+  // Agent Runtime sessions live in the same sidebar timeline as chats,
   // so the palette lists them too (searched client-side by title — they have
   // no message bodies for the backend conversation search to match).
-  const backgroundExecutionEnabled =
-    useFeature("agentBackgroundExecution") === true;
-  const { data: executionSessions = [] } = useMyAgentExecutions(
-    open &&
-      isAuthenticated &&
-      canReadConversation === true &&
-      backgroundExecutionEnabled,
+  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const { data: runs = [] } = useMyAgentRuns(
+    open && isAuthenticated && canReadConversation === true && runtimeEnabled,
   );
 
   const navigationDestinations = useNavigationDestinations();
@@ -225,15 +221,15 @@ export function ConversationSearchPalette({
     );
   }, [recentChatsView, searchQuery, navigationDestinations]);
 
-  // The conversation search runs on the backend; execution sessions carry no
+  // The conversation search runs on the backend; run sessions carry no
   // message bodies, so their titles are matched here instead.
-  const matchingExecutions = useMemo(() => {
+  const matchingRuns = useMemo(() => {
     const normalizedQuery = debouncedSearch.trim().toLocaleLowerCase();
     if (!normalizedQuery) return [];
-    return executionSessions.filter((execution) =>
-      execution.title.toLocaleLowerCase().includes(normalizedQuery),
+    return runs.filter((run) =>
+      run.title.toLocaleLowerCase().includes(normalizedQuery),
     );
-  }, [executionSessions, debouncedSearch]);
+  }, [runs, debouncedSearch]);
 
   const browseItems = useMemo(() => {
     if (debouncedSearch.trim()) {
@@ -241,13 +237,13 @@ export function ConversationSearchPalette({
     }
     return {
       // Keep the palette's Pinned group aligned with the sidebar: chats and
-      // background executions share one newest-pin-first list.
+      // Agent Runtime runs share one newest-pin-first list.
       pinned: buildPinnedSidebarItems({
         chats: conversations,
         projects: [],
-        executions: executionSessions,
+        runs,
       }),
-      // Executions sort into the same timeline as chats, mirroring the
+      // Runs sort into the same timeline as chats, mirroring the
       // sidebar's merged recents list.
       recent: [
         ...conversations
@@ -257,10 +253,10 @@ export function ConversationSearchPalette({
             item,
             timestamp: item.lastMessageAt,
           })),
-        ...executionSessions
-          .filter((execution) => !execution.pinnedAt)
+        ...runs
+          .filter((run) => !run.pinnedAt)
           .map((item) => ({
-            kind: "execution" as const,
+            kind: "run" as const,
             item,
             timestamp: item.stateChangedAt ?? item.startedAt,
           })),
@@ -270,7 +266,7 @@ export function ConversationSearchPalette({
           new Date(left.timestamp).getTime(),
       ),
     };
-  }, [conversations, executionSessions, debouncedSearch]);
+  }, [conversations, runs, debouncedSearch]);
 
   // Reset state on every open/close transition.
   // Clearing on open handles stale chars from macOS dead keys (e.g. Option+N inserts ˜
@@ -568,28 +564,36 @@ export function ConversationSearchPalette({
     );
   };
 
-  const renderExecutionItem = (
-    execution: (typeof executionSessions)[number],
+  const renderRunItem = (
+    run: (typeof runs)[number],
     opts?: { dateLabel?: string },
   ) => (
     <CommandItem
-      key={`exec-${execution.taskId}`}
-      value={`exec-${execution.taskId}`}
+      key={`exec-${run.taskId}`}
+      value={`exec-${run.taskId}`}
       onSelect={() => {
-        router.push(`/chat/executions/${execution.taskId}`);
+        router.push(`/chat/runs/${run.taskId}`);
         onOpenChange(false);
       }}
       className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full"
     >
-      <ExecutionStateIcon state={execution.state} className="h-4 w-4" />
+      <RunStateIcon
+        state={run.state}
+        attentionState={run.attentionState}
+        startedAt={run.startedAt}
+        endedAt={run.endedAt}
+        hardDeadlineAt={run.hardDeadlineAt}
+        lastModelActivityAt={run.lastModelActivityAt}
+        className="size-4"
+      />
       <span className="text-sm flex-1 min-w-0 truncate leading-snug">
-        {execution.title}
+        {run.title}
       </span>
-      {execution.projectId && execution.projectName && (
+      {run.projectId && run.projectName && (
         <ProjectBadgeButton
-          projectId={execution.projectId}
-          projectName={execution.projectName}
-          projectIcon={execution.projectIcon}
+          projectId={run.projectId}
+          projectName={run.projectName}
+          projectIcon={run.projectIcon}
           onNavigate={(projectId) => {
             router.push(`/projects/${projectId}`);
             onOpenChange(false);
@@ -667,12 +671,10 @@ export function ConversationSearchPalette({
               <CommandGroup heading="Chats">
                 <SearchSkeleton />
               </CommandGroup>
-            ) : conversations.length > 0 || matchingExecutions.length > 0 ? (
+            ) : conversations.length > 0 || matchingRuns.length > 0 ? (
               <CommandGroup heading="Chats">
                 {conversations.map((conv) => renderConversationItem(conv))}
-                {matchingExecutions.map((execution) =>
-                  renderExecutionItem(execution),
-                )}
+                {matchingRuns.map((run) => renderRunItem(run))}
               </CommandGroup>
             ) : matchingNavigationItems.length === 0 ? (
               <CommandEmpty>
@@ -711,7 +713,7 @@ export function ConversationSearchPalette({
                 headings (Pinned / Recent), so no standalone label here — a
                 "Chats" label stacked on "Pinned" read as a double heading. */}
             {!recentChatsView &&
-              (conversations.length > 0 || executionSessions.length > 0) && (
+              (conversations.length > 0 || runs.length > 0) && (
                 <CommandSeparator className="my-2" />
               )}
 
@@ -727,7 +729,7 @@ export function ConversationSearchPalette({
                               entry.item.lastMessageAt,
                             ),
                           })
-                        : renderExecutionItem(entry.item, {
+                        : renderRunItem(entry.item, {
                             dateLabel: getDateBucketLabel(
                               entry.item.stateChangedAt ?? entry.item.startedAt,
                             ),
@@ -742,7 +744,7 @@ export function ConversationSearchPalette({
                         ? renderConversationItem(entry.item, {
                             dateLabel: getDateBucketLabel(entry.timestamp),
                           })
-                        : renderExecutionItem(entry.item, {
+                        : renderRunItem(entry.item, {
                             dateLabel: getDateBucketLabel(entry.timestamp),
                           }),
                     )}
@@ -750,7 +752,7 @@ export function ConversationSearchPalette({
                 )}
                 {recentChatsView &&
                   conversations.length === 0 &&
-                  executionSessions.length === 0 && (
+                  runs.length === 0 && (
                     <div className="py-4 text-center text-sm text-muted-foreground">
                       No recent chats
                     </div>

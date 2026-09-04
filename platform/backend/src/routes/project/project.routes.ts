@@ -13,7 +13,7 @@ import { ProjectLabelModel, ProjectModel } from "@/models";
 import { projectService } from "@/services/project";
 import {
   constructResponseSchema,
-  GetAgentExecutionResponseSchema,
+  GetAgentRunResponseSchema,
   LabelWithDetailsSchema,
   ProjectConversationItemSchema,
   ProjectDetailSchema,
@@ -688,19 +688,17 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/projects/:id/executions",
+    "/api/projects/:id/runs",
     {
       schema: {
-        operationId: RouteId.GetProjectExecutions,
+        operationId: RouteId.GetProjectRuns,
         description:
-          "All execution sessions in a project the caller can read. Sessions " +
+          "All run sessions in a project the caller can read. Sessions " +
           "started by others require `project:read-all`; all non-owner views " +
           "are read-only.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(
-          z.array(GetAgentExecutionResponseSchema),
-        ),
+        response: constructResponseSchema(z.array(GetAgentRunResponseSchema)),
       },
     },
     async ({ params: { id }, organizationId, user }) =>

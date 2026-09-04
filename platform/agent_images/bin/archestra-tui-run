@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+if [[ $# -lt 3 ]]; then
+  echo "usage: archestra-tui-run <completion-marker> <answer-file> <command> [args...]" >&2
+  exit 64
+fi
+
+done_marker="$1"
+answer_file="$2"
+failed_marker="${done_marker}.failed"
+completed_frame="${done_marker}.frame"
+shift 2
+
+rm -f "${done_marker}" "${failed_marker}" "${completed_frame}" "${answer_file}"
+
+child_pid=""
+child_target=""
+
+stop_child() {
+  if [[ -n "${child_pid}" ]]; then
+    kill -TERM -- "${child_target}" 2>/dev/null || true
+    for _ in {1..8}; do
+      if ! kill -0 "${child_pid}" 2>/dev/null; then
+        return
+      fi
+      sleep 0.25
+    done
+    kill -KILL -- "${child_target}" 2>/dev/null || true
+  fi
+}
+
+forward_signal() {
+  stop_child
+  wait "${child_pid}" 2>/dev/null || true
+  exit 143
+}
+trap forward_signal INT TERM
+
+reset_terminal() {
+  # Full-screen clients can leave origin mode, a restricted scroll region, or
+  # DECLRMM horizontal margins active. Spell out the reset for terminal
+  # players that do not implement RIS (ESC c) completely.
+  printf '\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?69l\033[?6l\033[r\033[0m\033[2J\033[H'
+}
+
+watch_for_completion() {
+  # Agent Runtime bounds this process with the run deadline and pod lifecycle.
+  # This loop only bridges a client's end-of-turn callback to its otherwise
+  # persistent TUI process.
+  while kill -0 "${child_pid}" 2>/dev/null; do
+    if [[ -f "${done_marker}" ]]; then
+      # Keep the completed frame visible long enough for tmux's pipe-pane to
+      # capture it before closing the client. Save the visible pane as well:
+      # full-screen clients restore the shell screen during shutdown, but the
+      # retained transcript should finish on the native interface the user saw.
+      sleep 2
+      if [[ -n "${TMUX_PANE:-}" ]] && command -v tmux >/dev/null 2>&1; then
+        # Some clients probe terminal capabilities during teardown. tmux can
+        # briefly paint the terminal's device-attribute reply as text; it is not
+        # part of the interface and should not survive in the completed frame.
+        geometry="$(tmux display-message -p -t "${TMUX_PANE}" '#{pane_width}x#{pane_height}' 2>/dev/null || true)"
+        if [[ "${geometry}" =~ ^[0-9]+x[0-9]+$ ]]; then
+          printf '\033]777;archestra-terminal-size=%s\007' "${geometry}" \
+            > "${completed_frame}"
+        else
+          : > "${completed_frame}"
+        fi
+        tmux capture-pane -p -e -t "${TMUX_PANE}" \
+          | sed '/?1;2c/d' \
+          >> "${completed_frame}" || true
+      fi
+      stop_child
+      return
+    fi
+    sleep 1
+  done
+}
+
+if [[ -t 0 ]]; then
+  # Give the client the actual tmux pty so it receives browser resizes and
+  # input. The supervisor keeps it in the foreground while independently
+  # watching for completion.
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  set +e
+  "${script_dir}/archestra-tui-exec" \
+    "${done_marker}" \
+    "${completed_frame}" \
+    "$@"
+  status=$?
+  set -e
+else
+  "$@" &
+  child_pid=$!
+  child_target="${child_pid}"
+  watch_for_completion &
+  completion_watcher_pid=$!
+  set +e
+  wait "${child_pid}" 2>/dev/null
+  status=$?
+  wait "${completion_watcher_pid}" 2>/dev/null || true
+  set -e
+fi
+
+if [[ ! -f "${done_marker}" ]]; then
+  if [[ ${status} -eq 0 ]]; then
+    echo "archestra: the TUI exited without completing its turn" >&2
+    exit 1
+  fi
+  exit "${status}"
+fi
+
+# Native clients may leave scroll regions, margins, or application modes set
+# while shutting down. Reset before writing the machine-readable answer so it
+# cannot wrap into a one-column strip in the retained terminal.
+reset_terminal
+printf '\n===ARCHESTRA-FINAL-ANSWER===\n'
+if [[ -s "${answer_file}" ]]; then
+  cat "${answer_file}"
+else
+  echo "The session ended without producing a final message."
+fi
+printf '\n===ARCHESTRA-FINAL-ANSWER-END===\n'
+if [[ -s "${completed_frame}" ]]; then
+  reset_terminal
+  cat "${completed_frame}"
+fi
+if [[ -f "${failed_marker}" ]]; then
+  exit 1
+fi

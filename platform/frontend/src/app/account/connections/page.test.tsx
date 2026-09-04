@@ -25,10 +25,10 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
 }));
 vi.mock("@/lib/config/config.query", () => ({
-  useFeature: (feature: string) => feature === "agentBackgroundExecution",
+  useFeature: (feature: string) => feature === "agentRuntime",
 }));
-vi.mock("@/lib/execution-credentials.query", () => ({
-  useExecutionCredentials: () => ({
+vi.mock("@/lib/runtime-credentials.query", () => ({
+  useRuntimeCredentials: () => ({
     data: [
       {
         key: "github",
@@ -45,7 +45,7 @@ vi.mock("@/lib/execution-credentials.query", () => ({
     isPending: false,
     isError: false,
   }),
-  useDeleteExecutionCredentialConnection: () => ({
+  useDeleteRuntimeCredentialConnection: () => ({
     mutate: mocks.disconnect,
     isPending: false,
   }),
@@ -64,7 +64,7 @@ describe("AccountConnectionsPage", () => {
     await user.click(screen.getByRole("menuitem", { name: "Disconnect" }));
 
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "Background executions you start will no longer be able to use this connection.",
+      "Agent Runtime runs you start will no longer be able to use this connection.",
     );
     expect(mocks.disconnect).not.toHaveBeenCalled();
 

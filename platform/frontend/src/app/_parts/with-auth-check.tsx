@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/loading";
 import { authQueryKeys, useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
+import { AuthSurfaceFrame } from "./auth-surface-frame";
 
 type ErrorReportingUser = Parameters<
   typeof import("@sentry/nextjs").setUser
@@ -175,9 +176,15 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   ]);
 
   // Auth surfaces are their own layout with no shell behind them, so a single
-  // centred indicator is still the right call while the session resolves.
+  // centred indicator is still the right call while the session resolves. It
+  // draws inside the same frame the shell's auth branch will render, so the
+  // route's own loading indicator takes over at exactly this position.
   if (inProgress && (isAuthPage || isSpecialAuth)) {
-    return <LoadingState label="Loading…" variant="viewport" />;
+    return (
+      <AuthSurfaceFrame>
+        <LoadingState label="Loading…" variant="fill" />
+      </AuthSurfaceFrame>
+    );
   }
 
   // Everywhere else, an unresolved session means we do not yet know whether
@@ -195,7 +202,11 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     // Special auth pages are always rendered (handles both 2FA verification and setup)
     return <>{children}</>;
   } else if (isAuthPage && isLoggedIn) {
-    return <LoadingState label="Redirecting…" variant="viewport" />;
+    return (
+      <AuthSurfaceFrame>
+        <LoadingState label="Redirecting…" variant="fill" />
+      </AuthSurfaceFrame>
+    );
   } else if (isRecordingRender) {
     // The offline video renderer drives a browser that holds no session, so
     // this page cannot sit behind the gate. It is safe outside it because it

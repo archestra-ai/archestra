@@ -10,6 +10,7 @@ import {
 import db, { schema } from "@/database";
 import type { ConversationContentKey } from "@/types/conversation";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
+import { uuidv7 } from "@/utils/uuid";
 
 type ConversationAttachment =
   typeof schema.conversationAttachmentsTable.$inferSelect;
@@ -58,11 +59,16 @@ class ConversationAttachmentModel {
     >,
     conversationKey?: AttachmentKey,
   ): Promise<ConversationAttachment> {
+    // Filename lookup promises latest-wins and breaks createdAt ties by id.
+    // A monotonic v7 id preserves insertion order when rapid writes share the
+    // same millisecond; a random v4 id makes that selection nondeterministic.
+    const id = uuidv7();
     const [result] = await db
       .insert(schema.conversationAttachmentsTable)
       .values(
         conversationKey
           ? {
+              id,
               ...params,
               lockedChat: true,
               originalName: encryptLockedChatText(params.originalName, {
@@ -80,7 +86,7 @@ class ConversationAttachmentModel {
                   })
                 : params.textPreview,
             }
-          : params,
+          : { id, ...params },
       )
       .returning();
     // Hand the caller back what it stored, not the ciphertext it now holds.

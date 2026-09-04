@@ -479,6 +479,17 @@ class AgentRuntimeManager {
     return { name: pod.metadata.name, phase: pod.status?.phase ?? "Unknown" };
   }
 
+  /** Point-in-time startup state used to seed a newly loaded run page. */
+  async getStartupProgress(
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope">,
+  ): Promise<AgentRuntimeStartupProgress & { resourceName: string | null }> {
+    const pod = await this.findPod(session);
+    return {
+      ...describeAgentRuntimeStartupProgress(pod),
+      resourceName: pod?.metadata?.name ?? null,
+    };
+  }
+
   /**
    * The whole pod object behind `findPodPhase`.
    *
@@ -486,7 +497,9 @@ class AgentRuntimeManager {
    * has room, the image will not pull — is the only thing worth telling
    * someone watching a run start.
    */
-  async findPod(session: AgentRunRecord): Promise<k8s.V1Pod | null> {
+  async findPod(
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope">,
+  ): Promise<k8s.V1Pod | null> {
     const clients = this.requireClients();
     const pods = await clients.coreApi.listNamespacedPod({
       namespace: session.runtimeScope,

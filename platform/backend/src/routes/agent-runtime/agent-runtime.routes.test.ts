@@ -105,6 +105,12 @@ describe("Agent Runtime routes", () => {
     );
     config.agentRuntime.enabled = true;
     Reflect.set(agentRuntimeManager, "clusterReachable", true);
+    vi.spyOn(agentRuntimeManager, "getStartupProgress").mockResolvedValue({
+      phase: "scheduling",
+      message: "Waiting for a node with room for this run",
+      detail: "No eligible node is currently available",
+      resourceName: "agent-run-example",
+    });
   });
 
   afterEach(async () => {
@@ -811,7 +817,19 @@ describe("Agent Runtime routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(
-      expect.objectContaining({ taskId: task.id, viewerRole: "owner" }),
+      expect.objectContaining({
+        taskId: task.id,
+        viewerRole: "owner",
+        startupProgress: {
+          phase: "scheduling",
+          message: "Waiting for a node with room for this run",
+          detail: "No eligible node is currently available",
+          resourceName: "agent-run-example",
+        },
+      }),
+    );
+    expect(agentRuntimeManager.getStartupProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: task.id }),
     );
   });
 
@@ -858,8 +876,10 @@ describe("Agent Runtime routes", () => {
         taskId: task.id,
         projectId: project.id,
         viewerRole: "shared",
+        startupProgress: null,
       }),
     );
+    expect(agentRuntimeManager.getStartupProgress).not.toHaveBeenCalled();
   });
 
   test("opens an organization-shared run read-only for a colleague and 404s without a share", async ({

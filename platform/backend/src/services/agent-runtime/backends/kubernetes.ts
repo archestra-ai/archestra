@@ -5,6 +5,7 @@ import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import type {
   AgentRunInput,
   AgentRunRecord,
+  AgentRunStartupProgress,
   AgentRuntimeSteerMode,
 } from "@/types";
 import { ApiError } from "@/types";
@@ -73,6 +74,12 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
       }
       await delay(POD_START_POLL_MS, params.abortSignal);
     }
+  }
+
+  async getStartupProgress(
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope">,
+  ): Promise<AgentRunStartupProgress> {
+    return agentRuntimeManager.getStartupProgress(session);
   }
 
   async streamOutput(params: {

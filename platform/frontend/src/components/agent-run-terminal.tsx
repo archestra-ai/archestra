@@ -12,6 +12,8 @@ import {
   type ExecSessionTransport,
   ExecTerminal,
 } from "@/components/exec/exec-terminal";
+import type { ExecSessionProgress } from "@/components/exec/exec-terminal-progress";
+import { useMyAgentRun } from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
 
 /** Shared tmux terminal for Agent detail and Chat run sessions. */
@@ -34,6 +36,8 @@ export function AgentRunTerminal({
   onError?: () => void;
   onClosed?: () => void;
 }) {
+  const runQuery = useMyAgentRun(taskId, active);
+  const run = runQuery.data?.taskId === taskId ? runQuery.data : null;
   const transport = useMemo<ExecSessionTransport>(
     () => createAgentRunTransport(taskId),
     [taskId],
@@ -43,11 +47,16 @@ export function AgentRunTerminal({
     <ExecTerminal
       sessionKey={taskId}
       transport={transport}
-      isActive={active}
+      // The metadata snapshot supplies both the original start time and the
+      // current runtime phase. Opening the WebSocket first would briefly show
+      // a fresh 0:00 counter on every reload before correcting itself.
+      isActive={active && !!run}
       title={title}
       disconnectedLabel="Run finishing…"
       showManualCommand={showManualCommand}
       showDisconnectedStatus={showDisconnectedStatus}
+      initialProgress={run?.startupProgress ?? DEFAULT_STARTUP_PROGRESS}
+      progressStartedAt={parseStartedAt(run?.startedAt)}
       onCommandChange={onCommandChange}
       onError={onError}
       onClosed={onClosed}
@@ -58,15 +67,6 @@ export function AgentRunTerminal({
 export function createAgentRunTransport(taskId: string): ExecSessionTransport {
   return {
     open: (handlers) => {
-      // An Agent attach always has a known first wait. Seed the shared progress
-      // panel immediately so neither run surface flashes the generic
-      // "Connecting..." placeholder before the backend reports a finer phase.
-      handlers.onProgress?.({
-        phase: "queued",
-        message: "Preparing the run environment",
-        detail: null,
-        resourceName: null,
-      });
       const subscriptions = [
         websocketService.subscribe(
           "agent_run_attach_started",
@@ -149,4 +149,19 @@ export function createAgentRunTransport(taskId: string): ExecSessionTransport {
         payload: { runId: taskId, cols, rows },
       }),
   };
+}
+
+// ===================== internals =====================
+
+const DEFAULT_STARTUP_PROGRESS: ExecSessionProgress = {
+  phase: "queued",
+  message: "Preparing the run environment",
+  detail: null,
+  resourceName: null,
+};
+
+function parseStartedAt(startedAt: string | undefined): number | undefined {
+  if (!startedAt) return undefined;
+  const parsed = new Date(startedAt).getTime();
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

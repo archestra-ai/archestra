@@ -18385,6 +18385,12 @@ export type GetMyAgentRunResponses = {
         projectName: string | null;
         projectIcon: string | null;
         viewerRole: 'owner' | 'shared';
+        startupProgress?: {
+            phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
+            message: string;
+            detail: string | null;
+            resourceName: string | null;
+        } | null;
     };
 };
 
@@ -88884,6 +88890,12 @@ export type GetProjectRunsResponses = {
         projectName: string | null;
         projectIcon: string | null;
         viewerRole: 'owner' | 'shared';
+        startupProgress?: {
+            phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
+            message: string;
+            detail: string | null;
+            resourceName: string | null;
+        } | null;
     }>;
 };
 

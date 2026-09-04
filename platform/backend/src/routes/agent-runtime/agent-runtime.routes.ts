@@ -11,6 +11,7 @@ import {
   userHasPermission,
 } from "@/auth";
 import config from "@/config";
+import logger from "@/logging";
 import {
   A2ATaskModel,
   AgentModel,
@@ -37,7 +38,9 @@ import {
 } from "@/services/agent-runtime/start-task";
 import {
   type Agent,
+  type AgentRunSession,
   AgentRunShareVisibilitySchema,
+  type AgentRunStartupProgress,
   ApiError,
   constructResponseSchema,
   GetAgentRunResponseSchema,
@@ -389,7 +392,11 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
       if (owned) {
-        return reply.send({ ...owned, viewerRole: "owner" as const });
+        return reply.send({
+          ...owned,
+          viewerRole: "owner" as const,
+          startupProgress: await inspectStartupProgress(owned),
+        });
       }
 
       // Non-owners may still open the run read-only when a share grants
@@ -415,7 +422,11 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
             })
           : false;
         if (explicitlyShared || sharedThroughProject) {
-          return reply.send({ ...shared, viewerRole: "shared" as const });
+          return reply.send({
+            ...shared,
+            viewerRole: "shared" as const,
+            startupProgress: null,
+          });
         }
       }
 
@@ -717,6 +728,26 @@ type OwnedRunRequest = {
   user: { id: string };
   organizationId: string;
 };
+
+async function inspectStartupProgress(
+  run: AgentRunSession,
+): Promise<AgentRunStartupProgress | null> {
+  if (run.endedAt || run.lastModelActivityAt) return null;
+
+  try {
+    return await resolveAgentRuntimeBackendDriver(
+      run.backend,
+    ).getStartupProgress(run);
+  } catch (error) {
+    // Run metadata remains useful even when the runtime control plane cannot
+    // be inspected. The live attach path may still recover independently.
+    logger.warn(
+      { error, taskId: run.taskId },
+      "Could not inspect Agent Runtime startup progress",
+    );
+    return null;
+  }
+}
 
 async function requireOwnedRun(request: OwnedRunRequest) {
   const run = await AgentRunModel.findForActorByTaskId({

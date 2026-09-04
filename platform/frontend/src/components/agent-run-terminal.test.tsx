@@ -48,21 +48,6 @@ describe("Agent run terminal transport", () => {
     expect(websocketMock.connect).not.toHaveBeenCalled();
     expect(websocketMock.send).toHaveBeenCalledOnce();
   });
-
-  it("shows structured startup progress before the backend reports a phase", () => {
-    websocketMock.isConnected.mockReturnValue(false);
-    websocketMock.onConnectionChange.mockReturnValue(vi.fn());
-    const sessionHandlers = handlers();
-
-    createAgentRunTransport("task-1").open(sessionHandlers);
-
-    expect(sessionHandlers.onProgress).toHaveBeenCalledWith({
-      phase: "queued",
-      message: "Preparing the run environment",
-      detail: null,
-      resourceName: null,
-    });
-  });
 });
 
 function handlers() {

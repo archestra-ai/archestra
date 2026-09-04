@@ -1,3 +1,4 @@
+import { AGENT_RUN_ATTACH_PHASES } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -248,9 +249,22 @@ export const SelectAgentRunSessionSchema = SelectAgentRunSchema.extend({
  */
 export const AgentRunViewerRoleSchema = z.enum(["owner", "shared"]);
 
+/** A point-in-time view of what an active runtime is waiting on. */
+export const AgentRunStartupProgressSchema = z.object({
+  phase: z.enum(AGENT_RUN_ATTACH_PHASES),
+  message: z.string(),
+  detail: z.string().nullable(),
+  resourceName: z.string().nullable(),
+});
+export type AgentRunStartupProgress = z.infer<
+  typeof AgentRunStartupProgressSchema
+>;
+
 /** A single run session plus the viewer's relationship to it. */
 export const GetAgentRunResponseSchema = SelectAgentRunSessionSchema.extend({
   viewerRole: AgentRunViewerRoleSchema,
+  /** Present on the detail endpoint while an owned run is starting. */
+  startupProgress: AgentRunStartupProgressSchema.nullable().optional(),
 });
 
 export const UpdateAgentRunSchema = createUpdateSchema(schema.agentRunsTable)

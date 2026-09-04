@@ -4,6 +4,7 @@ import type WebSocket from "ws";
 import type {
   AgentRunInput,
   AgentRunRecord,
+  AgentRunStartupProgress,
   AgentRuntimeBackend,
   AgentRuntimeResources,
   AgentRuntimeSteerMode,
@@ -93,6 +94,11 @@ export interface AgentRuntimeBackendDriver {
     session: AgentRunRecord;
     abortSignal?: AbortSignal;
   }): Promise<void>;
+
+  /** Inspect the runtime's current startup wait without opening a terminal. */
+  getStartupProgress(
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope">,
+  ): Promise<AgentRunStartupProgress>;
 
   /** Follow the session's output. Resolves when the stream ends. */
   streamOutput(params: {

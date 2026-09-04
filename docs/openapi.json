@@ -64598,6 +64598,40 @@
                         "owner",
                         "shared"
                       ]
+                    },
+                    "startupProgress": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "scheduling",
+                            "pulling",
+                            "starting",
+                            "attaching"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "detail": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "resourceName": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "phase",
+                        "message",
+                        "detail",
+                        "resourceName"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -345870,6 +345904,40 @@
                           "owner",
                           "shared"
                         ]
+                      },
+                      "startupProgress": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "scheduling",
+                              "pulling",
+                              "starting",
+                              "attaching"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "resourceName": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "phase",
+                          "message",
+                          "detail",
+                          "resourceName"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [

@@ -60,7 +60,7 @@ interface OrganizationDefaultEngineTarget {
   defaultEnvironmentNamespace: string | null;
 }
 
-const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.8";
+const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.9";
 const ENGINE_CONTAINER = "dagger-engine";
 // Engine resources (cpu/memory requests, memory limit, buildkit cache PVC size)
 // come from config so small/local clusters can override the defaults. No CPU

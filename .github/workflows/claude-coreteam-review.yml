@@ -21,6 +21,7 @@ jobs:
   determine-token:
     name: Determine Token
     if: |
+      github.repository == 'archestra-ai/archestra' &&
       !contains(github.event.pull_request.title, '[WIP]') &&
       !github.event.pull_request.draft
     runs-on: ubuntu-latest

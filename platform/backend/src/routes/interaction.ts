@@ -33,7 +33,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInteractions,
         description:
-          "Get interactions in the active organization with pagination and sorting. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.",
+          "Get interactions in the active organization with pagination and sorting. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.",
         tags: ["Interaction"],
         querystring: z
           .object({
@@ -160,7 +160,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInteractionSummaries,
         description:
-          "Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.",
+          "Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.",
         tags: ["Interaction"],
         querystring: z
           .object({
@@ -237,7 +237,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInteractionSessions,
         description:
-          "Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.",
+          "Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.",
         tags: ["Interaction"],
         querystring: z
           .object({
@@ -424,7 +424,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInteraction,
         description:
-          "Get an interaction in the active organization by ID. `log:read` returns only a row attributed to the caller; `log:admin` can return any row in the organization. Agent permissions do not change log visibility.",
+          "Get an interaction in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.",
         tags: ["Interaction"],
         params: z.object({
           interactionId: UuidIdSchema,

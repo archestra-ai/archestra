@@ -136,11 +136,11 @@ describe("enrichOpenApiWithRbac", () => {
 
     expect(operation["x-required-permissions"]).toEqual({
       kind: "static",
-      note: expect.stringContaining("`log:admin` widens"),
+      note: expect.stringContaining("`log:admin` includes"),
       permissions: ["log:read"],
     });
     expect(operation.description).toContain(
-      "Agent permissions do not change log visibility.",
+      "`log:admin` includes every row in the active organization.",
     );
   });
 
@@ -168,11 +168,11 @@ describe("enrichOpenApiWithRbac", () => {
 
     expect(operation["x-required-permissions"]).toEqual({
       kind: "static",
-      note: expect.stringContaining("Without `member:read`"),
+      note: expect.stringContaining("`member:read` includes"),
       permissions: ["llmCost:read"],
     });
     expect(operation.description).toContain(
-      "With it, the response includes identified users across the active organization.",
+      "`member:read` includes identified users across the active organization.",
     );
   });
 

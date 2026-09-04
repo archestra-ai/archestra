@@ -18,9 +18,7 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 - **Resource**: The type of object or feature being accessed (e.g., `agent`, `mcpGateway`, `llmProxy`)
 - **Action**: The operation being performed (`create`, `read`, `update`, `delete`, `admin`)
 
-For example, `agent:create` allows creating new agents, `mcpGateway:update` allows updating MCP gateways, and `llmProxy:read` allows viewing the organization's LLM Proxy and its connection details. Cost analytics and logs use separate permissions.
-
-Two resources distinguish an own-records view from an organization-wide one: `log:read` shows only the caller's own LLM proxy and MCP tool-call records in the active organization, while `log:admin` shows every record there, including unattributed traffic. Agent and MCP-server permissions do not change this log visibility. `auditLog:read` and `auditLog:admin` split the audit trail between the caller's actions and the organization-wide trail. This is what makes a deliberately-restricted admin role practical — its holders keep full visibility into their own activity without seeing anyone else's.
+For example, `agent:create` allows creating agents, `mcpGateway:update` allows updating MCP gateways, and `llmProxy:read` allows viewing the LLM Proxy.
 
 ## Predefined Roles
 
@@ -320,6 +318,22 @@ The following table lists all available permissions that can be assigned to cust
 | `toolPolicy:delete` | Remove tools and security policies |
 
 
+## LLM API Permissions
+
+| API data | Required permissions | Visibility |
+|----------|----------------------|------------|
+| View LLM Proxy configuration | `llmProxy:read` | The active organization's proxy and connection details |
+| Update LLM Proxy configuration | `llmProxy:update` | The active organization's proxy configuration |
+| Personal usage (`/api/statistics/me*`) | None | The caller's usage |
+| Cost totals, teams, agents, models, and savings | `llmCost:read` | All matching usage in the active organization |
+| User cost statistics (`/api/statistics/users`) | `llmCost:read` | The caller's usage |
+| User cost statistics for all users | `llmCost:read` and `member:read` | Identified users in the active organization |
+| App cost statistics | `llmCost:read` and `app:read` | Apps visible to the caller; `app:admin` includes all apps |
+| Skill cost statistics | `llmCost:read` and `skill:read` | Skills visible to the caller; `skill:admin` includes all skills |
+| LLM and MCP logs for the caller | `log:read` | Records attributed to the caller |
+| All LLM and MCP logs | `log:read` and `log:admin` | All records in the active organization, including unattributed traffic |
+
+
 ## Scoped Resources
 
 Some resources use a two-step authorization model:
@@ -361,15 +375,6 @@ Examples:
 - `agent:delete` alone does **not** allow deleting every agent
 - `agent:team-admin` allows managing team-scoped agents only in teams the user belongs to
 - `agent:admin` bypasses those scope restrictions
-
-### LLM Proxy
-
-Each organization has one LLM Proxy. It is not personal, team-scoped, or controlled by agent permissions:
-
-- `llmProxy:read` lets a caller view the proxy and its connection details
-- `llmProxy:update` lets a caller change proxy configuration
-- Proxy request logs use the separate `log` resource
-- Organization-wide cost analytics use the separate `llmCost` resource
 
 ### Visibility-Scoped Credentials
 
@@ -451,7 +456,7 @@ In **Auto** tool mode, each caller can only discover and run tools from MCP serv
 
 **Associated Artifacts:**
 
-Policies and tool assignments follow the access rules of their associated resources. Interaction and MCP tool-call logs are different: `log:read` shows the caller's own attributed records and `log:admin` shows every record in the active organization, regardless of agent or MCP-server access.
+Policies and tool assignments follow their associated resources. LLM and MCP logs use the permissions in [LLM API Permissions](#llm-api-permissions).
 
 ### Regular Review
 

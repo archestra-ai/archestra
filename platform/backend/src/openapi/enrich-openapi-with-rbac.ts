@@ -300,33 +300,33 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
 
 const STATIC_ROUTE_PERMISSION_NOTES = {
   [RouteId.GetInteractions]:
-    "`log:read` returns rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent permissions do not change log visibility.",
+    "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetInteractionSummaries]:
-    "`log:read` returns rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent permissions do not change log visibility.",
+    "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetInteractionSessions]:
-    "`log:read` returns rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent permissions do not change log visibility.",
+    "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetUniqueExternalAgentIds]:
-    "`log:read` returns identifiers from rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent permissions do not change log visibility.",
+    "`log:read` returns identifiers from rows attributed to the caller. `log:admin` includes identifiers from every row in the active organization.",
   [RouteId.GetUniqueUserIds]:
-    "`log:read` returns only the caller's identity; `log:admin` widens the result to every represented user in the active organization.",
+    "`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
   [RouteId.GetInteraction]:
-    "`log:read` permits a row attributed to the caller; `log:admin` permits any row in the active organization. Agent permissions do not change log visibility.",
+    "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
   [RouteId.GetMcpToolCalls]:
-    "`log:read` returns rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent and MCP-server permissions do not change log visibility.",
+    "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
   [RouteId.GetMcpToolCall]:
-    "`log:read` permits a row attributed to the caller; `log:admin` permits any row in the active organization. Agent and MCP-server permissions do not change log visibility.",
+    "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
   [RouteId.GetTeamStatistics]:
-    "Returns aggregate usage for the active organization; agent administration permission is not required.",
+    "Returns aggregate team usage for the active organization.",
   [RouteId.GetAgentStatistics]:
-    "Returns aggregate usage for every agent in the active organization; agent administration permission is not required.",
+    "Returns aggregate usage for every agent in the active organization.",
   [RouteId.GetModelStatistics]:
-    "Returns aggregate usage for the active organization; agent administration permission is not required.",
+    "Returns aggregate model usage for the active organization.",
   [RouteId.GetOverviewStatistics]:
-    "Returns aggregate usage for the active organization; agent administration permission is not required.",
+    "Returns aggregate usage for the active organization.",
   [RouteId.GetCostSavingsStatistics]:
-    "Returns aggregate usage for the active organization; agent administration permission is not required.",
+    "Returns aggregate cost savings for the active organization.",
   [RouteId.GetUserStatistics]:
-    "Without `member:read`, the response is narrowed to the caller's own usage. With it, the response includes identified users across the active organization.",
+    "Returns the caller's usage. `member:read` includes identified users across the active organization.",
   [RouteId.GetAppStatistics]:
     "App details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.",
   [RouteId.GetSkillStatistics]:

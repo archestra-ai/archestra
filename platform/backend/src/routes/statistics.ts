@@ -76,7 +76,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetTeamStatistics,
         description:
-          "Get organization-wide team usage statistics. The result includes every team in the active organization; agent administration permission is not required.",
+          "Get usage statistics for every team in the active organization.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(z.array(TeamStatisticsSchema)),
@@ -98,7 +98,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentStatistics,
         description:
-          "Get organization-wide agent usage statistics. The result includes every agent in the active organization; agent administration permission is not required.",
+          "Get usage statistics for every agent in the active organization.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(z.array(AgentStatisticsSchema)),
@@ -120,7 +120,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetModelStatistics,
         description:
-          "Get organization-wide model usage statistics. The result includes every interaction in the active organization; agent administration permission is not required.",
+          "Get model usage statistics for every interaction in the active organization.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(z.array(ModelStatisticsSchema)),

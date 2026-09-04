@@ -21,7 +21,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMcpToolCalls,
         description:
-          "Get MCP tool calls in the active organization with cursor pagination. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent and MCP-server permissions do not change log visibility.",
+          "Get MCP tool calls in the active organization with cursor pagination. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.",
         tags: ["MCP Tool Call"],
         querystring: z
           .object({
@@ -88,7 +88,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMcpToolCall,
         description:
-          "Get an MCP tool call in the active organization by ID. `log:read` returns only a row attributed to the caller; `log:admin` can return any row in the organization. Agent and MCP-server permissions do not change log visibility.",
+          "Get an MCP tool call in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.",
         tags: ["MCP Tool Call"],
         params: z.object({
           mcpToolCallId: UuidIdSchema,

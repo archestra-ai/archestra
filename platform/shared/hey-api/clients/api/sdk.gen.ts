@@ -4183,7 +4183,7 @@ export const renewIncomingEmailSubscription = <ThrowOnError extends boolean = fa
 export const deleteIncomingEmailSubscription = <ThrowOnError extends boolean = false>(options?: Options<DeleteIncomingEmailSubscriptionData, ThrowOnError>) => (options?.client ?? client).delete<DeleteIncomingEmailSubscriptionResponses, DeleteIncomingEmailSubscriptionErrors, ThrowOnError>({ url: '/api/incoming-email/subscription', ...options });
 
 /**
- * Get interactions in the active organization with pagination and sorting. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.
+ * Get interactions in the active organization with pagination and sorting. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.
  *
  * Authentication:
  *
@@ -4193,12 +4193,12 @@ export const deleteIncomingEmailSubscription = <ThrowOnError extends boolean = f
  *
  * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  *
- * `log:read` returns rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent permissions do not change log visibility.
+ * `log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.
  */
 export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionsResponses, GetInteractionsErrors, ThrowOnError>({ url: '/api/interactions', ...options });
 
 /**
- * Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.
+ * Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.
  *
  * Authentication:
  *
@@ -4208,12 +4208,12 @@ export const getInteractions = <ThrowOnError extends boolean = false>(options?: 
  *
  * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  *
- * `log:read` returns rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent permissions do not change log visibility.
+ * `log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.
  */
 export const getInteractionSummaries = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionSummariesData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionSummariesResponses, GetInteractionSummariesErrors, ThrowOnError>({ url: '/api/interactions/summaries', ...options });
 
 /**
- * Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.
+ * Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.
  *
  * Authentication:
  *
@@ -4223,7 +4223,7 @@ export const getInteractionSummaries = <ThrowOnError extends boolean = false>(op
  *
  * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  *
- * `log:read` returns rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent permissions do not change log visibility.
+ * `log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.
  */
 export const getInteractionSessions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionSessionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionSessionsResponses, GetInteractionSessionsErrors, ThrowOnError>({ url: '/api/interactions/sessions', ...options });
 
@@ -4238,7 +4238,7 @@ export const getInteractionSessions = <ThrowOnError extends boolean = false>(opt
  *
  * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  *
- * `log:read` returns identifiers from rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent permissions do not change log visibility.
+ * `log:read` returns identifiers from rows attributed to the caller. `log:admin` includes identifiers from every row in the active organization.
  */
 export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueExternalAgentIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueExternalAgentIdsResponses, GetUniqueExternalAgentIdsErrors, ThrowOnError>({ url: '/api/interactions/external-agent-ids', ...options });
 
@@ -4253,12 +4253,12 @@ export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(
  *
  * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  *
- * `log:read` returns only the caller's identity; `log:admin` widens the result to every represented user in the active organization.
+ * `log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.
  */
 export const getUniqueUserIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueUserIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueUserIdsResponses, GetUniqueUserIdsErrors, ThrowOnError>({ url: '/api/interactions/user-ids', ...options });
 
 /**
- * Get an interaction in the active organization by ID. `log:read` returns only a row attributed to the caller; `log:admin` can return any row in the organization. Agent permissions do not change log visibility.
+ * Get an interaction in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.
  *
  * Authentication:
  *
@@ -4268,7 +4268,7 @@ export const getUniqueUserIds = <ThrowOnError extends boolean = false>(options?:
  *
  * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  *
- * `log:read` permits a row attributed to the caller; `log:admin` permits any row in the active organization. Agent permissions do not change log visibility.
+ * `log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.
  */
 export const getInteraction = <ThrowOnError extends boolean = false>(options: Options<GetInteractionData, ThrowOnError>) => (options.client ?? client).get<GetInteractionResponses, GetInteractionErrors, ThrowOnError>({ url: '/api/interactions/{interactionId}', ...options });
 
@@ -6536,7 +6536,7 @@ export const hardResetMcpServer = <ThrowOnError extends boolean = false>(options
 export const reloadMcpServerTools = <ThrowOnError extends boolean = false>(options: Options<ReloadMcpServerToolsData, ThrowOnError>) => (options.client ?? client).post<ReloadMcpServerToolsResponses, ReloadMcpServerToolsErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/reload-tools', ...options });
 
 /**
- * Get MCP tool calls in the active organization with cursor pagination. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent and MCP-server permissions do not change log visibility.
+ * Get MCP tool calls in the active organization with cursor pagination. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.
  *
  * Authentication:
  *
@@ -6546,12 +6546,12 @@ export const reloadMcpServerTools = <ThrowOnError extends boolean = false>(optio
  *
  * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  *
- * `log:read` returns rows attributed to the caller; `log:admin` widens the result to every row in the active organization. Agent and MCP-server permissions do not change log visibility.
+ * `log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.
  */
 export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: Options<GetMcpToolCallsData, ThrowOnError>) => (options?.client ?? client).get<GetMcpToolCallsResponses, GetMcpToolCallsErrors, ThrowOnError>({ url: '/api/mcp-tool-calls', ...options });
 
 /**
- * Get an MCP tool call in the active organization by ID. `log:read` returns only a row attributed to the caller; `log:admin` can return any row in the organization. Agent and MCP-server permissions do not change log visibility.
+ * Get an MCP tool call in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.
  *
  * Authentication:
  *
@@ -6561,7 +6561,7 @@ export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: 
  *
  * `log:read`: View your own LLM proxy and MCP tool call logs in the active organization
  *
- * `log:read` permits a row attributed to the caller; `log:admin` permits any row in the active organization. Agent and MCP-server permissions do not change log visibility.
+ * `log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.
  */
 export const getMcpToolCall = <ThrowOnError extends boolean = false>(options: Options<GetMcpToolCallData, ThrowOnError>) => (options.client ?? client).get<GetMcpToolCallResponses, GetMcpToolCallErrors, ThrowOnError>({ url: '/api/mcp-tool-calls/{mcpToolCallId}', ...options });
 
@@ -9694,7 +9694,7 @@ export const rotateSkillShareLink = <ThrowOnError extends boolean = false>(optio
 export const revokeSkillShareLink = <ThrowOnError extends boolean = false>(options: Options<RevokeSkillShareLinkData, ThrowOnError>) => (options.client ?? client).delete<RevokeSkillShareLinkResponses, RevokeSkillShareLinkErrors, ThrowOnError>({ url: '/api/skill-share-links/{id}', ...options });
 
 /**
- * Get organization-wide team usage statistics. The result includes every team in the active organization; agent administration permission is not required.
+ * Get usage statistics for every team in the active organization.
  *
  * Authentication:
  *
@@ -9704,12 +9704,12 @@ export const revokeSkillShareLink = <ThrowOnError extends boolean = false>(optio
  *
  * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
  *
- * Returns aggregate usage for the active organization; agent administration permission is not required.
+ * Returns aggregate team usage for the active organization.
  */
 export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({ url: '/api/statistics/teams', ...options });
 
 /**
- * Get organization-wide agent usage statistics. The result includes every agent in the active organization; agent administration permission is not required.
+ * Get usage statistics for every agent in the active organization.
  *
  * Authentication:
  *
@@ -9719,12 +9719,12 @@ export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?
  *
  * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
  *
- * Returns aggregate usage for every agent in the active organization; agent administration permission is not required.
+ * Returns aggregate usage for every agent in the active organization.
  */
 export const getAgentStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetAgentStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetAgentStatisticsResponses, GetAgentStatisticsErrors, ThrowOnError>({ url: '/api/statistics/agents', ...options });
 
 /**
- * Get organization-wide model usage statistics. The result includes every interaction in the active organization; agent administration permission is not required.
+ * Get model usage statistics for every interaction in the active organization.
  *
  * Authentication:
  *
@@ -9734,7 +9734,7 @@ export const getAgentStatistics = <ThrowOnError extends boolean = false>(options
  *
  * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
  *
- * Returns aggregate usage for the active organization; agent administration permission is not required.
+ * Returns aggregate model usage for the active organization.
  */
 export const getModelStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetModelStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetModelStatisticsResponses, GetModelStatisticsErrors, ThrowOnError>({ url: '/api/statistics/models', ...options });
 
@@ -9749,7 +9749,7 @@ export const getModelStatistics = <ThrowOnError extends boolean = false>(options
  *
  * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
  *
- * Without `member:read`, the response is narrowed to the caller's own usage. With it, the response includes identified users across the active organization.
+ * Returns the caller's usage. `member:read` includes identified users across the active organization.
  */
 export const getUserStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetUserStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetUserStatisticsResponses, GetUserStatisticsErrors, ThrowOnError>({ url: '/api/statistics/users', ...options });
 
@@ -9822,7 +9822,7 @@ export const getSkillStatistics = <ThrowOnError extends boolean = false>(options
  *
  * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
  *
- * Returns aggregate usage for the active organization; agent administration permission is not required.
+ * Returns aggregate usage for the active organization.
  */
 export const getOverviewStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetOverviewStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetOverviewStatisticsResponses, GetOverviewStatisticsErrors, ThrowOnError>({ url: '/api/statistics/overview', ...options });
 
@@ -9837,7 +9837,7 @@ export const getOverviewStatistics = <ThrowOnError extends boolean = false>(opti
  *
  * `llmCost:read`: View organization-wide LLM usage cost statistics and analytics
  *
- * Returns aggregate usage for the active organization; agent administration permission is not required.
+ * Returns aggregate cost savings for the active organization.
  */
 export const getCostSavingsStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetCostSavingsStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetCostSavingsStatisticsResponses, GetCostSavingsStatisticsErrors, ThrowOnError>({ url: '/api/statistics/cost-savings', ...options });
 

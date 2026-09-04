@@ -1259,7 +1259,7 @@ async fn resolve_tool_ids(client: &EvalClient, short_names: &[String]) -> Result
     let mut resolved = HashMap::new();
     for short_name in short_names {
         let exact = format!("archestra__{short_name}");
-        let tools = client.list_tools(Some(&exact)).await?;
+        let tools = client.list_tools().await?;
         let matches: Vec<_> = tools
             .into_iter()
             .filter(|t| t.get("name").and_then(|v| v.as_str()) == Some(&exact))

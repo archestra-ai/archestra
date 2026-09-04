@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-08-31
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,6 +35,16 @@ An admin picks each gateway tool explicitly. Each assignment can be pinned to a 
 Use explicit assignment when different clients need different subsets of the same installed MCP server, or when a gateway should use a shared service-account connection for some tools and caller-specific credentials for others.
 
 A gateway shares the agent **Auto** / **Custom** **Tools & Knowledge Sources** control. Explicit assignment above is **Custom** mode; **Auto** mode lets `search_tools`/`run_tool` reach every tool the signed-in user can access (see [Load Tools When Needed](#load-tools-when-needed)). A gateway can also be assigned [knowledge sources](/docs/platform-knowledge#assigning-to-an-agent) under the same setting, giving it a `query_knowledge_sources` tool.
+
+## Subagents
+
+A gateway can offer your agents to its clients as delegation tools. A client calls `agent__<name>` with a message, the agent does the work, and the answer comes back like any other tool result.
+
+Delegation shares the **Auto** / **Custom** setting that tools use, under **Subagents** on the gateway's **Tools & Knowledge** step. **Custom** offers only the agents you assign. **Auto** offers every agent the calling user can access — a new agent included automatically — minus a disabled list.
+
+**Auto** needs a signed-in user. A request authenticated with an organization or team token falls back to the assigned list instead.
+
+Both modes stay inside the gateway's [environment](/docs/platform-environments) — only same-environment agents are offered. See [Delegation](/docs/platform-agents#delegation) for how an agent delegates.
 
 ## Authentication
 

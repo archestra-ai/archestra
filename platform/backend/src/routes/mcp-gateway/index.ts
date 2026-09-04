@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { EXECUTION_ID_HEADER } from "@archestra/shared";
+import { RUN_ID_HEADER } from "@archestra/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -7,9 +7,15 @@ import { z } from "zod";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, McpToolCallModel } from "@/models";
+import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
-import { UuidOrSlugSchema } from "@/types";
+import {
+  AgentRunAttentionStateSchema,
+  type AgentRunRecord,
+  ApiError,
+  constructResponseSchema,
+  UuidOrSlugSchema,
+} from "@/types";
 import { getPublicRequestOrigin } from "../request-origin";
 import {
   deriveStatePrincipal,
@@ -47,6 +53,7 @@ import {
   deriveAuthMethod,
   describeGatewayAuthFailure,
   ensureRequestSocketDestroySoon,
+  extractBearerToken,
   extractPassthroughHeaders,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
@@ -105,16 +112,10 @@ async function logHandshake(params: {
   method: "initialize" | typeof SERVER_DISCOVER_METHOD;
   revision: McpProtocolRevision;
   tokenAuthContext: TokenAuthContext | undefined;
-  executionId?: string;
+  runId?: string;
 }): Promise<void> {
-  const {
-    fastify,
-    profileId,
-    method,
-    revision,
-    tokenAuthContext,
-    executionId,
-  } = params;
+  const { fastify, profileId, method, revision, tokenAuthContext, runId } =
+    params;
 
   try {
     await McpToolCallModel.create({
@@ -129,7 +130,7 @@ async function logHandshake(params: {
         // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
       }) as any,
       userId: tokenAuthContext?.userId ?? null,
-      executionId: executionId ?? null,
+      runId: runId ?? null,
       authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
     });
     fastify.log.trace({ profileId, method }, "Saved handshake request");
@@ -157,7 +158,7 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
-  const executionId = readHeader(request, EXECUTION_ID_HEADER);
+  const runId = readHeader(request, RUN_ID_HEADER);
 
   // Read from the raw body: the SDK's request schemas drop unknown params, so
   // these are gone by the time a request handler runs.
@@ -192,7 +193,7 @@ async function handleMcpPostRequest(
     const { server } = await createAgentServer({
       agentId: profileId,
       tokenAuth: tokenAuthContext,
-      executionId,
+      runId,
       mrtr: {
         // Only a 2026-07-28 client can act on an InputRequiredResult. A legacy
         // client keeps the in-band elicitation it has always used.
@@ -254,7 +255,7 @@ async function handleMcpPostRequest(
         method: "initialize",
         revision,
         tokenAuthContext,
-        executionId,
+        runId,
       });
     }
 
@@ -364,6 +365,56 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         }),
       };
+    },
+  );
+
+  // Native Agent Runtime clients use their existing MCP gateway credential to
+  // publish a non-lifecycle attention signal. This stays separate from A2A
+  // task state: a CLI waiting at its prompt is still a live, completable run.
+  fastify.post(
+    `${endpoint}/:profileId/runtime-status`,
+    {
+      schema: {
+        operationId: "reportAgentRuntimeStatus",
+        tags: ["MCP Gateway"],
+        params: z.object({ profileId: UuidOrSlugSchema }),
+        body: z.object({
+          taskId: z.string().uuid(),
+          attentionState: z.union([AgentRunAttentionStateSchema, z.null()]),
+        }),
+        response: constructResponseSchema(z.object({ updated: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const token = extractBearerToken(request);
+      const profileId = await AgentModel.resolveIdFromIdOrSlug(
+        request.params.profileId,
+      );
+      if (!profileId || !token) {
+        throw new ApiError(401, "Unauthorized");
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      if (!tokenAuth) {
+        throw new ApiError(401, "Unauthorized");
+      }
+
+      const run = await AgentRunModel.findByTaskId(request.body.taskId);
+      if (
+        !run ||
+        run.agentId !== profileId ||
+        !runtimeTokenMatchesRun({ run, tokenAuth })
+      ) {
+        // Do not disclose another actor's task to a token that merely reaches
+        // the same Agent.
+        throw new ApiError(404, "Run not found");
+      }
+
+      const updated = await AgentRunModel.updateAttentionState({
+        taskId: request.body.taskId,
+        attentionState: request.body.attentionState,
+      });
+      return reply.send({ updated });
     },
   );
 
@@ -644,7 +695,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId: tokenAuth.organizationId,
             ...(tokenAuth.userId && { userId: tokenAuth.userId }),
           },
-          executionId: readHeader(request, EXECUTION_ID_HEADER),
+          runId: readHeader(request, RUN_ID_HEADER),
         });
         return {
           jsonrpc: "2.0",
@@ -657,7 +708,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const executionId = readHeader(request, EXECUTION_ID_HEADER);
+      const runId = readHeader(request, RUN_ID_HEADER);
       const tokenAuthContext: TokenAuthContext = {
         tokenId: tokenAuth.tokenId,
         teamId: tokenAuth.teamId,
@@ -667,7 +718,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
-        ...(executionId && { executionId }),
+        ...(runId && { runId }),
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist
@@ -702,6 +753,24 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 function readHeader(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function runtimeTokenMatchesRun(params: {
+  run: Pick<AgentRunRecord, "actorId" | "actorKind" | "organizationId">;
+  tokenAuth: TokenAuthContext;
+}): boolean {
+  if (params.tokenAuth.organizationId !== params.run.organizationId) {
+    return false;
+  }
+  switch (params.run.actorKind) {
+    case "user":
+      return params.tokenAuth.userId === params.run.actorId;
+    case "team":
+      return params.tokenAuth.teamId === params.run.actorId;
+    case "organization":
+    case "system":
+      return params.tokenAuth.isOrganizationToken;
+  }
 }
 
 export default mcpGatewayRoutes;

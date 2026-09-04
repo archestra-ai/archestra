@@ -12970,7 +12970,7 @@ export type GetAgentsResponses = {
             modelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
-            backgroundExecution: {
+            runtime: {
                 image: string;
                 command: Array<string> | null;
                 inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -12999,7 +12999,7 @@ export type GetAgentsResponses = {
                 maxCostUsd?: number | null;
                 idleTimeoutMinutes: number | null;
             } | null;
-            backgroundExecutionSecretId: string | null;
+            runtimeSecretId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13104,7 +13104,7 @@ export type CreateAgentData = {
         modelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
-        backgroundExecution?: {
+        runtime?: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -13268,7 +13268,7 @@ export type CreateAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        backgroundExecution: {
+        runtime: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -13297,7 +13297,7 @@ export type CreateAgentResponses = {
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
-        backgroundExecutionSecretId: string | null;
+        runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13409,6 +13409,10 @@ export type GetAllAgentsData = {
          * Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
          */
         includeTools?: boolean;
+        /**
+         * Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it.
+         */
+        view?: 'chat';
     };
     url: '/api/agents/all';
 };
@@ -13505,7 +13509,7 @@ export type GetAllAgentsResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        backgroundExecution: {
+        runtime: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -13534,7 +13538,7 @@ export type GetAllAgentsResponses = {
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
-        backgroundExecutionSecretId: string | null;
+        runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13797,7 +13801,7 @@ export type GetDefaultMcpGatewayResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        backgroundExecution: {
+        runtime: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -13826,7 +13830,7 @@ export type GetDefaultMcpGatewayResponses = {
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
-        backgroundExecutionSecretId: string | null;
+        runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14081,7 +14085,7 @@ export type ImportAgentResponses = {
             modelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
-            backgroundExecution: {
+            runtime: {
                 image: string;
                 command: Array<string> | null;
                 inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -14110,7 +14114,7 @@ export type ImportAgentResponses = {
                 maxCostUsd?: number | null;
                 idleTimeoutMinutes: number | null;
             } | null;
-            backgroundExecutionSecretId: string | null;
+            runtimeSecretId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14378,7 +14382,7 @@ export type GetAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        backgroundExecution: {
+        runtime: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -14407,7 +14411,7 @@ export type GetAgentResponses = {
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
-        backgroundExecutionSecretId: string | null;
+        runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14503,7 +14507,7 @@ export type UpdateAgentData = {
         modelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
-        backgroundExecution?: {
+        runtime?: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -14669,7 +14673,7 @@ export type UpdateAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        backgroundExecution: {
+        runtime: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -14698,7 +14702,7 @@ export type UpdateAgentResponses = {
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
-        backgroundExecutionSecretId: string | null;
+        runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -15135,7 +15139,7 @@ export type RestoreAgentVersionResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        backgroundExecution: {
+        runtime: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -15164,7 +15168,7 @@ export type RestoreAgentVersionResponses = {
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
-        backgroundExecutionSecretId: string | null;
+        runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -15350,7 +15354,7 @@ export type CloneAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        backgroundExecution: {
+        runtime: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -15379,7 +15383,7 @@ export type CloneAgentResponses = {
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
-        backgroundExecutionSecretId: string | null;
+        runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -16892,7 +16896,7 @@ export type RestoreAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        backgroundExecution: {
+        runtime: {
             image: string;
             command: Array<string> | null;
             inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
@@ -16921,7 +16925,7 @@ export type RestoreAgentResponses = {
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
-        backgroundExecutionSecretId: string | null;
+        runtimeSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -17587,6 +17591,1291 @@ export type UpdateMemberDefaultModelResponses = {
 };
 
 export type UpdateMemberDefaultModelResponse = UpdateMemberDefaultModelResponses[keyof UpdateMemberDefaultModelResponses];
+
+export type GetAgentRuntimePreflightData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/preflight';
+};
+
+export type GetAgentRuntimePreflightErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRuntimePreflightError = GetAgentRuntimePreflightErrors[keyof GetAgentRuntimePreflightErrors];
+
+export type GetAgentRuntimePreflightResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ready: boolean;
+        configured: Array<string>;
+        missing: Array<{
+            key: string;
+            credentialId?: string;
+            label: string;
+            description?: string;
+        }>;
+        misconfigured: Array<{
+            key: string;
+            credentialId?: string;
+            label: string;
+            description?: string;
+        }>;
+    };
+};
+
+export type GetAgentRuntimePreflightResponse = GetAgentRuntimePreflightResponses[keyof GetAgentRuntimePreflightResponses];
+
+export type DeleteAgentRuntimeCredentialData = {
+    body?: never;
+    path: {
+        id: string;
+        key: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/credentials/{key}';
+};
+
+export type DeleteAgentRuntimeCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteAgentRuntimeCredentialError = DeleteAgentRuntimeCredentialErrors[keyof DeleteAgentRuntimeCredentialErrors];
+
+export type DeleteAgentRuntimeCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deleted: boolean;
+    };
+};
+
+export type DeleteAgentRuntimeCredentialResponse = DeleteAgentRuntimeCredentialResponses[keyof DeleteAgentRuntimeCredentialResponses];
+
+export type SetAgentRuntimeCredentialData = {
+    body: {
+        value: string;
+    };
+    path: {
+        id: string;
+        key: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/credentials/{key}';
+};
+
+export type SetAgentRuntimeCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SetAgentRuntimeCredentialError = SetAgentRuntimeCredentialErrors[keyof SetAgentRuntimeCredentialErrors];
+
+export type SetAgentRuntimeCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        configured: true;
+    };
+};
+
+export type SetAgentRuntimeCredentialResponse = SetAgentRuntimeCredentialResponses[keyof SetAgentRuntimeCredentialResponses];
+
+export type GetAgentRunsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runs';
+};
+
+export type GetAgentRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRunsError = GetAgentRunsErrors[keyof GetAgentRunsErrors];
+
+export type GetAgentRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        taskId: string;
+        agentId: string;
+        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorId: string;
+        actorUserId: string | null;
+        title: string;
+        pinnedAt: string | null;
+        projectId: string | null;
+        workloadName: string;
+        backend: 'kubernetes';
+        runtimeScope: string;
+        attentionState: 'input_required' | 'auth_required' | null;
+        virtualApiKeyId: string | null;
+        startedAt: string;
+        endedAt: string | null;
+        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+        statusReason: string | null;
+        stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
+    }>;
+};
+
+export type GetAgentRunsResponse = GetAgentRunsResponses[keyof GetAgentRunsResponses];
+
+export type StartAgentRunData = {
+    body: {
+        message: string;
+        projectId?: string;
+        attachments?: Array<{
+            name: string;
+            contentType: string;
+            contentBase64: string;
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runs';
+};
+
+export type StartAgentRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartAgentRunError = StartAgentRunErrors[keyof StartAgentRunErrors];
+
+export type StartAgentRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        taskId: string;
+        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+        agentId: string;
+        agentName: string;
+        prompt: string;
+        projectId: string | null;
+        createdAt: string;
+    };
+};
+
+export type StartAgentRunResponse = StartAgentRunResponses[keyof StartAgentRunResponses];
+
+export type GetMyAgentRunsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/agent-runs';
+};
+
+export type GetMyAgentRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyAgentRunsError = GetMyAgentRunsErrors[keyof GetMyAgentRunsErrors];
+
+export type GetMyAgentRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            taskId: string;
+            agentId: string;
+            actorKind: 'user' | 'team' | 'organization' | 'system';
+            actorId: string;
+            actorUserId: string | null;
+            title: string;
+            pinnedAt: string | null;
+            projectId: string | null;
+            workloadName: string;
+            backend: 'kubernetes';
+            runtimeScope: string;
+            attentionState: 'input_required' | 'auth_required' | null;
+            virtualApiKeyId: string | null;
+            startedAt: string;
+            endedAt: string | null;
+            state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+            statusReason: string | null;
+            stateChangedAt: string | null;
+            hardDeadlineAt: string;
+            lastModelActivityAt: string | null;
+            prompt: string;
+            agent: {
+                id: string;
+                name: string;
+                icon: string | null;
+            };
+            projectName: string | null;
+            projectIcon: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetMyAgentRunsResponse = GetMyAgentRunsResponses[keyof GetMyAgentRunsResponses];
+
+export type DeleteAgentRunData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}';
+};
+
+export type DeleteAgentRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteAgentRunError = DeleteAgentRunErrors[keyof DeleteAgentRunErrors];
+
+export type DeleteAgentRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deleted: true;
+    };
+};
+
+export type DeleteAgentRunResponse = DeleteAgentRunResponses[keyof DeleteAgentRunResponses];
+
+export type GetMyAgentRunData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}';
+};
+
+export type GetMyAgentRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMyAgentRunError = GetMyAgentRunErrors[keyof GetMyAgentRunErrors];
+
+export type GetMyAgentRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        taskId: string;
+        agentId: string;
+        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorId: string;
+        actorUserId: string | null;
+        title: string;
+        pinnedAt: string | null;
+        projectId: string | null;
+        workloadName: string;
+        backend: 'kubernetes';
+        runtimeScope: string;
+        attentionState: 'input_required' | 'auth_required' | null;
+        virtualApiKeyId: string | null;
+        startedAt: string;
+        endedAt: string | null;
+        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+        statusReason: string | null;
+        stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
+        prompt: string;
+        agent: {
+            id: string;
+            name: string;
+            icon: string | null;
+        };
+        projectName: string | null;
+        projectIcon: string | null;
+        viewerRole: 'owner' | 'shared';
+        startupProgress?: {
+            phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
+            message: string;
+            detail: string | null;
+            resourceName: string | null;
+        } | null;
+    };
+};
+
+export type GetMyAgentRunResponse = GetMyAgentRunResponses[keyof GetMyAgentRunResponses];
+
+export type UpdateAgentRunData = {
+    body: {
+        title?: string;
+        pinnedAt?: string | null;
+        projectId?: string | null;
+    };
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}';
+};
+
+export type UpdateAgentRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentRunError = UpdateAgentRunErrors[keyof UpdateAgentRunErrors];
+
+export type UpdateAgentRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        taskId: string;
+        agentId: string;
+        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorId: string;
+        actorUserId: string | null;
+        title: string;
+        pinnedAt: string | null;
+        projectId: string | null;
+        workloadName: string;
+        backend: 'kubernetes';
+        runtimeScope: string;
+        attentionState: 'input_required' | 'auth_required' | null;
+        virtualApiKeyId: string | null;
+        startedAt: string;
+        endedAt: string | null;
+        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+        statusReason: string | null;
+        stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
+        prompt: string;
+        agent: {
+            id: string;
+            name: string;
+            icon: string | null;
+        };
+        projectName: string | null;
+        projectIcon: string | null;
+    };
+};
+
+export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRunResponses];
+
+export type CancelAgentRunData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/cancel';
+};
+
+export type CancelAgentRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CancelAgentRunError = CancelAgentRunErrors[keyof CancelAgentRunErrors];
+
+export type CancelAgentRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        taskId: string;
+        state: 'TASK_STATE_CANCELED';
+    };
+};
+
+export type CancelAgentRunResponse = CancelAgentRunResponses[keyof CancelAgentRunResponses];
+
+export type UnshareAgentRunData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/share';
+};
+
+export type UnshareAgentRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnshareAgentRunError = UnshareAgentRunErrors[keyof UnshareAgentRunErrors];
+
+export type UnshareAgentRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnshareAgentRunResponse = UnshareAgentRunResponses[keyof UnshareAgentRunResponses];
+
+export type GetAgentRunShareData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/share';
+};
+
+export type GetAgentRunShareErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRunShareError = GetAgentRunShareErrors[keyof GetAgentRunShareErrors];
+
+export type GetAgentRunShareResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        taskId: string;
+        organizationId: string;
+        createdByUserId: string;
+        visibility: 'organization' | 'team' | 'user';
+        createdAt: string;
+        teamIds: Array<string>;
+        userIds: Array<string>;
+    } | null;
+};
+
+export type GetAgentRunShareResponse = GetAgentRunShareResponses[keyof GetAgentRunShareResponses];
+
+export type ShareAgentRunData = {
+    body: {
+        visibility: 'organization' | 'team' | 'user';
+        teamIds?: Array<string>;
+        userIds?: Array<string>;
+    };
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/share';
+};
+
+export type ShareAgentRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ShareAgentRunError = ShareAgentRunErrors[keyof ShareAgentRunErrors];
+
+export type ShareAgentRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        taskId: string;
+        organizationId: string;
+        createdByUserId: string;
+        visibility: 'organization' | 'team' | 'user';
+        createdAt: string;
+        teamIds: Array<string>;
+        userIds: Array<string>;
+    };
+};
+
+export type ShareAgentRunResponse = ShareAgentRunResponses[keyof ShareAgentRunResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -22790,6 +24079,94 @@ export type GetAppVersionsResponses = {
 
 export type GetAppVersionsResponse = GetAppVersionsResponses[keyof GetAppVersionsResponses];
 
+export type GetAppVersionSummariesData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/versions/summaries';
+};
+
+export type GetAppVersionSummariesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppVersionSummariesError = GetAppVersionSummariesErrors[keyof GetAppVersionSummariesErrors];
+
+export type GetAppVersionSummariesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        appId: string | null;
+        version: number;
+        createdAt: string;
+    }>;
+};
+
+export type GetAppVersionSummariesResponse = GetAppVersionSummariesResponses[keyof GetAppVersionSummariesResponses];
+
 export type GetAppVersionData = {
     body?: never;
     path: {
@@ -22916,6 +24293,140 @@ export type GetAppVersionResponses = {
 };
 
 export type GetAppVersionResponse = GetAppVersionResponses[keyof GetAppVersionResponses];
+
+export type RestoreAppVersionData = {
+    body: {
+        baseVersion: number;
+    };
+    path: {
+        appId: string;
+        version: number;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/versions/{version}/restore';
+};
+
+export type RestoreAppVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestoreAppVersionError = RestoreAppVersionErrors[keyof RestoreAppVersionErrors];
+
+export type RestoreAppVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        name: string;
+        slug: string | null;
+        description: string | null;
+        templateId: string | null;
+        mcpServerId: string | null;
+        spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
+            summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
+            features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
+            data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
+            ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
+            tools: Array<string>;
+        } | null;
+        latestVersion: number;
+        enabled: boolean;
+        openInFullscreen: boolean;
+        locked: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
+        icon: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        warnings?: Array<string>;
+    };
+};
+
+export type RestoreAppVersionResponse = RestoreAppVersionResponses[keyof RestoreAppVersionResponses];
 
 export type GetAppToolsData = {
     body?: never;
@@ -23591,7 +25102,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentExecution.shared' | 'agentExecution.unshared' | 'executionCredential.created' | 'executionCredential.updated' | 'executionCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -23695,7 +25206,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentExecution.shared' | 'agentExecution.unshared' | 'executionCredential.created' | 'executionCredential.updated' | 'executionCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -23814,7 +25325,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentExecution.shared' | 'agentExecution.unshared' | 'executionCredential.created' | 'executionCredential.updated' | 'executionCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -35200,9 +36711,9 @@ export type GetConfigResponses = {
             mcpIdleHibernationBetaEnabled: boolean;
             mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
-            agentBackgroundExecution: boolean;
-            agentBackgroundExecutionBaseImage: string;
-            agentBackgroundExecutionBackend: {
+            agentRuntime: boolean;
+            agentRuntimeBaseImage: string;
+            agentRuntimeBackend: {
                 name: 'kubernetes';
                 available: boolean;
                 defaultImage: string;
@@ -41609,7 +43120,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -41710,7 +43221,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -41918,7 +43429,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -42040,7 +43551,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -42162,7 +43673,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -42284,7 +43795,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -42406,7 +43917,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -42507,7 +44018,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -42608,7 +44119,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -43150,7 +44661,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -43725,7 +45236,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -43826,7 +45337,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -43927,7 +45438,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44028,7 +45539,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44129,7 +45640,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44230,7 +45741,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44331,7 +45842,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44430,7 +45941,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44529,7 +46040,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44628,7 +46139,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44729,7 +46240,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44830,7 +46341,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -44931,7 +46442,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -45746,7 +47257,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -46561,7 +48072,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -47376,7 +48887,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -47477,7 +48988,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -47646,7 +49157,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -47854,7 +49365,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -48062,7 +49573,7 @@ export type GetInteractionsResponses = {
             id: string;
             profileId: string | null;
             externalAgentId: string | null;
-            executionId: string | null;
+            runId: string | null;
             userId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
@@ -48280,6 +49791,129 @@ export type GetInteractionsResponses = {
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
 
+export type GetInteractionSummariesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        profileId?: string;
+        externalAgentId?: string;
+        userId?: string;
+        sessionId?: string;
+        startDate?: string;
+        endDate?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'createdAt' | 'profileId' | 'externalAgentId' | 'model' | 'userId';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/interactions/summaries';
+};
+
+export type GetInteractionSummariesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInteractionSummariesError = GetInteractionSummariesErrors[keyof GetInteractionSummariesErrors];
+
+export type GetInteractionSummariesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            sessionId: string | null;
+            model: string | null;
+            baselineModel: string | null;
+            billingMode: 'metered' | 'subscription';
+            inputTokens: number | null;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cost: string | null;
+            baselineCost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            createdAt: string;
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings';
+            externalAgentIdLabel: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetInteractionSummariesResponse = GetInteractionSummariesResponses[keyof GetInteractionSummariesResponses];
+
 export type GetInteractionSessionsData = {
     body?: never;
     path?: never;
@@ -48428,6 +50062,7 @@ export type GetInteractionSessionsResponses = {
              * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
              */
             lastUserMessagePreview: string | null;
+            lastInteractionId: string | null;
             lastInteractionType: string | null;
             conversationTitle: string | null;
             claudeCodeTitle: string | null;
@@ -48692,7 +50327,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -48793,7 +50428,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -49001,7 +50636,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -49123,7 +50758,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -49245,7 +50880,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -49367,7 +51002,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -49489,7 +51124,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -49590,7 +51225,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -49691,7 +51326,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -50233,7 +51868,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -50808,7 +52443,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -50909,7 +52544,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51010,7 +52645,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51111,7 +52746,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51212,7 +52847,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51313,7 +52948,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51414,7 +53049,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51513,7 +53148,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51612,7 +53247,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51711,7 +53346,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51812,7 +53447,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -51913,7 +53548,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -52014,7 +53649,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -52829,7 +54464,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -53644,7 +55279,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -54459,7 +56094,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -54560,7 +56195,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -54729,7 +56364,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -54937,7 +56572,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -55145,7 +56780,7 @@ export type GetInteractionResponses = {
         id: string;
         profileId: string | null;
         externalAgentId: string | null;
-        executionId: string | null;
+        runId: string | null;
         userId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
@@ -69863,6 +71498,94 @@ export type McpGatewayPostResponses = {
     200: unknown;
 };
 
+export type ReportAgentRuntimeStatusData = {
+    body: {
+        taskId: string;
+        attentionState: 'input_required' | 'auth_required' | null;
+    };
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}/runtime-status';
+};
+
+export type ReportAgentRuntimeStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReportAgentRuntimeStatusError = ReportAgentRuntimeStatusErrors[keyof ReportAgentRuntimeStatusErrors];
+
+export type ReportAgentRuntimeStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updated: boolean;
+    };
+};
+
+export type ReportAgentRuntimeStatusResponse = ReportAgentRuntimeStatusResponses[keyof ReportAgentRuntimeStatusResponses];
+
 export type McpOauthClientLabelKeysData = {
     body?: never;
     path?: never;
@@ -72532,7 +74255,7 @@ export type GetMcpToolCallsResponses = {
             } | null;
             toolResult: unknown;
             userId: string | null;
-            executionId: string | null;
+            runId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
             createdAt: string;
             userName: string | null;
@@ -72646,7 +74369,7 @@ export type GetMcpToolCallResponses = {
         } | null;
         toolResult: unknown;
         userId: string | null;
-        executionId: string | null;
+        runId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
         createdAt: string;
         userName: string | null;
@@ -87061,16 +88784,16 @@ export type GetProjectConversationsResponses = {
 
 export type GetProjectConversationsResponse = GetProjectConversationsResponses[keyof GetProjectConversationsResponses];
 
-export type GetProjectExecutionsData = {
+export type GetProjectRunsData = {
     body?: never;
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/projects/{id}/executions';
+    url: '/api/projects/{id}/runs';
 };
 
-export type GetProjectExecutionsErrors = {
+export type GetProjectRunsErrors = {
     /**
      * Default Response
      */
@@ -87133,9 +88856,9 @@ export type GetProjectExecutionsErrors = {
     };
 };
 
-export type GetProjectExecutionsError = GetProjectExecutionsErrors[keyof GetProjectExecutionsErrors];
+export type GetProjectRunsError = GetProjectRunsErrors[keyof GetProjectRunsErrors];
 
-export type GetProjectExecutionsResponses = {
+export type GetProjectRunsResponses = {
     /**
      * Default Response
      */
@@ -87150,15 +88873,18 @@ export type GetProjectExecutionsResponses = {
         title: string;
         pinnedAt: string | null;
         projectId: string | null;
-        deploymentName: string;
+        workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
         prompt: string;
         agent: {
             id: string;
@@ -87168,10 +88894,16 @@ export type GetProjectExecutionsResponses = {
         projectName: string | null;
         projectIcon: string | null;
         viewerRole: 'owner' | 'shared';
+        startupProgress?: {
+            phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
+            message: string;
+            detail: string | null;
+            resourceName: string | null;
+        } | null;
     }>;
 };
 
-export type GetProjectExecutionsResponse = GetProjectExecutionsResponses[keyof GetProjectExecutionsResponses];
+export type GetProjectRunsResponse = GetProjectRunsResponses[keyof GetProjectRunsResponses];
 
 export type UnpinProjectData = {
     body?: never;
@@ -87343,14 +89075,14 @@ export type PinProjectResponses = {
 
 export type PinProjectResponse = PinProjectResponses[keyof PinProjectResponses];
 
-export type ListExecutionCredentialsData = {
+export type ListRuntimeCredentialsData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/execution-credentials';
+    url: '/api/runtime-credentials';
 };
 
-export type ListExecutionCredentialsErrors = {
+export type ListRuntimeCredentialsErrors = {
     /**
      * Default Response
      */
@@ -87413,9 +89145,9 @@ export type ListExecutionCredentialsErrors = {
     };
 };
 
-export type ListExecutionCredentialsError = ListExecutionCredentialsErrors[keyof ListExecutionCredentialsErrors];
+export type ListRuntimeCredentialsError = ListRuntimeCredentialsErrors[keyof ListRuntimeCredentialsErrors];
 
-export type ListExecutionCredentialsResponses = {
+export type ListRuntimeCredentialsResponses = {
     /**
      * Default Response
      */
@@ -87432,9 +89164,9 @@ export type ListExecutionCredentialsResponses = {
     }>;
 };
 
-export type ListExecutionCredentialsResponse = ListExecutionCredentialsResponses[keyof ListExecutionCredentialsResponses];
+export type ListRuntimeCredentialsResponse = ListRuntimeCredentialsResponses[keyof ListRuntimeCredentialsResponses];
 
-export type CreateExecutionCredentialData = {
+export type CreateRuntimeCredentialData = {
     body: {
         key: string;
         name: string;
@@ -87445,10 +89177,10 @@ export type CreateExecutionCredentialData = {
     };
     path?: never;
     query?: never;
-    url: '/api/execution-credentials';
+    url: '/api/runtime-credentials';
 };
 
-export type CreateExecutionCredentialErrors = {
+export type CreateRuntimeCredentialErrors = {
     /**
      * Default Response
      */
@@ -87511,9 +89243,9 @@ export type CreateExecutionCredentialErrors = {
     };
 };
 
-export type CreateExecutionCredentialError = CreateExecutionCredentialErrors[keyof CreateExecutionCredentialErrors];
+export type CreateRuntimeCredentialError = CreateRuntimeCredentialErrors[keyof CreateRuntimeCredentialErrors];
 
-export type CreateExecutionCredentialResponses = {
+export type CreateRuntimeCredentialResponses = {
     /**
      * Default Response
      */
@@ -87532,18 +89264,18 @@ export type CreateExecutionCredentialResponses = {
     };
 };
 
-export type CreateExecutionCredentialResponse = CreateExecutionCredentialResponses[keyof CreateExecutionCredentialResponses];
+export type CreateRuntimeCredentialResponse = CreateRuntimeCredentialResponses[keyof CreateRuntimeCredentialResponses];
 
-export type GetExecutionCredentialUsageData = {
+export type GetRuntimeCredentialUsageData = {
     body?: never;
     path: {
         key: string;
     };
     query?: never;
-    url: '/api/execution-credentials/{key}/usage';
+    url: '/api/runtime-credentials/{key}/usage';
 };
 
-export type GetExecutionCredentialUsageErrors = {
+export type GetRuntimeCredentialUsageErrors = {
     /**
      * Default Response
      */
@@ -87606,9 +89338,9 @@ export type GetExecutionCredentialUsageErrors = {
     };
 };
 
-export type GetExecutionCredentialUsageError = GetExecutionCredentialUsageErrors[keyof GetExecutionCredentialUsageErrors];
+export type GetRuntimeCredentialUsageError = GetRuntimeCredentialUsageErrors[keyof GetRuntimeCredentialUsageErrors];
 
-export type GetExecutionCredentialUsageResponses = {
+export type GetRuntimeCredentialUsageResponses = {
     /**
      * Default Response
      */
@@ -87620,18 +89352,18 @@ export type GetExecutionCredentialUsageResponses = {
     };
 };
 
-export type GetExecutionCredentialUsageResponse = GetExecutionCredentialUsageResponses[keyof GetExecutionCredentialUsageResponses];
+export type GetRuntimeCredentialUsageResponse = GetRuntimeCredentialUsageResponses[keyof GetRuntimeCredentialUsageResponses];
 
-export type DeleteExecutionCredentialData = {
+export type DeleteRuntimeCredentialData = {
     body?: never;
     path: {
         key: string;
     };
     query?: never;
-    url: '/api/execution-credentials/{key}';
+    url: '/api/runtime-credentials/{key}';
 };
 
-export type DeleteExecutionCredentialErrors = {
+export type DeleteRuntimeCredentialErrors = {
     /**
      * Default Response
      */
@@ -87694,9 +89426,9 @@ export type DeleteExecutionCredentialErrors = {
     };
 };
 
-export type DeleteExecutionCredentialError = DeleteExecutionCredentialErrors[keyof DeleteExecutionCredentialErrors];
+export type DeleteRuntimeCredentialError = DeleteRuntimeCredentialErrors[keyof DeleteRuntimeCredentialErrors];
 
-export type DeleteExecutionCredentialResponses = {
+export type DeleteRuntimeCredentialResponses = {
     /**
      * Default Response
      */
@@ -87705,9 +89437,9 @@ export type DeleteExecutionCredentialResponses = {
     };
 };
 
-export type DeleteExecutionCredentialResponse = DeleteExecutionCredentialResponses[keyof DeleteExecutionCredentialResponses];
+export type DeleteRuntimeCredentialResponse = DeleteRuntimeCredentialResponses[keyof DeleteRuntimeCredentialResponses];
 
-export type UpdateExecutionCredentialData = {
+export type UpdateRuntimeCredentialData = {
     body: {
         description?: string;
         icon?: string | null;
@@ -87716,10 +89448,10 @@ export type UpdateExecutionCredentialData = {
         key: string;
     };
     query?: never;
-    url: '/api/execution-credentials/{key}';
+    url: '/api/runtime-credentials/{key}';
 };
 
-export type UpdateExecutionCredentialErrors = {
+export type UpdateRuntimeCredentialErrors = {
     /**
      * Default Response
      */
@@ -87782,9 +89514,9 @@ export type UpdateExecutionCredentialErrors = {
     };
 };
 
-export type UpdateExecutionCredentialError = UpdateExecutionCredentialErrors[keyof UpdateExecutionCredentialErrors];
+export type UpdateRuntimeCredentialError = UpdateRuntimeCredentialErrors[keyof UpdateRuntimeCredentialErrors];
 
-export type UpdateExecutionCredentialResponses = {
+export type UpdateRuntimeCredentialResponses = {
     /**
      * Default Response
      */
@@ -87803,18 +89535,18 @@ export type UpdateExecutionCredentialResponses = {
     };
 };
 
-export type UpdateExecutionCredentialResponse = UpdateExecutionCredentialResponses[keyof UpdateExecutionCredentialResponses];
+export type UpdateRuntimeCredentialResponse = UpdateRuntimeCredentialResponses[keyof UpdateRuntimeCredentialResponses];
 
-export type DeletePersonalExecutionCredentialConnectionData = {
+export type DeletePersonalRuntimeCredentialConnectionData = {
     body?: never;
     path: {
         key: string;
     };
     query?: never;
-    url: '/api/execution-credentials/{key}/personal';
+    url: '/api/runtime-credentials/{key}/personal';
 };
 
-export type DeletePersonalExecutionCredentialConnectionErrors = {
+export type DeletePersonalRuntimeCredentialConnectionErrors = {
     /**
      * Default Response
      */
@@ -87877,9 +89609,9 @@ export type DeletePersonalExecutionCredentialConnectionErrors = {
     };
 };
 
-export type DeletePersonalExecutionCredentialConnectionError = DeletePersonalExecutionCredentialConnectionErrors[keyof DeletePersonalExecutionCredentialConnectionErrors];
+export type DeletePersonalRuntimeCredentialConnectionError = DeletePersonalRuntimeCredentialConnectionErrors[keyof DeletePersonalRuntimeCredentialConnectionErrors];
 
-export type DeletePersonalExecutionCredentialConnectionResponses = {
+export type DeletePersonalRuntimeCredentialConnectionResponses = {
     /**
      * Default Response
      */
@@ -87888,9 +89620,9 @@ export type DeletePersonalExecutionCredentialConnectionResponses = {
     };
 };
 
-export type DeletePersonalExecutionCredentialConnectionResponse = DeletePersonalExecutionCredentialConnectionResponses[keyof DeletePersonalExecutionCredentialConnectionResponses];
+export type DeletePersonalRuntimeCredentialConnectionResponse = DeletePersonalRuntimeCredentialConnectionResponses[keyof DeletePersonalRuntimeCredentialConnectionResponses];
 
-export type SetPersonalExecutionCredentialConnectionData = {
+export type SetPersonalRuntimeCredentialConnectionData = {
     body: {
         value: string;
     };
@@ -87898,10 +89630,10 @@ export type SetPersonalExecutionCredentialConnectionData = {
         key: string;
     };
     query?: never;
-    url: '/api/execution-credentials/{key}/personal';
+    url: '/api/runtime-credentials/{key}/personal';
 };
 
-export type SetPersonalExecutionCredentialConnectionErrors = {
+export type SetPersonalRuntimeCredentialConnectionErrors = {
     /**
      * Default Response
      */
@@ -87964,9 +89696,9 @@ export type SetPersonalExecutionCredentialConnectionErrors = {
     };
 };
 
-export type SetPersonalExecutionCredentialConnectionError = SetPersonalExecutionCredentialConnectionErrors[keyof SetPersonalExecutionCredentialConnectionErrors];
+export type SetPersonalRuntimeCredentialConnectionError = SetPersonalRuntimeCredentialConnectionErrors[keyof SetPersonalRuntimeCredentialConnectionErrors];
 
-export type SetPersonalExecutionCredentialConnectionResponses = {
+export type SetPersonalRuntimeCredentialConnectionResponses = {
     /**
      * Default Response
      */
@@ -87975,18 +89707,18 @@ export type SetPersonalExecutionCredentialConnectionResponses = {
     };
 };
 
-export type SetPersonalExecutionCredentialConnectionResponse = SetPersonalExecutionCredentialConnectionResponses[keyof SetPersonalExecutionCredentialConnectionResponses];
+export type SetPersonalRuntimeCredentialConnectionResponse = SetPersonalRuntimeCredentialConnectionResponses[keyof SetPersonalRuntimeCredentialConnectionResponses];
 
-export type DeleteOrganizationExecutionCredentialConnectionData = {
+export type DeleteOrganizationRuntimeCredentialConnectionData = {
     body?: never;
     path: {
         key: string;
     };
     query?: never;
-    url: '/api/execution-credentials/{key}/organization';
+    url: '/api/runtime-credentials/{key}/organization';
 };
 
-export type DeleteOrganizationExecutionCredentialConnectionErrors = {
+export type DeleteOrganizationRuntimeCredentialConnectionErrors = {
     /**
      * Default Response
      */
@@ -88049,9 +89781,9 @@ export type DeleteOrganizationExecutionCredentialConnectionErrors = {
     };
 };
 
-export type DeleteOrganizationExecutionCredentialConnectionError = DeleteOrganizationExecutionCredentialConnectionErrors[keyof DeleteOrganizationExecutionCredentialConnectionErrors];
+export type DeleteOrganizationRuntimeCredentialConnectionError = DeleteOrganizationRuntimeCredentialConnectionErrors[keyof DeleteOrganizationRuntimeCredentialConnectionErrors];
 
-export type DeleteOrganizationExecutionCredentialConnectionResponses = {
+export type DeleteOrganizationRuntimeCredentialConnectionResponses = {
     /**
      * Default Response
      */
@@ -88060,9 +89792,9 @@ export type DeleteOrganizationExecutionCredentialConnectionResponses = {
     };
 };
 
-export type DeleteOrganizationExecutionCredentialConnectionResponse = DeleteOrganizationExecutionCredentialConnectionResponses[keyof DeleteOrganizationExecutionCredentialConnectionResponses];
+export type DeleteOrganizationRuntimeCredentialConnectionResponse = DeleteOrganizationRuntimeCredentialConnectionResponses[keyof DeleteOrganizationRuntimeCredentialConnectionResponses];
 
-export type SetOrganizationExecutionCredentialConnectionData = {
+export type SetOrganizationRuntimeCredentialConnectionData = {
     body: {
         value: string;
     };
@@ -88070,10 +89802,10 @@ export type SetOrganizationExecutionCredentialConnectionData = {
         key: string;
     };
     query?: never;
-    url: '/api/execution-credentials/{key}/organization';
+    url: '/api/runtime-credentials/{key}/organization';
 };
 
-export type SetOrganizationExecutionCredentialConnectionErrors = {
+export type SetOrganizationRuntimeCredentialConnectionErrors = {
     /**
      * Default Response
      */
@@ -88136,9 +89868,9 @@ export type SetOrganizationExecutionCredentialConnectionErrors = {
     };
 };
 
-export type SetOrganizationExecutionCredentialConnectionError = SetOrganizationExecutionCredentialConnectionErrors[keyof SetOrganizationExecutionCredentialConnectionErrors];
+export type SetOrganizationRuntimeCredentialConnectionError = SetOrganizationRuntimeCredentialConnectionErrors[keyof SetOrganizationRuntimeCredentialConnectionErrors];
 
-export type SetOrganizationExecutionCredentialConnectionResponses = {
+export type SetOrganizationRuntimeCredentialConnectionResponses = {
     /**
      * Default Response
      */
@@ -88147,1261 +89879,7 @@ export type SetOrganizationExecutionCredentialConnectionResponses = {
     };
 };
 
-export type SetOrganizationExecutionCredentialConnectionResponse = SetOrganizationExecutionCredentialConnectionResponses[keyof SetOrganizationExecutionCredentialConnectionResponses];
-
-export type GetAgentBackgroundExecutionPreflightData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/background-execution/preflight';
-};
-
-export type GetAgentBackgroundExecutionPreflightErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAgentBackgroundExecutionPreflightError = GetAgentBackgroundExecutionPreflightErrors[keyof GetAgentBackgroundExecutionPreflightErrors];
-
-export type GetAgentBackgroundExecutionPreflightResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        ready: boolean;
-        configured: Array<string>;
-        missing: Array<{
-            key: string;
-            credentialId?: string;
-            label: string;
-            description?: string;
-        }>;
-        misconfigured: Array<{
-            key: string;
-            credentialId?: string;
-            label: string;
-            description?: string;
-        }>;
-    };
-};
-
-export type GetAgentBackgroundExecutionPreflightResponse = GetAgentBackgroundExecutionPreflightResponses[keyof GetAgentBackgroundExecutionPreflightResponses];
-
-export type DeleteAgentBackgroundExecutionCredentialData = {
-    body?: never;
-    path: {
-        id: string;
-        key: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/background-execution/credentials/{key}';
-};
-
-export type DeleteAgentBackgroundExecutionCredentialErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteAgentBackgroundExecutionCredentialError = DeleteAgentBackgroundExecutionCredentialErrors[keyof DeleteAgentBackgroundExecutionCredentialErrors];
-
-export type DeleteAgentBackgroundExecutionCredentialResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        deleted: boolean;
-    };
-};
-
-export type DeleteAgentBackgroundExecutionCredentialResponse = DeleteAgentBackgroundExecutionCredentialResponses[keyof DeleteAgentBackgroundExecutionCredentialResponses];
-
-export type SetAgentBackgroundExecutionCredentialData = {
-    body: {
-        value: string;
-    };
-    path: {
-        id: string;
-        key: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/background-execution/credentials/{key}';
-};
-
-export type SetAgentBackgroundExecutionCredentialErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type SetAgentBackgroundExecutionCredentialError = SetAgentBackgroundExecutionCredentialErrors[keyof SetAgentBackgroundExecutionCredentialErrors];
-
-export type SetAgentBackgroundExecutionCredentialResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        configured: true;
-    };
-};
-
-export type SetAgentBackgroundExecutionCredentialResponse = SetAgentBackgroundExecutionCredentialResponses[keyof SetAgentBackgroundExecutionCredentialResponses];
-
-export type GetAgentExecutionsData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/executions';
-};
-
-export type GetAgentExecutionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAgentExecutionsError = GetAgentExecutionsErrors[keyof GetAgentExecutionsErrors];
-
-export type GetAgentExecutionsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        taskId: string;
-        agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
-        actorId: string;
-        actorUserId: string | null;
-        title: string;
-        pinnedAt: string | null;
-        projectId: string | null;
-        deploymentName: string;
-        backend: 'kubernetes';
-        runtimeScope: string;
-        virtualApiKeyId: string | null;
-        startedAt: string;
-        endedAt: string | null;
-        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
-        statusReason: string | null;
-        stateChangedAt: string | null;
-    }>;
-};
-
-export type GetAgentExecutionsResponse = GetAgentExecutionsResponses[keyof GetAgentExecutionsResponses];
-
-export type StartAgentExecutionData = {
-    body: {
-        message: string;
-        projectId?: string;
-        attachments?: Array<{
-            name: string;
-            contentType: string;
-            contentBase64: string;
-        }>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/executions';
-};
-
-export type StartAgentExecutionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type StartAgentExecutionError = StartAgentExecutionErrors[keyof StartAgentExecutionErrors];
-
-export type StartAgentExecutionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        taskId: string;
-        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
-        agentId: string;
-        agentName: string;
-        prompt: string;
-        projectId: string | null;
-        createdAt: string;
-    };
-};
-
-export type StartAgentExecutionResponse = StartAgentExecutionResponses[keyof StartAgentExecutionResponses];
-
-export type GetMyAgentExecutionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/agent-executions';
-};
-
-export type GetMyAgentExecutionsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetMyAgentExecutionsError = GetMyAgentExecutionsErrors[keyof GetMyAgentExecutionsErrors];
-
-export type GetMyAgentExecutionsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        taskId: string;
-        agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
-        actorId: string;
-        actorUserId: string | null;
-        title: string;
-        pinnedAt: string | null;
-        projectId: string | null;
-        deploymentName: string;
-        backend: 'kubernetes';
-        runtimeScope: string;
-        virtualApiKeyId: string | null;
-        startedAt: string;
-        endedAt: string | null;
-        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
-        statusReason: string | null;
-        stateChangedAt: string | null;
-        prompt: string;
-        agent: {
-            id: string;
-            name: string;
-            icon: string | null;
-        };
-        projectName: string | null;
-        projectIcon: string | null;
-    }>;
-};
-
-export type GetMyAgentExecutionsResponse = GetMyAgentExecutionsResponses[keyof GetMyAgentExecutionsResponses];
-
-export type DeleteAgentExecutionData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-executions/{taskId}';
-};
-
-export type DeleteAgentExecutionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteAgentExecutionError = DeleteAgentExecutionErrors[keyof DeleteAgentExecutionErrors];
-
-export type DeleteAgentExecutionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        deleted: true;
-    };
-};
-
-export type DeleteAgentExecutionResponse = DeleteAgentExecutionResponses[keyof DeleteAgentExecutionResponses];
-
-export type GetMyAgentExecutionData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-executions/{taskId}';
-};
-
-export type GetMyAgentExecutionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetMyAgentExecutionError = GetMyAgentExecutionErrors[keyof GetMyAgentExecutionErrors];
-
-export type GetMyAgentExecutionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        taskId: string;
-        agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
-        actorId: string;
-        actorUserId: string | null;
-        title: string;
-        pinnedAt: string | null;
-        projectId: string | null;
-        deploymentName: string;
-        backend: 'kubernetes';
-        runtimeScope: string;
-        virtualApiKeyId: string | null;
-        startedAt: string;
-        endedAt: string | null;
-        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
-        statusReason: string | null;
-        stateChangedAt: string | null;
-        prompt: string;
-        agent: {
-            id: string;
-            name: string;
-            icon: string | null;
-        };
-        projectName: string | null;
-        projectIcon: string | null;
-        viewerRole: 'owner' | 'shared';
-    };
-};
-
-export type GetMyAgentExecutionResponse = GetMyAgentExecutionResponses[keyof GetMyAgentExecutionResponses];
-
-export type UpdateAgentExecutionData = {
-    body: {
-        title?: string;
-        pinnedAt?: string | null;
-        projectId?: string | null;
-    };
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-executions/{taskId}';
-};
-
-export type UpdateAgentExecutionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateAgentExecutionError = UpdateAgentExecutionErrors[keyof UpdateAgentExecutionErrors];
-
-export type UpdateAgentExecutionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        taskId: string;
-        agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
-        actorId: string;
-        actorUserId: string | null;
-        title: string;
-        pinnedAt: string | null;
-        projectId: string | null;
-        deploymentName: string;
-        backend: 'kubernetes';
-        runtimeScope: string;
-        virtualApiKeyId: string | null;
-        startedAt: string;
-        endedAt: string | null;
-        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
-        statusReason: string | null;
-        stateChangedAt: string | null;
-        prompt: string;
-        agent: {
-            id: string;
-            name: string;
-            icon: string | null;
-        };
-        projectName: string | null;
-        projectIcon: string | null;
-    };
-};
-
-export type UpdateAgentExecutionResponse = UpdateAgentExecutionResponses[keyof UpdateAgentExecutionResponses];
-
-export type CancelAgentExecutionData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-executions/{taskId}/cancel';
-};
-
-export type CancelAgentExecutionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CancelAgentExecutionError = CancelAgentExecutionErrors[keyof CancelAgentExecutionErrors];
-
-export type CancelAgentExecutionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        taskId: string;
-        state: 'TASK_STATE_CANCELED';
-    };
-};
-
-export type CancelAgentExecutionResponse = CancelAgentExecutionResponses[keyof CancelAgentExecutionResponses];
-
-export type UnshareAgentExecutionData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-executions/{taskId}/share';
-};
-
-export type UnshareAgentExecutionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UnshareAgentExecutionError = UnshareAgentExecutionErrors[keyof UnshareAgentExecutionErrors];
-
-export type UnshareAgentExecutionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type UnshareAgentExecutionResponse = UnshareAgentExecutionResponses[keyof UnshareAgentExecutionResponses];
-
-export type GetAgentExecutionShareData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-executions/{taskId}/share';
-};
-
-export type GetAgentExecutionShareErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAgentExecutionShareError = GetAgentExecutionShareErrors[keyof GetAgentExecutionShareErrors];
-
-export type GetAgentExecutionShareResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        taskId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    } | null;
-};
-
-export type GetAgentExecutionShareResponse = GetAgentExecutionShareResponses[keyof GetAgentExecutionShareResponses];
-
-export type ShareAgentExecutionData = {
-    body: {
-        visibility: 'organization' | 'team' | 'user';
-        teamIds?: Array<string>;
-        userIds?: Array<string>;
-    };
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-executions/{taskId}/share';
-};
-
-export type ShareAgentExecutionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ShareAgentExecutionError = ShareAgentExecutionErrors[keyof ShareAgentExecutionErrors];
-
-export type ShareAgentExecutionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        taskId: string;
-        organizationId: string;
-        createdByUserId: string;
-        visibility: 'organization' | 'team' | 'user';
-        createdAt: string;
-        teamIds: Array<string>;
-        userIds: Array<string>;
-    };
-};
-
-export type ShareAgentExecutionResponse = ShareAgentExecutionResponses[keyof ShareAgentExecutionResponses];
+export type SetOrganizationRuntimeCredentialConnectionResponse = SetOrganizationRuntimeCredentialConnectionResponses[keyof SetOrganizationRuntimeCredentialConnectionResponses];
 
 export type GetScheduleTriggersData = {
     body?: never;
@@ -99099,7 +99577,10 @@ export type RotateTokenResponse = RotateTokenResponses[keyof RotateTokenResponse
 export type GetToolsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
     url: '/api/tools';
 };
 
@@ -99172,48 +99653,58 @@ export type GetToolsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        catalogId: string | null;
-        delegateToAgentId: string | null;
-        name: string;
-        rawName: string | null;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
+    200: {
+        data: Array<{
+            id: string;
+            catalogId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            rawName: string | null;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: string | null;
+            agent: {
+                id: string;
+                name: string;
+            } | null;
+            catalog: {
+                id: string;
+                name: string;
+            } | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-        description: string | null;
-        meta: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
-        clonedPendingDiscovery: boolean;
-        policiesAutoConfiguredAt: string | null;
-        policiesAutoConfiguringStartedAt: string | null;
-        policiesAutoConfiguredReasoning: string | null;
-        policiesAutoConfiguredModel: string | null;
-        createdAt: string;
-        updatedAt: string;
-        deletedAt: string | null;
-        agent: {
-            id: string;
-            name: string;
-        } | null;
-        catalog: {
-            id: string;
-            name: string;
-        } | null;
-    }>;
+    };
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];

@@ -385,6 +385,10 @@ describe("applyPromptCacheBreakpoints", () => {
       ["meta.llama3-70b-instruct-v1:0", "Llama"],
       ["mistral.mistral-large-2407-v1:0", "Mistral"],
       ["deepseek.r1-v1:0", "DeepSeek"],
+      ["amazon.nova-micro-v1:0", "Nova Micro v1"],
+      ["amazon.nova-lite-v1:0", "Nova Lite v1"],
+      ["amazon.nova-pro-v1:0", "Nova Pro v1"],
+      ["amazon.nova-premier-v1:0", "Nova Premier v1"],
     ])("adds no cachePoint for %s (%s)", (model) => {
       const messages = [userMessage("a"), userMessage("b")];
 
@@ -401,8 +405,8 @@ describe("applyPromptCacheBreakpoints", () => {
 
     it.each([
       ["us.anthropic.claude-opus-4-6-v1:0", "Claude via inference profile"],
-      ["amazon.nova-pro-v1:0", "Nova Pro"],
-      ["amazon.nova-lite-v1:0", "Nova Lite"],
+      ["amazon.nova-2-lite-v1:0", "Nova 2 Lite"],
+      ["global.amazon.nova-2-lite-v1:0", "Nova 2 Lite inference profile"],
     ])("still adds a cachePoint for %s (%s)", (model) => {
       const result = applyPromptCacheBreakpoints({
         provider: "bedrock",

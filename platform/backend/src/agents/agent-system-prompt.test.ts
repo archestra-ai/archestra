@@ -4,8 +4,11 @@ import {
   type ArchestraToolShortName,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_LIST_APP_VERSIONS_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
+  TOOL_RESTORE_APP_VERSION_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
@@ -508,13 +511,16 @@ describe("buildAgentSystemPrompt", () => {
   // accepts names the model has seen) — unconditionally, with no dispatch-gate
   // mirroring: a non-dispatchable name is refused by run_tool with a clear
   // error at call time.
-  test("names scaffold_app in the tool-loading instruction regardless of assignment", async ({
+  test("names direct app build and rollback paths in the tool-loading instruction", async ({
     makeAgent,
     makeUser,
     makeMember,
   }) => {
     const user = await makeUser();
     const scaffoldAppName = brand(TOOL_SCAFFOLD_APP_SHORT_NAME);
+    const listAppsName = brand(TOOL_LIST_APPS_SHORT_NAME);
+    const listAppVersionsName = brand(TOOL_LIST_APP_VERSIONS_SHORT_NAME);
+    const restoreAppVersionName = brand(TOOL_RESTORE_APP_VERSION_SHORT_NAME);
 
     const searchAgent = await makeAgent({
       systemPrompt: "Base.",
@@ -534,6 +540,12 @@ describe("buildAgentSystemPrompt", () => {
       agentId: searchAgent.id,
     });
     expect(searchPrompt).toContain(scaffoldAppName);
+    expect(searchPrompt).toContain(listAppsName);
+    expect(searchPrompt).toContain(listAppVersionsName);
+    expect(searchPrompt).toContain(restoreAppVersionName);
+    expect(searchPrompt).toContain(
+      "Never call `read_app` or reproduce historical HTML through `edit_app` for a rollback.",
+    );
 
     // full mode has no tool-loading section, so no app steering either
     const fullAgent = await makeAgent({
@@ -547,6 +559,7 @@ describe("buildAgentSystemPrompt", () => {
       agentId: fullAgent.id,
     });
     expect(fullPrompt).not.toContain(scaffoldAppName);
+    expect(fullPrompt).not.toContain(restoreAppVersionName);
   });
 
   test("appends the hook session context last", async ({

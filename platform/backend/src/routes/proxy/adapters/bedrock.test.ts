@@ -1,5 +1,9 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
+import { Agent } from "undici";
+import { vi } from "vitest";
+import type { BedrockClient } from "@/clients/bedrock-client";
+import config from "@/config";
 import { describe, expect, test } from "@/test";
 import { Bedrock } from "@/types";
 import { bedrockAdapterFactory, getCommandInput } from "./bedrock";
@@ -872,6 +876,27 @@ describe("Bedrock client creation", () => {
     };
 
     expect(client.config.baseUrl).toBe(customBaseUrl);
+  });
+
+  test("applies the configured LLM upstream timeout to Bedrock requests", async () => {
+    config.llmProxy.upstreamTimeoutMs = 5_000;
+    const fetchMock = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ stopReason: "end_turn" })),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = bedrockAdapterFactory.createClient("test-key", {
+      baseUrl: "https://bedrock.example.com",
+      source: "chat",
+    }) as BedrockClient;
+
+    await client.converse("test-model", {});
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ dispatcher: expect.any(Agent) }),
+    );
   });
 });
 

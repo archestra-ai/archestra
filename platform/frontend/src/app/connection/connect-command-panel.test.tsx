@@ -928,10 +928,11 @@ describe("ConnectCommandPanel", () => {
     );
     // the skill list isn't even fetched for callers who can't install skills,
     // and the wizard grows no extra step: the script is the whole flow
-    expect(allSkillsMock).toHaveBeenLastCalledWith({
-      enabled: false,
-      forAgentId: "p1",
-    });
+    expect(allSkillsMock).toHaveBeenLastCalledWith(
+      // objectContaining, so the deferral this list is fetched under stays an
+      // implementation detail: what matters is that it is switched off.
+      expect.objectContaining({ enabled: false, forAgentId: "p1" }),
+    );
     expect(
       screen.queryByTestId("skills-marketplace-step"),
     ).not.toBeInTheDocument();

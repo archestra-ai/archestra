@@ -43,9 +43,8 @@ import { AgentPageShell } from "./agent-page-shell";
 export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
   const config = AGENT_PAGE_CONFIGS[kind];
   const router = useRouter();
-  const backgroundExecutionEnabled = useFeature("agentBackgroundExecution");
-  const catalogEnabled =
-    kind === "agent" && backgroundExecutionEnabled === true;
+  const runtimeEnabled = useFeature("agentRuntime");
+  const catalogEnabled = kind === "agent" && runtimeEnabled === true;
   const [sourceSelected, setSourceSelected] = useState(false);
   const [selectedTemplate, setSelectedTemplate] =
     useState<AgentCatalogTemplate | null>(null);

@@ -653,7 +653,8 @@ class AppModel {
       ) {
         throw new ApiError(
           409,
-          `App ${params.id} has moved to version ${app.latestVersion}; the edit was based on version ${params.expectedLatestVersion}. Call read_app and retry.`,
+          `App ${params.id} has moved to version ${app.latestVersion}; the change was based on version ${params.expectedLatestVersion}. Refresh the app and retry.`,
+          "app_version_conflict",
         );
       }
 

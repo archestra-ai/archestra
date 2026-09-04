@@ -1,7 +1,7 @@
 "use client";
 
 import type { AgentRunAttachPhase } from "@archestra/shared";
-import { Check, CircleAlert, Loader2 } from "lucide-react";
+import { Check, CircleAlert, Info, Loader2, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -14,21 +14,7 @@ export type ExecSessionProgress = {
 };
 
 /**
- * The waits an attach goes through, as a person would describe them.
- *
- * Several protocol phases collapse into one step: "queued" and "scheduling"
- * are both "we do not have a machine yet", and splitting them would show a
- * step that ticks over without anything having visibly happened.
- */
-const STEPS: { label: string; phases: AgentRunAttachPhase[] }[] = [
-  { label: "Scheduling onto a node", phases: ["queued", "scheduling"] },
-  { label: "Pulling the agent image", phases: ["pulling"] },
-  { label: "Starting the agent session", phases: ["starting"] },
-  { label: "Opening the terminal", phases: ["attaching"] },
-];
-
-/**
- * Startup progress for a background execution's terminal.
+ * Startup progress for an Agent Runtime run's terminal.
  *
  * Replaces an unqualified "Connecting…" that could sit for minutes while a pod
  * was scheduled and its image pulled. Every line here comes from the run's
@@ -137,7 +123,85 @@ export function ExecTerminalProgress({
   );
 }
 
+/** A terminal-sized status for waits, errors, and informational notices. */
+export function ExecTerminalStatus({
+  title,
+  detail,
+  tone = "info",
+  compact = false,
+}: {
+  title: string;
+  detail?: string | null;
+  tone?: "info" | "loading" | "warning" | "error";
+  compact?: boolean;
+}) {
+  const Icon =
+    tone === "loading"
+      ? Loader2
+      : tone === "error"
+        ? CircleAlert
+        : tone === "warning"
+          ? TriangleAlert
+          : Info;
+
+  return (
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      className={cn(
+        "flex min-h-0 flex-1 items-center justify-center p-6",
+        compact && "flex-none p-4",
+      )}
+    >
+      <div
+        className={cn(
+          "flex w-full max-w-sm flex-col items-center gap-3 text-center",
+          compact && "max-w-xl flex-row text-left",
+        )}
+      >
+        <div
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-lg border bg-slate-900",
+            tone === "error" && "border-red-400/20 text-red-400",
+            tone === "warning" && "border-amber-400/20 text-amber-400",
+            (tone === "info" || tone === "loading") &&
+              "border-slate-800 text-slate-300",
+          )}
+        >
+          <Icon
+            className={cn(
+              "size-4",
+              tone === "loading" && "animate-spin motion-reduce:animate-none",
+            )}
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-slate-100">{title}</p>
+          {detail ? (
+            <p className="break-words text-xs leading-relaxed text-slate-400">
+              {detail}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== internals =====================
+
+/**
+ * The waits an attach goes through, as a person would describe them.
+ *
+ * Several protocol phases collapse into one step: "queued" and "scheduling"
+ * are both "we do not have a machine yet", and splitting them would show a
+ * step that ticks over without anything having visibly happened.
+ */
+const STEPS: { label: string; phases: AgentRunAttachPhase[] }[] = [
+  { label: "Scheduling onto a node", phases: ["queued", "scheduling"] },
+  { label: "Pulling the agent image", phases: ["pulling"] },
+  { label: "Starting the agent session", phases: ["starting"] },
+  { label: "Opening the terminal", phases: ["attaching"] },
+];
 
 function StepIcon({ state }: { state: "done" | "active" | "pending" }) {
   if (state === "done") {

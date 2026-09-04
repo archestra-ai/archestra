@@ -78,8 +78,8 @@ export interface ChatPromptInputToolsProps {
    * `lockedChatEnabled` feature flag it enables the locked-chat toggle.
    */
   onLockedChatChange?: (lockedChat: boolean) => void;
-  /** The composer launches an isolated Agent execution, not a chat turn. */
-  executionMode?: boolean;
+  /** The composer launches an isolated Agent run, not a chat turn. */
+  runtimeMode?: boolean;
   /** Whether the agent has a code sandbox available (allows any file type) */
   sandboxAvailable?: boolean;
   /** Whether models are still loading - passed to API key selector */
@@ -172,7 +172,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   allowFileUploads = false,
   lockedChat = false,
   onLockedChatChange,
-  executionMode = false,
+  runtimeMode = false,
   sandboxAvailable = false,
   isModelsLoading = false,
   tokensUsed = 0,
@@ -249,8 +249,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // and surfaced in the conversation's Files panel (and staged into the
   // sandbox when one is available), so the only gate is the org-level toggle.
   const showFileUploadButton = allowFileUploads;
-  const supportedTypesDescription = executionMode
-    ? "files are staged into the isolated execution before the Agent starts"
+  const supportedTypesDescription = runtimeMode
+    ? "files are staged into the dedicated runtime before the Agent starts"
     : sandboxAvailable
       ? "any file type"
       : "any file type (files this model can't read are saved to the chat's Files panel)";
@@ -266,7 +266,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
   const { altKey } = usePlatform();
   const showLockedChatToggle =
-    !executionMode &&
+    !runtimeMode &&
     lockedChatEnabled &&
     !conversationId &&
     !!onLockedChatChange;
@@ -304,22 +304,36 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     chatProviderSettings: ["enable"],
   });
   const canShowProviderSettings =
-    !executionMode && canSeeProviderSettings === true;
+    !runtimeMode && canSeeProviderSettings === true;
 
-  const handleModelSelectorOpenChange = useCallback(
+  const focusTextarea = useCallback(() => {
+    // Popover restores focus to its trigger as it closes. Wait until that
+    // finishes before returning focus to the prompt for the user's next input.
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
+  }, [textareaRef]);
+
+  const handleAgentChange = useCallback(
+    (agentId: string) => {
+      onAgentChange?.(agentId);
+      focusTextarea();
+    },
+    [focusTextarea, onAgentChange],
+  );
+
+  const handleSelectorOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
-        setTimeout(() => {
-          textareaRef.current?.focus();
-        }, 100);
+        focusTextarea();
       }
     },
-    [textareaRef],
+    [focusTextarea],
   );
 
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
-      {!executionMode &&
+      {!runtimeMode &&
         canSeeProviderSettings === false &&
         subscriptionConnectRequired &&
         (conversationId || onApiKeyChange) && (
@@ -380,7 +394,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       </p>
                       <InitialAgentSelector
                         currentAgentId={selectorAgentId}
-                        onAgentChange={onAgentChange}
+                        onAgentChange={handleAgentChange}
                       />
                     </div>
                   )}
@@ -475,7 +489,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     )}
                   </>
                 )}
-                {!executionMode &&
+                {!runtimeMode &&
                   canSeeProviderSettings === false &&
                   subscriptionConnectRequired &&
                   onSubscriptionConnect && (
@@ -528,7 +542,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           warning that only exists inside a popover — or only for users who can
           see provider settings — is a warning most narrow-viewport users never
           get. The wide toolbar renders its own copy below. */}
-      {!executionMode && isNarrow && notRecommendedForAgents && (
+      {!runtimeMode && isNarrow && notRecommendedForAgents && (
         <NotRecommendedForAgentsNoticeBadge />
       )}
 
@@ -626,10 +640,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             onAgentChange && (
               <InitialAgentSelector
                 currentAgentId={selectorAgentId}
-                onAgentChange={onAgentChange}
+                onAgentChange={handleAgentChange}
               />
             )}
-          {!executionMode &&
+          {!runtimeMode &&
             canSeeProviderSettings === false &&
             subscriptionConnectRequired &&
             onSubscriptionConnect && (
@@ -679,13 +693,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   agentLlmApiKeyId={agentLlmApiKeyId}
                   suppressAutoSelect={agentRequiresPerUserConnect}
                   connectRequestToken={subscriptionConnectRequest}
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      setTimeout(() => {
-                        textareaRef.current?.focus();
-                      }, 100);
-                    }
-                  }}
+                  onOpenChange={handleSelectorOpenChange}
                 />
               )}
               {subscriptionConnectRequired && onSubscriptionConnect && (
@@ -703,7 +711,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 <ModelSelector
                   selectedModel={selectedModel}
                   onModelChange={onModelChange}
-                  onOpenChange={handleModelSelectorOpenChange}
+                  onOpenChange={handleSelectorOpenChange}
                   apiKeyId={
                     conversationId
                       ? currentConversationChatApiKeyId
@@ -743,8 +751,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               )}
             </div>
           )}
-          {!executionMode && toolsUnavailable && <NoToolsModelBadge />}
-          {!executionMode && notRecommendedForAgents && (
+          {!runtimeMode && toolsUnavailable && <NoToolsModelBadge />}
+          {!runtimeMode && notRecommendedForAgents && (
             <NotRecommendedForAgentsNoticeBadge />
           )}
           {tokensUsed > 0 && maxContextLength && (

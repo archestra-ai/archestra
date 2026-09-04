@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
+  echo "archestra: OpenCode requires an Agent configured for OpenAI Responses" >&2
+  exit 78
+fi
+
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
+config_file="${runtime_dir}/opencode.json"
+instructions_file="${runtime_dir}/opencode-instructions.md"
+task_file="${runtime_dir}/task.md"
+attention_plugin="${runtime_dir}/opencode-attention.js"
+model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
+context_length="${ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH:-32768}"
+output_length="${ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH:-8192}"
+
+mkdir -p "${runtime_dir}/config" "${runtime_dir}/data" "${runtime_dir}/cache" "${runtime_dir}/state"
+export XDG_CONFIG_HOME="${runtime_dir}/config"
+export XDG_DATA_HOME="${runtime_dir}/data"
+export XDG_CACHE_HOME="${runtime_dir}/cache"
+export XDG_STATE_HOME="${runtime_dir}/state"
+export OPENCODE_CONFIG="${config_file}"
+export OPENCODE_CONFIG_DIR="${runtime_dir}/config"
+export OPENCODE_DISABLE_AUTOUPDATE=1
+export OPENCODE_DISABLE_PROJECT_CONFIG=1
+# OpenCode's event firehose exposes explicit question, permission, and turn
+# lifecycle events. Load only this generated plugin: project config discovery
+# remains disabled, so a checked-out repository cannot contribute plugins.
+cat > "${attention_plugin}" <<'PLUGIN'
+export const ArchestraAttention = async () => {
+  let primarySessionID;
+
+  const update = async (...args) => {
+    try {
+      const command = process.env.ARCHESTRA_AGENT_ATTENTION_COMMAND ?? "archestra-agent-attention";
+      const child = Bun.spawn([command, ...args], { stdout: "ignore", stderr: "ignore" });
+      await child.exited;
+    } catch {
+      // Attention reporting is best-effort and must never interrupt a run.
+    }
+  };
+
+  return {
+    event: async ({ event }) => {
+      if (event.type === "question.asked") {
+        await update("set", "Input requested");
+        return;
+      }
+      if (event.type === "permission.asked") {
+        await update("set", "Permission needed");
+        return;
+      }
+      if (
+        event.type === "question.replied" ||
+        event.type === "question.rejected" ||
+        event.type === "permission.replied" ||
+        event.type === "session.error"
+      ) {
+        await update("clear");
+        return;
+      }
+      if (event.type !== "session.status") return;
+
+      if (event.properties.status.type === "busy") {
+        primarySessionID ??= event.properties.sessionID;
+        if (event.properties.sessionID === primarySessionID) await update("clear");
+        return;
+      }
+      if (event.properties.sessionID !== primarySessionID) return;
+      if (
+        event.properties.status.type === "idle" &&
+        process.env.ARCHESTRA_AGENT_RUNTIME_MODE === "interactive"
+      ) {
+        await update("set", "Waiting for input");
+      } else {
+        await update("clear");
+      }
+    },
+  };
+};
+PLUGIN
+chmod 0600 "${attention_plugin}"
+
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" > "${instructions_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
+
+completion_plugin=""
+if [[ "${runtime_mode}" == "one_shot" ]] \
+  && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
+  completion_plugin="${runtime_dir}/opencode-completion.js"
+  cat > "${completion_plugin}" <<'PLUGIN'
+import { writeFile } from "node:fs/promises";
+
+export const ArchestraCompletion = async ({ client, directory }) => ({
+  event: async ({ event }) => {
+    if (event.type !== "session.idle") return;
+
+    const sessionID = event.properties?.sessionID;
+    if (!sessionID) return;
+
+    const sessionResponse = await client.session.get({
+      path: { id: sessionID },
+      query: { directory },
+    });
+    if (sessionResponse.data?.parentID) return;
+
+    const response = await client.session.messages({
+      path: { id: sessionID },
+      query: { directory },
+    });
+    const messages = response.data ?? [];
+    const assistant = [...messages]
+      .reverse()
+      .find((message) => message.info?.role === "assistant");
+    const answer = (assistant?.parts ?? [])
+      .filter((part) => part.type === "text" && !part.ignored)
+      .map((part) => part.text)
+      .join("")
+      .trim();
+    if (!answer) return;
+
+    const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
+    await writeFile(`${runtimeDir}/final-answer.txt`, `${answer}\n`, "utf8");
+    await writeFile(`${runtimeDir}/turn-complete`, "", "utf8");
+  },
+});
+PLUGIN
+fi
+
+jq -n \
+  --arg model "${model}" \
+  --arg base_url "${OPENAI_BASE_URL:?}" \
+  --arg api_key '{env:OPENAI_API_KEY}' \
+  --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
+  --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
+  --arg mcp_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
+  --arg instructions_file "${instructions_file}" \
+  --arg attention_plugin "${attention_plugin}" \
+  --arg completion_plugin "${completion_plugin}" \
+  --argjson context_length "${context_length}" \
+  --argjson output_length "${output_length}" \
+  '{
+    "$schema":"https://opencode.ai/config.json",
+    autoupdate:false,
+    plugin:([$attention_plugin] + if $completion_plugin == "" then [] else [("file://" + $completion_plugin)] end),
+    model:("archestra/" + $model),
+    permission:"allow",
+    instructions:[$instructions_file],
+    provider:{archestra:{
+      npm:"@ai-sdk/openai",
+      name:"Archestra",
+      options:{
+        baseURL:$base_url,
+        apiKey:$api_key,
+        headers:{
+          "X-Archestra-Run-Id":$task_id,
+          "X-Archestra-Session-Id":$task_id
+        }
+      },
+      models:{($model):{
+        name:$model,
+        tool_call:true,
+        limit:{context:$context_length,output:$output_length}
+      }}
+    }},
+    mcp:{archestra:{
+      type:"remote",
+      url:$mcp_url,
+      enabled:true,
+      oauth:false,
+      headers:{
+        Authorization:("Bearer " + $mcp_token),
+        "X-Archestra-Run-Id":$task_id,
+        "X-Archestra-Session-Id":$task_id
+      }
+    }}
+  }' > "${config_file}"
+chmod 0600 "${config_file}" "${instructions_file}" "${task_file}"
+
+case "${runtime_mode}" in
+  interactive)
+    exec opencode \
+      --auto \
+      --model "archestra/${model}" \
+      --prompt "$(cat "${task_file}")"
+    ;;
+  one_shot)
+    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
+      export OPENCODE_PURE=1
+      exec opencode run \
+        --pure \
+        --auto \
+        --model "archestra/${model}" \
+        -- "$(cat "${task_file}")"
+    fi
+
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    exec "${script_dir}/archestra-tui-run" \
+      "${runtime_dir}/turn-complete" \
+      "${runtime_dir}/final-answer.txt" \
+      opencode \
+        --auto \
+        --model "archestra/${model}" \
+        --prompt "$(cat "${task_file}")"
+    ;;
+  *)
+    echo "archestra: unknown Agent Runtime mode" >&2
+    exit 78
+    ;;
+esac

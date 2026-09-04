@@ -1,4 +1,4 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   A2AMessage,
@@ -182,6 +182,46 @@ class A2AMessageModel {
       byTask.set(message.taskId, list);
     }
     return byTask;
+  }
+
+  /**
+   * Fetch only the first user-message parts needed to label task listings.
+   *
+   * The full-message batch above is intentionally kept for A2A transcript
+   * consumers. Listings must not use it: agent replies can contain multi-MB
+   * execution transcripts in both `parts` and `content`, while a listing only
+   * needs the first user prompt.
+   */
+  static async findFirstUserPartsByTaskIds(
+    taskIds: string[],
+  ): Promise<Map<string, unknown[]>> {
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await db
+      .selectDistinctOn([schema.a2aMessagesTable.taskId], {
+        taskId: schema.a2aMessagesTable.taskId,
+        parts: schema.a2aMessagesTable.parts,
+      })
+      .from(schema.a2aMessagesTable)
+      .where(
+        and(
+          inArray(schema.a2aMessagesTable.taskId, taskIds),
+          eq(schema.a2aMessagesTable.role, "ROLE_USER"),
+        ),
+      )
+      .orderBy(
+        schema.a2aMessagesTable.taskId,
+        schema.a2aMessagesTable.createdAt,
+        schema.a2aMessagesTable.id,
+      );
+
+    return new Map(
+      rows.flatMap(({ taskId, parts }) =>
+        taskId === null ? [] : [[taskId, parts] as const],
+      ),
+    );
   }
 
   static async delete(id: string): Promise<void> {

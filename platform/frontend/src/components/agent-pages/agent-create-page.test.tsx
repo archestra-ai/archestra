@@ -91,9 +91,9 @@ describe("AgentCreatePage", () => {
   it("offers maintained Agent templates and prefills the existing create wizard", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
-      feature === "agentBackgroundExecution"
+      feature === "agentRuntime"
         ? true
-        : feature === "agentBackgroundExecutionBaseImage"
+        : feature === "agentRuntimeBaseImage"
           ? "agent-archestra:dev"
           : undefined,
     );
@@ -107,6 +107,7 @@ describe("AgentCreatePage", () => {
       "Archestra Agent",
       "Claude Code",
       "Codex",
+      "OpenCode",
       "Hermes",
       "OpenClaw",
     ]) {
@@ -125,7 +126,7 @@ describe("AgentCreatePage", () => {
           name: "Codex",
           icon: "/model-logos/openai.svg",
           requiredSubscriptionKind: "chatgpt",
-          backgroundExecution: expect.objectContaining({
+          runtime: expect.objectContaining({
             command: ["archestra-codex"],
             image: "agent-codex:dev",
             credentials: expect.arrayContaining([
@@ -142,12 +143,41 @@ describe("AgentCreatePage", () => {
     expect(screen.getByRole("button", { name: "Catalog" })).toBeInTheDocument();
   });
 
+  it("prefills OpenCode with its maintained Responses runtime", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime"
+        ? true
+        : feature === "agentRuntimeBaseImage"
+          ? "agent-archestra:dev"
+          : undefined,
+    );
+
+    render(<AgentCreatePage kind="agent" />);
+    await user.click(screen.getByRole("button", { name: /opencode/i }));
+
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialValues: expect.objectContaining({
+          name: "OpenCode",
+          icon: "/agent-logos/opencode.svg",
+          runtime: expect.objectContaining({
+            image: "agent-opencode:dev",
+            command: ["archestra-opencode"],
+            inferenceProtocol: "openai_responses",
+            steerMode: "tmux_keys",
+          }),
+        }),
+      }),
+    );
+  });
+
   it("prefills OpenClaw with its compatible Chat Completions transport", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
-      feature === "agentBackgroundExecution"
+      feature === "agentRuntime"
         ? true
-        : feature === "agentBackgroundExecutionBaseImage"
+        : feature === "agentRuntimeBaseImage"
           ? "agent-archestra:dev"
           : undefined,
     );
@@ -159,7 +189,7 @@ describe("AgentCreatePage", () => {
       expect.objectContaining({
         initialValues: expect.objectContaining({
           name: "OpenClaw",
-          backgroundExecution: expect.objectContaining({
+          runtime: expect.objectContaining({
             command: ["archestra-openclaw"],
             inferenceProtocol: "openai_chat",
           }),
@@ -171,7 +201,7 @@ describe("AgentCreatePage", () => {
   it("uses the configured product name and sidebar icon for the built-in Agent", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
-      feature === "agentBackgroundExecution" ? true : undefined,
+      feature === "agentRuntime" ? true : undefined,
     );
     vi.mocked(useAppName).mockReturnValue("Acme AI");
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-app-icon.svg");
@@ -204,7 +234,7 @@ describe("AgentCreatePage", () => {
     const user = userEvent.setup();
     mockConfig.enterpriseFeatures.fullWhiteLabeling = true;
     vi.mocked(useFeature).mockImplementation((feature) =>
-      feature === "agentBackgroundExecution" ? true : undefined,
+      feature === "agentRuntime" ? true : undefined,
     );
     vi.mocked(useAppName).mockReturnValue("Example AI");
     vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
@@ -231,7 +261,7 @@ describe("AgentCreatePage", () => {
   it("prefills Claude Code with its runtime-scoped personal subscription token", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
-      feature === "agentBackgroundExecution" ? true : undefined,
+      feature === "agentRuntime" ? true : undefined,
     );
 
     render(<AgentCreatePage kind="agent" />);
@@ -240,7 +270,7 @@ describe("AgentCreatePage", () => {
     expect(formProps).toHaveBeenLastCalledWith(
       expect.objectContaining({
         initialValues: expect.objectContaining({
-          backgroundExecution: expect.objectContaining({
+          runtime: expect.objectContaining({
             command: ["archestra-claude-code"],
             credentials: expect.arrayContaining([
               expect.objectContaining({

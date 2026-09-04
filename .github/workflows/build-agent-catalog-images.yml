@@ -38,6 +38,7 @@ jobs:
           - agent-archestra
           - agent-claude-code
           - agent-codex
+          - agent-opencode
           - agent-hermes
           - agent-openclaw
     permissions:

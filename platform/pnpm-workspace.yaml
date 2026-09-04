@@ -2,7 +2,7 @@ packages:
   - "backend"
   - "drizzle-migration-linter"
   - "frontend"
-  - "runner-agent"
+  - "runtime-agent"
   - "shared"
   - "archestra-rs/napi-loader"
   - "archestra-rs/sandbox-rs"
@@ -94,9 +94,11 @@ overrides:
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'
   samlify: '>=2.13.0'
-  # CVE-2026-16221 / CVE-2026-13676 (HIGH, interpretation conflict) fixed in
-  # 3.1.4, then CVE-2026-18446 (HIGH, same class) fixed in 3.1.5.
-  fast-uri: '>=3.1.5'
+  # CVE-2026-16221 / CVE-2026-13676 / CVE-2026-18446 / CVE-2026-75899 /
+  # CVE-2026-75931 / CVE-2026-75975 / CVE-2026-76172 (HIGH, URI parsing and
+  # validation flaws) fixed across 3.1.4-3.1.6. Keep every transitive consumer
+  # on the fully patched 3.x line.
+  fast-uri: '>=3.1.6 <4'
   ajv: 8.18.0
   # GHSA-gcfj-64vw-6mp9 (HIGH, prototype pollution) affects >=1.15.2, fixed in 1.18.0.
   axios: '>=1.18.0'

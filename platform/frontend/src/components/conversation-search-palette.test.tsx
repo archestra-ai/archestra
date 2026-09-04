@@ -12,12 +12,12 @@ const {
   mockRouterPush,
   mockDeleteMutate,
   mockUseConversations,
-  mockUseMyAgentExecutions,
+  mockUseMyAgentRuns,
 } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUseConversations: vi.fn(),
-  mockUseMyAgentExecutions: vi.fn(),
+  mockUseMyAgentRuns: vi.fn(),
 }));
 
 vi.mock("next/navigation");
@@ -53,8 +53,8 @@ vi.mock("@/lib/chat/chat.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/agent-background-execution.query", () => ({
-  useMyAgentExecutions: mockUseMyAgentExecutions,
+vi.mock("@/lib/agent-runtime.query", () => ({
+  useMyAgentRuns: mockUseMyAgentRuns,
 }));
 
 // Store the onValueChange callback so tests can control selectedValue
@@ -192,7 +192,7 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
       isFetching: false,
     });
-    mockUseMyAgentExecutions.mockReturnValue({
+    mockUseMyAgentRuns.mockReturnValue({
       data: [],
       isLoading: false,
     });
@@ -309,16 +309,18 @@ describe("ConversationSearchPalette", () => {
     expect(row.querySelector(".lucide-message-circle")).toBeNull();
   });
 
-  it("lists background execution sessions in the browse view and opens one", () => {
-    mockUseMyAgentExecutions.mockReturnValue({
+  it("lists Agent Runtime sessions in the browse view and opens one", () => {
+    mockUseMyAgentRuns.mockReturnValue({
       data: [
         {
           taskId: "task-1",
           title: "Nightly report run",
           state: "TASK_STATE_WORKING",
-          startedAt: new Date().toISOString(),
+          startedAt: new Date(Date.now() - 30 * 60_000).toISOString(),
           stateChangedAt: new Date().toISOString(),
           endedAt: null,
+          hardDeadlineAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+          lastModelActivityAt: new Date(Date.now() - 20 * 60_000).toISOString(),
           projectId: "project-1",
           projectName: "Release work",
         },
@@ -329,8 +331,8 @@ describe("ConversationSearchPalette", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
 
     expect(screen.getByText("Nightly report run")).toBeInTheDocument();
-    // The row carries the same state-colored execution mark as the sidebar.
-    expect(screen.getByLabelText("Execution running")).toBeInTheDocument();
+    // The row carries the same liveness-aware run mark as the sidebar.
+    expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Open project Release work" }),
     );
@@ -338,11 +340,11 @@ describe("ConversationSearchPalette", () => {
     mockRouterPush.mockClear();
 
     fireEvent.click(screen.getByTestId("cmd-item-exec-task-1"));
-    expect(mockRouterPush).toHaveBeenCalledWith("/chat/executions/task-1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/task-1");
   });
 
-  it("shows pinned execution sessions under Pinned instead of Recent", () => {
-    mockUseMyAgentExecutions.mockReturnValue({
+  it("shows pinned run sessions under Pinned instead of Recent", () => {
+    mockUseMyAgentRuns.mockReturnValue({
       data: [
         {
           taskId: "task-pinned",
@@ -371,13 +373,13 @@ describe("ConversationSearchPalette", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("matches execution sessions by title during search", () => {
+  it("matches run sessions by title during search", () => {
     mockUseConversations.mockReturnValue({
       data: [],
       isLoading: false,
       isFetching: false,
     });
-    mockUseMyAgentExecutions.mockReturnValue({
+    mockUseMyAgentRuns.mockReturnValue({
       data: [
         {
           taskId: "task-1",

@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+def main() -> int:
+    if len(sys.argv) < 4:
+        print(
+            "usage: archestra-tui-exec <completion-marker> <frame-file> <command> [args...]",
+            file=sys.stderr,
+        )
+        return 64
+
+    completion_marker = Path(sys.argv[1])
+    frame_file = Path(sys.argv[2])
+    command = sys.argv[3:]
+    parent_process_group = os.getpgrp()
+
+    child_pid = os.fork()
+    if child_pid == 0:
+        os.setpgid(0, 0)
+        os.kill(os.getpid(), signal.SIGSTOP)
+        os.execvp(command[0], command)
+
+    os.setpgid(child_pid, child_pid)
+    os.waitpid(child_pid, os.WUNTRACED)
+    os.tcsetpgrp(0, child_pid)
+    os.killpg(child_pid, signal.SIGCONT)
+
+    child_status: int | None = None
+    try:
+        while child_status is None:
+            exited_pid, status = os.waitpid(child_pid, os.WNOHANG)
+            if exited_pid == child_pid:
+                child_status = status
+                break
+            if completion_marker.exists():
+                time.sleep(2)
+                capture_frame(frame_file)
+                child_status = stop_process_group(child_pid)
+                break
+            time.sleep(0.2)
+    finally:
+        signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+        os.tcsetpgrp(0, parent_process_group)
+
+    if completion_marker.exists():
+        return 0
+    return os.waitstatus_to_exitcode(child_status)
+
+
+def capture_frame(frame_file: Path) -> None:
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
+        return
+    result = subprocess.run(
+        ["tmux", "capture-pane", "-p", "-e", "-t", pane],
+        check=False,
+        stdout=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        return
+    size_result = subprocess.run(
+        [
+            "tmux",
+            "display-message",
+            "-p",
+            "-t",
+            pane,
+            "#{pane_width}x#{pane_height}",
+        ],
+        check=False,
+        stdout=subprocess.PIPE,
+    )
+    size = size_result.stdout.strip()
+    metadata = (
+        b"\x1b]777;archestra-terminal-size=" + size + b"\x07"
+        if size_result.returncode == 0 and re.fullmatch(rb"[0-9]+x[0-9]+", size)
+        else b""
+    )
+    clean_lines = [
+        line for line in result.stdout.splitlines(keepends=True) if b"?1;2c" not in line
+    ]
+    frame_file.write_bytes(metadata + b"".join(clean_lines))
+
+
+def stop_process_group(child_pid: int) -> int:
+    try:
+        os.killpg(child_pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        exited_pid, status = os.waitpid(child_pid, os.WNOHANG)
+        if exited_pid == child_pid:
+            return status
+        time.sleep(0.05)
+
+    try:
+        os.killpg(child_pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    return os.waitpid(child_pid, 0)[1]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

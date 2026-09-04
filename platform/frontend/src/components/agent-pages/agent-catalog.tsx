@@ -14,7 +14,13 @@ import {
 } from "@/lib/hooks/use-app-name";
 
 export interface AgentCatalogTemplate {
-  id: "archestra" | "claude-code" | "codex" | "hermes" | "openclaw";
+  id:
+    | "archestra"
+    | "claude-code"
+    | "codex"
+    | "opencode"
+    | "hermes"
+    | "openclaw";
   name: string;
   description: string;
   icon: string | null;
@@ -74,6 +80,17 @@ export function getAgentCatalogTemplates(
       requiredSubscriptionKind: "chatgpt",
     }),
     template({
+      id: "opencode",
+      name: "OpenCode",
+      icon: "/agent-logos/opencode.svg",
+      description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      platformName: appName,
+      image: image(archestraImage, "opencode"),
+      command: ["archestra-opencode"],
+      inferenceProtocol: "openai_responses",
+      steerMode: "tmux_keys",
+    }),
+    template({
       id: "hermes",
       name: "Hermes",
       icon: "/agent-logos/hermes.png",
@@ -105,7 +122,7 @@ export function AgentCatalog({
   onStartFromScratch: () => void;
   onSelect: (template: AgentCatalogTemplate) => void;
 }) {
-  const configuredImage = useFeature("agentBackgroundExecutionBaseImage");
+  const configuredImage = useFeature("agentRuntimeBaseImage");
   const appName = useAppName();
   const resolvedAppIconLogo = useAppIconLogo();
   // SPDX-SnippetBegin
@@ -185,6 +202,16 @@ function CatalogAgentIcon({
       return <ProviderIcon provider="anthropic" size={22} />;
     case "codex":
       return <ProviderIcon provider="openai" size={22} />;
+    case "opencode":
+      return (
+        <Image
+          src="/agent-logos/opencode.svg"
+          alt=""
+          width={22}
+          height={22}
+          className="h-[22px] w-auto object-contain dark:invert"
+        />
+      );
     case "hermes":
       return (
         <Image
@@ -222,7 +249,7 @@ function template(params: {
   steerMode: "pipe" | "tmux_keys";
   requiredSubscriptionKind?: SubscriptionCredentialKind;
   additionalCredentials?: NonNullable<
-    NonNullable<AgentFormInitialValues["backgroundExecution"]>["credentials"]
+    NonNullable<AgentFormInitialValues["runtime"]>["credentials"]
   >;
 }): AgentCatalogTemplate {
   return {
@@ -237,7 +264,7 @@ function template(params: {
       systemPrompt: `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through ${params.platformName}, verify your work, and report the concrete result.`,
       accessAllTools: true,
       requiredSubscriptionKind: params.requiredSubscriptionKind,
-      backgroundExecution: {
+      runtime: {
         image: params.image,
         command: params.command,
         inferenceProtocol: params.inferenceProtocol,

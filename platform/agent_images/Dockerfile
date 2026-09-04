@@ -16,14 +16,14 @@ RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 WORKDIR /opt/archestra
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY patches ./patches
-COPY runner-agent/package.json ./runner-agent/package.json
-RUN pnpm install --filter @archestra/runner-agent --frozen-lockfile \
+COPY runtime-agent/package.json ./runtime-agent/package.json
+RUN pnpm install --filter @archestra/runtime-agent --frozen-lockfile \
       --ignore-scripts
-COPY runner-agent/tsconfig.json ./runner-agent/tsconfig.json
-COPY runner-agent/src ./runner-agent/src
-RUN pnpm --filter @archestra/runner-agent build \
- && chmod +x /opt/archestra/runner-agent/dist/index.js \
- && ln -s /opt/archestra/runner-agent/dist/index.js /usr/local/bin/archestra-runner-agent
+COPY runtime-agent/tsconfig.json ./runtime-agent/tsconfig.json
+COPY runtime-agent/src ./runtime-agent/src
+RUN pnpm --filter @archestra/runtime-agent build \
+ && chmod +x /opt/archestra/runtime-agent/dist/index.js \
+ && ln -s /opt/archestra/runtime-agent/dist/index.js /usr/local/bin/archestra-runtime-agent
 
 COPY agent_images/bin /usr/local/bin
 RUN chmod 0755 /usr/local/bin/archestra-*
@@ -55,6 +55,17 @@ USER root
 RUN pnpm add --global @openai/codex@0.149.1 \
  && codex --version \
  && chown -R 1000:1000 /home/node
+USER 1000:1000
+
+FROM agent-base AS agent-opencode
+USER root
+RUN pnpm add --global opencode-ai@1.18.23 \
+ && OPENCODE_PACKAGE_DIR="$(pnpm list --global --json opencode-ai | jq -r '.[0].dependencies["opencode-ai"].path')" \
+ && node "${OPENCODE_PACKAGE_DIR}/postinstall.mjs" \
+ && opencode --version \
+ && chown -R 1000:1000 /home/node
+ENV OPENCODE_DISABLE_AUTOUPDATE=1
+ENV OPENCODE_DISABLE_PROJECT_CONFIG=1
 USER 1000:1000
 
 FROM agent-base AS agent-hermes

@@ -582,7 +582,7 @@ export const permissionDescriptions: Record<string, string> = {
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
   "project:read-all":
-    "View chats and execution sessions that other members started in any project you can access. Without this, you only see the sessions you started yourself — including in projects you own.",
+    "View chats and Agent Runtime runs that other members started in any project you can access. Without this, you only see the sessions you started yourself — including in projects you own.",
   "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read": "View your own LLM proxy and MCP tool call logs",
   "log:admin": "View every user's LLM proxy and MCP tool call logs",
@@ -675,35 +675,35 @@ export const requiredEndpointPermissionsMap: Partial<
    */
   [RouteId.GetOrganization]: {},
 
-  // Background execution belongs to Agents. Read access is enough to view
+  // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes
   // additionally enforce Agent update + scope ownership inside the route.
-  [RouteId.GetAgentBackgroundExecutionPreflight]: { agent: ["read"] },
-  [RouteId.SetAgentBackgroundExecutionCredential]: { agent: ["read"] },
-  [RouteId.DeleteAgentBackgroundExecutionCredential]: { agent: ["read"] },
-  [RouteId.ListExecutionCredentials]: { agent: ["read"] },
-  [RouteId.CreateExecutionCredential]: { agentSettings: ["update"] },
-  [RouteId.GetExecutionCredentialUsage]: { agentSettings: ["update"] },
-  [RouteId.UpdateExecutionCredential]: { agentSettings: ["update"] },
-  [RouteId.DeleteExecutionCredential]: { agentSettings: ["update"] },
-  [RouteId.SetPersonalExecutionCredentialConnection]: { agent: ["read"] },
-  [RouteId.DeletePersonalExecutionCredentialConnection]: { agent: ["read"] },
-  [RouteId.SetOrganizationExecutionCredentialConnection]: {
+  [RouteId.GetAgentRuntimePreflight]: { agent: ["read"] },
+  [RouteId.SetAgentRuntimeCredential]: { agent: ["read"] },
+  [RouteId.DeleteAgentRuntimeCredential]: { agent: ["read"] },
+  [RouteId.ListRuntimeCredentials]: { agent: ["read"] },
+  [RouteId.CreateRuntimeCredential]: { agentSettings: ["update"] },
+  [RouteId.GetRuntimeCredentialUsage]: { agentSettings: ["update"] },
+  [RouteId.UpdateRuntimeCredential]: { agentSettings: ["update"] },
+  [RouteId.DeleteRuntimeCredential]: { agentSettings: ["update"] },
+  [RouteId.SetPersonalRuntimeCredentialConnection]: { agent: ["read"] },
+  [RouteId.DeletePersonalRuntimeCredentialConnection]: { agent: ["read"] },
+  [RouteId.SetOrganizationRuntimeCredentialConnection]: {
     agentSettings: ["update"],
   },
-  [RouteId.DeleteOrganizationExecutionCredentialConnection]: {
+  [RouteId.DeleteOrganizationRuntimeCredentialConnection]: {
     agentSettings: ["update"],
   },
-  [RouteId.GetAgentExecutions]: { agent: ["read"] },
-  [RouteId.StartAgentExecution]: { agent: ["read"] },
-  [RouteId.GetMyAgentExecutions]: { agent: ["read"] },
-  [RouteId.GetMyAgentExecution]: { agent: ["read"] },
-  [RouteId.UpdateAgentExecution]: { agent: ["read"] },
-  [RouteId.CancelAgentExecution]: { agent: ["read"] },
-  [RouteId.DeleteAgentExecution]: { agent: ["read"] },
-  [RouteId.GetAgentExecutionShare]: { agent: ["read"] },
-  [RouteId.ShareAgentExecution]: { agent: ["read"] },
-  [RouteId.UnshareAgentExecution]: { agent: ["read"] },
+  [RouteId.GetAgentRuns]: { agent: ["read"] },
+  [RouteId.StartAgentRun]: { agent: ["read"] },
+  [RouteId.GetMyAgentRuns]: { agent: ["read"] },
+  [RouteId.GetMyAgentRun]: { agent: ["read"] },
+  [RouteId.UpdateAgentRun]: { agent: ["read"] },
+  [RouteId.CancelAgentRun]: { agent: ["read"] },
+  [RouteId.DeleteAgentRun]: { agent: ["read"] },
+  [RouteId.GetAgentRunShare]: { agent: ["read"] },
+  [RouteId.ShareAgentRun]: { agent: ["read"] },
+  [RouteId.UnshareAgentRun]: { agent: ["read"] },
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -835,6 +835,9 @@ export const requiredEndpointPermissionsMap: Partial<
     toolPolicy: ["delete"],
   },
   [RouteId.GetInteractions]: {
+    log: ["read"],
+  },
+  [RouteId.GetInteractionSummaries]: {
     log: ["read"],
   },
   [RouteId.GetInteraction]: {
@@ -1938,7 +1941,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // branch here to answer 403 and leak a trashed project's existence.
   [RouteId.PermanentlyDeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
-  [RouteId.GetProjectExecutions]: { project: ["read"], agent: ["read"] },
+  [RouteId.GetProjectRuns]: { project: ["read"], agent: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is
   // still enforced in the handler (projectService.listFiles/uploadFile ->
@@ -1995,7 +1998,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkDeleteApps]: { app: ["delete"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
+  [RouteId.GetAppVersionSummaries]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },
+  [RouteId.RestoreAppVersion]: { app: ["update"] },
   [RouteId.GetAppTools]: { app: ["read"] },
   [RouteId.AssignToolToApp]: { app: ["update"] },
   [RouteId.UnassignToolFromApp]: { app: ["update"] },

@@ -17,9 +17,10 @@ jobs:
     name: Add Archestra banner
     # The banner is contributor onboarding for the public repo. In private
     # mirrors (e.g. archestra-ai/archestra-private, where task-env sessions
-    # open their PRs) the GitHub App secrets don't exist, so the job could
-    # only ever fail red — skip it there.
-    if: ${{ !github.event.repository.private }}
+    # open their PRs) the GitHub App secrets don't exist. Dependabot PRs also
+    # receive a fork-like secret context without these credentials, so neither
+    # event can append the banner and both should skip instead of failing red.
+    if: ${{ !github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       issues: write # edit issue body

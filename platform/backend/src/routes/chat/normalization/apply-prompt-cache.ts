@@ -15,7 +15,9 @@ const CLAUDE_45_AND_NEWER_ONE_HOUR_CACHE_MODEL =
 const CLAUDE_45_ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
 
 // Bedrock fronts many model families, and only Anthropic Claude and Amazon Nova
-// support prompt caching. Sending a cachePoint to any other family does not
+// 2 support explicit prompt caching. Legacy Nova v1 uses automatic prompt
+// caching but rejects Converse `cachePoint` blocks. Sending a cachePoint to a
+// model without explicit-cache support does not
 // degrade gracefully — AWS rejects the whole request with a 403 "You invoked an
 // unsupported model or your request did not allow prompt caching", so an
 // uncacheable model is unusable rather than merely uncached.
@@ -24,7 +26,7 @@ const CLAUDE_45_ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
 // gets no breakpoints, costing a cache hit rather than breaking the request.
 // Widen it when AWS documents caching for another Bedrock family.
 // https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
-const BEDROCK_PROMPT_CACHE_MODEL = /claude|nova-(?:micro|lite|pro|premier)/;
+const BEDROCK_PROMPT_CACHE_MODEL = /claude|nova-2-/;
 
 // Per-provider cache-breakpoint marker, written into a message's
 // `providerOptions`. Anthropic and Amazon Bedrock both require explicit

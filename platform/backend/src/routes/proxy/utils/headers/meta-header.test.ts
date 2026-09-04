@@ -1,7 +1,7 @@
 import {
-  EXECUTION_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   META_HEADER,
+  RUN_ID_HEADER,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
@@ -16,7 +16,7 @@ describe("parseMetaHeader", () => {
 
     expect(result).toEqual({
       externalAgentId: "my-agent",
-      executionId: "exec-123",
+      runId: "exec-123",
       sessionId: "session-456",
     });
   });
@@ -47,7 +47,7 @@ describe("parseMetaHeader", () => {
     });
 
     expect(result).toEqual({
-      executionId: "exec-123",
+      runId: "exec-123",
       sessionId: "session-456",
     });
   });
@@ -68,15 +68,15 @@ describe("parseMetaHeader", () => {
 
     expect(result).toEqual({
       externalAgentId: "my-agent",
-      executionId: "exec-123",
+      runId: "exec-123",
     });
   });
 
-  test("sets only execution-id when first and third are empty", () => {
+  test("sets only run-id when first and third are empty", () => {
     const result = parseMetaHeader({ [metaHeaderKey]: "/exec-123/" });
 
     expect(result).toEqual({
-      executionId: "exec-123",
+      runId: "exec-123",
     });
   });
 
@@ -93,7 +93,7 @@ describe("parseMetaHeader", () => {
 
     expect(result).toEqual({
       externalAgentId: "agent",
-      executionId: "exec",
+      runId: "exec",
       sessionId: "session",
     });
   });
@@ -105,7 +105,7 @@ describe("parseMetaHeader", () => {
 
     expect(result).toEqual({
       externalAgentId: "my-agent",
-      executionId: "exec-123",
+      runId: "exec-123",
       sessionId: "session-456",
     });
   });
@@ -117,7 +117,7 @@ describe("parseMetaHeader", () => {
 
     expect(result).toEqual({
       externalAgentId: "agent",
-      executionId: "exec",
+      runId: "exec",
       sessionId: "session",
     });
   });
@@ -167,8 +167,8 @@ describe("getHeaderValue", () => {
     ).toBe("agent-1");
     expect(
       getHeaderValue(
-        { [EXECUTION_ID_HEADER.toLowerCase()]: "exec-1" },
-        EXECUTION_ID_HEADER,
+        { [RUN_ID_HEADER.toLowerCase()]: "exec-1" },
+        RUN_ID_HEADER,
       ),
     ).toBe("exec-1");
   });

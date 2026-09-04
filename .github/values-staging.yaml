@@ -72,24 +72,24 @@ archestra:
     ARCHESTRA_MCP_SERVER_ALERTING_ENABLED: "true"
     ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
     ARCHESTRA_MCP_SKILLS_ENABLED: "true"
-    # Background execution is intentionally independent of ARCHESTRA_BETA.
+    # Agent Runtime is intentionally independent of ARCHESTRA_BETA.
     # Enable it only on staging while the capability is being rolled out.
-    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED: "true"
-    # Execution Jobs run in separate pods, so the API's ordinary loopback URL
-    # cannot reach the platform from a runner. Use the in-cluster Service that
-    # the runner NetworkPolicy already permits on port 9000.
-    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL: "http://archestra-platform.archestra.svc.cluster.local:9000"
+    ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
+    # Agent Runtime Jobs run in separate pods, so the API's ordinary loopback URL
+    # cannot reach the platform from a run pod. Use the in-cluster Service that
+    # the Agent Runtime NetworkPolicy already permits on port 9000.
+    ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL: "http://archestra-platform.archestra.svc.cluster.local:9000"
     # Lobster Env workers run dockerd + kind + tilt inside their pods, which
     # needs the privileged opt-in, and land on the dedicated autoscaled
-    # runners pool (tainted archestra-runners=true) so heavy sessions never
+    # Agent Runtime pool (tainted archestra-agent-runtime=true) so heavy runs never
     # pressure the platform's own nodes. The storage cap covers the in-pod
     # /var/lib/docker emptyDir on that pool's 200GB disks.
-    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED: "true"
-    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR: "archestra-runners=true"
-    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT: "60Gi"
-    # Scale-from-zero on the runners pool plus a cold multi-GB image pull can
+    ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"
+    ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR: "archestra-agent-runtime=true"
+    ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT: "60Gi"
+    # Scale-from-zero on the Agent Runtime pool plus a cold multi-GB image pull can
     # take 6+ minutes before the container starts.
-    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_POD_START_TIMEOUT_SECONDS: "900"
+    ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS: "900"
     # BETA: auto-sync-permissions connectors (off by default everywhere else).
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.

@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { DefaultUserLimitsSection } from "@/app/settings/llm/_parts/default-user-limits-section";
 import { ModelProvidersSection } from "@/app/settings/llm/_parts/model-providers-section";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { LoadingState } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -185,7 +184,7 @@ export default function LlmSettingsPage() {
   };
 
   if (isInitialLoading) {
-    return <LoadingState variant="page" />;
+    return null;
   }
 
   return (

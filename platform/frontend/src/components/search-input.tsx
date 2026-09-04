@@ -26,6 +26,14 @@ type SearchInputProps = {
    * follows it; this extends the same indicator across the request the commit
    * triggers, so one continuous signal covers keystroke to results. Pass the
    * query's `isFetching` — the same flag the table gets as `isLoading`.
+   *
+   * Only ever consulted while the box actually holds a search term. Callers
+   * pass `isFetching`, which is true for the list's first load and for every
+   * background refetch as well, so taking it at face value lit the magnifier
+   * on pages nobody was searching — and, worse, told `useReportSearchInFlight`
+   * a search was running, which is what suppresses the sidebar toggle's
+   * spinner. An ordinary page load would light this box and silence the one
+   * indicator that was supposed to report it.
    */
   isLoading?: boolean;
 };
@@ -61,7 +69,8 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
 
     // Typing was the part with no feedback at all: the debounce, the commit and
     // the request that follows it all used to pass under a static magnifier.
-    const isBusy = isCommitPending || isLoading;
+    // An empty box is not searching, whatever the list behind it is doing.
+    const isBusy = isCommitPending || (isLoading && searchValue !== "");
 
     // The sidebar toggle's spinner reports that the app itself is loading. This
     // wait is already reported twice over, right where the user is looking, so

@@ -290,7 +290,7 @@ curl -X POST "${a2aEndpoint}" \\
     [a2aEndpoint, tokenForDisplay, approvalExampleMessageId],
   );
 
-  // cURL example for background execution: get the task handle immediately,
+  // cURL example for Agent Runtime: get the task handle immediately,
   // then poll it. Useful for runs that outlive a request timeout.
   const backgroundTaskCurlCode = useMemo(
     () => `# Start the run in the background — returns a task straight away

@@ -10,6 +10,7 @@ import { isUsableTerminalDimensions } from "./exec-terminal.utils";
 import {
   type ExecSessionProgress,
   ExecTerminalProgress,
+  ExecTerminalStatus,
 } from "./exec-terminal-progress";
 
 type ConnectionStatus =
@@ -80,7 +81,12 @@ interface ExecTerminalProps {
   disconnectedLabel?: string;
   /** Whether a closed PTY should add a status banner above its retained frame. */
   showDisconnectedStatus?: boolean;
+  /** Snapshot shown immediately while the live transport catches up. */
+  initialProgress?: ExecSessionProgress | null;
+  /** Stable start time for the elapsed counter, such as the run's start. */
+  progressStartedAt?: number;
   onCommandChange?: (command: string | null) => void;
+  onError?: () => void;
   onClosed?: () => void;
 }
 
@@ -93,15 +99,23 @@ export function ExecTerminal({
   showManualCommand = true,
   disconnectedLabel = "Session terminated",
   showDisconnectedStatus = true,
+  initialProgress = null,
+  progressStartedAt,
   onCommandChange,
+  onError,
   onClosed,
 }: ExecTerminalProps) {
   // Read through a ref so a new transport object on every render cannot
   // retrigger the effect; `sessionKey` is the reconnect signal.
   const transportRef = useRef(transport);
   transportRef.current = transport;
+  const initialProgressRef = useRef(initialProgress);
+  initialProgressRef.current = initialProgress;
+  const hasTransportProgressRef = useRef(false);
   const onClosedRef = useRef(onClosed);
   onClosedRef.current = onClosed;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
   const onCommandChangeRef = useRef(onCommandChange);
   onCommandChangeRef.current = onCommandChange;
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -200,7 +214,8 @@ export function ExecTerminal({
         }
 
         setStatus("connecting");
-        setProgress(null);
+        hasTransportProgressRef.current = false;
+        setProgress(initialProgressRef.current);
         setConnectingSince(Date.now());
         setErrorMessage(null);
 
@@ -210,6 +225,7 @@ export function ExecTerminal({
         closeSession = transportRef.current.open({
           onProgress: (sessionProgress) => {
             if (disposed) return;
+            hasTransportProgressRef.current = true;
             setProgress(sessionProgress);
           },
           onStarted: (startedCommand) => {
@@ -235,6 +251,7 @@ export function ExecTerminal({
             if (disposed) return;
             setStatus("error");
             setErrorMessage(message);
+            onErrorRef.current?.();
           },
           onClosed: (reason) => {
             if (disposed) return;
@@ -292,15 +309,11 @@ export function ExecTerminal({
     };
   }, [isActive, sessionKey, cleanup]);
 
-  const statusText = {
-    idle: "",
-    connecting: "Connecting...",
-    connected: "",
-    disconnected: closedReason
-      ? `${disconnectedLabel} — ${closedReason}`
-      : disconnectedLabel,
-    error: errorMessage || "Connection error",
-  }[status];
+  useEffect(() => {
+    if (status === "connecting" && !hasTransportProgressRef.current) {
+      setProgress(initialProgress);
+    }
+  }, [initialProgress, status]);
 
   const [commandCopied, setCommandCopied] = useState(false);
 
@@ -327,24 +340,38 @@ export function ExecTerminal({
             (progress ? (
               <ExecTerminalProgress
                 progress={progress}
-                startedAt={connectingSince}
+                startedAt={progressStartedAt ?? connectingSince}
               />
             ) : (
-              <div className="flex items-center justify-center p-4 text-slate-400 text-sm font-mono">
-                {statusText}
-              </div>
+              <ExecTerminalStatus
+                title="Connecting to the terminal"
+                tone="loading"
+              />
             ))}
-          {(status === "error" ||
-            (status === "disconnected" && showDisconnectedStatus)) && (
-            <div
-              className={`flex items-center justify-center p-4 text-sm font-mono ${status === "error" ? "text-red-400" : "text-yellow-400"}`}
-            >
-              {statusText}
-            </div>
-          )}
+          {status === "error" ? (
+            <ExecTerminalStatus
+              title="Unable to open the terminal"
+              detail={errorMessage || "The terminal connection failed."}
+              tone="error"
+            />
+          ) : null}
+          {status === "disconnected" && showDisconnectedStatus ? (
+            <ExecTerminalStatus
+              title={disconnectedLabel}
+              detail={closedReason}
+              tone="warning"
+            />
+          ) : null}
           <div
             className="flex-1 min-h-0 p-4 pb-2"
-            style={{ display: status === "connecting" ? "none" : "block" }}
+            style={{
+              display:
+                status === "connecting" ||
+                status === "error" ||
+                (status === "disconnected" && showDisconnectedStatus)
+                  ? "none"
+                  : "block",
+            }}
           >
             <div ref={terminalRef} className="h-full" />
           </div>

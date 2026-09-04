@@ -276,9 +276,13 @@ describe("ToolModel", () => {
       });
       await makeAgentTool(agent2.id, tool2.id);
 
-      const tools = await ToolModel.findAll(admin.id, true);
+      const tools = await ToolModel.findAll({
+        userId: admin.id,
+        isAgentAdmin: true,
+        pagination: { limit: 20, offset: 0 },
+      });
       // Expects exactly 2 proxy-discovered tools (Archestra tools are no longer auto-assigned)
-      expect(tools.length).toBe(2);
+      expect(tools.data).toHaveLength(2);
     });
 
     test("non-admin only sees MCP tools, not proxy tools", async ({
@@ -333,9 +337,13 @@ describe("ToolModel", () => {
       await makeAgentTool(agent1.id, mcpTool.id);
 
       // Non-admin user only sees MCP tools, not proxy tools
-      const tools = await ToolModel.findAll(user1.id, false);
-      expect(tools).toHaveLength(1);
-      expect(tools[0].id).toBe(mcpTool.id);
+      const tools = await ToolModel.findAll({
+        userId: user1.id,
+        isAgentAdmin: false,
+        pagination: { limit: 20, offset: 0 },
+      });
+      expect(tools.data).toHaveLength(1);
+      expect(tools.data[0].id).toBe(mcpTool.id);
     });
 
     test("member with no access sees only MCP tools", async ({
@@ -354,8 +362,12 @@ describe("ToolModel", () => {
       });
       await makeAgentTool(agent1.id, tool1.id);
 
-      const tools = await ToolModel.findAll(user.id, false);
-      expect(tools).toHaveLength(0);
+      const tools = await ToolModel.findAll({
+        userId: user.id,
+        isAgentAdmin: false,
+        pagination: { limit: 20, offset: 0 },
+      });
+      expect(tools.data).toHaveLength(0);
     });
 
     test("findById returns tool for admin", async ({

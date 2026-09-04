@@ -34,6 +34,15 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   };
 });
 
+// The auth frame pulls in live-data chrome (notification bar, version footer)
+// that is irrelevant to the gate's routing decisions and needs a QueryClient;
+// its geometry is pinned by the loading-states e2e spec instead.
+vi.mock("./auth-surface-frame", () => ({
+  AuthSurfaceFrame: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="auth-surface-frame">{children}</div>
+  ),
+}));
+
 // Mock shared module
 // Partial: the gate reads real shared constants (the render route it lets
 // through) alongside the permissions map this suite substitutes. Replacing the

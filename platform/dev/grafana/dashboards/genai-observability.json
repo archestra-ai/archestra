@@ -2281,7 +2281,7 @@
       },
       "id": 64,
       "panels": [],
-      "title": "External Agent Executions",
+      "title": "External Agent Runs",
       "type": "row"
     },
     {
@@ -2289,7 +2289,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Total number of unique agent executions within the selected time range, grouped by agent name. An execution is identified by the X-Archestra-Execution-Id header.",
+      "description": "Total number of unique agent runs within the selected time range, grouped by agent name. A run is identified by the X-Archestra-Run-Id header.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2337,7 +2337,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "round(sum by (external_agent_id, agent_name) (sum_over_time(increase(agent_executions_total{external_agent_id!=\"\"}[1m])[$__range:1m])))",
+          "expr": "round(sum by (external_agent_id, agent_name) (sum_over_time(increase(agent_runs_total{external_agent_id!=\"\"}[1m])[$__range:1m])))",
           "instant": true,
           "legendFormat": "{{agent_name}} ({{external_agent_id}})",
           "queryType": "instant",
@@ -2345,7 +2345,7 @@
           "refId": "A"
         }
       ],
-      "title": "Executions per Agent",
+      "title": "Runs per Agent",
       "type": "stat"
     },
     {
@@ -2453,7 +2453,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Running total of full operating cost per agent: LLM API spending + a fixed fee per execution (default: $1, configurable in the query). The value at the right edge is the total for the selected period.",
+      "description": "Running total of full operating cost per agent: LLM API spending + a fixed fee per run (default: $1, configurable in the query). The value at the right edge is the total for the selected period.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2536,7 +2536,7 @@
             "uid": "${metrics_datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (agent_name) (sum_over_time(increase(llm_cost_total{billing_mode=\"metered\", agent_name!=\"\"}[1m])[$__range:1m])) + round(sum by (agent_name) (sum_over_time(increase(agent_executions_total{agent_name!=\"\"}[1m])[$__range:1m]))) * 1",
+          "expr": "sum by (agent_name) (sum_over_time(increase(llm_cost_total{billing_mode=\"metered\", agent_name!=\"\"}[1m])[$__range:1m])) + round(sum by (agent_name) (sum_over_time(increase(agent_runs_total{agent_name!=\"\"}[1m])[$__range:1m]))) * 1",
           "instant": false,
           "legendFormat": "{{agent_name}}",
           "queryType": "range",
@@ -2545,7 +2545,7 @@
           "exemplar": true
         }
       ],
-      "title": "Inference + Execution Cost",
+      "title": "Inference + Run Cost",
       "type": "timeseries"
     },
     {

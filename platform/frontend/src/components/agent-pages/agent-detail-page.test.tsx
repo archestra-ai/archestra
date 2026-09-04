@@ -62,8 +62,8 @@ vi.mock("@/components/agent-form", () => ({
 vi.mock("./agent-connect-content", () => ({
   AgentConnectContent: () => <div>connect content</div>,
 }));
-vi.mock("./agent-executions", () => ({
-  AgentExecutions: () => <div>execution history</div>,
+vi.mock("./agent-runs", () => ({
+  AgentRuns: () => <div>run history</div>,
 }));
 vi.mock("@/components/clone-agent-dialog", () => ({
   CloneAgentDialog: () => null,
@@ -263,10 +263,10 @@ describe("AgentDetailPage", () => {
   });
 
   it("corrects a ?section= this record has none of", () => {
-    // Executions is an agent-with-background-execution tab; asking for it on a
+    // Runs is an agent-with-runtime tab; asking for it on a
     // record without one renders Configuration, and the URL is put right so a
     // reload does not keep asking.
-    mockSection("executions");
+    mockSection("runs");
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.getByText("form section: configuration")).toBeVisible();
@@ -398,27 +398,25 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("—")).toBeNull();
   });
 
-  it("names delegated task history Executions and gives it a section", () => {
+  it("names delegated task history Runs and gives it a section", () => {
     vi.mocked(useFeature).mockReturnValue(true);
-    mockAgent({ ...baseAgent, backgroundExecution: {} });
+    mockAgent({ ...baseAgent, runtime: {} });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(
       screen
-        .getAllByRole("link", { name: "Executions" })
+        .getAllByRole("link", { name: "Runs" })
         .every(
-          (link) =>
-            link.getAttribute("href") === "/agents/a1?section=executions",
+          (link) => link.getAttribute("href") === "/agents/a1?section=runs",
         ),
     ).toBe(true);
-    expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
   });
 
-  it("keeps execution UI invisible when its feature flag is disabled", () => {
-    mockAgent({ ...baseAgent, backgroundExecution: {} });
+  it("keeps run UI invisible when its feature flag is disabled", () => {
+    mockAgent({ ...baseAgent, runtime: {} });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByRole("link", { name: "Executions" })).toBeNull();
-    expect(screen.queryByText("execution history")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
+    expect(screen.queryByText("run history")).toBeNull();
   });
 });

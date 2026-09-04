@@ -268,6 +268,7 @@ async function discoverAuthorizationServerMetadataWithOverrides(
   authorization_endpoint: string;
   token_endpoint: string;
   registration_endpoint?: string;
+  token_endpoint_auth_methods_supported?: string[];
   scopes_supported?: string[];
   /** RFC 8414 issuer identifier. */
   issuer?: string;
@@ -321,6 +322,7 @@ interface DiscoveredEndpoints {
   authorizationEndpoint: string;
   tokenEndpoint: string;
   registrationEndpoint?: string;
+  tokenEndpointAuthMethodsSupported?: string[];
   /**
    * Issuer identifier and RFC 9207 support, carried out of discovery so the
    * authorization step can record what the callback will verify against.
@@ -436,6 +438,10 @@ export async function discoverOAuthEndpoints(
         metadata.authorization_endpoint,
       tokenEndpoint: explicitEndpoints.tokenEndpoint ?? metadata.token_endpoint,
       registrationEndpoint: metadata.registration_endpoint,
+      ...(Array.isArray(metadata.token_endpoint_auth_methods_supported) && {
+        tokenEndpointAuthMethodsSupported:
+          metadata.token_endpoint_auth_methods_supported,
+      }),
       issuer: typeof metadata.issuer === "string" ? metadata.issuer : undefined,
       issParameterSupported:
         metadata.authorization_response_iss_parameter_supported === true,
@@ -476,6 +482,7 @@ async function registerOAuthClient(
     grant_types?: string[];
     response_types?: string[];
     scope?: string;
+    token_endpoint_auth_method?: OAuthClientAuthMethod;
   },
 ) {
   try {
@@ -496,7 +503,11 @@ async function registerOAuthClient(
 
     const result = await response.json();
     logger.info(
-      { registrationResult: result },
+      {
+        hasClientId: typeof result?.client_id === "string",
+        hasClientSecret: typeof result?.client_secret === "string",
+        tokenEndpointAuthMethod: result?.token_endpoint_auth_method,
+      },
       "registerOAuthClient: Dynamic client registration response",
     );
     return result;
@@ -515,6 +526,7 @@ interface OAuthStateData {
   codeVerifier: string;
   clientId?: string;
   clientSecret?: string;
+  tokenEndpointAuthMethod?: OAuthClientAuthMethod;
   registrationResult?: Record<string, unknown>;
   /**
    * Issuer of the authorization server this flow was started against, and
@@ -600,6 +612,7 @@ export async function refreshOAuthToken(
       // to be able to refresh the token.
       client_id?: string;
       client_secret?: string;
+      token_endpoint_auth_method?: OAuthClientAuthMethod;
     };
 
     if (!currentTokens.refresh_token) {
@@ -677,23 +690,30 @@ export async function refreshOAuthToken(
     );
 
     // Exchange refresh token for new access token
+    const tokenRequestHeaders = new Headers({
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    });
+    const tokenRequestBody = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: currentTokens.refresh_token,
+      ...(oauthResource && {
+        resource: oauthResource,
+      }),
+    });
+    applyOAuthClientAuthentication({
+      headers: tokenRequestHeaders,
+      body: tokenRequestBody,
+      clientId,
+      clientSecret,
+      authMethod:
+        currentTokens.token_endpoint_auth_method ?? "client_secret_post",
+    });
+
     const tokenResponse = await fetch(tokenEndpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: currentTokens.refresh_token,
-        client_id: clientId,
-        ...(clientSecret && {
-          client_secret: clientSecret,
-        }),
-        ...(oauthResource && {
-          resource: oauthResource,
-        }),
-      }),
+      headers: tokenRequestHeaders,
+      body: tokenRequestBody,
       signal: AbortSignal.timeout(OAUTH_TOKEN_REFRESH_TIMEOUT_MS),
     });
 
@@ -754,6 +774,9 @@ export async function refreshOAuthToken(
       // Store client credentials for token refresh (config takes precedence, fallback to stored)
       ...(clientId && { client_id: clientId }),
       ...(clientSecret && { client_secret: clientSecret }),
+      ...(currentTokens.token_endpoint_auth_method && {
+        token_endpoint_auth_method: currentTokens.token_endpoint_auth_method,
+      }),
     };
 
     // Persist the refreshed tokens. The grant already succeeded and a rotating
@@ -898,6 +921,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Discover authorization server metadata to get the correct authorization endpoint
         let authorizationEndpoint: string;
         let registrationEndpoint: string | undefined;
+        let tokenEndpointAuthMethodsSupported: string[] = [];
         let discoveredIssuer: string | undefined;
         let discoveredIssSupported: boolean | undefined;
 
@@ -919,6 +943,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
             authorizationEndpoint = endpoints.authorizationEndpoint;
             registrationEndpoint = endpoints.registrationEndpoint;
+            tokenEndpointAuthMethodsSupported =
+              endpoints.tokenEndpointAuthMethodsSupported ?? [];
             discoveredIssuer = endpoints.issuer;
             discoveredIssSupported = endpoints.issParameterSupported;
           } catch (error) {
@@ -958,8 +984,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // If we don't have client credentials and registration endpoint is available, try dynamic registration
         let registrationResult: Record<string, unknown> | undefined;
+        let tokenEndpointAuthMethod: OAuthClientAuthMethod | undefined;
         let registrationError: string | undefined;
         if (!clientId && registrationEndpoint) {
+          tokenEndpointAuthMethod = selectDynamicClientAuthMethod(
+            tokenEndpointAuthMethodsSupported,
+          );
           const registrationMetadata = {
             client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
             redirect_uris: [redirectUri],
@@ -969,6 +999,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // "web", which then rejects the localhost-style redirect URIs a
             // self-hosted deployment uses. Non-OIDC servers ignore it.
             application_type: "native" as const,
+            token_endpoint_auth_method: tokenEndpointAuthMethod,
           };
           try {
             fastify.log.info(
@@ -1062,6 +1093,10 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             clientSecret = registrationResult?.client_secret as
               | string
               | undefined;
+            tokenEndpointAuthMethod =
+              parseOAuthClientAuthMethod(
+                registrationResult?.token_endpoint_auth_method,
+              ) ?? tokenEndpointAuthMethod;
 
             // RFC 7591: a `scope` in the registration response is the scope
             // set the client is allowed to use. Prefer it for the
@@ -1116,6 +1151,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           codeVerifier,
           clientId,
           clientSecret,
+          tokenEndpointAuthMethod,
           registrationResult,
           issuer: discoveredIssuer,
           issParameterSupported: discoveredIssSupported,
@@ -1243,6 +1279,11 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use client credentials from state (dynamically registered) or fall back to config
       const clientId = oauthState.clientId || oauthConfig.client_id;
       const clientSecret = oauthState.clientSecret || oauthConfig.client_secret;
+      const tokenEndpointAuthMethod =
+        oauthState.tokenEndpointAuthMethod ??
+        parseOAuthClientAuthMethod(
+          oauthState.registrationResult?.token_endpoint_auth_method,
+        );
 
       // Use the same redirect URI that was registered during initiation
       // This must match exactly what was used in the authorization request
@@ -1267,6 +1308,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             clientInformation: {
               client_id: clientId,
               client_secret: clientSecret,
+              ...(tokenEndpointAuthMethod && {
+                token_endpoint_auth_method: tokenEndpointAuthMethod,
+              }),
             },
             authorizationCode: code,
             codeVerifier: oauthState.codeVerifier,
@@ -1304,25 +1348,30 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         const oauthResource = getOAuthTokenResource(oauthConfig);
+        const tokenRequestHeaders = new Headers({
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        });
+        const tokenRequestBody = new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+          code_verifier: oauthState.codeVerifier,
+          ...(oauthResource && {
+            resource: oauthResource,
+          }),
+        });
+        applyOAuthClientAuthentication({
+          headers: tokenRequestHeaders,
+          body: tokenRequestBody,
+          clientId,
+          clientSecret,
+          authMethod: tokenEndpointAuthMethod ?? "client_secret_post",
+        });
         const tokenResponse = await fetch(tokenEndpoint, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            Accept: "application/json",
-          },
-          body: new URLSearchParams({
-            grant_type: "authorization_code",
-            code,
-            redirect_uri: redirectUri,
-            client_id: clientId,
-            code_verifier: oauthState.codeVerifier,
-            ...(clientSecret && {
-              client_secret: clientSecret,
-            }),
-            ...(oauthResource && {
-              resource: oauthResource,
-            }),
-          }),
+          headers: tokenRequestHeaders,
+          body: tokenRequestBody,
         });
 
         if (!tokenResponse.ok) {
@@ -1387,6 +1436,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store client credentials for token refresh (may come from dynamic registration)
         ...(clientId && { client_id: clientId }),
         ...(clientSecret && { client_secret: clientSecret }),
+        ...(tokenEndpointAuthMethod && {
+          token_endpoint_auth_method: tokenEndpointAuthMethod,
+        }),
       };
 
       logger.info(
@@ -1522,6 +1574,74 @@ async function resolveOAuthClientBrandName(
   const organization = await OrganizationModel.getById(organizationId);
   const appName = organization?.appName?.trim();
   return appName || defaultBrandName;
+}
+
+type OAuthClientAuthMethod =
+  | "client_secret_basic"
+  | "client_secret_post"
+  | "none";
+
+function selectDynamicClientAuthMethod(
+  supportedMethods: string[],
+): OAuthClientAuthMethod {
+  if (supportedMethods.includes("client_secret_basic")) {
+    return "client_secret_basic";
+  }
+  if (supportedMethods.includes("client_secret_post")) {
+    return "client_secret_post";
+  }
+  if (supportedMethods.includes("none")) {
+    return "none";
+  }
+
+  // Preserve compatibility with authorization servers that omit this optional
+  // metadata: this is the method the direct OAuth flow historically used.
+  return "client_secret_post";
+}
+
+function parseOAuthClientAuthMethod(
+  value: unknown,
+): OAuthClientAuthMethod | undefined {
+  if (
+    value === "client_secret_basic" ||
+    value === "client_secret_post" ||
+    value === "none"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function applyOAuthClientAuthentication(params: {
+  headers: Headers;
+  body: URLSearchParams;
+  clientId: string;
+  clientSecret?: string;
+  authMethod: OAuthClientAuthMethod;
+}): void {
+  if (params.authMethod === "client_secret_basic") {
+    if (!params.clientSecret) {
+      throw new Error(
+        "client_secret_basic authentication requires a client secret",
+      );
+    }
+    const encodedClientId = formEncode(params.clientId);
+    const encodedClientSecret = formEncode(params.clientSecret);
+    params.headers.set(
+      "Authorization",
+      `Basic ${Buffer.from(`${encodedClientId}:${encodedClientSecret}`).toString("base64")}`,
+    );
+    return;
+  }
+
+  params.body.set("client_id", params.clientId);
+  if (params.authMethod === "client_secret_post" && params.clientSecret) {
+    params.body.set("client_secret", params.clientSecret);
+  }
+}
+
+function formEncode(value: string): string {
+  return new URLSearchParams({ value }).toString().slice("value=".length);
 }
 
 export default oauthRoutes;

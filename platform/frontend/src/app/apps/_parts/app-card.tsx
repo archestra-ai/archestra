@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
+  History,
   Loader2,
   MoreHorizontal,
   Pin,
@@ -14,10 +15,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { LabelTags } from "@/components/label-tags";
+import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-history-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { useNavigableCard } from "@/components/table-card-view";
@@ -44,7 +46,10 @@ import {
   usePinApp,
 } from "@/lib/app.query";
 import { appRunUrl } from "@/lib/apps/app-run-url";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  appActionDisabledReason,
+  useAppAccess,
+} from "@/lib/apps/use-app-access";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFeature } from "@/lib/config/config.query";
 import type { BulkCardSelectionProps } from "@/lib/hooks/use-bulk-card-selection";
@@ -82,10 +87,12 @@ function CardSelectionCheckbox({
   label,
   selection,
   disabled = false,
+  disabledReason = "Installed apps are managed through their MCP server",
 }: {
   label: string;
   selection?: BulkCardSelectionProps;
   disabled?: boolean;
+  disabledReason?: string;
 }) {
   const checkbox = (
     <Checkbox
@@ -103,15 +110,14 @@ function CardSelectionCheckbox({
 
   if (!disabled) return checkbox;
 
-  const reason = "Installed apps are managed through their MCP server";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex cursor-not-allowed" title={reason}>
+        <span className="inline-flex cursor-not-allowed" title={disabledReason}>
           {checkbox}
         </span>
       </TooltipTrigger>
-      <TooltipContent>{reason}</TooltipContent>
+      <TooltipContent>{disabledReason}</TooltipContent>
     </Tooltip>
   );
 }
@@ -233,7 +239,7 @@ function OwnedAppCard({
   const router = useRouter();
   const openApp = useOpenAppInChat();
   const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
-  const { data: canDelete } = useHasPermissions({ app: ["delete"] });
+  const access = useAppAccess(app);
   // A personal app the caller only reaches through app:admin oversight
   // (viewerRole "admin") — i.e. someone else's personal app — gets a visible
   // "Owned by <name>" badge (mirroring the Projects page) so an admin can tell
@@ -247,6 +253,17 @@ function OwnedAppCard({
   // the card unmounts mid-navigation, so it never resets; only a failure does.
   const [isOpening, setIsOpening] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const settingsDisabledReason = appActionDisabledReason({
+    app,
+    access,
+    action: "update",
+  });
+  const deleteDisabledReason = appActionDisabledReason({
+    app,
+    access,
+    action: "delete",
+  });
 
   const handleOpen = async (lockedChat = false) => {
     setIsOpening(true);
@@ -280,6 +297,11 @@ function OwnedAppCard({
               <CardSelectionCheckbox
                 label={`Select ${app.name}`}
                 selection={selection}
+                disabled={selection.selectionDisabled || !access.canEdit}
+                disabledReason={
+                  settingsDisabledReason ??
+                  "You do not have permission to modify this app"
+                }
               />
             ) : null}
             <AppTypeIcon owned icon={app.icon} />
@@ -326,10 +348,18 @@ function OwnedAppCard({
               pinned={!!app.pinnedAt}
               target={{ source: "owned", appId: app.id }}
             />
-            <DropdownMenuItem onSelect={() => onOpenSettings?.(app)}>
-              <Settings className="h-4 w-4" />
-              Settings
-            </DropdownMenuItem>
+            <AppMenuItem
+              icon={<Settings className="h-4 w-4" />}
+              label="Settings"
+              disabledReason={settingsDisabledReason}
+              onSelect={() => onOpenSettings?.(app)}
+            />
+            <AppMenuItem
+              icon={<History className="h-4 w-4" />}
+              label="Version history"
+              disabledReason={settingsDisabledReason}
+              onSelect={() => setHistoryOpen(true)}
+            />
             <DropdownMenuItem asChild>
               <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
                 <SquareArrowOutUpRight className="h-4 w-4" />
@@ -346,18 +376,14 @@ function OwnedAppCard({
                 Open as locked chat
               </DropdownMenuItem>
             ) : null}
-            {canDelete ? (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </>
-            ) : null}
+            <DropdownMenuSeparator />
+            <AppMenuItem
+              icon={<Trash2 className="h-4 w-4" />}
+              label="Delete"
+              variant="destructive"
+              disabledReason={deleteDisabledReason}
+              onSelect={() => setDeleteOpen(true)}
+            />
           </CardOverflowMenu>
         </div>
 
@@ -383,6 +409,11 @@ function OwnedAppCard({
         app={{ id: app.id, name: app.name }}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+      />
+      <AppVersionHistoryDialog
+        app={app}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
       />
     </>
   );
@@ -518,5 +549,63 @@ function ExternalAppCard({
         </CardDescription>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * A refused menu item stays in the menu so the action remains discoverable.
+ * `aria-disabled` keeps it focusable, while the guarded select handler and the
+ * visible/screen-reader reason explain why it cannot run.
+ */
+function AppMenuItem({
+  icon,
+  label,
+  onSelect,
+  disabledReason,
+  variant,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onSelect: () => void;
+  disabledReason?: string;
+  variant?: "default" | "destructive";
+}) {
+  const reasonId = useId();
+  const isDisabled = !!disabledReason;
+  const content = (
+    <DropdownMenuItem
+      aria-disabled={isDisabled || undefined}
+      aria-describedby={isDisabled ? reasonId : undefined}
+      className={isDisabled ? "cursor-not-allowed opacity-50" : undefined}
+      variant={variant}
+      onSelect={(event) => {
+        if (isDisabled) {
+          event.preventDefault();
+          return;
+        }
+        onSelect();
+      }}
+    >
+      {icon}
+      <span>{label}</span>
+      {disabledReason ? (
+        <span id={reasonId} aria-hidden="true" className="sr-only">
+          {disabledReason}
+        </span>
+      ) : null}
+    </DropdownMenuItem>
+  );
+
+  if (!disabledReason) return content;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="cursor-not-allowed">{content}</div>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-64">
+        {disabledReason}
+      </TooltipContent>
+    </Tooltip>
   );
 }

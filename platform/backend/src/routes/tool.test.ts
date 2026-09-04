@@ -4,7 +4,7 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-describe("GET /api/tools/:id", () => {
+describe("tool routes", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
@@ -77,5 +77,32 @@ describe("GET /api/tools/:id", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  test("returns a bounded page from the tools collection", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({ catalogId: catalog.id, name: "first-tool" });
+    await makeTool({ catalogId: catalog.id, name: "second-tool" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/tools?limit=1&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: [expect.objectContaining({ catalogId: catalog.id })],
+      pagination: {
+        currentPage: 1,
+        limit: 1,
+        total: 2,
+        totalPages: 2,
+        hasNext: true,
+        hasPrev: false,
+      },
+    });
   });
 });

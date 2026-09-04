@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-07-23
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -200,7 +200,7 @@ Provider onboarding uses backend Vitest for proxy behavior coverage and e2e test
 The backend matrix covers:
 
 - declared tool persistence
-- execution ID persistence
+- run ID persistence
 - streaming tool call handling
 - token cost limit enforcement
 - TOON compression

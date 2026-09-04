@@ -1,7 +1,7 @@
 "use client";
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { SkillScopeSelector } from "@/app/skills/_parts/skill-scope-selector";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ export function BulkVisibilityDialog({
   onOpenChange,
   onApply,
   isPending,
+  renderTeamSelectionNotice,
 }: {
   items: readonly BulkVisibilityItem[];
   noun: string;
@@ -56,6 +57,8 @@ export function BulkVisibilityDialog({
    */
   onApply: (change: BulkVisibilityChange) => Promise<boolean>;
   isPending: boolean;
+  /** Optional resource-specific consequence of the staged team selection. */
+  renderTeamSelectionNotice?: (teamIds: readonly string[]) => ReactNode;
 }) {
   const common = commonVisibility(items);
   const [scope, setScope] = useState<ResourceVisibilityScope>(
@@ -106,6 +109,9 @@ export function BulkVisibilityDialog({
           userIds={userIds}
           onUserIdsChange={setUserIds}
         />
+        {scope === "team" && renderTeamSelectionNotice ? (
+          <div className="mt-3">{renderTeamSelectionNotice(teamIds)}</div>
+        ) : null}
       </div>
 
       <DialogStickyFooter>

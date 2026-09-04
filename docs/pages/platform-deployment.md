@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-01
+lastUpdated: 2026-09-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -884,47 +884,51 @@ Upgrading from a chart that ran the included engine leaves its cache volume behi
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.
   - Default: `50`
 
-### Agent Background Execution
+### Agent Runtime
 
-Background execution runs delegated Agent tasks in dedicated Kubernetes pods. You can view logs, open a shell, and steer a run while it is active. It needs the Kubernetes runtime configured (see `ARCHESTRA_ORCHESTRATOR_*`); without it the capability stays unavailable.
+Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can view logs, open a shell, and steer a run while it is active. It needs the Kubernetes runtime configured (see `ARCHESTRA_ORCHESTRATOR_*`); without it the capability stays unavailable.
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED`** - Enables Background execution. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
+- **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE`** - Container image prefilled when Background execution is enabled on an Agent. The built-in image supplies the default Agent loop; custom images can replace it and set their own command.
+- **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop; custom images can replace it and set their own command.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged background pods. Privileged containers have node-level access.
+- **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL`** - Base URL a background pod uses to reach the LLM proxy and the MCP gateway. It has to be reachable from inside the cluster. With neither this nor `ARCHESTRA_INTERNAL_API_BASE_URL` set, starting a run fails rather than letting it bypass the proxy.
+- **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`** - Base URL an Agent Runtime pod uses to reach the LLM proxy and the MCP gateway. It has to be reachable from inside the cluster. With neither this nor `ARCHESTRA_INTERNAL_API_BASE_URL` set, starting a run fails rather than letting it bypass the proxy.
   - Default: `ARCHESTRA_INTERNAL_API_BASE_URL`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_TTL_HOURS`** - Lifetime cap for runs whose Agent sets none. Kubernetes enforces it on the workload as well.
+- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS`** - Lifetime cap for runs whose Agent sets none. Kubernetes enforces it on the workload as well.
   - Default: `72`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_IDLE_TIMEOUT_MINUTES`** - How long the built-in execution agent waits for another steer after finishing its current work before the run exits. An Agent can override this value. Custom images receive the timeout as `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_IDLE_TIMEOUT_SECONDS` and must implement the wait themselves.
+- **`ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES`** - How long the built-in runtime agent waits for another steer after finishing its current work before the run exits. An Agent can override this value. Custom images receive the timeout as `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` and must implement the wait themselves.
   - Default: `180`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_CPU_REQUEST`**, **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_REQUEST`**, **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_LIMIT`** - Pod resources for a run whose Agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
+- **`ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST`**, **`ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT`** - Pod resources for a run whose Agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
   - Defaults: `500m`, `1Gi`, `4Gi`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT`** - Maximum writable scratch space for one execution. Kubernetes enforces the limit on the run's `emptyDir` volume.
+- **`ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT`** - Maximum writable scratch space for one run. Kubernetes enforces the limit on the run's `emptyDir` volume.
   - Default: `10Gi`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.
+- **`ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.
   - Default: `600`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR`** - Steers background pods onto a dedicated node pool, written as `key=value` pairs. The pairs become each pod's node selector, with a matching `NoSchedule` toleration per pair. Empty schedules background pods like any other workload. Use it when heavy runs should not share nodes with the platform.
+- **`ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`** - Steers Agent Runtime pods onto a dedicated node pool, written as `key=value` pairs. The pairs become each pod's node selector, with a matching `NoSchedule` toleration per pair. Empty schedules them like any other workload. Use it when heavy runs should not share nodes with the platform.
   - Default: unset
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR`** - Label selector matching the platform's own API pods, written as `key=value` pairs. Background pods get an egress policy allowing exactly that destination. Override it when your deployment labels the platform differently.
+- **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR`** - Label selector matching the platform's own API pods, written as `key=value` pairs. Agent Runtime pods get an egress policy allowing exactly that destination. Override it when your deployment labels the platform differently.
   - Default: `archestra.io/p4-shim-client=true`
 
-- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RECONCILE_INTERVAL_SECONDS`** - How often the reconciler syncs run state and applies the lifetime and idle stops.
+- **`ARCHESTRA_AGENT_RUNTIME_RECONCILE_INTERVAL_SECONDS`** - How often the reconciler syncs run state and applies the lifetime and idle stops.
   - Default: `30`
+
+- **`ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES`** - Maximum uncompressed container output stored as a complete transcript for one run. Transcripts are gzip-compressed in independent chunks before storage. A run that exceeds the limit keeps its final 1 MiB and is labeled **Retained tail only** in the terminal.
+  - Default: `262144000` (250 MiB)
+  - Completed transcripts follow `ARCHESTRA_A2A_TASK_RETENTION_DAYS`; deleting a run also deletes its transcript.
 
 ### Skills Marketplace
 
@@ -1288,7 +1292,8 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 - **`ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS`** - Headers/body timeout (milliseconds) for LLM-call fetches, applied as a custom undici dispatcher on both the chat→proxy and proxy→upstream hops.
   - Default: unset, i.e. undici's defaults (5 minutes for both headers and body timeout)
-  - Opt-in: set a larger value (e.g. `600000` for 10 minutes) when an upstream's time-to-first-token can exceed 5 minutes — typically a slow CPU-only Ollama or vLLM model — which otherwise fails with `Headers Timeout Error`
+  - Opt-in: raise it when an upstream can take more than 5 minutes to send headers or the next stream chunk
+  - Keep it below the load balancer's request or idle timeout. For a 600-second load balancer timeout, use `540000` so Archestra can report the upstream timeout before the load balancer closes the connection
   - Keep it finite so genuinely-dead upstreams still surface as errors
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify subscription credentials as subscription usage.
@@ -1460,7 +1465,7 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 
 A2A task streams work across replicas. A client can subscribe on one replica while the task runs on another — the stream reads the task's event log from the database, and Postgres `LISTEN/NOTIFY` wakes it as soon as the running replica writes. If a notification is missed, the stream falls back to a periodic read, so it stays correct either way. Behind a connection pooler that cannot hold a listener, set `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`.
 
-- **`ARCHESTRA_A2A_TASK_RETENTION_DAYS`** - How long a finished A2A task is kept before it is deleted, along with its artifacts and stream events.
+- **`ARCHESTRA_A2A_TASK_RETENTION_DAYS`** - How long a finished A2A task is kept before it is deleted, along with its artifacts, stream events, and retained execution transcript.
   - Default: `90`. Set to `0` to keep tasks forever.
   - Only terminal tasks (completed, failed, canceled, rejected) are eligible; a task still running is never deleted.
   - The task's messages are detached before it goes, so the conversation history they belong to is untouched — only the task-scoped view of them is lost. The agent's answer also stays in that history.

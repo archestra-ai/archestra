@@ -1709,7 +1709,7 @@ describe("ChatOpsManager security validation", () => {
     );
   });
 
-  test("uses verified user ID for agent execution (not synthetic ID)", async ({
+  test("uses verified user ID for agent run (not synthetic ID)", async ({
     makeUser,
     makeOrganization,
     makeTeam,

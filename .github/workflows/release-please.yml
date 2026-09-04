@@ -364,10 +364,26 @@ jobs:
             echo "Release $TAG_NAME is already published; skipping."
           fi
 
+      # Dispatches the website repo's CLI deploy workflow. A Vercel deploy hook
+      # cannot be used: hooks create Git-integration deployments, which Vercel
+      # blocks when the website's head commit author is not a Vercel team member.
+      - name: Generate website deployment token
+        id: generate-website-token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}
+          owner: archestra-ai
+          repositories: website
+          permission-actions: write
+
       - name: Trigger website deploy
         env:
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
-        run: curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL"
+          GH_TOKEN: ${{ steps.generate-website-token.outputs.token }}
+        run: |
+          gh workflow run deploy-to-vercel.yml \
+            --repo archestra-ai/website \
+            --ref main
 
   notify-release-failure:
     name: Notify release failure

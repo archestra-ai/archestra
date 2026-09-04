@@ -20,7 +20,8 @@ const {
   getApps,
   getApp,
   getExternalApp,
-  getAppVersions,
+  getAppVersionSummaries,
+  restoreAppVersion: restoreAppVersionApi,
   getAppTools,
   createApp,
   updateApp,
@@ -144,7 +145,7 @@ export function useAppVersions(appId: string | null) {
     queryKey: ["apps", appId, "versions"],
     enabled: !!appId,
     queryFn: async () => {
-      const { data, error } = await getAppVersions({
+      const { data, error } = await getAppVersionSummaries({
         path: { appId: appId as string },
       });
       throwOnApiError(error, { allowNotFound: true });
@@ -401,6 +402,46 @@ export function useUpdateApp() {
       // which drives the MCP registry card — refresh it too.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("App updated");
+    },
+  });
+}
+
+export function useRestoreAppVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      appId,
+      version,
+      baseVersion,
+    }: {
+      appId: string;
+      version: number;
+      baseVersion: number;
+    }) => {
+      const { data, error } = await restoreAppVersionApi({
+        path: { appId, version },
+        body: { baseVersion },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
+      queryClient.invalidateQueries({
+        queryKey: ["apps", variables.appId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["apps", variables.appId, "versions"],
+      });
+      toast.success(
+        data.latestVersion === variables.baseVersion
+          ? "That version is already current"
+          : `Restored as version ${data.latestVersion}`,
+      );
     },
   });
 }

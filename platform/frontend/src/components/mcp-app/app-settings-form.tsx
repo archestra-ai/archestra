@@ -4,7 +4,7 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
-import { Globe, User, UserRound, Users } from "lucide-react";
+import { AlertTriangle, Globe, User, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
@@ -12,6 +12,8 @@ import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
+import { AppTeamAccessWarning } from "@/components/mcp-app/app-team-access-warning";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,7 +39,8 @@ import {
   useUnassignToolFromApp,
   useUpdateApp,
 } from "@/lib/app.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAppAccess } from "@/lib/apps/use-app-access";
+import { notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 
@@ -83,11 +86,15 @@ export function AppSettingsForm({
   /** Reports save button state (must be a stable callback, e.g. a setState). */
   onStatusChange?: (status: { saving: boolean; disabled: boolean }) => void;
 }) {
-  const { data: canUpdate } = useHasPermissions({ app: ["update"] });
-  const { data: isAppAdmin } = useHasPermissions({ app: ["admin"] });
-  const { data: isAppTeamAdmin } = useHasPermissions({ app: ["team-admin"] });
+  const {
+    canEdit,
+    isAdmin: isAppAdmin,
+    isTeamAdmin: isAppTeamAdmin,
+    currentUserId,
+    userTeamIds,
+    isPending: isAccessPending,
+  } = useAppAccess(app);
   const { data: teams } = useAssignableTeams({ isResourceAdmin: !!isAppAdmin });
-  const { data: session } = useSession();
   const { data: members = [] } = useOrganizationMembers();
 
   const updateApp = useUpdateApp();
@@ -158,13 +165,13 @@ export function AppSettingsForm({
   const memberOptions = useMemo(
     () =>
       members
-        .filter((member) => member.id !== session?.user?.id)
+        .filter((member) => member.id !== currentUserId)
         .map((member) => ({
           userId: member.id,
           name: member.name,
           email: member.email,
         })),
-    [members, session?.user?.id],
+    [members, currentUserId],
   );
 
   const enabledOptions = [
@@ -189,7 +196,7 @@ export function AppSettingsForm({
     {
       value: "unlocked" as const,
       label: "Unlocked",
-      description: "Agents (and you) can modify the app normally",
+      description: "Authorized editors and their agents can modify the app",
     },
     {
       value: "locked" as const,
@@ -266,6 +273,7 @@ export function AppSettingsForm({
   // plain personal app, quietly un-sharing it.
   const userSelectionMissing = scope === "user" && userIds.length === 0;
   const selectionMissing = teamSelectionMissing || userSelectionMissing;
+  const readOnly = isAccessPending || !canEdit;
   // Save waits only while the assignments query is in flight. If it errors,
   // Save re-enables: identity/visibility still save, and the tool diff is
   // skipped below while the selection is unseeded (clearing it by accident is
@@ -283,9 +291,9 @@ export function AppSettingsForm({
   useEffect(() => {
     onStatusChange?.({
       saving,
-      disabled: saving || toolsLoading || selectionMissing,
+      disabled: readOnly || saving || toolsLoading || selectionMissing,
     });
-  }, [saving, toolsLoading, selectionMissing, onStatusChange]);
+  }, [readOnly, saving, toolsLoading, selectionMissing, onStatusChange]);
 
   // Serializes the handler itself: the state-based `saving` guard lags a
   // render, so a rapid resubmit could reread a stale tool-diff snapshot and
@@ -294,7 +302,7 @@ export function AppSettingsForm({
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (submitInFlight.current) return;
-    if (saving || toolsLoading || selectionMissing) return;
+    if (readOnly || saving || toolsLoading || selectionMissing) return;
     submitInFlight.current = true;
     try {
       await submitSettings(values);
@@ -325,9 +333,6 @@ export function AppSettingsForm({
       });
       if (!result) return;
     }
-    // Visibility is editable on its own permissions; identity + environment only
-    // when the caller can update the app, so omit those fields otherwise (mirrors
-    // the field-limited bodies the old publish popover / rename dialog sent).
     // "Shared with named people" is stored as a personal app plus grants, so the
     // fourth option collapses back to `personal` here. Both lists are always
     // sent: switching away from Teams or Users must revoke what it left behind,
@@ -337,7 +342,7 @@ export function AppSettingsForm({
       teamIds: scope === "team" ? teamIds : [],
       userIds: scope === "user" ? userIds : [],
     };
-    if (canUpdate) {
+    if (canEdit) {
       body.name = values.name.trim();
       body.description = values.description.trim() || null;
       body.icon = values.icon;
@@ -358,7 +363,7 @@ export function AppSettingsForm({
     const result = await updateApp.mutateAsync({ appId: app.id, body });
     if (!result) return;
 
-    if (canUpdate && seededToolIds) {
+    if (canEdit && seededToolIds) {
       const results = await Promise.all([
         ...[...selectedToolIds]
           .filter((id) => !seededToolIds.has(id))
@@ -409,166 +414,176 @@ export function AppSettingsForm({
       className="flex min-h-0 flex-1 flex-col"
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        {canUpdate && (
-          <>
-            <IdentityFields
-              icon={form.watch("icon")}
-              onIconChange={(icon) =>
-                form.setValue("icon", icon, { shouldDirty: true })
-              }
-              fallbackType="app"
-            >
-              <div className="space-y-2">
-                <Label htmlFor="app-settings-name">Name *</Label>
-                <Input
-                  id="app-settings-name"
-                  aria-invalid={!!form.formState.errors.name}
-                  {...form.register("name", {
-                    required: "Name is required.",
-                    maxLength: {
-                      value: 100,
-                      message: "Name must be 100 characters or fewer.",
-                    },
-                    validate: (value) =>
-                      value.trim().length > 0 || "Name is required.",
-                  })}
-                />
-                {form.formState.errors.name?.message ? (
-                  <p className="text-xs text-destructive">
-                    {form.formState.errors.name.message}
-                  </p>
-                ) : null}
-              </div>
-            </IdentityFields>
+        {!isAccessPending && !canEdit ? (
+          <Alert variant="info">
+            <AlertTriangle />
+            <AlertTitle>View-only settings</AlertTitle>
+            <AlertDescription>
+              {notYoursToChange({ resource: "app", scope: app.scope })}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-            <div className="space-y-2">
-              <Label htmlFor="app-settings-slug">URL</Label>
-              <FieldDescription id="app-settings-slug-help">
-                Where this app opens. Changing it breaks links that used the old
-                URL.
-              </FieldDescription>
-              <div className="flex items-center gap-1">
-                <span className="shrink-0 text-sm text-muted-foreground">
-                  /a/
-                </span>
-                <Input
-                  id="app-settings-slug"
-                  placeholder="sales-dashboard"
-                  aria-invalid={!!form.formState.errors.slug}
-                  // Only one of the two is rendered at a time, so point at
-                  // whichever is actually in the DOM or the message goes
-                  // unannounced (same wiring as components/ui/form.tsx).
-                  aria-describedby={
-                    form.formState.errors.slug
-                      ? "app-settings-slug-help app-settings-slug-error"
-                      : "app-settings-slug-help"
-                  }
-                  {...form.register("slug", {
-                    maxLength: {
-                      value: 100,
-                      message: "URL must be 100 characters or fewer.",
-                    },
-                    validate: (value) =>
-                      value.trim() === "" ||
-                      SLUG_PATTERN.test(value.trim()) ||
-                      "Use lowercase letters, numbers and single hyphens.",
-                  })}
-                />
-              </div>
-              {form.formState.errors.slug?.message ? (
-                <p
-                  id="app-settings-slug-error"
-                  className="text-xs text-destructive"
-                >
-                  {form.formState.errors.slug.message}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="app-settings-description">Description</Label>
-              <Textarea
-                id="app-settings-description"
-                aria-invalid={!!form.formState.errors.description}
-                {...form.register("description", {
-                  maxLength: {
-                    value: 500,
-                    message: "Description must be 500 characters or fewer.",
-                  },
-                })}
-              />
-              {form.formState.errors.description?.message ? (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.description.message}
-                </p>
-              ) : null}
-            </div>
-
-            <EnvironmentSelector
-              value={environmentId}
-              onChange={setEnvironmentId}
-              resource="app"
-              helpText="The app can be assigned and call MCP tools from this environment plus the Default environment."
+        <IdentityFields
+          icon={form.watch("icon")}
+          onIconChange={(icon) =>
+            form.setValue("icon", icon, { shouldDirty: true })
+          }
+          fallbackType="app"
+          disabled={readOnly}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="app-settings-name">Name *</Label>
+            <Input
+              id="app-settings-name"
+              disabled={readOnly}
+              aria-invalid={!!form.formState.errors.name}
+              {...form.register("name", {
+                required: "Name is required.",
+                maxLength: {
+                  value: 100,
+                  message: "Name must be 100 characters or fewer.",
+                },
+                validate: (value) =>
+                  value.trim().length > 0 || "Name is required.",
+              })}
             />
+            {form.formState.errors.name?.message ? (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.name.message}
+              </p>
+            ) : null}
+          </div>
+        </IdentityFields>
 
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Tools</h3>
-              {toolsSeeded ? (
-                <AppToolsEditor
-                  appId={app.id}
-                  environmentId={environmentId}
-                  selectedToolIds={selectedToolIds}
-                  onSelectionChange={setSelectedToolIds}
-                />
-              ) : (
-                // Unseeded selection: the checklist would misrepresent every
-                // assigned tool as unchecked, and staged edits would be
-                // dropped by the save's unseeded-diff skip.
-                <p className="text-sm text-muted-foreground">
-                  {appToolsQuery.isPending
-                    ? "Loading tools…"
-                    : "Tool assignments couldn't be loaded. Saving keeps the app's current tools."}
-                </p>
-              )}
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="app-settings-slug">URL</Label>
+          <FieldDescription id="app-settings-slug-help">
+            Where this app opens. Changing it breaks links that used the old
+            URL.
+          </FieldDescription>
+          <div className="flex items-center gap-1">
+            <span className="shrink-0 text-sm text-muted-foreground">/a/</span>
+            <Input
+              id="app-settings-slug"
+              disabled={readOnly}
+              placeholder="sales-dashboard"
+              aria-invalid={!!form.formState.errors.slug}
+              // Only one of the two is rendered at a time, so point at
+              // whichever is actually in the DOM or the message goes
+              // unannounced (same wiring as components/ui/form.tsx).
+              aria-describedby={
+                form.formState.errors.slug
+                  ? "app-settings-slug-help app-settings-slug-error"
+                  : "app-settings-slug-help"
+              }
+              {...form.register("slug", {
+                maxLength: {
+                  value: 100,
+                  message: "URL must be 100 characters or fewer.",
+                },
+                validate: (value) =>
+                  value.trim() === "" ||
+                  SLUG_PATTERN.test(value.trim()) ||
+                  "Use lowercase letters, numbers and single hyphens.",
+              })}
+            />
+          </div>
+          {form.formState.errors.slug?.message ? (
+            <p
+              id="app-settings-slug-error"
+              className="text-xs text-destructive"
+            >
+              {form.formState.errors.slug.message}
+            </p>
+          ) : null}
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="app-settings-open-mode">Opens in</Label>
-              {selectedOpenModeDescription ? (
-                <FieldDescription>
-                  {selectedOpenModeDescription}
-                </FieldDescription>
-              ) : null}
-              <Select
-                value={openMode}
-                onValueChange={(next) =>
-                  setOpenMode(next as "inline" | "fullscreen")
-                }
-              >
-                <SelectTrigger id="app-settings-open-mode" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  {openModeOptions.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      description={option.description}
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </>
-        )}
+        <div className="space-y-2">
+          <Label htmlFor="app-settings-description">Description</Label>
+          <Textarea
+            id="app-settings-description"
+            disabled={readOnly}
+            aria-invalid={!!form.formState.errors.description}
+            {...form.register("description", {
+              maxLength: {
+                value: 500,
+                message: "Description must be 500 characters or fewer.",
+              },
+            })}
+          />
+          {form.formState.errors.description?.message ? (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.description.message}
+            </p>
+          ) : null}
+        </div>
+
+        <EnvironmentSelector
+          value={environmentId}
+          onChange={setEnvironmentId}
+          resource="app"
+          disabled={readOnly}
+          helpText="The app can be assigned and call MCP tools from this environment plus the Default environment."
+        />
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Tools</h3>
+          {toolsSeeded ? (
+            <AppToolsEditor
+              appId={app.id}
+              environmentId={environmentId}
+              selectedToolIds={selectedToolIds}
+              onSelectionChange={setSelectedToolIds}
+              readOnly={readOnly}
+            />
+          ) : (
+            // Unseeded selection: the checklist would misrepresent every
+            // assigned tool as unchecked, and staged edits would be
+            // dropped by the save's unseeded-diff skip.
+            <p className="text-sm text-muted-foreground">
+              {appToolsQuery.isPending
+                ? "Loading tools…"
+                : "Tool assignments couldn't be loaded. Saving keeps the app's current tools."}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="app-settings-open-mode">Opens in</Label>
+          {selectedOpenModeDescription ? (
+            <FieldDescription>{selectedOpenModeDescription}</FieldDescription>
+          ) : null}
+          <Select
+            value={openMode}
+            disabled={readOnly}
+            onValueChange={(next) =>
+              setOpenMode(next as "inline" | "fullscreen")
+            }
+          >
+            <SelectTrigger id="app-settings-open-mode" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              {openModeOptions.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  description={option.description}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <VisibilitySelector
           heading="Who can use this app"
           value={scope}
           options={options}
           onValueChange={setScope}
+          readOnly={readOnly}
         >
           {scope === "user" && (
             <div className="space-y-2">
@@ -581,6 +596,7 @@ export function AppSettingsForm({
                 searchPlaceholder="Search users..."
                 emptyMessage="No users found."
                 className="w-full"
+                disabled={readOnly}
               />
             </div>
           )}
@@ -589,7 +605,7 @@ export function AppSettingsForm({
             <div className="space-y-2">
               <Label>Teams</Label>
               <MultiSelectCombobox
-                disabled={!canShareTeams || hasNoTeams}
+                disabled={readOnly || !canShareTeams || hasNoTeams}
                 options={
                   teams?.map((team) => ({
                     value: team.id,
@@ -603,6 +619,12 @@ export function AppSettingsForm({
                 }
                 emptyMessage="No teams found."
               />
+              <AppTeamAccessWarning
+                scope={scope}
+                selectedTeamIds={teamIds}
+                isAppAdmin={!!isAppAdmin}
+                userTeamIds={userTeamIds}
+              />
             </div>
           )}
 
@@ -613,6 +635,7 @@ export function AppSettingsForm({
             ) : null}
             <Select
               value={enabledStatus}
+              disabled={readOnly}
               onValueChange={(next) =>
                 setEnabledStatus(next as "disabled" | "enabled")
               }
@@ -641,6 +664,7 @@ export function AppSettingsForm({
             ) : null}
             <Select
               value={lockedStatus}
+              disabled={readOnly}
               onValueChange={(next) =>
                 setLockedStatus(next as "unlocked" | "locked")
               }
@@ -663,7 +687,7 @@ export function AppSettingsForm({
           </div>
         </VisibilitySelector>
 
-        {canUpdate && (
+        {canEdit && (
           <AdvancedLabelsSection
             ref={labelsRef}
             labels={labels}

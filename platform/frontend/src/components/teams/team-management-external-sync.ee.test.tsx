@@ -86,6 +86,44 @@ describe("TeamManagementExternalSyncSection", () => {
     expect(screen.getByText("Add External Group Mapping")).toBeInTheDocument();
   });
 
+  it("says it syncs membership only and links Role Mapping for provider admins", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: permissions.identityProvider?.includes("update") ?? false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    useTeamSyncIdentityProviderOptionsMock.mockReturnValue({
+      data: [{ id: "idp-1", providerId: "keycloak", groupsExpression: null }],
+    });
+
+    renderSection();
+
+    const note = screen
+      .getByText(/matched users join as/i)
+      .closest("p") as HTMLElement;
+    expect(note).toHaveTextContent("Not able to edit team");
+    expect(note).toHaveTextContent(/Org-wide roles are synced separately/);
+    expect(screen.getByRole("link", { name: "Role Mapping" })).toHaveAttribute(
+      "href",
+      "/settings/identity-providers?edit=idp-1&section=role-mapping",
+    );
+  });
+
+  it("does not link Role Mapping for users who cannot edit identity providers", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    useTeamSyncIdentityProviderOptionsMock.mockReturnValue({
+      data: [{ id: "idp-1", providerId: "keycloak", groupsExpression: null }],
+    });
+
+    renderSection();
+
+    expect(screen.getByText(/matched users join as/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Role Mapping" })).toBeNull();
+  });
+
   it("hides the mapping controls in read-only mode", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,

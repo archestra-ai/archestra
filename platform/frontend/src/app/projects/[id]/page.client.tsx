@@ -29,7 +29,6 @@ import {
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
 import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentIcon } from "@/components/agent-icon";
-import { ExecutionStateIcon } from "@/components/chat/execution-state-icon";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import type { FileListItem } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
@@ -40,10 +39,10 @@ import {
   ProjectInstructionsPanel,
 } from "@/components/chat/project-instructions";
 import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
+import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { FileDropZone } from "@/components/files/file-drop-zone";
-import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
@@ -58,7 +57,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useStartAgentExecution } from "@/lib/agent-background-execution.query";
+import { useStartAgentRun } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
@@ -76,8 +75,8 @@ import {
   usePinProject,
   useProject,
   useProjectConversations,
-  useProjectExecutions,
   useProjectFiles,
+  useProjectRuns,
   useUploadProjectFiles,
 } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRuns } from "@/lib/schedule-trigger.query";
@@ -102,7 +101,7 @@ function ProjectDetail() {
   const { data: conversations } = useProjectConversations(id, {
     enabled: !!project && project.viewerRole !== "admin",
   });
-  const { data: executions } = useProjectExecutions(id, {
+  const { data: runs } = useProjectRuns(id, {
     enabled: !!project && project.viewerRole !== "admin",
   });
   const deleteProject = useDeleteProject();
@@ -123,7 +122,7 @@ function ProjectDetail() {
   if (isPending) {
     return (
       <PageLayout title="Project" description="">
-        <LoadingState label="Loading project…" variant="page" />
+        {null}
       </PageLayout>
     );
   }
@@ -282,7 +281,7 @@ function ProjectDetail() {
               canCreate={canChat}
               defaultAgentId={project.defaultAgent?.id ?? null}
             />
-            {!isAdminView && <ExecutionsList executions={executions ?? []} />}
+            {!isAdminView && <RunsList runs={runs ?? []} />}
             {!isAdminView && <ChatsList conversations={conversations ?? []} />}
           </div>
         </PageLayout>
@@ -322,31 +321,24 @@ function ProjectChatInput({
 }) {
   const router = useRouter();
   const createConversation = useCreateConversation();
-  const startExecution = useStartAgentExecution();
+  const startRun = useStartAgentRun();
   const { data: projectFiles } = useProjectFiles(projectId);
   const projectHasFiles = (projectFiles?.length ?? 0) > 0;
 
   return (
     <NewChatComposer
       projectDefaultAgentId={defaultAgentId}
-      isSubmitting={createConversation.isPending || startExecution.isPending}
-      onSubmit={({
-        text,
-        agentId,
-        modelId,
-        apiKeyId,
-        files,
-        executionMode,
-      }) => {
+      isSubmitting={createConversation.isPending || startRun.isPending}
+      onSubmit={({ text, agentId, modelId, apiKeyId, files, runtimeMode }) => {
         // Ignore a second submit while the first create is still in flight.
-        if (createConversation.isPending || startExecution.isPending) return;
-        if (executionMode) {
-          startExecution.mutate(
+        if (createConversation.isPending || startRun.isPending) return;
+        if (runtimeMode) {
+          startRun.mutate(
             { agentId, message: text, files, projectId },
             {
-              onSuccess: (execution) => {
-                if (execution) {
-                  router.push(`/chat/executions/${execution.taskId}`);
+              onSuccess: (run) => {
+                if (run) {
+                  router.push(`/chat/runs/${run.taskId}`);
                 }
               },
             },
@@ -387,48 +379,44 @@ function ProjectChatInput({
   );
 }
 
-function ExecutionsList({
-  executions,
+function RunsList({
+  runs,
 }: {
-  executions: Array<{
+  runs: Array<{
     taskId: string;
     title: string;
-    state: Parameters<typeof ExecutionStateIcon>[0]["state"];
+    state: Parameters<typeof RunStateIcon>[0]["state"];
     stateChangedAt: string | null;
     startedAt: string;
     viewerRole: "owner" | "shared";
   }>;
 }) {
-  if (executions.length === 0) return null;
+  if (runs.length === 0) return null;
   return (
     <section>
       <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-        Executions
+        Runs
       </h2>
       <div className="space-y-2">
-        {executions.map((execution) => (
+        {runs.map((run) => (
           <Link
-            key={execution.taskId}
-            href={`/chat/executions/${execution.taskId}`}
+            key={run.taskId}
+            href={`/chat/runs/${run.taskId}`}
             className="flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-              <ExecutionStateIcon state={execution.state} className="size-4" />
+              <RunStateIcon state={run.state} className="size-4" />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">
-                {execution.title}
+                {run.title}
               </span>
               <span className="block truncate text-xs text-muted-foreground">
-                {execution.viewerRole === "owner"
-                  ? "Your execution"
-                  : "Read-only execution"}
+                {run.viewerRole === "owner" ? "Your run" : "Read-only run"}
               </span>
             </span>
             <span className="shrink-0 text-xs text-muted-foreground">
-              {formatRelativeTimeFromNow(
-                execution.stateChangedAt ?? execution.startedAt,
-              )}
+              {formatRelativeTimeFromNow(run.stateChangedAt ?? run.startedAt)}
             </span>
             <TerminalSquare className="size-4 shrink-0 text-muted-foreground" />
           </Link>

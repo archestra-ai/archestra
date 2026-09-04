@@ -8,7 +8,6 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
-import ExecutionCredentialDefinitionModel from "@/models/execution-credential-definition";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -26,6 +25,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -86,9 +86,9 @@ export const AUDIT_DECISIONS = {
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
-  executionCredentialDefinitionsTable: {
+  runtimeCredentialDefinitionsTable: {
     audited: true,
-    model: ExecutionCredentialDefinitionModel,
+    model: RuntimeCredentialDefinitionModel,
   },
 
   agentToolsTable: { audited: true, model: AgentToolModel },
@@ -653,7 +653,16 @@ export const AUDIT_DECISIONS = {
     reason:
       "records which pod carries an A2A task; the task's own state machine and event log are the record of the work",
   },
-  agentExecutionInputsTable: {
+  agentRunTranscriptsTable: {
+    audited: false,
+    reason:
+      "task-owned execution output; the Agent run surface is the record of the work",
+  },
+  agentRunTranscriptChunksTable: {
+    audited: false,
+    reason: "storage chunks owned by an Agent run transcript",
+  },
+  agentRunInputsTable: {
     audited: false,
     reason:
       "task-owned runtime inputs; the execution start event records the file count without logging file names or content",
@@ -661,7 +670,7 @@ export const AUDIT_DECISIONS = {
   agentRunSharesTable: {
     audited: false,
     reason:
-      "agent execution share metadata; share and unshare are audited at the route level (agentExecution.shared/unshared)",
+      "agent run share metadata; share and unshare are audited at the route level (agentRun.shared/unshared)",
   },
   agentRunShareTeamsTable: {
     audited: false,
@@ -676,10 +685,10 @@ export const AUDIT_DECISIONS = {
     reason:
       "a person's own credential references, with no administrative CRUD — only the owner can add or remove one, and the value is never stored here",
   },
-  executionCredentialConnectionsTable: {
+  runtimeCredentialConnectionsTable: {
     audited: false,
     reason:
-      "credential references only; secret values are never stored here and mutations are recorded by the execution credential route",
+      "credential references only; secret values are never stored here and mutations are recorded by the runtime credential route",
   },
   skillSandboxesTable: {
     audited: false,

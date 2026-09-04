@@ -9,11 +9,16 @@ import { isUsableTerminalDimensions } from "./exec/exec-terminal.utils";
  * output remains readable and scrollable.
  */
 export function TerminalPlayback({ content }: { content: string }) {
+  const recording = parseTerminalRecording(content);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const recordingFrameRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<import("@xterm/xterm").Terminal | null>(null);
-  const contentRef = useRef(content);
+  const updateRecordedScaleRef = useRef<() => void>(() => {});
+  const recordingRef = useRef(recording);
   const renderedContentRef = useRef("");
-  contentRef.current = content;
+  const recordedDimensionsRef = useRef<TerminalDimensions | null>(null);
+  recordingRef.current = recording;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -41,6 +46,7 @@ export function TerminalPlayback({ content }: { content: string }) {
         fontSize: 12,
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+        lineHeight: TERMINAL_LINE_HEIGHT,
         scrollback: RETAINED_SCROLLBACK_LINES,
         scrollSensitivity: TERMINAL_SCROLL_SENSITIVITY,
         theme: {
@@ -71,8 +77,63 @@ export function TerminalPlayback({ content }: { content: string }) {
       let rendered = false;
       let renderedDimensions: { cols: number; rows: number } | null = null;
 
+      const updateRecordedScale = () => {
+        const viewport = viewportRef.current;
+        const frame = recordingFrameRef.current;
+        const container = containerRef.current;
+        if (
+          !recordingRef.current.dimensions ||
+          !viewport ||
+          !frame ||
+          !container
+        ) {
+          return;
+        }
+
+        const naturalWidth = container.offsetWidth;
+        const naturalHeight = container.offsetHeight;
+        if (naturalWidth <= 0 || naturalHeight <= 0) return;
+
+        const availableWidth = Math.max(
+          0,
+          viewport.clientWidth - RETAINED_TERMINAL_HORIZONTAL_PADDING_PX,
+        );
+        const scale = Math.min(
+          1,
+          Math.max(MIN_RETAINED_TERMINAL_SCALE, availableWidth / naturalWidth),
+        );
+
+        container.style.transform = `scale(${scale})`;
+        container.style.transformOrigin = "top left";
+        frame.style.width = `${naturalWidth * scale}px`;
+        frame.style.height = `${naturalHeight * scale}px`;
+      };
+      updateRecordedScaleRef.current = updateRecordedScale;
+
       const fitAndRender = () => {
         if (disposed) return;
+        const currentRecording = recordingRef.current;
+        if (currentRecording.dimensions) {
+          if (!layoutReady) return;
+          if (
+            !sameDimensions(renderedDimensions, currentRecording.dimensions)
+          ) {
+            terminal.resize(
+              currentRecording.dimensions.cols,
+              currentRecording.dimensions.rows,
+            );
+          }
+          if (!rendered) {
+            terminal.write(withReadOnlyTerminalState(currentRecording.content));
+            renderedContentRef.current = currentRecording.content;
+            recordedDimensionsRef.current = currentRecording.dimensions;
+            terminalRef.current = terminal;
+            rendered = true;
+          }
+          renderedDimensions = currentRecording.dimensions;
+          updateRecordedScale();
+          return;
+        }
         const dims = fitAddon.proposeDimensions();
         if (!layoutReady || !isUsableTerminalDimensions(dims)) return;
         const dimensionsChanged =
@@ -85,8 +146,9 @@ export function TerminalPlayback({ content }: { content: string }) {
           return;
         }
         if (!rendered) {
-          terminal.write(withReadOnlyTerminalState(contentRef.current));
-          renderedContentRef.current = contentRef.current;
+          terminal.write(withReadOnlyTerminalState(currentRecording.content));
+          renderedContentRef.current = currentRecording.content;
+          recordedDimensionsRef.current = null;
           terminalRef.current = terminal;
           rendered = true;
         } else if (dimensionsChanged) {
@@ -94,14 +156,21 @@ export function TerminalPlayback({ content }: { content: string }) {
           // replay its byte stream into the new grid instead of reflowing a
           // screen full of absolute cursor positions from the old dimensions.
           terminal.reset();
-          terminal.write(withReadOnlyTerminalState(contentRef.current));
-          renderedContentRef.current = contentRef.current;
+          terminal.write(withReadOnlyTerminalState(currentRecording.content));
+          renderedContentRef.current = currentRecording.content;
         }
         renderedDimensions = dims;
       };
 
       resizeObserver = new ResizeObserver(() => {
         if (disposed) return;
+        if (recordingRef.current.dimensions) {
+          // Fitting changes xterm's column count and corrupts full-screen TUI
+          // recordings that use absolute cursor positions. Keep the captured
+          // grid intact and scale its canvas as a single unit instead.
+          updateRecordedScale();
+          return;
+        }
         const dims = fitAddon.proposeDimensions();
         if (!isUsableTerminalDimensions(dims)) return;
         try {
@@ -111,7 +180,7 @@ export function TerminalPlayback({ content }: { content: string }) {
         }
         fitAndRender();
       });
-      resizeObserver.observe(containerRef.current);
+      resizeObserver.observe(viewportRef.current ?? containerRef.current);
 
       // Avoid replaying a whole TUI recording into the transient dimensions
       // produced while the surrounding tab/grid is still mounting.
@@ -129,7 +198,9 @@ export function TerminalPlayback({ content }: { content: string }) {
       resizeObserver?.disconnect();
       initializedTerminal?.dispose();
       terminalRef.current = null;
+      updateRecordedScaleRef.current = () => {};
       renderedContentRef.current = "";
+      recordedDimensionsRef.current = null;
     };
   }, []);
 
@@ -137,23 +208,64 @@ export function TerminalPlayback({ content }: { content: string }) {
     const terminal = terminalRef.current;
     if (!terminal) return;
 
+    const nextRecording = parseTerminalRecording(content);
     const rendered = renderedContentRef.current;
-    if (content.startsWith(rendered)) {
-      terminal.write(withReadOnlyTerminalState(content.slice(rendered.length)));
+    const dimensionsChanged = !sameDimensions(
+      recordedDimensionsRef.current,
+      nextRecording.dimensions,
+    );
+    if (nextRecording.dimensions && dimensionsChanged) {
+      terminal.resize(
+        nextRecording.dimensions.cols,
+        nextRecording.dimensions.rows,
+      );
+      terminal.reset();
+      terminal.write(withReadOnlyTerminalState(nextRecording.content));
+      requestAnimationFrame(() => updateRecordedScaleRef.current());
+    } else if (nextRecording.content.startsWith(rendered)) {
+      terminal.write(
+        withReadOnlyTerminalState(nextRecording.content.slice(rendered.length)),
+      );
     } else {
       terminal.reset();
-      terminal.write(withReadOnlyTerminalState(content));
+      terminal.write(withReadOnlyTerminalState(nextRecording.content));
     }
-    renderedContentRef.current = content;
+    renderedContentRef.current = nextRecording.content;
+    recordedDimensionsRef.current = nextRecording.dimensions;
   }, [content]);
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden bg-slate-950 p-4 pb-2">
+    <div
+      ref={viewportRef}
+      className="flex min-h-0 flex-1 overflow-auto bg-slate-950 p-4 pb-2"
+      data-testid="terminal-playback-viewport"
+    >
       <div
-        ref={containerRef}
-        className="min-h-0 flex-1 overflow-hidden"
-        data-testid="terminal-playback"
-      />
+        ref={recordingFrameRef}
+        className={recording.dimensions ? "shrink-0" : "flex min-h-0 flex-1"}
+        style={
+          recording.dimensions
+            ? {
+                height: `calc(${recording.dimensions.rows * 1.2}em + 0.5rem)`,
+                width: `calc(${recording.dimensions.cols}ch + 0.5rem)`,
+              }
+            : undefined
+        }
+      >
+        <div
+          ref={containerRef}
+          className={recording.dimensions ? "shrink-0" : "min-h-0 flex-1"}
+          data-testid="terminal-playback"
+          style={
+            recording.dimensions
+              ? {
+                  height: `calc(${recording.dimensions.rows * 1.2}em + 0.5rem)`,
+                  width: `calc(${recording.dimensions.cols}ch + 0.5rem)`,
+                }
+              : undefined
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -163,8 +275,25 @@ export function TerminalPlayback({ content }: { content: string }) {
 const READ_ONLY_TERMINAL_STATE =
   "\u001b[?25l\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l\u001b[?1015l";
 const ALTERNATE_SCREEN_MODES = new Set([47, 1047, 1049]);
-const RETAINED_SCROLLBACK_LINES = 50_000;
+const RETAINED_SCROLLBACK_LINES = 1_000_000;
 const TERMINAL_SCROLL_SENSITIVITY = 3;
+const TERMINAL_LINE_HEIGHT = 1.2;
+const MIN_RETAINED_TERMINAL_SCALE = 0.5;
+const RETAINED_TERMINAL_HORIZONTAL_PADDING_PX = 32;
+const TERMINAL_SIZE_PATTERN = new RegExp(
+  `${String.fromCharCode(27)}\\]777;archestra-terminal-size=(\\d+)x(\\d+)${String.fromCharCode(7)}`,
+  "g",
+);
+
+interface TerminalDimensions {
+  cols: number;
+  rows: number;
+}
+
+interface TerminalRecording {
+  content: string;
+  dimensions: TerminalDimensions | null;
+}
 
 function withReadOnlyTerminalState(content: string): string {
   return `${content}${READ_ONLY_TERMINAL_STATE}`;
@@ -174,4 +303,23 @@ function containsAlternateScreenMode(params: (number | number[])[]): boolean {
   return params.some(
     (param) => typeof param === "number" && ALTERNATE_SCREEN_MODES.has(param),
   );
+}
+
+function parseTerminalRecording(content: string): TerminalRecording {
+  let dimensions: TerminalDimensions | null = null;
+  const sanitizedContent = content.replace(
+    TERMINAL_SIZE_PATTERN,
+    (_marker, cols: string, rows: string) => {
+      dimensions = { cols: Number(cols), rows: Number(rows) };
+      return "";
+    },
+  );
+  return { content: sanitizedContent, dimensions };
+}
+
+function sameDimensions(
+  left: TerminalDimensions | null,
+  right: TerminalDimensions | null,
+): boolean {
+  return left?.cols === right?.cols && left?.rows === right?.rows;
 }

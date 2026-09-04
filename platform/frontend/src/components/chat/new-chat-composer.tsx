@@ -3,9 +3,9 @@
 import type { FileUIPart } from "ai";
 import { useMemo } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
-import { AgentExecutionCredentialPrompt } from "@/components/agent-execution-credential-prompt";
-import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
-import { useAgentBackgroundExecutionPreflight } from "@/lib/agent-background-execution.query";
+import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
+import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
+import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import { useMemberDefaultModel } from "@/lib/chat/chat.query";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useFeature } from "@/lib/config/config.query";
@@ -43,7 +43,7 @@ export function NewChatComposer({
     modelId: string;
     apiKeyId: string | null;
     files: FileUIPart[];
-    executionMode: boolean;
+    runtimeMode: boolean;
   }) => void;
   /** The pinned agent of the project this composer starts chats in, if any. */
   projectDefaultAgentId?: string | null;
@@ -56,7 +56,7 @@ export function NewChatComposer({
   isProjectLoading?: boolean;
   isSubmitting?: boolean;
 }) {
-  const { data: internalAgents = [] } = useInternalAgents();
+  const { data: internalAgents = [] } = useChatAgents();
   const { data: defaultAgentId } = useDefaultAgentId();
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider();
@@ -96,17 +96,16 @@ export function NewChatComposer({
     return model?.capabilities?.inputModalities ?? null;
   }, [modelId, chatModels]);
 
-  const backgroundExecutionEnabled =
-    useFeature("agentBackgroundExecution") === true;
-  const executionAgent = backgroundExecutionEnabled
+  const runtimeEnabled = useFeature("agentRuntime") === true;
+  const runtimeAgent = runtimeEnabled
     ? internalAgents.find(
-        (agent) => agent.id === agentId && agent.backgroundExecution !== null,
+        (agent) => agent.id === agentId && agent.runtime !== null,
       )
     : undefined;
-  const isExecutionMode = !!executionAgent;
-  const executionPreflight = useAgentBackgroundExecutionPreflight(
+  const isRuntimeMode = !!runtimeAgent;
+  const runtimePreflight = useAgentRuntimePreflight(
     agentId ?? "",
-    isExecutionMode,
+    isRuntimeMode,
   );
 
   if (!agentId) return null;
@@ -130,14 +129,14 @@ export function NewChatComposer({
             const text = message.text?.trim() ?? "";
             const files = message.files ?? [];
             if (!text && files.length === 0) return;
-            if (isExecutionMode && !text) return;
+            if (isRuntimeMode && !text) return;
             onSubmit({
               text,
               agentId,
               modelId,
               apiKeyId,
               files,
-              executionMode: isExecutionMode,
+              runtimeMode: isRuntimeMode,
             });
           }}
           status={isSubmitting ? "submitted" : "ready"}
@@ -164,24 +163,22 @@ export function NewChatComposer({
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
           sendDisabled={
-            isExecutionMode &&
-            (executionPreflight.isPending ||
-              executionPreflight.data?.ready !== true)
+            isRuntimeMode &&
+            (runtimePreflight.isPending ||
+              runtimePreflight.data?.ready !== true)
           }
-          executionMode={isExecutionMode}
-          executionAgentName={executionAgent?.name}
+          runtimeMode={isRuntimeMode}
+          runtimeAgentName={runtimeAgent?.name}
         />
-        {isExecutionMode && executionPreflight.data?.ready === false && (
-          <AgentExecutionCredentialPrompt
+        {isRuntimeMode && runtimePreflight.data?.ready === false && (
+          <AgentRuntimeCredentialPrompt
             agentId={agentId}
             missing={[
-              ...executionPreflight.data.missing,
-              ...executionPreflight.data.misconfigured,
+              ...runtimePreflight.data.missing,
+              ...runtimePreflight.data.misconfigured,
             ]}
-            declarations={
-              executionAgent?.backgroundExecution?.credentials ?? []
-            }
-            onConnected={() => executionPreflight.refetch()}
+            declarations={runtimeAgent?.runtime?.credentials ?? []}
+            onConnected={() => runtimePreflight.refetch()}
           />
         )}
       </div>

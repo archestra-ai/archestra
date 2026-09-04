@@ -31,6 +31,8 @@ interface BedrockClientConfig {
     secretAccessKey: string;
     sessionToken?: string;
   }>;
+  /** Fetch implementation carrying proxy timeout and other transport policy. */
+  fetch?: typeof globalThis.fetch;
 }
 
 // Use SDK stream event type with raw bytes for passthrough
@@ -313,7 +315,7 @@ export class BedrockClient {
       logger.warn("[BedrockClient] no authentication configured");
     }
 
-    return fetch(url, {
+    return (this.config.fetch ?? globalThis.fetch)(url, {
       ...init,
       headers,
     });

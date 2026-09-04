@@ -296,7 +296,7 @@ export type TokenAuthContext = {
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
   passthroughHeaders?: Record<string, string>;
   /** Durable execution that issued this gateway request, when provided. */
-  executionId?: string;
+  runId?: string;
 };
 
 /**
@@ -317,7 +317,7 @@ type ToolCallAuthInfo = {
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
   executedAs?: McpExecutedAs;
-  executionId?: string;
+  runId?: string;
 };
 
 /**
@@ -608,7 +608,7 @@ class McpClient {
             userId: tokenAuth.userId,
             authMethod: deriveAuthMethod(tokenAuth),
             executedAs: platformExecutedAs(tokenAuth.userId),
-            executionId: tokenAuth.executionId,
+            runId: tokenAuth.runId,
           }
         : undefined;
 
@@ -3602,7 +3602,7 @@ class McpClient {
           toolCall: storedToolCall,
           toolResult: storedToolResult,
           userId: authInfo?.userId ?? null,
-          executionId: authInfo?.executionId ?? null,
+          runId: authInfo?.runId ?? null,
           authMethod: authInfo?.authMethod ?? null,
         },
         audit,

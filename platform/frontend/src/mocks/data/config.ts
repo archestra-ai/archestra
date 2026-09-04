@@ -35,10 +35,10 @@ export function makeConfig(
       mcpIdleHibernationBetaEnabled: false,
       mcpServerAlertingEnabled: false,
       sandbox: false,
-      agentBackgroundExecution: false,
-      agentBackgroundExecutionBaseImage:
+      agentRuntime: false,
+      agentRuntimeBaseImage:
         "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",
-      agentBackgroundExecutionBackend: null,
+      agentRuntimeBackend: null,
       plugins: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

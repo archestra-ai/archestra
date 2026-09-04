@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   DEFAULT_SORT_BY,
@@ -50,14 +55,27 @@ const internalAgentsQuery = {
   includeTools: false,
 } as const;
 
+const chatAgentsQuery = {
+  ...internalAgentsQuery,
+  view: "chat",
+} as const;
+
 export const internalAgentsQueryKey = [
   "agents",
   "all",
   internalAgentsQuery,
 ] as const;
 
+const chatAgentsQueryKey = ["agents", "chat-roster", chatAgentsQuery] as const;
+
 export async function fetchInternalAgents() {
   const { data, error } = await getAllAgents({ query: internalAgentsQuery });
+  throwOnApiError(error, { toastOnError: false });
+  return data ?? [];
+}
+
+async function fetchChatAgents() {
+  const { data, error } = await getAllAgents({ query: chatAgentsQuery });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
 }
@@ -297,7 +315,12 @@ export function useDefaultMcpGateway(params?: {
   });
 }
 
-export function useProfile(id: string | undefined) {
+export function useProfile(
+  id: string | undefined,
+  params?: { enabled?: boolean },
+) {
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: ["agents", id],
     queryFn: async () => {
@@ -306,9 +329,30 @@ export function useProfile(id: string | undefined) {
       throwOnApiError(error, { allowNotFound: true, toastOnError: false });
       return data ?? null;
     },
-    enabled: !!id,
+    enabled: !!id && (params?.enabled ?? true),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    /**
+     * Start from the row the user clicked, when a list already holds it.
+     *
+     * Opening an agent is a chain, not a single request: `AgentForm` gates
+     * roughly ten of its queries on flags derived from the agent itself
+     * (`supportsSubagents`, `shouldLoadLlmConfiguration` and
+     * `showsModelControl` all read `agentType`), so none of them can start
+     * until this one lands. Seeding removes the first link — the form's gates
+     * resolve on the first render and the rest fetch immediately, rather than
+     * one round trip later.
+     *
+     * Safe because findCachedAgent excludes the compact chat roster; the
+     * remaining list endpoints serialise whole agents with the same
+     * `SelectAgentSchema` this route returns. `initialDataUpdatedAt` carries
+     * the list's age across, so a stale row still revalidates on its normal
+     * schedule instead of being trusted indefinitely.
+     */
+    initialData: () =>
+      id ? findCachedAgent(queryClient, id)?.agent : undefined,
+    initialDataUpdatedAt: () =>
+      id ? findCachedAgent(queryClient, id)?.updatedAt : undefined,
   });
 }
 
@@ -643,6 +687,20 @@ export function useInternalAgents(params?: { enabled?: boolean }) {
   });
 }
 
+/**
+ * Lightweight roster for chat initialization. Large embedded images and
+ * editing-only fields stay out of this query; the selected/edited agent is
+ * hydrated through useProfile when its full record is needed.
+ */
+export function useChatAgents(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: chatAgentsQueryKey,
+    queryFn: fetchChatAgents,
+    enabled: params?.enabled,
+    meta: PERSISTED_QUERY_META,
+  });
+}
+
 export function useOrgScopedAgents() {
   return useQuery({
     queryKey: [
@@ -701,4 +759,42 @@ export function useImportAgent() {
       }
     },
   });
+}
+
+/**
+ * Looks for an agent in whatever agent list happens to be cached.
+ *
+ * Handles both shapes the lists use — a bare array and a paginated
+ * `{ data: [...] }` — and skips `["agents", id]` entries, whose data is a
+ * single agent rather than a list.
+ */
+/** Exactly what this route's query function returns, so seeding cannot widen it. */
+type CachedAgent = NonNullable<Awaited<ReturnType<typeof getAgent>>["data"]>;
+
+function findCachedAgent(
+  queryClient: QueryClient,
+  id: string,
+): { agent: CachedAgent; updatedAt: number } | undefined {
+  for (const query of queryClient
+    .getQueryCache()
+    .findAll({ queryKey: ["agents"] })) {
+    // The chat roster deliberately carries a partial Agent wire shape. It is
+    // enough to paint and initialize chat, but must never seed an editing form
+    // as though it came from the full detail endpoint.
+    if (query.queryKey[1] === "chat-roster") continue;
+    const cached: unknown = query.state.data;
+    const rows = Array.isArray(cached)
+      ? cached
+      : (cached as { data?: unknown } | null | undefined)?.data;
+    if (!Array.isArray(rows)) continue;
+
+    const agent = rows.find(
+      (row): row is CachedAgent =>
+        typeof row === "object" &&
+        row !== null &&
+        (row as { id?: unknown }).id === id,
+    );
+    if (agent) return { agent, updatedAt: query.state.dataUpdatedAt };
+  }
+  return undefined;
 }

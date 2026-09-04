@@ -21,7 +21,7 @@ const INLINE_SAFE_MIMES = new Set([
 ]);
 
 /** Returns the sniffed image mime, or null if no known signature matches. */
-function sniffImageMime(buffer: Buffer): string | null {
+export function sniffInlineSafeImageMime(buffer: Buffer): string | null {
   if (
     buffer.length >= 8 &&
     hasMagic(buffer, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -60,7 +60,7 @@ export function resolveArtifactMime(params: {
   buffer: Buffer;
   claimed: string | undefined;
 }): string {
-  const sniffed = sniffImageMime(params.buffer);
+  const sniffed = sniffInlineSafeImageMime(params.buffer);
   if (sniffed) return sniffed;
   // A tool that writes a report to disk and downloads it often claims nothing,
   // so sniffing is what lets the stored row say `application/pdf` and the

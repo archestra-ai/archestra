@@ -1,11 +1,20 @@
 name: Trigger Website Deploy
 
+# Dispatches the website repo's "Deploy to Vercel" GitHub Actions workflow,
+# which deploys production via the Vercel CLI. We can NOT use a Vercel deploy
+# hook here: deploy hooks create Git-integration deployments, and Vercel
+# blocks those whenever the website's head commit author is not a Vercel team
+# member (archestra-ai/website#659).
+
 on:
   workflow_call:
     secrets:
-      WEBSITE_VERCEL_DEPLOY_HOOK_URL:
+      ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID:
         required: true
-        description: Vercel deploy hook URL for the website
+        description: App ID for the Archestra Website Deploy GitHub App
+      ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY:
+        required: true
+        description: Private key for the Archestra Website Deploy GitHub App
   workflow_dispatch:
 
 permissions: {}
@@ -19,8 +28,26 @@ jobs:
     name: Trigger Website Vercel Deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Vercel Deploy Hook
+      - name: Checkout GitHub App token action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/github-app-token
+
+      - name: Generate website deployment token
+        id: generate-token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}
+          owner: archestra-ai
+          repositories: website
+          permission-actions: write
+
+      - name: Dispatch website deploy workflow
         env:
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL"
+          gh workflow run deploy-to-vercel.yml \
+            --repo archestra-ai/website \
+            --ref main

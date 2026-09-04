@@ -10,7 +10,6 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { BilledCost } from "@/components/billed-cost";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { JsonCodeBlock } from "@/components/json-code-block";
-import { LoadingState } from "@/components/loading";
 import { LockedChatContentUnavailable } from "@/components/locked-chat-content-unavailable";
 import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
@@ -72,11 +71,7 @@ function LogDetail({
   // loading and failure states keep the title and the way back rather than
   // dropping the reader onto a bare spinner.
   if (isPending) {
-    return (
-      <InteractionShell>
-        <LoadingState label="Loading interaction…" />
-      </InteractionShell>
-    );
+    return <InteractionShell>null</InteractionShell>;
   }
 
   if (isLoadingError) {
@@ -251,14 +246,12 @@ function LogDetail({
           },
         ]
       : []),
-    ...(dynamicInteraction.executionId
+    ...(dynamicInteraction.runId
       ? [
           {
-            label: "Execution ID",
+            label: "Run ID",
             value: (
-              <span className="font-mono">
-                {dynamicInteraction.executionId}
-              </span>
+              <span className="font-mono">{dynamicInteraction.runId}</span>
             ),
           },
         ]

@@ -1,7 +1,7 @@
 import {
   TOOL_CANCEL_TASK_SHORT_NAME,
   TOOL_GET_TASK_SHORT_NAME,
-  TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_LIST_TASKS_SHORT_NAME,
   TOOL_POST_TASK_FILE_SHORT_NAME,
   TOOL_START_TASK_SHORT_NAME,
@@ -21,14 +21,17 @@ import {
   AgentTeamModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
-import { resolveRunnerBackend } from "@/services/runners/backends";
-import { preflightAgentDeploymentCredentials } from "@/services/runners/credentials";
-import { resolveAgentDeployment } from "@/services/runners/pod-execution";
+import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
+import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
-} from "@/services/runners/start-task";
-import { AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE } from "@/types";
+} from "@/services/agent-runtime/start-task";
+import {
+  AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
+  AgentRunAttentionStateSchema,
+} from "@/types";
 import {
   catchError,
   defineArchestraTool,
@@ -41,7 +44,7 @@ import type { ArchestraContext } from "./types";
 /**
  * Start a durable delegated task through the same lifecycle used by the MCP
  * task tool. Agent delegation uses this when the target has Background
- * execution configured, so every delegation surface selects the same runtime.
+ * run configured, so every delegation surface selects the same runtime.
  */
 export async function startDelegatedTask(params: {
   agentId: string;
@@ -72,15 +75,15 @@ export async function startDelegatedTask(params: {
       return errorResult("Agent not found");
     }
 
-    const deployment = resolveAgentDeployment(agent);
-    if (deployment) resolveRunnerBackend(deployment.backend);
+    const runtime = resolveAgentRuntime(agent);
+    if (runtime) resolveAgentRuntimeBackendDriver(runtime.backend);
 
     // Refuse before creating a task when the caller can already fix the
     // missing credential. Otherwise the detached task fails after its handle
     // has been returned and the user only discovers the problem by polling.
-    if (deployment) {
-      const preflight = await preflightAgentDeploymentCredentials({
-        deployment,
+    if (runtime) {
+      const preflight = await preflightAgentRuntimeCredentials({
+        runtime,
         organizationId: actor.organizationId,
         userId: actor.id,
       });
@@ -89,7 +92,7 @@ export async function startDelegatedTask(params: {
       }
       if (preflight.misconfigured.length > 0) {
         return errorResult(
-          `Agent "${agent.name}" is missing shared Background execution credentials an administrator must configure: ${preflight.misconfigured
+          `Agent "${agent.name}" is missing shared Agent Runtime credentials an administrator must configure: ${preflight.misconfigured
             .map((entry) => entry.label)
             .join(", ")}`,
         );
@@ -138,10 +141,10 @@ export async function startDelegatedTask(params: {
     return structuredSuccessResult(
       {
         task: taskRowSummary(taskRow),
-        execution: deployment ? "background" : "foreground",
+        runtime: runtime ? "dedicated" : "foreground",
       },
       `Task ${taskRow.id} started on ${agent.name}` +
-        (deployment ? " (Background execution)" : " (foreground)") +
+        (runtime ? " (Agent Runtime)" : " (foreground)") +
         ". Poll get_task for progress.",
     );
   } catch (error) {
@@ -159,8 +162,8 @@ export async function startDelegatedTask(params: {
  * A2A v2 protocol drives, so a client speaking either surface sees the same
  * tasks in the same states.
  *
- * When the target Agent has Background execution configured, delegated work
- * runs in its deployment; otherwise it runs in-process. This task interface is
+ * When the target Agent has Agent Runtime configured, delegated work
+ * runs in its runtime; otherwise it runs in-process. This task interface is
  * independent of foreground message handling.
  */
 
@@ -182,8 +185,8 @@ const TaskSummarySchema = z.object({
 
 const StartTaskOutputSchema = z.object({
   task: TaskSummarySchema,
-  execution: z
-    .enum(["background", "foreground"])
+  runtime: z
+    .enum(["dedicated", "foreground"])
     .describe("Where the delegated task executes."),
 });
 
@@ -201,7 +204,7 @@ const GetTaskOutputSchema = z.object({
       started_at: z.string().nullable(),
     })
     .nullable()
-    .describe("The Agent run, when the task uses Background execution."),
+    .describe("The Agent run, when the task uses Agent Runtime."),
 });
 
 const ListTasksOutputSchema = z.object({
@@ -209,8 +212,8 @@ const ListTasksOutputSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 
-const ListAgentExecutionsOutputSchema = z.object({
-  executions: z.array(
+const ListAgentRunsOutputSchema = z.object({
+  runs: z.array(
     z.object({
       task_id: z.string().uuid(),
       title: z.string(),
@@ -220,6 +223,16 @@ const ListAgentExecutionsOutputSchema = z.object({
       started_at: z.string(),
       ended_at: z.string().nullable(),
       state_changed_at: z.string().nullable(),
+      hard_deadline_at: z
+        .string()
+        .describe("When the runtime will be forcefully stopped."),
+      last_model_activity_at: z
+        .string()
+        .nullable()
+        .describe("Most recent model request attributed to this run."),
+      attention_state: AgentRunAttentionStateSchema.nullable().describe(
+        "Native runtime signal that the live process needs user attention.",
+      ),
       agent: z.object({
         id: z.string().uuid(),
         name: z.string(),
@@ -230,7 +243,7 @@ const ListAgentExecutionsOutputSchema = z.object({
         id: z.string(),
         name: z.string().nullable(),
       }),
-      execution_url: z.string().url(),
+      run_url: z.string().url(),
       thread: z
         .object({
           provider: z.string(),
@@ -259,7 +272,7 @@ const registry = defineArchestraTools([
     title: "Start Task",
     description:
       "Start long-running work on an agent as a durable task and return immediately with its id. " +
-      "If the Agent has Background execution configured, the work executes in its deployment. " +
+      "If the Agent has Agent Runtime configured, the work executes in its runtime. " +
       "Poll get_task for progress, steer_task to interject, cancel_task to stop.",
     schema: z.object({
       agent_id: z.string().describe("The agent to do the work."),
@@ -372,16 +385,16 @@ const registry = defineArchestraTools([
   }),
 
   defineArchestraTool({
-    shortName: TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
-    title: "List Agent Executions",
+    shortName: TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+    title: "List Agent Runs",
     description:
-      "List recent executions across one or more accessible Agents for a read-only operations dashboard. " +
-      "Returns status, requester, execution links, and originating messaging threads when present.",
+      "List recent runs across one or more accessible Agents for a read-only operations dashboard. " +
+      "Returns status, requester, run links, and originating messaging threads when present.",
     schema: z.object({
       agent_ids: z.array(z.string().uuid()).min(1).max(20),
       limit: z.number().int().min(1).max(100).default(50),
     }),
-    outputSchema: ListAgentExecutionsOutputSchema,
+    outputSchema: ListAgentRunsOutputSchema,
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
@@ -412,7 +425,7 @@ const registry = defineArchestraTools([
           organizationId: actor.organizationId,
           limit: args.limit,
         });
-        const executions = rows.map((row) => ({
+        const runs = rows.map((row) => ({
           task_id: row.taskId,
           title: row.title,
           prompt: row.prompt,
@@ -421,6 +434,10 @@ const registry = defineArchestraTools([
           started_at: row.startedAt.toISOString(),
           ended_at: row.endedAt?.toISOString() ?? null,
           state_changed_at: row.stateChangedAt?.toISOString() ?? null,
+          hard_deadline_at: row.hardDeadlineAt.toISOString(),
+          last_model_activity_at:
+            row.lastModelActivityAt?.toISOString() ?? null,
+          attention_state: row.attentionState,
           agent: {
             id: row.agentId,
             name: row.agentName,
@@ -431,32 +448,28 @@ const registry = defineArchestraTools([
             id: row.actorId,
             name: row.actorName,
           },
-          execution_url: `${config.frontendBaseUrl}/chat/executions/${row.taskId}`,
-          thread: buildExecutionThread(row),
+          run_url: `${config.frontendBaseUrl}/chat/runs/${row.taskId}`,
+          thread: buildRunThread(row),
         }));
-        const byState = executions.reduce<Record<string, number>>(
-          (counts, execution) => {
-            counts[execution.state] = (counts[execution.state] ?? 0) + 1;
-            return counts;
-          },
-          {},
-        );
+        const byState = runs.reduce<Record<string, number>>((counts, run) => {
+          counts[run.state] = (counts[run.state] ?? 0) + 1;
+          return counts;
+        }, {});
 
         return structuredSuccessResult(
           {
-            executions,
+            runs,
             summary: {
-              total: executions.length,
-              active: executions.filter((execution) =>
-                ACTIVE_TASK_STATES.has(execution.state),
-              ).length,
+              total: runs.length,
+              active: runs.filter((run) => ACTIVE_TASK_STATES.has(run.state))
+                .length,
               by_state: byState,
             },
           },
-          `${executions.length} execution(s)`,
+          `${runs.length} run(s)`,
         );
       } catch (error) {
-        return catchError(error, "listing Agent executions");
+        return catchError(error, "listing Agent runs");
       }
     },
   }),
@@ -466,7 +479,7 @@ const registry = defineArchestraTools([
     title: "Steer Task",
     description:
       "Interject one message into a running task's container session — a course correction " +
-      "without stopping the work. Only tasks using Background execution can be steered.",
+      "without stopping the work. Only tasks using Agent Runtime can be steered.",
     schema: z.object({
       task_id: z.string().uuid(),
       message: z.string().trim().min(1, "message is required."),
@@ -486,21 +499,19 @@ const registry = defineArchestraTools([
         // Narrower than task access on purpose: steering types into a shell
         // holding that person's own credentials.
         if (session.actorUserId !== actor.id) {
-          return errorResult(
-            "Only the person the execution acts as can steer it.",
-          );
+          return errorResult("Only the person the run acts as can steer it.");
         }
         const agent = await AgentModel.findById(session.agentId);
-        const deployment = agent ? resolveAgentDeployment(agent) : null;
-        if (!deployment) {
+        const runtime = agent ? resolveAgentRuntime(agent) : null;
+        if (!runtime) {
           return errorResult(
-            "The Agent no longer has Background execution configured.",
+            "The Agent no longer has Agent Runtime configured.",
           );
         }
 
-        await resolveRunnerBackend(session.backend).steer({
+        await resolveAgentRuntimeBackendDriver(session.backend).steer({
           session,
-          steerMode: deployment.steerMode,
+          steerMode: runtime.steerMode,
           message: args.message,
         });
         return structuredSuccessResult(
@@ -585,10 +596,10 @@ const registry = defineArchestraTools([
           );
         }
         // Same narrowing as steering: the upload appears in the thread as the
-        // task's own delivery, acting for the person the execution runs as.
+        // task's own delivery, acting for the person the run runs as.
         if (session.actorUserId !== actor.id) {
           return errorResult(
-            "Only the person the execution acts as can post files for it.",
+            "Only the person the run acts as can post files for it.",
           );
         }
         const target = session.completionTarget;
@@ -646,9 +657,9 @@ function credentialsNeededResult(
   agentId: string,
   missing: Array<{ key: string; label: string; description?: string }>,
 ) {
-  const url = `${config.frontendBaseUrl}/agents/${agentId}?tab=overview#background-execution-credentials`;
+  const url = `${config.frontendBaseUrl}/agents/${agentId}?tab=overview#runtime-credentials`;
   return errorResult(
-    `This Agent's Background execution needs credentials you have not set up yet:\n${missing
+    `This Agent's Agent Runtime needs credentials you have not set up yet:\n${missing
       .map(
         (entry) =>
           `- ${entry.label} (${entry.key})${entry.description ? `: ${entry.description}` : ""}`,
@@ -659,7 +670,7 @@ function credentialsNeededResult(
   );
 }
 
-function buildExecutionThread(
+function buildRunThread(
   row: Awaited<ReturnType<typeof AgentRunModel.listDashboard>>[number],
 ) {
   if (!row.threadProvider || !row.threadChannelId || !row.threadId) return null;
@@ -692,7 +703,7 @@ function missingCredentialsFrom(error: unknown): {
     error &&
     typeof error === "object" &&
     (error as { code?: unknown }).code ===
-      AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE &&
+      AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE &&
     typeof (error as { agentId?: unknown }).agentId === "string" &&
     Array.isArray((error as { missing?: unknown }).missing)
   ) {

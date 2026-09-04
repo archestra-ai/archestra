@@ -1870,7 +1870,7 @@ export const parseSandboxMemoryMaxBytes = (
 export function parseLabelSelector(
   value: string | undefined,
   defaultValue: Record<string, string>,
-  envName = "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR",
+  envName = "ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR",
 ): Record<string, string> {
   const raw = value?.trim();
   if (!raw) return defaultValue;
@@ -2264,53 +2264,48 @@ const config = {
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
       path.join(homedir(), ".archestra", "skill-marketplace-cache"),
   },
-  agentBackgroundExecution: {
+  agentRuntime: {
     /**
-     * Background execution: delegated Agent tasks run in one Kubernetes pod
+     * Agent Runtime: delegated Agent tasks run in one Kubernetes pod
      * each and remain attachable and steerable while they run.
      *
      * Deliberately an independent switch rather than `betaFeatureEnabled`:
      * the feature spawns compute holding a user's personal credentials, so
      * flipping the ARCHESTRA_BETA master switch must never turn it on by
      * implication. It also needs the Kubernetes runtime configured — without
-     * that, `orchestratorK8sRuntime` is false and background runs stay unavailable
+     * that, `orchestratorK8sRuntime` is false and dedicated runtimes stay unavailable
      * regardless of this value.
      */
-    enabled:
-      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED === "true",
+    enabled: process.env.ARCHESTRA_AGENT_RUNTIME_ENABLED === "true",
     /**
      * Privileged pods have node-level impact. Agent administrators cannot
      * enable them unless the deployment operator explicitly opts in too.
      */
     allowPrivileged:
-      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED ===
-      "true",
-    /** Built-in execution loop used when an Agent enables the capability. */
+      process.env.ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED === "true",
+    /** Built-in agent loop used when an Agent enables a dedicated runtime. */
     defaultImage:
-      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE?.trim() ||
+      process.env.ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE?.trim() ||
       "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",
-    /** Fallback lifetime cap for runners whose agent sets none. */
+    /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
-      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_TTL_HOURS,
+      process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,
       72,
     ),
     /**
-     * Fallback idle stop for runners whose agent sets none. An idle runner is
+     * Fallback idle stop for Agent Runtime runs whose agent sets none. An idle run is
      * stopped rather than scaled to zero: its in-memory session state cannot
      * survive the pod, so the loss is made explicit instead of silent.
      */
     defaultIdleTimeoutMinutes: parsePositiveInt(
-      process.env
-        .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_IDLE_TIMEOUT_MINUTES,
+      process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_IDLE_TIMEOUT_MINUTES,
       180,
     ),
     resources: {
       cpuRequest:
-        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_CPU_REQUEST?.trim() ||
-        "500m",
+        process.env.ARCHESTRA_AGENT_RUNTIME_CPU_REQUEST?.trim() || "500m",
       memoryRequest:
-        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_REQUEST?.trim() ||
-        "1Gi",
+        process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_REQUEST?.trim() || "1Gi",
       /**
        * No CPU limit by default, matching the MCP server runtime: throttling
        * an agent mid-turn surfaces as confusing timeouts rather than
@@ -2318,70 +2313,74 @@ const config = {
        * should die rather than take the node with it.
        */
       memoryLimit:
-        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_LIMIT?.trim() ||
-        "4Gi",
+        process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT?.trim() || "4Gi",
     },
     ephemeralStorageLimit: parseK8sResourceQuantity({
-      envName: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT",
-      value:
-        process.env
-          .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT,
+      envName: "ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT",
+      value: process.env.ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT,
       validator: isValidK8sMemoryQuantity,
       defaultValue: "10Gi",
     }),
     /**
-     * Base URL a background execution pod uses to reach this deployment's LLM
+     * Base URL an Agent Runtime pod uses to reach this deployment's LLM
      * proxy and MCP gateway. Must be reachable from inside the cluster, so it
      * defaults to the internal API URL rather than the browser-facing one.
      *
-     * Empty means background executions cannot start: a session which silently
+     * Empty means Agent Runtime runs cannot start: a session which silently
      * bypasses the proxy loses all observability, so a missing URL fails the
      * spawn loudly instead of falling back to a direct provider call.
      */
     platformBaseUrl:
-      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL?.trim() ||
+      process.env.ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL?.trim() ||
       process.env.ARCHESTRA_INTERNAL_API_BASE_URL?.trim() ||
       "",
     /**
-     * Selects the platform's own API-serving pods, so a runner's egress policy
+     * Selects the platform's own API-serving pods, so a run's egress policy
      * can allow exactly that destination and nothing else. The default is the
      * label the Helm chart already stamps on both the platform and worker
      * deployments; override it if your deployment labels them differently, or
      * when the platform runs outside the cluster.
      */
     platformPodSelector: parseLabelSelector(
-      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR,
+      process.env.ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR,
       { "archestra.io/p4-shim-client": "true" },
     ),
     /**
-     * Steers runner pods onto a dedicated node pool: a key=value list that
-     * becomes each runner pod's nodeSelector, plus one matching NoSchedule
+     * Steers Agent Runtime pods onto a dedicated node pool: a key=value list that
+     * becomes each pod's nodeSelector, plus one matching NoSchedule
      * toleration per entry so a pool tainted with the same pairs admits them.
-     * Empty (the default) schedules runners like any other pod. Heavy
-     * privileged runners sharing nodes with the platform can evict it under
+     * Empty (the default) schedules runs like any other pod. Heavy
+     * privileged runs sharing nodes with the platform can evict it under
      * memory or disk pressure; a dedicated autoscaled pool contains that.
      */
     nodeSelector: parseLabelSelector(
-      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR,
+      process.env.ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR,
       {},
-      "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR",
+      "ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR",
     ),
     /**
      * How long a launched run may stay Pending before it is declared failed.
-     * Covers node scale-up of a dedicated (scale-to-zero) runner pool plus a
+     * Covers node scale-up of a dedicated (scale-to-zero) Agent Runtime pool plus a
      * cold multi-GB image pull, which together overran the old fixed 5-minute
      * limit; a genuinely unavailable image just takes this long to surface.
      */
     podStartTimeoutSeconds: parsePositiveInt(
-      process.env
-        .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_POD_START_TIMEOUT_SECONDS,
+      process.env.ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS,
       600,
     ),
-    /** How often the reconciler syncs runner state and applies TTL/idle stops. */
+    /** How often the reconciler syncs run state and applies TTL/idle stops. */
     reconcileIntervalSeconds: parsePositiveInt(
-      process.env
-        .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RECONCILE_INTERVAL_SECONDS,
+      process.env.ARCHESTRA_AGENT_RUNTIME_RECONCILE_INTERVAL_SECONDS,
       30,
+    ),
+    /**
+     * Maximum uncompressed PTY bytes retained as a complete transcript. Runs
+     * beyond it keep the bounded tail and report that the full transcript was
+     * truncated instead of allowing one noisy TUI to exhaust backend memory.
+     */
+    transcriptMaxBytes: parsePositiveInt(
+      process.env.ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES,
+      250 * 1024 * 1024,
     ),
   },
   plugins: {

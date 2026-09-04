@@ -12,7 +12,7 @@ export type PinnedSidebarItem<C, P, A = never, E = never> =
   | { type: "chat"; pinnedAt: string | Date; item: C }
   | { type: "project"; pinnedAt: string | Date; item: P }
   | { type: "app"; pinnedAt: string | Date; item: A }
-  | { type: "execution"; pinnedAt: string | Date; item: E };
+  | { type: "run"; pinnedAt: string | Date; item: E };
 
 export function buildPinnedSidebarItems<
   C extends Pinnable,
@@ -23,7 +23,7 @@ export function buildPinnedSidebarItems<
   chats: C[];
   projects: P[];
   apps?: A[];
-  executions?: E[];
+  runs?: E[];
 }): PinnedSidebarItem<C, P, A, E>[] {
   const items: PinnedSidebarItem<C, P, A, E>[] = [];
   for (const chat of args.chats) {
@@ -45,12 +45,12 @@ export function buildPinnedSidebarItems<
       items.push({ type: "app", pinnedAt: app.pinnedAt, item: app });
     }
   }
-  for (const execution of args.executions ?? []) {
-    if (execution.pinnedAt) {
+  for (const run of args.runs ?? []) {
+    if (run.pinnedAt) {
       items.push({
-        type: "execution",
-        pinnedAt: execution.pinnedAt,
-        item: execution,
+        type: "run",
+        pinnedAt: run.pinnedAt,
+        item: run,
       });
     }
   }

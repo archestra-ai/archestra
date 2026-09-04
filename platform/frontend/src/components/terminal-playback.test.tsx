@@ -10,6 +10,7 @@ const { terminal, fit, dimensions, proposeDimensions } = vi.hoisted(() => {
       loadAddon: vi.fn(),
       open: vi.fn(),
       reset: vi.fn(),
+      resize: vi.fn(),
       write: vi.fn(),
       options: [] as unknown[],
       registerCsiHandler: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("@xterm/xterm", () => ({
     loadAddon = terminal.loadAddon;
     open = terminal.open;
     reset = terminal.reset;
+    resize = terminal.resize;
     write = terminal.write;
     parser = { registerCsiHandler: terminal.registerCsiHandler };
   },
@@ -48,6 +50,7 @@ vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
 describe("TerminalPlayback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fit.mockImplementation(() => {});
     dimensions.current = { cols: 120, rows: 40 };
     resizeObserverCallback = undefined;
     terminal.options.length = 0;
@@ -129,6 +132,65 @@ describe("TerminalPlayback", () => {
     );
   });
 
+  it("preserves a completed TUI's recorded grid instead of reflowing it", async () => {
+    fit.mockImplementation(() => {
+      terminal.resize(dimensions.current.cols, dimensions.current.rows);
+    });
+    render(
+      <TerminalPlayback
+        content={
+          "\u001b]777;archestra-terminal-size=160x40\u0007\u001b[2JHermes"
+        }
+      />,
+    );
+
+    await waitFor(() =>
+      expect(terminal.write).toHaveBeenCalledWith(
+        `\u001b[2JHermes${readOnlyTerminalState}`,
+      ),
+    );
+    expect(terminal.resize).toHaveBeenCalledWith(160, 40);
+    expect(terminal.write).not.toHaveBeenCalledWith(
+      expect.stringContaining("archestra-terminal-size"),
+    );
+
+    dimensions.current = { cols: 90, rows: 30 };
+    act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
+
+    expect(terminal.reset).not.toHaveBeenCalled();
+    expect(terminal.resize).toHaveBeenCalledTimes(1);
+  });
+
+  it("scales a recorded grid as one canvas on a narrower viewport", async () => {
+    const { getByTestId } = render(
+      <TerminalPlayback
+        content={
+          "\u001b]777;archestra-terminal-size=160x40\u0007\u001b[2JClaude Code"
+        }
+      />,
+    );
+    await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());
+
+    const viewport = getByTestId("terminal-playback-viewport");
+    const playback = getByTestId("terminal-playback");
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 720 },
+    });
+    Object.defineProperties(playback, {
+      offsetHeight: { configurable: true, value: 600 },
+      offsetWidth: { configurable: true, value: 1280 },
+    });
+
+    act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
+
+    expect(playback.style.transform).toBe("scale(0.5375)");
+    expect(playback.parentElement).toHaveStyle({
+      height: "322.5px",
+      width: "688px",
+    });
+    expect(terminal.resize).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps retained playback locally scrollable", async () => {
     render(<TerminalPlayback content="captured frame" />);
     await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());
@@ -136,7 +198,8 @@ describe("TerminalPlayback", () => {
     expect(terminal.options.at(-1)).toMatchObject({
       convertEol: true,
       disableStdin: true,
-      scrollback: 50_000,
+      lineHeight: 1.2,
+      scrollback: 1_000_000,
       scrollSensitivity: 3,
     });
     expect(terminal.write).toHaveBeenCalledWith(

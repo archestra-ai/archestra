@@ -19,14 +19,13 @@ import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtim
 import logger from "@/logging";
 import {
   AgentModel,
-  ConversationAttachmentModel,
-  ConversationModel,
   EnvironmentModel,
   FileNameExistsError,
   OrganizationModel,
   SkillSandboxConversationGoneError,
   SkillSandboxModel,
 } from "@/models";
+import { loadConversationAttachmentSource } from "@/services/conversation-attachment-source";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { UnsafePathError } from "@/skills-sandbox/file-path";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
@@ -2505,105 +2504,13 @@ async function loadUploadSource(params: {
       };
     }
     case "chat_attachment": {
-      if (!conversationId) {
-        logger.warn(
-          {
-            organizationId: userCtx.organizationId,
-            userId: userCtx.userId,
-            attachmentId: source.attachmentId,
-            filename: source.filename,
-            reason: "no_conversation_context",
-          },
-          "[Sandbox] rejected chat_attachment upload",
-        );
-        return {
-          error:
-            "chat_attachment uploads require a conversation context; use a base64 or text source instead.",
-        };
-      }
-      // A locked chat's attachments are sealed under a key the server does not
-      // hold outside the request that presented it, and this path has no such
-      // request. Copying one into the sandbox would put ciphertext under a
-      // `v1:`-prefixed filename on the sandbox filesystem — useless to the
-      // model, and a plaintext copy in the sandbox's replay log if it ever
-      // could be opened. Refused, matching the rest of the sandbox boundary.
-      const lockedChatInfo =
-        await ConversationModel.getLockedChatKeyInfo(conversationId);
-      if (lockedChatInfo?.lockedChat) {
-        return {
-          error:
-            "Files attached to a locked chat can't be copied into the sandbox — they are encrypted with a key only the user's browser holds.",
-        };
-      }
-
-      // A filename or other non-UUID can't be an attachment id. Reject it here:
-      // the id column is uuid-typed, so querying it with a non-UUID throws an
-      // unhandled Postgres error that aborts the whole turn instead of
-      // surfacing as the graceful "no such attachment" result below.
-      if (source.attachmentId != null && !isUuid(source.attachmentId)) {
-        logger.warn(
-          {
-            organizationId: userCtx.organizationId,
-            userId: userCtx.userId,
-            conversationId,
-            attachmentId: source.attachmentId,
-            reason: "attachment_id_not_uuid",
-          },
-          "[Sandbox] rejected chat_attachment upload",
-        );
-        return {
-          error: `No accessible attachment with id "${source.attachmentId}" exists. Pass the attachment's id, or select it by \`filename\` instead.`,
-        };
-      }
-      const attachment =
-        source.attachmentId != null
-          ? await ConversationAttachmentModel.findByIdWithData(
-              source.attachmentId,
-            )
-          : await ConversationAttachmentModel.findLatestByNameWithData({
-              conversationId,
-              originalName: source.filename ?? "",
-            });
-      if (!attachment || attachment.organizationId !== userCtx.organizationId) {
-        logger.warn(
-          {
-            organizationId: userCtx.organizationId,
-            userId: userCtx.userId,
-            conversationId,
-            attachmentId: source.attachmentId,
-            filename: source.filename,
-            reason: "attachment_not_found_or_wrong_org",
-          },
-          "[Sandbox] rejected chat_attachment upload",
-        );
-        return {
-          error:
-            source.attachmentId != null
-              ? `No accessible attachment with id ${source.attachmentId} exists.`
-              : `No attachment named "${source.filename}" exists in this conversation.`,
-        };
-      }
-      if (attachment.conversationId !== conversationId) {
-        logger.warn(
-          {
-            organizationId: userCtx.organizationId,
-            userId: userCtx.userId,
-            conversationId,
-            attachmentId: source.attachmentId,
-            reason: "cross_conversation_attachment",
-          },
-          "[Sandbox] rejected chat_attachment upload",
-        );
-        return {
-          error:
-            "That attachment belongs to a different conversation and cannot be used here.",
-        };
-      }
-      return {
-        data: attachment.fileData,
-        mimeType: attachment.mimeType,
-        originalName: attachment.originalName,
-      };
+      return loadConversationAttachmentSource({
+        organizationId: userCtx.organizationId,
+        userId: userCtx.userId,
+        conversationId,
+        attachmentId: source.attachmentId,
+        filename: source.filename,
+      });
     }
     case "my_file": {
       const fileScope = resolveChatFileScope(scope, conversationId, appId);

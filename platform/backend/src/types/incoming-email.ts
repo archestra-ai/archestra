@@ -164,7 +164,7 @@ export interface EmailReplyOptions {
  */
 export interface EmailProcessingResult {
   success: boolean;
-  /** The agent execution result (if successful) */
+  /** The agent run result (if successful) */
   agentResponse?: string;
   /** Error message (if failed) */
   error?: string;

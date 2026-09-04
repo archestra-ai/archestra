@@ -1,5 +1,6 @@
 import type { IncomingMessage, Server } from "node:http";
 import { PassThrough } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import {
   type ClientWebSocketMessage,
   ClientWebSocketMessageSchema,
@@ -27,8 +28,10 @@ import {
   UserModel,
 } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
+import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
+import { RETAINED_LOG_BYTES } from "@/services/agent-runtime/output-capture";
+import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
-import { resolveRunnerBackend } from "@/services/runners/backends";
 
 interface McpLogsSubscription {
   serverId: string;
@@ -531,7 +534,7 @@ class WebSocketService {
   }
 
   /**
-   * Attach the browser to a agent run's live session.
+   * Attach the browser to an Agent run's live session.
    *
    * Authorization is narrower than being able to see the agent run: attaching
    * lands inside a shell running under the creator's own credentials, so only
@@ -569,39 +572,38 @@ class WebSocketService {
     const stderr = new PassThrough();
 
     try {
-      const { resourceName, command, socket } = await resolveRunnerBackend(
-        session.backend,
-      ).attach({
-        session,
-        stdin,
-        stdout,
-        stderr,
-        // Attaching waits on scheduling, the image pull and the agent's own
-        // session — minutes, on a cold node. Relay each wait as it is entered
-        // so the terminal can name what it is waiting for instead of showing
-        // an unqualified "Connecting…" for the whole of it.
-        onProgress: (progress) => {
-          if (ws.readyState !== WS.OPEN) return;
-          this.sendToClient(ws, {
-            type: "agent_run_attach_progress",
-            payload: {
-              runId,
-              phase: progress.phase,
-              message: progress.message,
-              detail: progress.detail ?? null,
-              resourceName: progress.resourceName ?? null,
-            },
-          });
-        },
-        onStatus: (status) => {
-          if (status.outcome === "failure") {
+      const { resourceName, command, socket } =
+        await resolveAgentRuntimeBackendDriver(session.backend).attach({
+          session,
+          stdin,
+          stdout,
+          stderr,
+          // Attaching waits on scheduling, the image pull and the agent's own
+          // session — minutes, on a cold node. Relay each wait as it is entered
+          // so the terminal can name what it is waiting for instead of showing
+          // an unqualified "Connecting…" for the whole of it.
+          onProgress: (progress) => {
+            if (ws.readyState !== WS.OPEN) return;
             this.sendToClient(ws, {
-              type: "agent_run_attach_closed",
-              payload: { runId, reason: status.message ?? undefined },
+              type: "agent_run_attach_progress",
+              payload: {
+                runId,
+                phase: progress.phase,
+                message: progress.message,
+                detail: progress.detail ?? null,
+                resourceName: progress.resourceName ?? null,
+              },
             });
-          }
-        },
-      });
+          },
+          onStatus: (status) => {
+            if (status.outcome === "failure") {
+              this.sendToClient(ws, {
+                type: "agent_run_attach_closed",
+                payload: { runId, reason: status.message ?? undefined },
+              });
+            }
+          },
+        });
 
       this.agentRunAttachSubscriptions.set(ws, {
         runId,
@@ -687,6 +689,47 @@ class WebSocketService {
     }
 
     if (session.endedAt) {
+      const decoder = new StringDecoder("utf8");
+      const transcript = await agentRunTranscriptStore
+        .stream({
+          runId: session.id,
+          onChunk: (chunk) => {
+            const logs = decoder.write(chunk);
+            if (logs) {
+              this.sendToClient(ws, {
+                type: "agent_run_logs",
+                payload: { runId, logs },
+              });
+            }
+          },
+        })
+        .catch((error) => {
+          logger.warn(
+            { error, sessionId: session.id, taskId: session.taskId },
+            "Could not read the complete Agent run transcript",
+          );
+          return null;
+        });
+      if (transcript?.isComplete) {
+        const finalLogs = decoder.end();
+        if (finalLogs) {
+          this.sendToClient(ws, {
+            type: "agent_run_logs",
+            payload: { runId, logs: finalLogs },
+          });
+        }
+        this.sendToClient(ws, {
+          type: "agent_run_logs_ended",
+          payload: {
+            runId,
+            source: "full",
+            truncated: false,
+            totalBytes: transcript.uncompressedBytes,
+          },
+        });
+        return;
+      }
+
       if (session.logs) {
         this.sendToClient(ws, {
           type: "agent_run_logs",
@@ -695,7 +738,14 @@ class WebSocketService {
       }
       this.sendToClient(ws, {
         type: "agent_run_logs_ended",
-        payload: { runId },
+        payload: {
+          runId,
+          source: "tail",
+          truncated:
+            transcript?.isComplete === false ||
+            Buffer.byteLength(session.logs ?? "", "utf8") >= RETAINED_LOG_BYTES,
+          totalBytes: transcript?.uncompressedBytes,
+        },
       });
       return;
     }
@@ -719,7 +769,7 @@ class WebSocketService {
     });
 
     try {
-      await resolveRunnerBackend(session.backend).streamOutput({
+      await resolveAgentRuntimeBackendDriver(session.backend).streamOutput({
         session,
         destination: stream,
         lines,

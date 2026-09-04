@@ -55,6 +55,7 @@ import {
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
+import { restoreAppVersion } from "@/services/apps/app-version-restore";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
 import {
   assertCanAssignEnvironment,
@@ -68,6 +69,7 @@ import {
   AppRenderDiagnosticEntrySchema,
   AppScopeSchema,
   AppTemplateSchema,
+  AppVersionSummarySchema,
   type AppViewerRole,
   CreateAppSchema,
   CredentialResolutionModeSchema,
@@ -113,6 +115,9 @@ const UpdateAppBodySchema = UpdateAppSchema.extend({
   // Omitted leaves grants untouched; `[]` revokes them all. Not UUIDs — better-auth
   // user ids are opaque strings.
   userIds: z.array(z.string().min(1)).optional(),
+});
+const RestoreAppVersionBodySchema = z.strictObject({
+  baseVersion: z.number().int().positive(),
 });
 
 // Create/update responses carry soft save-time validation warnings (the save
@@ -1395,6 +1400,24 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/apps/:appId/versions/summaries",
+    {
+      schema: {
+        operationId: RouteId.GetAppVersionSummaries,
+        description:
+          "List an app's version metadata without returning the HTML artifacts.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        response: constructResponseSchema(z.array(AppVersionSummarySchema)),
+      },
+    },
+    async ({ params: { appId }, user, organizationId }, reply) => {
+      await loadViewableApp({ appId, userId: user.id, organizationId });
+      return reply.send(await AppVersionModel.listSummariesForApp(appId));
+    },
+  );
+
+  fastify.get(
     "/api/apps/:appId/versions/:version",
     {
       schema: {
@@ -1415,6 +1438,78 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, `App ${appId} has no version ${version}.`);
       }
       return reply.send(row);
+    },
+  );
+
+  fastify.post(
+    "/api/apps/:appId/versions/:version/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreAppVersion,
+        description:
+          "Restore an immutable app version by copying its artifact forward " +
+          "as a new head version. History is never rewritten.",
+        tags: ["Apps"],
+        params: z.object({
+          appId: UuidIdSchema,
+          version: z.coerce.number().int().positive(),
+        }),
+        body: RestoreAppVersionBodySchema,
+        response: constructResponseSchema(AppWithWarningsSchema),
+      },
+    },
+    async (
+      {
+        params: { appId, version },
+        body: { baseVersion },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      const app = await loadViewableApp({
+        appId,
+        userId: user.id,
+        organizationId,
+      });
+      const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
+      if (app.locked) {
+        throw new ApiError(
+          409,
+          `App "${app.name}" is locked; its content cannot be restored. Unlock it first.`,
+        );
+      }
+      await assertCallerMayAuthorApp({
+        userId: user.id,
+        organizationId,
+        app: {
+          id: app.id,
+          scope: app.scope,
+          authorId: app.authorId,
+          enabled: app.enabled,
+        },
+        resourceTeamIds,
+      });
+
+      const restored = await restoreAppVersion({
+        appId,
+        version,
+        baseVersion,
+      });
+      logger.info(
+        {
+          appId,
+          restoredFromVersion: version,
+          latestVersion: restored.app.latestVersion,
+          userId: user.id,
+        },
+        "Restored app version via REST",
+      );
+      return reply.send(
+        restored.warnings.length > 0
+          ? { ...restored.app, warnings: restored.warnings }
+          : restored.app,
+      );
     },
   );
 

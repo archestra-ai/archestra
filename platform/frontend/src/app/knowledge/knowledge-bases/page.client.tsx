@@ -28,7 +28,6 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { LabelTags } from "@/components/label-tags";
-import { LoadingState } from "@/components/loading";
 import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
@@ -728,7 +727,7 @@ function KnowledgeBaseCardGrid({
   onPaginationChange: (next: { pageIndex: number; pageSize: number }) => void;
 }) {
   if (isLoading) {
-    return <LoadingState label="Loading knowledge bases…" variant="page" />;
+    return null;
   }
 
   if (knowledgeBases.length === 0) {

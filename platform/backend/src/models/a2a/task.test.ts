@@ -1,6 +1,8 @@
 import { eq } from "drizzle-orm";
 import { A2AProtocolTaskState } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
+import { AgentRunModel } from "@/models";
+import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { describe, expect, test } from "@/test";
 import A2AContextModel from "./context";
 import A2AMessageModel from "./message";
@@ -474,6 +476,45 @@ describe("A2ATaskModel", () => {
         .from(schema.a2aArtifactsTable)
         .where(eq(schema.a2aArtifactsTable.taskId, task.id));
       expect(artifacts).toEqual([]);
+    });
+
+    test("deletes retained transcripts with their expired task", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const agent = await makeAgent({ organizationId: organization.id });
+      const { task } = await makeTaskWithHistory(
+        A2AProtocolTaskState.Completed,
+      );
+      const run = await AgentRunModel.create({
+        organizationId: organization.id,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "system",
+        actorId: "retention-test",
+        workloadName: `runner-${task.id}`,
+        backend: "kubernetes",
+        runtimeScope: "archestra-dev",
+      });
+      await agentRunTranscriptStore.persist({
+        runId: run.id,
+        transcript: "complete retained transcript",
+        observedBytes: Buffer.byteLength("complete retained transcript"),
+      });
+      await backdate(task.id, 10 * 24 * 60 * 60 * 1000);
+
+      await A2ATaskModel.deleteTerminalTasksOlderThan({
+        retentionMs: 24 * 60 * 60 * 1000,
+        batchSize: 100,
+      });
+
+      expect(
+        await agentRunTranscriptStore.stream({
+          runId: run.id,
+          onChunk: () => undefined,
+        }),
+      ).toBeNull();
     });
 
     test("keeps the conversation history the deleted task pointed at", async () => {

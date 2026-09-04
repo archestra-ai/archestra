@@ -107,7 +107,7 @@ describe("PluginsPage", () => {
   });
 
   it("groups related facts into a compact table", () => {
-    render(<PluginsPage />);
+    const { container } = render(<PluginsPage />);
 
     for (const name of [
       "Plugin",
@@ -125,6 +125,16 @@ describe("PluginsPage", () => {
       ).not.toBeInTheDocument();
     }
     expect(screen.getByText("13 files")).toBeVisible();
+    expect(container.querySelector('th[data-column-id="source"]')).toHaveStyle({
+      width: "180px",
+    });
+    expect(
+      (
+        container.querySelector(
+          'th[data-column-id="displayName"]',
+        ) as HTMLElement
+      ).style.width,
+    ).toBe("");
   });
 
   it("attributes the vendor's own plugin to its author, not the deployment", () => {

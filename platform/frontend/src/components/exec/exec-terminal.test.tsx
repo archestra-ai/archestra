@@ -152,6 +152,95 @@ describe("ExecTerminal", () => {
     expect(screen.queryByText("Connecting...")).not.toBeInTheDocument();
   });
 
+  it("keeps persisted startup progress and elapsed time across page loads", async () => {
+    const startedAt = Date.now() - 122_000;
+    const transport: ExecSessionTransport = {
+      open: () => vi.fn(),
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal
+        sessionKey="task-persisted-progress"
+        transport={transport}
+        isActive
+        initialProgress={{
+          phase: "scheduling",
+          message: "Waiting for a node with room for this run",
+          detail: "No eligible node is currently available",
+          resourceName: "agent-run-example",
+        }}
+        progressStartedAt={startedAt}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Waiting for a node with room for this run"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("timer")).toHaveTextContent("2:02");
+    expect(
+      screen.getByText("No eligible node is currently available"),
+    ).toBeInTheDocument();
+  });
+
+  it("prefers live startup progress over a stale persisted snapshot", async () => {
+    const session: { handlers: ExecSessionHandlers | null } = {
+      handlers: null,
+    };
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        session.handlers = handlers;
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+    const initialProgress = {
+      phase: "scheduling" as const,
+      message: "Waiting for a node",
+      detail: null,
+      resourceName: null,
+    };
+    const { rerender } = render(
+      <ExecTerminal
+        sessionKey="task-live-progress"
+        transport={transport}
+        isActive
+        initialProgress={initialProgress}
+      />,
+    );
+    await screen.findByText("Waiting for a node");
+
+    act(() =>
+      session.handlers?.onProgress?.({
+        phase: "pulling",
+        message: "Pulling the agent image",
+        detail: null,
+        resourceName: "agent-run-example",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Pulling the agent image",
+      ),
+    );
+
+    rerender(
+      <ExecTerminal
+        sessionKey="task-live-progress"
+        transport={transport}
+        isActive
+        initialProgress={{ ...initialProgress }}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Pulling the agent image",
+    );
+    expect(screen.queryByText("Waiting for a node")).not.toBeInTheDocument();
+  });
+
   /**
    * The startup phase is conveyed by a spinner moving down a list, which a
    * screen reader user cannot see. The phase text has to be announced instead.
@@ -216,7 +305,58 @@ describe("ExecTerminal", () => {
 
     render(<ExecTerminal sessionKey="task-3" transport={transport} isActive />);
 
-    expect(await screen.findByText("Connecting...")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Connecting to the terminal",
+    );
+  });
+
+  it("explains a failed attach as an accessible terminal error", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onError(
+          "Timed out waiting for the Agent pod to accept a terminal",
+        );
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal sessionKey="task-error" transport={transport} isActive />,
+    );
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Unable to open the terminal")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Timed out waiting for the Agent pod to accept a terminal",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("separates a closed session's summary from its reason", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onClosed("The pod stopped responding");
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal
+        sessionKey="task-closed"
+        transport={transport}
+        isActive
+        disconnectedLabel="Execution finished"
+      />,
+    );
+
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("Execution finished")).toBeInTheDocument();
+    expect(screen.getByText("The pod stopped responding")).toBeInTheDocument();
   });
 
   it("drops the startup progress once the session is live", async () => {

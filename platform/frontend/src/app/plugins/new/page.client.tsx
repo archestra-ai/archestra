@@ -1,21 +1,13 @@
 "use client";
 
-import {
-  POPULAR_PLUGIN_MARKETPLACES,
-  type ResourceVisibilityScope,
-} from "@archestra/shared";
+import { POPULAR_PLUGIN_MARKETPLACES } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import {
-  type ProfileLabel,
-  ProfileLabels,
-  type ProfileLabelsRef,
-} from "@/components/agent-labels";
+import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { FilterBar } from "@/components/filter-bar";
-import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -30,36 +22,27 @@ import { useFeature } from "@/lib/config/config.query";
 import { useCreatePlugin } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {
-  type PluginClientType,
-  PluginContentFields,
-  type PluginFileDraft,
-} from "../_parts/plugin-content-fields";
+  blankPluginDraft,
+  isPluginDraftComplete,
+  type PluginDraft,
+} from "../_parts/plugin-draft";
+import { PluginForm } from "../_parts/plugin-form";
 import { PluginBackLink } from "../_parts/plugin-page-shell";
-import type { PluginPlatform } from "../_parts/plugin-platforms";
-import { PluginScopeSelector } from "../_parts/plugin-scope-selector";
 
-type CreateStep = "source" | "content" | "access";
+type CreateStep = "source" | "configure";
 
 const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
   { id: "source", title: "Source" },
-  { id: "content", title: "Content" },
-  { id: "access", title: "Access" },
+  { id: "configure", title: "Configure" },
 ];
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
   source: "Import from GitHub, or start blank.",
-  content: "Add the files this plugin installs.",
-  access: "Choose who can discover this plugin.",
+  // The whole plugin is on one page, so the sentence names the whole of it —
+  // and the plugin's own page says the same thing over the same form.
+  configure:
+    "Add the files this plugin installs, and choose who can discover it.",
 };
-
-const INITIAL_FILES: PluginFileDraft[] = [
-  {
-    path: "hooks/hooks.json",
-    content: "",
-    encoding: "utf8",
-    mode: "100644",
-  },
-];
 
 export default function NewPluginPage() {
   return (
@@ -75,7 +58,7 @@ function NewPluginGate() {
   const enabled = useFeature("plugins");
 
   if (enabled === undefined) {
-    return <LoadingState label="Loading plugins…" variant="page" />;
+    return null;
   }
 
   if (!enabled) {
@@ -108,44 +91,33 @@ function NewPluginWizard() {
   const [search, setSearch] = useState("");
 
   const [step, setStep] = useState<CreateStep>(
-    initialSource === "blank" ? "content" : "source",
+    initialSource === "blank" ? "configure" : "source",
   );
   const stepIndex = CREATE_STEPS.findIndex((s) => s.id === step);
 
-  // The draft outlives the steps: content is written on one, access on the
-  // next, and both go up together on create.
-  const [displayName, setDisplayName] = useState("");
-  const [description, setDescription] = useState("");
-  const [clientType, setClientType] = useState<PluginClientType>("claude-code");
-  const [platforms, setPlatforms] = useState<PluginPlatform[]>([
-    "posix",
-    "windows",
-  ]);
-  const [files, setFiles] = useState<PluginFileDraft[]>(INITIAL_FILES);
-  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [userIds, setUserIds] = useState<string[]>([]);
-  const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  const [draft, setDraft] = useState<PluginDraft>(blankPluginDraft);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const patchDraft = (patch: Partial<PluginDraft>) =>
+    setDraft((prev) => ({ ...prev, ...patch }));
 
-  const contentComplete = displayName.trim().length > 0 && files.length > 0;
+  const isComplete = isPluginDraftComplete({ draft, isGithubPlugin: false });
 
   const createPlugin = useCreatePlugin();
   const handleCreate = async () => {
-    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     // A handled failure resolves to null and a rejection is reported by the
-    // mutation's own `onError`; both keep the wizard where it is with the
-    // draft intact, so the author can retry without retyping.
+    // mutation's own `onError`; both keep the page where it is with the draft
+    // intact, so the author can retry without retyping.
     const created = await createPlugin
       .mutateAsync({
-        displayName: displayName.trim(),
-        description,
-        clientType,
-        supportedPlatforms: platforms,
-        scope,
-        teamIds: scope === "team" ? teamIds : [],
-        userIds: scope === "personal" ? userIds : [],
-        files,
+        displayName: draft.displayName.trim(),
+        description: draft.description,
+        clientType: draft.clientType,
+        supportedPlatforms: draft.supportedPlatforms,
+        scope: draft.scope,
+        teamIds: draft.scope === "team" ? draft.teamIds : [],
+        userIds: draft.scope === "personal" ? draft.userIds : [],
+        files: draft.files,
         labels: finalLabels,
       })
       .catch(() => null);
@@ -204,7 +176,7 @@ function NewPluginWizard() {
                   icon={<FileText className="size-5" />}
                   title="Blank template"
                   description="Write the plugin files here."
-                  onClick={() => setStep("content")}
+                  onClick={() => setStep("configure")}
                 />
               </div>
 
@@ -278,65 +250,22 @@ function NewPluginWizard() {
             </div>
           )}
 
-          {step === "content" && (
+          {step === "configure" && (
             <div className="flex flex-col gap-4">
-              <div className="rounded-lg border p-6">
-                <PluginContentFields
-                  displayName={displayName}
-                  onDisplayNameChange={setDisplayName}
-                  description={description}
-                  onDescriptionChange={setDescription}
-                  clientType={clientType}
-                  onClientTypeChange={setClientType}
-                  platforms={platforms}
-                  onPlatformsChange={setPlatforms}
-                  files={files}
-                  onFilesChange={setFiles}
-                />
-              </div>
+              <PluginForm
+                draft={draft}
+                onChange={patchDraft}
+                labelsRef={labelsRef}
+                isCreate
+              />
               <WizardFooter>
                 <Button variant="outline" onClick={() => setStep("source")}>
                   <ArrowLeft className="h-4 w-4" />
                   Back
                 </Button>
-                <Button
-                  disabled={!contentComplete}
-                  onClick={() => setStep("access")}
-                >
-                  Continue
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </WizardFooter>
-            </div>
-          )}
-
-          {step === "access" && (
-            <div className="flex flex-col gap-4">
-              <div className="rounded-lg border p-6">
-                <PluginScopeSelector
-                  scope={scope}
-                  onScopeChange={setScope}
-                  teamIds={teamIds}
-                  onTeamIdsChange={setTeamIds}
-                  userIds={userIds}
-                  onUserIdsChange={setUserIds}
-                />
-                <div className="mt-4">
-                  <ProfileLabels
-                    ref={labelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                  />
-                </div>
-              </div>
-              <WizardFooter>
-                <Button variant="outline" onClick={() => setStep("content")}>
-                  <ArrowLeft className="h-4 w-4" />
-                  Back
-                </Button>
                 <PermissionButton
                   permissions={{ plugin: ["create", "admin"] }}
-                  disabled={!contentComplete || createPlugin.isPending}
+                  disabled={!isComplete || createPlugin.isPending}
                   onClick={handleCreate}
                 >
                   {createPlugin.isPending ? "Creating..." : "Create plugin"}

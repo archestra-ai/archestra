@@ -1,5 +1,6 @@
 import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { forwardRef } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LOCKED_CHAT_DRAFT_SHORTCUT_EVENT } from "@/consts";
@@ -216,24 +217,28 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       Submit {status ?? "unset"}
     </button>
   ),
-  PromptInputTextarea: ({
-    placeholder,
-    onKeyDown,
-    disabled,
-    "data-testid": testId,
-  }: {
-    placeholder?: string;
-    onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
-    disabled?: boolean;
-    "data-testid"?: string;
-  }) => (
-    <textarea
-      data-testid={testId}
-      disabled={disabled}
-      onKeyDown={onKeyDown}
-      placeholder={placeholder}
-    />
-  ),
+  PromptInputTextarea: forwardRef<
+    HTMLTextAreaElement,
+    {
+      placeholder?: string;
+      onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+      disabled?: boolean;
+      "data-testid"?: string;
+    }
+  >(function MockPromptInputTextarea(
+    { placeholder, onKeyDown, disabled, "data-testid": testId },
+    ref,
+  ) {
+    return (
+      <textarea
+        ref={ref}
+        data-testid={testId}
+        disabled={disabled}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+      />
+    );
+  }),
   PromptInputTools: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="prompt-tools">{children}</div>
   ),
@@ -265,6 +270,23 @@ vi.mock("@/components/chat/chat-tools-display", () => ({
 
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: () => <div data-testid="model-selector" />,
+}));
+
+vi.mock("@/components/chat/initial-agent-selector", () => ({
+  InitialAgentSelector: ({
+    onAgentChange,
+  }: {
+    onAgentChange: (agentId: string) => void;
+  }) => (
+    <button
+      type="button"
+      onKeyDown={(event) => {
+        if (event.key === "Enter") onAgentChange("agent-2");
+      }}
+    >
+      Select agent
+    </button>
+  ),
 }));
 
 // The Apps Hackathon recorder cluster is a self-contained feature with its own
@@ -321,7 +343,7 @@ vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({
-  useSkillsPaginated: () => mockUseSkillsPaginated(),
+  useSkillsPaginated: (...args: unknown[]) => mockUseSkillsPaginated(...args),
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -407,19 +429,56 @@ describe("ArchestraPromptInput", () => {
     localStorage.clear();
   });
 
-  it("turns the composer into a focused execution launcher", () => {
+  it("returns keyboard focus to the prompt after selecting an agent", () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions) =>
+          ({
+            data: "chatAgentPicker" in permissions,
+            isPending: false,
+            isLoading: false,
+          }) as ReturnType<typeof useHasPermissions>,
+      );
+      const onAgentChange = vi.fn();
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          selectorAgentId="agent-1"
+          onAgentChange={onAgentChange}
+        />,
+      );
+
+      const agentSelector = screen.getByRole("button", {
+        name: "Select agent",
+      });
+      agentSelector.focus();
+      fireEvent.keyDown(agentSelector, { key: "Enter" });
+
+      expect(onAgentChange).toHaveBeenCalledWith("agent-2");
+      expect(agentSelector).toHaveFocus();
+
+      act(() => vi.advanceTimersByTime(100));
+
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("turns the composer into a focused run launcher", () => {
     render(
       <ArchestraPromptInput
         {...defaultProps}
-        executionMode
-        executionAgentName="Codex"
+        runtimeMode
+        runtimeAgentName="Codex"
         allowFileUploads
       />,
     );
 
     expect(
       screen.getByText(
-        "Starts Codex in an isolated execution. This becomes its live terminal when ready.",
+        "Starts Codex in its dedicated runtime. This becomes its live terminal when ready.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveAttribute(
@@ -1283,6 +1342,28 @@ describe("ArchestraPromptInput", () => {
       });
     });
 
+    it("does not load the skills catalog for a blank composer", () => {
+      mockControllerState.value = "";
+
+      render(<ArchestraPromptInput {...defaultProps} />);
+
+      expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
+        { limit: 100, forAgentId: defaultProps.agentId },
+        { enabled: false },
+      );
+    });
+
+    it("loads the skills catalog when the draft starts with a slash", () => {
+      mockControllerState.value = "/";
+
+      render(<ArchestraPromptInput {...defaultProps} />);
+
+      expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
+        { limit: 100, forAgentId: defaultProps.agentId },
+        { enabled: true },
+      );
+    });
+
     it("submits a bare skill command with skill metadata and an empty prompt", () => {
       const onSubmit = vi.fn();
       mockControllerState.value = "/my-skill";
@@ -1545,6 +1626,18 @@ describe("ArchestraPromptInput", () => {
     // The new-chat draft key is agent-independent (so a typed prompt survives
     // an agent switch); the agentId prop below no longer affects the key.
     const draftKey = NEW_CHAT_DRAFT_STORAGE_KEY;
+
+    it.each([
+      "null",
+      "undefined",
+    ])("discards a serialized %s sentinel instead of painting it into the composer", (sentinel) => {
+      localStorage.setItem(draftKey, sentinel);
+
+      render(<ArchestraPromptInput {...defaultProps} agentId={agentId} />);
+
+      expect(mockTextInputSetInput).toHaveBeenCalledWith("");
+      expect(localStorage.getItem(draftKey)).toBeNull();
+    });
 
     it("keeps the saved draft when the consumer rejects the submit", () => {
       const text = "draft text the user typed";

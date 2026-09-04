@@ -600,9 +600,8 @@ export const ModelSelector = memo(function ModelSelector({
   // If loading, show loading state
   if (isLoading) {
     return (
-      <PromptInputButton className="w-[150px]" disabled>
+      <PromptInputButton aria-label="Loading models" className="w-8" disabled>
         <Loader2 className="size-4 animate-spin" />
-        <ModelSelectorName>Loading models...</ModelSelectorName>
       </PromptInputButton>
     );
   }

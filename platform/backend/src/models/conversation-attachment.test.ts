@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 
@@ -41,6 +42,48 @@ test("create + findByIdWithData round-trips bytes and metadata", async ({
   expect(fetchedRow.fileData.equals(bytes)).toBe(true);
   expect(fetchedRow.originalName).toBe("hello.txt");
   expect(fetchedRow.mimeType).toBe("text/plain");
+});
+
+test("same-millisecond attachments resolve the later insert by filename", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+  const first = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "duplicate.txt",
+    mimeType: "text/plain",
+    fileSize: 2,
+    contentHash: "duplicate-v1",
+    fileData: Buffer.from("v1"),
+  });
+  const second = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "duplicate.txt",
+    mimeType: "text/plain",
+    fileSize: 2,
+    contentHash: "duplicate-v2",
+    fileData: Buffer.from("v2"),
+  });
+
+  expect(first.createdAt).toEqual(second.createdAt);
+  expect(second.id > first.id).toBe(true);
+  const latest = await ConversationAttachmentModel.findLatestByNameWithData({
+    conversationId: conversation.id,
+    originalName: "duplicate.txt",
+  });
+  expect(latest?.id).toBe(second.id);
+  expect(latest?.fileData.toString("utf8")).toBe("v2");
 });
 
 test("findById omits fileData (metadata-only)", async ({

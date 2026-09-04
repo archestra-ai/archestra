@@ -4,40 +4,34 @@ import os from "node:os";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 import { vitestLogPolicy } from "../vitest.shared";
+import { calculateVitestResourceLimits } from "./src/test/vitest-resource-limits";
 
 const isCI = process.env.CI === "true";
 
 /**
- * Bound the fork count by BOTH cores and memory. CPU half: 50% of cores
- * locally (leaves the other half for the human); CI runs all cores because the
- * memory cap is the real limit there. Memory half: with the forks pool each
- * worker loads the full module graph + its own PGlite (WASM) independently —
- * up to ~3 GB RSS per fork, not shared like the threads pool's single address
- * space — so cap at ~5 GB/fork or a shard OOM-kills the runner (cgroup OOM
- * aborts a worker abruptly, not with a clean Vitest error). Yields 12 forks on
- * the 16-vCPU / 64-GB CI runner, and half-cores (memory permitting) locally.
- * Trusts os.totalmem() to report real available RAM — valid on the bare-VM CI
- * runner, but it would over-report (and stop protecting) inside a
- * cgroup-limited container.
+ * Fork workers each load the backend graph and a PGlite database. CI keeps the
+ * throughput-oriented sizing used by its isolated shards. Local runs reserve
+ * most CPU and memory for the developer's other work instead of treating an
+ * interactive machine like a dedicated runner.
  */
-const MAX_WORKERS = Math.min(
-  isCI
-    ? os.availableParallelism()
-    : Math.max(1, Math.floor(os.availableParallelism() * 0.5)),
-  Math.max(1, Math.floor(os.totalmem() / (5 * 1024 ** 3))),
-);
+const { maxWorkers: MAX_WORKERS, maxOldSpaceMb: MAX_OLD_SPACE_MB } =
+  calculateVitestResourceLimits({
+    isCI,
+    availableParallelism: os.availableParallelism(),
+    totalMemoryBytes: os.totalmem(),
+  });
 
 /**
- * Per-fork V8 old-space ceiling, in MB — three quarters of RAM divided over
- * the forks that share it, floored at V8's own 2 GB default so this can only
- * ever raise the ceiling, never lower it. Kept below total memory so the
- * kernel OOM killer (which kills abruptly, with no heap diagnostics) stays out
- * of play even when every fork peaks together.
+ * Node compile data is safe to reuse across local runs: Node validates entries
+ * by content, and every Vitest fork inherits this path when it starts. CI owns
+ * its separately cached path in the workflow.
  */
-const MAX_OLD_SPACE_MB = Math.max(
-  2048,
-  Math.floor((os.totalmem() * 0.75) / MAX_WORKERS / 1024 ** 2),
-);
+if (!isCI && !process.env.NODE_COMPILE_CACHE) {
+  process.env.NODE_COMPILE_CACHE = path.resolve(
+    __dirname,
+    "node_modules/.cache/node-compile-cache",
+  );
+}
 
 /**
  * Partition test files by whether they use Vitest module mocking.
@@ -143,19 +137,9 @@ export default defineConfig({
 
     maxWorkers: MAX_WORKERS,
 
-    // Pin each fork's V8 old-space ceiling instead of inheriting it from the
-    // host's size. V8 derives its default from total system memory (~2 GB on a
-    // 7 GB machine, ~4 GB on 16 GB), and GitHub-hosted runner hardware depends
-    // on repository VISIBILITY: public repos get 4-vCPU/16-GB, private repos
-    // 2-vCPU/7-GB. So the same suite that fits comfortably here aborts with
-    // "FATAL ERROR: Ineffective mark-compacts near heap limit" on a private
-    // mirror of this repo, where the cap silently halves to 2 GB while
-    // MAX_WORKERS simultaneously collapses to 1 — concentrating every file in
-    // the shard into one long-lived heap (the mock-free project runs
-    // isolate: false, so module state accumulates across files by design).
-    // Deriving the ceiling from memory-per-fork keeps the value the big
-    // runners already get (~4 GB) and gives the small ones the headroom their
-    // single fork actually has.
+    // Pin each fork's V8 old-space ceiling. CI divides most runner memory over
+    // its workers; local runs cap each heap at 3 GB and their aggregate budget
+    // near one quarter of system memory.
     //
     // This is test.execArgv, NOT poolOptions.forks.execArgv: Vitest 4 composes
     // a worker's arguments from the pool defaults, the resolve conditions and
@@ -163,8 +147,13 @@ export default defineConfig({
     // nothing here (verified: the flag never reaches the fork's process.execArgv).
     execArgv: [`--max-old-space-size=${MAX_OLD_SPACE_MB}`],
 
-    // Increase concurrency on CI for faster test execution
-    maxConcurrency: isCI ? 12 : 6,
+    // No current backend tests opt into test.concurrent. Keep future local
+    // concurrency conservative while CI retains its dedicated-runner setting.
+    maxConcurrency: isCI ? 12 : 2,
+
+    // Persist transformed modules between local reruns. CI instead uses its
+    // workflow caches, and avoids the experimental cache path entirely.
+    experimental: { fsModuleCache: !isCI },
 
     // Sequence settings
     sequence: {

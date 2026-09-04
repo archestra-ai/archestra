@@ -29,7 +29,10 @@ import {
 } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
-import { RETAINED_LOG_BYTES } from "@/services/agent-runtime/output-capture";
+import {
+  AgentRuntimeOutputCapture,
+  RETAINED_LOG_BYTES,
+} from "@/services/agent-runtime/output-capture";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 
@@ -718,6 +721,12 @@ class WebSocketService {
             payload: { runId, logs: finalLogs },
           });
         }
+        const readable = await this.streamReadableAgentRunTranscript({
+          ws,
+          runId,
+          sessionId: session.id,
+          taskId: session.taskId,
+        });
         this.sendToClient(ws, {
           type: "agent_run_logs_ended",
           payload: {
@@ -725,6 +734,7 @@ class WebSocketService {
             source: "full",
             truncated: false,
             totalBytes: transcript.uncompressedBytes,
+            ...(readable ? { readable } : {}),
           },
         });
         return;
@@ -736,6 +746,12 @@ class WebSocketService {
           payload: { runId, logs: session.logs },
         });
       }
+      const readable = await this.streamReadableAgentRunTranscript({
+        ws,
+        runId,
+        sessionId: session.id,
+        taskId: session.taskId,
+      });
       this.sendToClient(ws, {
         type: "agent_run_logs_ended",
         payload: {
@@ -745,6 +761,7 @@ class WebSocketService {
             transcript?.isComplete === false ||
             Buffer.byteLength(session.logs ?? "", "utf8") >= RETAINED_LOG_BYTES,
           totalBytes: transcript?.uncompressedBytes,
+          ...(readable ? { readable } : {}),
         },
       });
       return;
@@ -769,12 +786,15 @@ class WebSocketService {
     });
 
     try {
-      await resolveAgentRuntimeBackendDriver(session.backend).streamOutput({
+      const output = new AgentRuntimeOutputCapture({
+        backend: resolveAgentRuntimeBackendDriver(session.backend),
         session,
-        destination: stream,
-        lines,
-        abortSignal: abortController.signal,
+        maxTranscriptBytes: RETAINED_LOG_BYTES,
+        throwOnStreamError: true,
+        onTextDelta: (chunk) => stream.write(chunk),
       });
+      await output.follow(abortController.signal, lines);
+      stream.end();
     } catch (error) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
@@ -784,6 +804,61 @@ class WebSocketService {
         },
       });
       this.unsubscribeAgentRunLogs(ws);
+    }
+  }
+
+  private async streamReadableAgentRunTranscript(params: {
+    ws: WebSocket;
+    runId: string;
+    sessionId: string;
+    taskId: string;
+  }): Promise<
+    { provider: string; version: number; totalBytes: number } | undefined
+  > {
+    const decoder = new StringDecoder("utf8");
+    try {
+      const transcript = await agentRunTranscriptStore.streamReadable({
+        runId: params.sessionId,
+        onChunk: (chunk) => {
+          const logs = decoder.write(chunk);
+          if (!logs) return;
+          this.sendToClient(params.ws, {
+            type: "agent_run_logs",
+            payload: {
+              runId: params.runId,
+              logs,
+              channel: "readable",
+            },
+          });
+        },
+      });
+      if (!transcript) return undefined;
+      const finalLogs = decoder.end();
+      if (finalLogs) {
+        this.sendToClient(params.ws, {
+          type: "agent_run_logs",
+          payload: {
+            runId: params.runId,
+            logs: finalLogs,
+            channel: "readable",
+          },
+        });
+      }
+      return {
+        provider: transcript.provider,
+        version: transcript.version,
+        totalBytes: transcript.uncompressedBytes,
+      };
+    } catch (error) {
+      logger.warn(
+        {
+          error,
+          sessionId: params.sessionId,
+          taskId: params.taskId,
+        },
+        "Could not read the Agent run's readable transcript",
+      );
+      return undefined;
     }
   }
 

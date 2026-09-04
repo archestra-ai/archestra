@@ -64,6 +64,8 @@ export {
   default as agentRunSharesTable,
 } from "./agent-run-share";
 export {
+  agentRunReadableTranscriptChunksTable,
+  agentRunReadableTranscriptsTable,
   agentRunTranscriptChunksTable,
   agentRunTranscriptsTable,
 } from "./agent-run-transcript";

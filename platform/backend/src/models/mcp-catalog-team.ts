@@ -7,6 +7,7 @@ import {
   DEFAULT_CATALOG_TEAM_ACCESS_LEVEL,
   normalizeCatalogTeamInput,
 } from "@/types/catalog-team-level";
+import TeamModel from "./team";
 
 interface CatalogTeamDetail {
   id: string;
@@ -51,11 +52,10 @@ class McpCatalogTeamModel {
           AND scope = 'personal'
           AND organization_id = ${organizationId}
       UNION
-      SELECT ct.catalog_id AS id
-        FROM mcp_catalog_team ct
-        INNER JOIN internal_mcp_catalog c ON ct.catalog_id = c.id
-        INNER JOIN team_member tm ON ct.team_id = tm.team_id
-        WHERE tm.user_id = ${userId}
+      SELECT mcp_catalog_team.catalog_id AS id
+        FROM mcp_catalog_team
+        INNER JOIN internal_mcp_catalog c ON mcp_catalog_team.catalog_id = c.id
+        WHERE ${TeamModel.effectiveMembershipCondition({ userId, teamIdColumn: schema.mcpCatalogTeamsTable.teamId })}
           AND c.scope = 'team'
           AND c.organization_id = ${organizationId}
     `);
@@ -95,12 +95,7 @@ class McpCatalogTeamModel {
     }
 
     if (catalog.scope === "team") {
-      const userTeams = await db
-        .select({ teamId: schema.teamMembersTable.teamId })
-        .from(schema.teamMembersTable)
-        .where(eq(schema.teamMembersTable.userId, userId));
-
-      const teamIds = userTeams.map((t) => t.teamId);
+      const teamIds = await TeamModel.getUserTeamIds(userId);
       if (teamIds.length === 0) return false;
 
       const catalogTeam = await db

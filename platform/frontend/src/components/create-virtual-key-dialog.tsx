@@ -26,10 +26,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
+  TeamVisibilityPicker,
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -497,20 +497,13 @@ export function VirtualKeyVisibilityField({
       onValueChange={onValueChange}
     >
       {value === "team" && (
-        <div className="space-y-2">
-          <Label>Teams</Label>
-          <MultiSelectCombobox
-            disabled={!canReadTeams}
-            options={teams.map((team) => ({
-              value: team.id,
-              label: team.name,
-            }))}
-            value={teamIds}
-            onChange={onTeamIdsChange}
-            placeholder={canReadTeams ? "Search teams..." : "Teams unavailable"}
-            emptyMessage="No teams found."
-          />
-        </div>
+        <TeamVisibilityPicker
+          disabled={!canReadTeams}
+          teams={teams}
+          value={teamIds}
+          onChange={onTeamIdsChange}
+          unavailableMessage={canReadTeams ? undefined : "Teams unavailable"}
+        />
       )}
     </VisibilitySelector>
   );

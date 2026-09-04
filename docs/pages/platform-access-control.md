@@ -364,6 +364,14 @@ Team admins do **not** automatically receive organization-level team permissions
 
 Team roles are also separate from resource actions named `:team-admin`. For example, `agent:team-admin` controls team-scoped agent management; it does not make the user an admin member of every team.
 
+### Team Hierarchies
+
+Teams can be nested to match an organization structure. A resource assigned to a team is available to direct members of that team and members of every descendant team, at any depth. Access does not flow upward from a child to its parent or sideways to sibling teams.
+
+Hierarchy expands resource visibility only. A user still needs the resource's matching RBAC action, and team membership roles are never inherited: an admin of a child team cannot manage its parent team's members or settings. Deleting a parent team moves its direct children to the root without deleting them.
+
+External group sync continues to create direct memberships on the mapped team. Those members receive inherited resource access from its ancestors; see [SSO Team Sync](/docs/platform-sso-team-sync).
+
 ### Agents and MCP Gateways
 
 `agent` and `mcpGateway` share the same scope model:
@@ -438,13 +446,13 @@ New users are automatically added to the "Default Team" when they accept an invi
 
 **For MCP Gateways and Agents:**
 
-- Users can only see team-scoped agents and gateways assigned to teams they belong to
+- Users can see team-scoped agents and gateways assigned to their direct teams or an ancestor team, as described in [Team Hierarchies](#team-hierarchies)
 - The resource's `:admin` action bypasses its scope restrictions
 - Resources with no team assignment are visible to all users
 
 **For MCP Servers:**
 
-- Users can only see, install, and manage MCP servers assigned to teams they belong to
+- Users can see, install, and manage MCP servers assigned to their direct teams or an ancestor team
 - Exception: Users with `mcpServerInstallation:admin` permission can access all MCP servers
 - Exception: MCP servers with no team assignment are accessible to all users
 

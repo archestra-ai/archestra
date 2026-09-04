@@ -2,10 +2,9 @@
 "use client";
 
 import { Globe, RefreshCw, Users } from "lucide-react";
-import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
   VisibilitySelector as SharedVisibilitySelector,
+  TeamVisibilityPicker,
   type VisibilityOption,
 } from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -158,28 +157,12 @@ export function KnowledgeSourceVisibilitySelector({
       onValueChange={onVisibilityChange}
     >
       {visibility === "team-scoped" && (
-        <div className="space-y-2">
-          <Label>
-            Teams
-            {showTeamRequired && (
-              <span className="text-destructive ml-1">(required)</span>
-            )}
-          </Label>
-          <MultiSelectCombobox
-            options={
-              teams?.map((team) => ({
-                value: team.id,
-                label: team.name,
-              })) || []
-            }
-            value={teamIds}
-            onChange={onTeamIdsChange}
-            placeholder={
-              teams?.length === 0 ? "No teams available" : "Search teams..."
-            }
-            emptyMessage="No teams found."
-          />
-        </div>
+        <TeamVisibilityPicker
+          teams={teams ?? []}
+          value={teamIds}
+          onChange={onTeamIdsChange}
+          required={showTeamRequired}
+        />
       )}
     </SharedVisibilitySelector>
   );

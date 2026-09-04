@@ -669,10 +669,10 @@ Required RBAC permission: `mcpRegistry:update`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `create_team` | Create a new team in the organization, optionally with key-value labels. | `team:create` |
+| `create_team` | Create a new team in the organization, optionally nested under a parent team and with key-value labels. | `team:create` |
 | `get_team` | Retrieve a single team by its ID or name, including its current member count. | `team:read` † |
 | `list_teams` | List all teams in the organization, optionally filtered by a name substring. | `team:read` † |
-| `edit_team` | Update a team's name, description, and/or labels. | `team:update` |
+| `edit_team` | Update a team's name, description, parent, and/or labels. | `team:update` |
 | `delete_team` | Delete a team by ID. | `team:delete` |
 | `list_team_members` | List all members of a team along with their roles. | `team:read` † |
 | `add_team_member` | Add an organization user to a team by user ID or email, optionally as an admin. | `team:read` † |
@@ -694,6 +694,7 @@ Required RBAC permission: `team:create`
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | The name of the team. |
 | `description` | `string` | No | Optional human-readable description of the team. |
+| `parent_id` | `string \| null` | No | Optional parent team ID. Omit or pass null for a root team. |
 | `labels` | `object[]` | No | Optional key-value labels to assign to the team for organization and categorization (e.g. cost-center, environment). |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
@@ -706,6 +707,7 @@ Required RBAC permission: `team:create`
 | `team.id` | `string` | Yes | The team ID. |
 | `team.name` | `string` | Yes | The team name. |
 | `team.description` | `string \| null` | Yes | The team description, if any. |
+| `team.parentId` | `string \| null` | Yes | The parent team ID, or null when this is a root team. |
 | `team.organizationId` | `string` | Yes | The organization the team belongs to. |
 | `team.createdBy` | `string \| null` | Yes | The ID of the user who created the team. |
 | `team.memberCount` | `number` | Yes | The number of members currently in the team. |
@@ -736,6 +738,7 @@ Additional access requirement: Callers without organization-level team managemen
 | `team.id` | `string` | Yes | The team ID. |
 | `team.name` | `string` | Yes | The team name. |
 | `team.description` | `string \| null` | Yes | The team description, if any. |
+| `team.parentId` | `string \| null` | Yes | The parent team ID, or null when this is a root team. |
 | `team.organizationId` | `string` | Yes | The organization the team belongs to. |
 | `team.createdBy` | `string \| null` | Yes | The ID of the user who created the team. |
 | `team.memberCount` | `number` | Yes | The number of members currently in the team. |
@@ -765,6 +768,7 @@ Additional access requirement: Callers without organization-level team managemen
 | `teams[].id` | `string` | Yes | The team ID. |
 | `teams[].name` | `string` | Yes | The team name. |
 | `teams[].description` | `string \| null` | Yes | The team description, if any. |
+| `teams[].parentId` | `string \| null` | Yes | The parent team ID, or null when this is a root team. |
 | `teams[].organizationId` | `string` | Yes | The organization the team belongs to. |
 | `teams[].createdBy` | `string \| null` | Yes | The ID of the user who created the team. |
 | `teams[].memberCount` | `number` | Yes | The number of members currently in the team. |
@@ -785,6 +789,7 @@ Required RBAC permission: `team:update`
 | `id` | `string` | Yes | The ID of the team to update. |
 | `name` | `string` | No | Optional new team name. |
 | `description` | `string \| null` | No | Optional new team description. Pass null to clear an existing description. |
+| `parent_id` | `string \| null` | No | Move the team under this parent. Pass null to move it to the root; omit to leave the hierarchy unchanged. |
 | `labels` | `object[]` | No | Replace the team's labels with this set. Pass an empty array to remove all labels. Omit to leave labels unchanged. |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
@@ -797,6 +802,7 @@ Required RBAC permission: `team:update`
 | `team.id` | `string` | Yes | The team ID. |
 | `team.name` | `string` | Yes | The team name. |
 | `team.description` | `string \| null` | Yes | The team description, if any. |
+| `team.parentId` | `string \| null` | Yes | The parent team ID, or null when this is a root team. |
 | `team.organizationId` | `string` | Yes | The organization the team belongs to. |
 | `team.createdBy` | `string \| null` | Yes | The ID of the user who created the team. |
 | `team.memberCount` | `number` | Yes | The number of members currently in the team. |

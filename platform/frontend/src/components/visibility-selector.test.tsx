@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
+  TeamVisibilityPicker,
   type VisibilityOption,
   VisibilitySelector,
 } from "./visibility-selector";
@@ -74,5 +75,68 @@ describe("VisibilitySelector", () => {
     fireEvent.click(screen.getByText("Teams"));
 
     expect(onValueChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("TeamVisibilityPicker", () => {
+  it("shows every child team that inherits access", () => {
+    render(
+      <TeamVisibilityPicker
+        teams={[
+          { id: "root", name: "Company", parentId: null },
+          { id: "group", name: "Product", parentId: "root" },
+          { id: "team", name: "Platform", parentId: "group" },
+          { id: "other", name: "Operations", parentId: null },
+        ]}
+        value={["root"]}
+        onChange={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText("Also available to 2 child teams"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Product, Platform")).toBeInTheDocument();
+    expect(screen.queryByText("Operations, Platform")).not.toBeInTheDocument();
+  });
+
+  it("does not count a directly selected child twice", () => {
+    render(
+      <TeamVisibilityPicker
+        teams={[
+          { id: "root", name: "Company", parentId: null },
+          { id: "child", name: "Platform", parentId: "root" },
+        ]}
+        value={["root", "child"]}
+        onChange={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText(/Also available to/)).not.toBeInTheDocument();
+  });
+
+  it("shows descendant summaries when the picker only exposes direct teams", () => {
+    render(
+      <TeamVisibilityPicker
+        teams={[
+          {
+            id: "root",
+            name: "Company",
+            parentId: null,
+            descendantTeams: [
+              { id: "group", name: "Product" },
+              { id: "team", name: "Platform" },
+            ],
+          },
+        ]}
+        value={["root"]}
+        onChange={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText("Also available to 2 child teams"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Product, Platform")).toBeInTheDocument();
   });
 });

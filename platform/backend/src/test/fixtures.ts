@@ -226,7 +226,10 @@ async function makeTeam(
   organizationId: string,
   createdBy: string,
   overrides: Partial<
-    Pick<InsertTeam, "name" | "description" | "convertToolResultsToToon">
+    Pick<
+      InsertTeam,
+      "name" | "description" | "convertToolResultsToToon" | "parentId"
+    >
   > = {},
 ) {
   const [team] = await db

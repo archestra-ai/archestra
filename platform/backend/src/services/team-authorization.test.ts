@@ -240,7 +240,6 @@ describe("team-authorization service", () => {
       const removed = await makeUser();
       await makeMember(removed.id, organizationId, { role: "member" });
       const cleaned = await cleanupCredentialSourcesAfterMemberRemoval({
-        actingUserId: creatorId,
         removedUserId: removed.id,
         teamId: team.id,
         organizationId,

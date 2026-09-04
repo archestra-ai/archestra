@@ -2,6 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import TeamModel from "./team";
 
 /**
  * Read-side accessibility + team loaders for apps. An app's visibility (scope +
@@ -52,7 +53,10 @@ class AppAccessModel {
               ),
               and(
                 eq(schema.internalMcpCatalogTable.scope, "team"),
-                eq(schema.teamMembersTable.userId, userId),
+                TeamModel.effectiveMembershipCondition({
+                  userId,
+                  teamIdColumn: schema.mcpCatalogTeamsTable.teamId,
+                }),
               ),
             ),
           );
@@ -83,18 +87,6 @@ class AppAccessModel {
         eq(
           schema.internalMcpCatalogTable.id,
           schema.mcpCatalogTeamsTable.catalogId,
-        ),
-      )
-      .leftJoin(
-        schema.teamMembersTable,
-        and(
-          eq(
-            schema.mcpCatalogTeamsTable.teamId,
-            schema.teamMembersTable.teamId,
-          ),
-          userId === undefined
-            ? undefined
-            : eq(schema.teamMembersTable.userId, userId),
         ),
       )
       .leftJoin(
@@ -174,17 +166,13 @@ class AppAccessModel {
               schema.mcpCatalogTeamsTable.catalogId,
             ),
           )
-          .innerJoin(
-            schema.teamMembersTable,
-            eq(
-              schema.mcpCatalogTeamsTable.teamId,
-              schema.teamMembersTable.teamId,
-            ),
-          )
           .where(
             and(
               eq(schema.appsTable.id, app.id),
-              eq(schema.teamMembersTable.userId, userId),
+              TeamModel.effectiveMembershipCondition({
+                userId,
+                teamIdColumn: schema.mcpCatalogTeamsTable.teamId,
+              }),
             ),
           )
           .limit(1);

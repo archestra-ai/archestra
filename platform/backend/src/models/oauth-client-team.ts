@@ -1,6 +1,7 @@
 import { eq, inArray, type SQL, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import TeamModel from "./team";
 
 /**
  * Team assignments for OAuth clients (both MCP gateway and LLM proxy clients —
@@ -31,10 +32,9 @@ class OauthClientTeamModel {
       OR (
         ${schema.oauthClientsTable.metadata}->>'scope' = 'team'
         AND EXISTS (
-          SELECT 1 FROM oauth_client_team oct
-          INNER JOIN team_member tm ON oct.team_id = tm.team_id
-          WHERE oct.oauth_client_id = ${schema.oauthClientsTable.id}
-            AND tm.user_id = ${userId}
+          SELECT 1 FROM oauth_client_team
+          WHERE oauth_client_team.oauth_client_id = ${schema.oauthClientsTable.id}
+            AND ${TeamModel.effectiveMembershipCondition({ userId, teamIdColumn: schema.oauthClientTeamsTable.teamId })}
         )
       )
     )`;

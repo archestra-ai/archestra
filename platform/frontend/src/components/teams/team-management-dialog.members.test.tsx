@@ -11,7 +11,10 @@ import { TeamManagementDialog } from "./team-management-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 
-const { useTokensMock } = vi.hoisted(() => ({ useTokensMock: vi.fn() }));
+const { useTeamsMock, useTokensMock } = vi.hoisted(() => ({
+  useTeamsMock: vi.fn(),
+  useTokensMock: vi.fn(),
+}));
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -21,6 +24,9 @@ vi.mock("@/lib/config/config", () => ({
   default: { enterpriseFeatures: { core: false } },
 }));
 vi.mock("@/lib/teams/team-token.query", () => ({ useTokens: useTokensMock }));
+vi.mock("@/lib/teams/team.query", () => ({
+  useTeams: useTeamsMock,
+}));
 vi.mock("@archestra/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@archestra/shared")>()),
   archestraApiSdk: {
@@ -90,6 +96,7 @@ beforeEach(() => {
     // biome-ignore lint/suspicious/noExplicitAny: partial hook result stub
   } as any);
   useTokensMock.mockReturnValue({ data: { tokens: [] } });
+  useTeamsMock.mockReturnValue({ data: [] });
   vi.mocked(archestraApiSdk.getTeamMembers).mockResolvedValue({
     data: [{ userId: "u-1", role: "member", name: "Rosa Lindqvist" }],
     // biome-ignore lint/suspicious/noExplicitAny: partial sdk result stub
@@ -105,9 +112,43 @@ beforeEach(() => {
 });
 
 describe("TeamManagementDialog member roles", () => {
+  it("keeps labels in a closed Advanced section", async () => {
+    renderDialog();
+
+    const advanced = screen.getByRole("button", { name: "Advanced" });
+    expect(advanced).toHaveAttribute("data-state", "closed");
+  });
+
+  it("offers valid parent paths and excludes the current team's descendants", async () => {
+    useTeamsMock.mockReturnValue({
+      data: [
+        { id: "root", name: "Product", parentId: null },
+        { ...team, parentId: "root" },
+        { id: "child", name: "Runtime", parentId: team.id },
+        { id: "other", name: "Operations", parentId: null },
+      ],
+    });
+    const user = await setupUserEvent();
+    renderDialog();
+
+    await user.click(screen.getByRole("combobox"));
+
+    const listbox = await screen.findByRole("listbox");
+    expect(
+      within(listbox).getByRole("option", { name: "Product" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).getByRole("option", { name: "Operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: /Runtime/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("labels the role control by what it grants, never as an RBAC role name", async () => {
     const user = await setupUserEvent();
     renderDialog();
+    await user.click(screen.getByRole("button", { name: "Members" }));
 
     const trigger = await findRoleTrigger(/not able to edit team/i);
     await user.click(trigger);
@@ -132,6 +173,7 @@ describe("TeamManagementDialog member roles", () => {
   it("still sends the stored role value when the new label is chosen", async () => {
     const user = await setupUserEvent();
     renderDialog();
+    await user.click(screen.getByRole("button", { name: "Members" }));
 
     await user.click(await findRoleTrigger(/not able to edit team/i));
     await user.click(
@@ -150,16 +192,14 @@ describe("TeamManagementDialog member roles", () => {
   it("explains what syncs and what does not, and jumps to External Group Sync", async () => {
     const user = await setupUserEvent();
     renderDialog();
+    await user.click(screen.getByRole("button", { name: "Members" }));
 
-    const note = (
-      await screen.findByText(/only for adding members by hand/i)
-    ).closest("p");
+    const note = (await screen.findByText(/add members manually/i)).closest(
+      "p",
+    );
     // The docs link appends screen-reader-only text, so match around it.
     expect(note).toHaveTextContent(
-      /External Group Sync syncs membership and Role Mapping/,
-    );
-    expect(note).toHaveTextContent(
-      /in your OIDC provider syncs roles — never this setting\./,
+      /External Group Sync to sync membership. Configure roles through Role Mapping/,
     );
 
     await user.click(

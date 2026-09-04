@@ -6,9 +6,8 @@ import {
   formatPermissionRequirement,
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
-import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
+  TeamVisibilityPicker,
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -111,27 +110,21 @@ export function OauthClientVisibilityField({
     >
       {scope === "team" && (
         <div className="space-y-2">
-          <Label>Teams *</Label>
-          <MultiSelectCombobox
+          <TeamVisibilityPicker
             disabled={
               !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
             }
-            options={
-              teams?.map((team) => ({
-                value: team.id,
-                label: team.name,
-              })) || []
-            }
+            teams={teams ?? []}
             value={teamIds}
             onChange={onTeamIdsChange}
-            placeholder={
+            required
+            unavailableMessage={
               !canReadTeams
                 ? "Teams unavailable"
                 : hasNoAvailableTeams
                   ? "No teams available"
-                  : "Search teams..."
+                  : undefined
             }
-            emptyMessage="No teams found."
           />
           {!canReadTeams && (
             <PermissionRequirementHint

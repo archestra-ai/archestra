@@ -44,6 +44,7 @@ import {
   useUserShareOption,
 } from "@/components/user-share-field";
 import {
+  TeamVisibilityPicker,
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -531,22 +532,19 @@ export function EditModelDialog({
 
                   {accessScope === "team" && (
                     <FormControl>
-                      <MultiSelectCombobox
+                      <TeamVisibilityPicker
                         disabled={!canReadTeams || assignableTeams.length === 0}
-                        options={assignableTeams.map((team) => ({
-                          value: team.id,
-                          label: team.name,
-                        }))}
+                        teams={assignableTeams}
                         value={field.value}
                         onChange={field.onChange}
-                        placeholder={
+                        required
+                        unavailableMessage={
                           !canReadTeams
                             ? "Teams unavailable"
                             : assignableTeams.length === 0
                               ? "No teams available"
-                              : "Search teams..."
+                              : undefined
                         }
-                        emptyMessage="No teams found."
                       />
                     </FormControl>
                   )}

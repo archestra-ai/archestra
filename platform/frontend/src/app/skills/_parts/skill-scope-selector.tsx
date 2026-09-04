@@ -2,14 +2,13 @@
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
 import { Globe, User, Users } from "lucide-react";
-import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
   UserShareField,
   useUserShareChoice,
   useUserShareOption,
 } from "@/components/user-share-field";
 import {
+  TeamVisibilityPicker,
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -125,19 +124,12 @@ export function SkillScopeSelector({
       )}
 
       {choice === "team" && (
-        <div className="space-y-2">
-          <Label>Teams</Label>
-          <MultiSelectCombobox
-            disabled={!canShareTeams || hasNoTeams}
-            options={
-              teams?.map((team) => ({ value: team.id, label: team.name })) ?? []
-            }
-            value={teamIds}
-            onChange={onTeamIdsChange}
-            placeholder={hasNoTeams ? "No teams available" : "Search teams..."}
-            emptyMessage="No teams found."
-          />
-        </div>
+        <TeamVisibilityPicker
+          teams={teams ?? []}
+          disabled={!canShareTeams || hasNoTeams}
+          value={teamIds}
+          onChange={onTeamIdsChange}
+        />
       )}
     </VisibilitySelector>
   );

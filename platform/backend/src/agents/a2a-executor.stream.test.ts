@@ -306,7 +306,7 @@ describe("executeA2AMessage real stream boundary", () => {
     );
   });
 
-  test("sends Bedrock cache control through the real A2A stream boundary", async ({
+  test("sends supported Bedrock cache control through the real A2A stream boundary", async ({
     makeOrganization,
     makeUser,
     makeInternalAgent,
@@ -317,7 +317,7 @@ describe("executeA2AMessage real stream boundary", () => {
     let modelPrompt: unknown;
     primePromptCacheAgent({
       provider: "bedrock",
-      selectedModel: "amazon.nova-lite-v1:0",
+      selectedModel: "amazon.nova-2-lite-v1:0",
       anthropicNativeEndpoint: false,
       model: modelCapturingPrompt((prompt) => {
         modelPrompt = prompt;

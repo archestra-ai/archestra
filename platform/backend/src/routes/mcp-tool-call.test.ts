@@ -4,19 +4,9 @@
  *   the caller (mcp_tool_calls.user_id); log:admin lifts the scoping.
  * - Another user's (or an unattributed) row 404s on the detail route without
  *   log:admin — existence is not disclosed.
- * - The agentId listing applies the same agent-visibility check as the main
- *   listing (regression: it previously skipped access control entirely).
+ * - Every route is constrained to the active organization; agent and MCP
+ *   server permissions do not widen or narrow log visibility.
  */
-import { vi } from "vitest";
-
-// hasPermission resolves the session from request headers, which app.inject
-// cannot provide — mock it (isMcpServerAdmin=false). userHasPermission stays
-// REAL so log:read / log:admin resolution runs against actual membership rows.
-vi.mock("@/auth", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/auth")>()),
-  hasPermission: vi.fn().mockResolvedValue({ success: false, error: null }),
-}));
-
 import McpToolCallModel from "@/models/mcp-tool-call";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -39,13 +29,14 @@ describe("mcp-tool-call routes", () => {
       method?: string;
       createdAt?: Date;
       mcpServerName?: string;
+      agentId?: string;
     } = {},
   ) =>
     McpToolCallModel.create({
       mcpServerName: overrides.mcpServerName ?? "test-server",
       method: overrides.method ?? "tools/call",
       userId,
-      agentId,
+      agentId: overrides.agentId ?? agentId,
       toolCall: { id: "call-1", name: "test_tool", arguments: {} },
       toolResult: { content: [{ type: "text", text: "ok" }] },
       createdAt: overrides.createdAt,
@@ -75,7 +66,7 @@ describe("mcp-tool-call routes", () => {
       otherUser = await makeUser();
       limitedUser = await makeUser();
       const readOnlyLogs = await makeCustomRole(organizationId, {
-        permission: { log: ["read"], agent: ["read"] },
+        permission: { log: ["read"] },
       });
       await makeMember(limitedUser.id, organizationId, {
         role: readOnlyLogs.role,
@@ -115,7 +106,18 @@ describe("mcp-tool-call routes", () => {
     expect(response.json().data[0].id).toBe(ownRowId);
   });
 
-  test("the org admin (log:admin) lists every user's tool calls", async () => {
+  test("log:admin alone lists every tool call in the active organization", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const auditor = await makeUser();
+    const allLogs = await makeCustomRole(organizationId, {
+      permission: { log: ["read", "admin"] },
+    });
+    await makeMember(auditor.id, organizationId, { role: allLogs.role });
+    currentUser = auditor;
+
     const response = await app.inject({
       method: "GET",
       url: "/api/mcp-tool-calls?limit=10",
@@ -123,6 +125,45 @@ describe("mcp-tool-call routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toHaveLength(3);
+  });
+
+  test("log:admin includes app-owned calls without app or agent permissions", async ({
+    makeApp,
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const appOwner = await makeUser();
+    const ownedApp = await makeApp({
+      organizationId,
+      authorId: appOwner.id,
+      scope: "personal",
+    });
+    const appCall = await McpToolCallModel.create({
+      ownerType: "app",
+      appId: ownedApp.id,
+      userId: appOwner.id,
+      mcpServerName: "app-server",
+      method: "tools/call",
+      toolCall: { id: "app-call", name: "app_tool", arguments: {} },
+      toolResult: { content: [{ type: "text", text: "ok" }] },
+    });
+    const auditor = await makeUser();
+    const allLogs = await makeCustomRole(organizationId, {
+      permission: { log: ["read", "admin"] },
+    });
+    await makeMember(auditor.id, organizationId, { role: allLogs.role });
+    currentUser = auditor;
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/mcp-tool-calls?limit=10",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.map((row: { id: string }) => row.id)).toContain(
+      appCall.id,
+    );
   });
 
   test("the predefined platform_admin sees only their own tool calls", async ({
@@ -160,7 +201,7 @@ describe("mcp-tool-call routes", () => {
     expect(other.statusCode).toBe(404);
   });
 
-  test("the agentId listing is access-controlled and own-scoped (regression: it skipped both)", async ({
+  test("the agentId filter stays own-scoped without requiring agent permissions", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -176,33 +217,22 @@ describe("mcp-tool-call routes", () => {
 
     const caller = await makeUser();
     const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read"], agent: ["read"] },
+      permission: { log: ["read"] },
     });
     await makeMember(caller.id, organizationId, { role: role.role });
     currentUser = caller;
 
-    const invisible = await app.inject({
+    const mine = await seedCall(caller.id, { agentId: privateAgent.id });
+    const privateAgentRows = await app.inject({
       method: "GET",
       url: `/api/mcp-tool-calls?limit=10&agentId=${privateAgent.id}`,
     });
-    expect(invisible.statusCode).toBe(200);
-    expect(invisible.json()).toMatchObject({
-      data: [],
-      pagination: { hasNext: false, nextCursor: null },
-    });
-
-    // A visible org agent still only yields the caller's own rows.
-    const mine = await seedCall(caller.id);
-    const visible = await app.inject({
-      method: "GET",
-      url: `/api/mcp-tool-calls?limit=10&agentId=${agentId}`,
-    });
-    expect(visible.statusCode).toBe(200);
-    expect(visible.json().data).toHaveLength(1);
-    expect(visible.json().data[0].id).toBe(mine.id);
+    expect(privateAgentRows.statusCode).toBe(200);
+    expect(privateAgentRows.json().data).toHaveLength(1);
+    expect(privateAgentRows.json().data[0].id).toBe(mine.id);
   });
 
-  test("returns an empty cursor page when the caller can access no agents", async ({
+  test("returns an empty cursor page when the caller has no attributed rows", async ({
     makeUser,
   }) => {
     currentUser = await makeUser();
@@ -217,6 +247,53 @@ describe("mcp-tool-call routes", () => {
       data: [],
       pagination: { limit: 10, hasNext: false, nextCursor: null },
     });
+  });
+
+  test("does not expose another organization's tool calls to log administrators", async ({
+    makeAgent,
+    makeApp,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const owner = await makeUser();
+    const otherAgent = await makeAgent({
+      organizationId: otherOrganization.id,
+      authorId: owner.id,
+      scope: "org",
+    });
+    const foreign = await seedCall(owner.id, { agentId: otherAgent.id });
+    const otherApp = await makeApp({
+      organizationId: otherOrganization.id,
+      authorId: owner.id,
+    });
+    const foreignAppCall = await McpToolCallModel.create({
+      ownerType: "app",
+      appId: otherApp.id,
+      userId: owner.id,
+      mcpServerName: "other-app-server",
+      method: "tools/call",
+      toolCall: { id: "other-app-call", name: "app_tool", arguments: {} },
+      toolResult: { content: [{ type: "text", text: "ok" }] },
+    });
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/mcp-tool-calls?limit=10",
+    });
+    expect(list.json().data).toHaveLength(3);
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/mcp-tool-calls/${foreign.id}`,
+    });
+    expect(detail.statusCode).toBe(404);
+
+    const appDetail = await app.inject({
+      method: "GET",
+      url: `/api/mcp-tool-calls/${foreignAppCall.id}`,
+    });
+    expect(appDetail.statusCode).toBe(404);
   });
 
   test("walks identical timestamps without repeating or skipping rows", async () => {

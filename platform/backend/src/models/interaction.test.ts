@@ -3234,7 +3234,10 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const userIds = await InteractionModel.getUniqueUserIds(admin.id, true);
+      const userIds = await InteractionModel.getUniqueUserIds({
+        requestingUserId: admin.id,
+        isAgentAdmin: true,
+      });
 
       expect(userIds).toHaveLength(2);
       expect(userIds.map((u) => u.name)).toEqual([
@@ -3286,7 +3289,10 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const userIds = await InteractionModel.getUniqueUserIds(admin.id, true);
+      const userIds = await InteractionModel.getUniqueUserIds({
+        requestingUserId: admin.id,
+        isAgentAdmin: true,
+      });
 
       expect(userIds).toHaveLength(1);
       expect(userIds[0].name).toBe("Test User");
@@ -3348,7 +3354,10 @@ describe("InteractionModel", () => {
       });
 
       // User sees userIds from both team-scoped and org-wide agent interactions
-      const userIds = await InteractionModel.getUniqueUserIds(user.id, false);
+      const userIds = await InteractionModel.getUniqueUserIds({
+        requestingUserId: user.id,
+        isAgentAdmin: false,
+      });
 
       expect(userIds).toHaveLength(2);
     });

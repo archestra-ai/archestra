@@ -857,12 +857,11 @@ describe("interaction routes", () => {
     expect(soloRow?.lastUserMessagePreview).toBe("solo message");
   });
 
-  test("hides an agent-less interaction from a non-agent-admin", async ({
+  test("hides an interaction that cannot be tied to the active organization", async ({
     makeUser,
     makeMember,
   }) => {
-    // The suite's default caller is an org admin; this test needs a caller
-    // without agent-admin (or log:admin) standing.
+    // A row with neither owning resource cannot be assigned to a tenant.
     const limited = await makeUser();
     await makeMember(limited.id, organizationId, { role: "member" });
     currentUser = limited;
@@ -892,7 +891,6 @@ describe("interaction routes", () => {
     makeKnowledgeBaseConnector,
     makeMember,
   }) => {
-    // KB interactions carry no agent, so only an agent admin may read them.
     await makeMember(currentUser.id, organizationId, { role: "admin" });
     const kb = await makeKnowledgeBase(organizationId);
     const connector = await makeKnowledgeBaseConnector(kb.id, organizationId, {
@@ -1031,7 +1029,7 @@ describe("interaction routes", () => {
       otherUser = await makeUser();
       limitedUser = await makeUser();
       const readOnlyLogs = await makeCustomRole(organizationId, {
-        permission: { log: ["read"], agent: ["read"] },
+        permission: { log: ["read"] },
       });
       await makeMember(limitedUser.id, organizationId, {
         role: readOnlyLogs.role,
@@ -1106,14 +1104,16 @@ describe("interaction routes", () => {
       ]);
     });
 
-    test("log:admin (custom role) and the predefined admin see every user's rows", async ({
+    test("log:admin alone sees every row in the active organization", async ({
+      makeAgent,
+      makeOrganization,
       makeUser,
       makeMember,
       makeCustomRole,
     }) => {
       const auditor = await makeUser();
       const allLogs = await makeCustomRole(organizationId, {
-        permission: { log: ["read", "admin"], agent: ["read", "admin"] },
+        permission: { log: ["read", "admin"] },
       });
       await makeMember(auditor.id, organizationId, { role: allLogs.role });
       currentUser = auditor;
@@ -1129,6 +1129,36 @@ describe("interaction routes", () => {
         url: `/api/interactions/${otherRowId}`,
       });
       expect(other.statusCode).toBe(200);
+
+      const otherOrganization = await makeOrganization();
+      const foreignAgent = await makeAgent({
+        organizationId: otherOrganization.id,
+        authorId: otherUser.id,
+        scope: "org",
+      });
+      const foreignRow = await InteractionModel.create({
+        profileId: foreignAgent.id,
+        userId: otherUser.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "foreign",
+          object: "chat.completion",
+          choices: [],
+        } as unknown as InteractionResponse,
+        type: "openai:chatCompletions",
+      });
+
+      const afterForeignInsert = await app.inject({
+        method: "GET",
+        url: "/api/interactions?limit=10&offset=0",
+      });
+      expect(afterForeignInsert.json().pagination.total).toBe(3);
+
+      const foreignDetail = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${foreignRow.id}`,
+      });
+      expect(foreignDetail.statusCode).toBe(404);
     });
 
     test("the predefined platform_admin sees only their own rows", async ({

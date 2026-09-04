@@ -69,6 +69,7 @@ import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
+import { interactionBelongsToOrganization } from "./log-organization";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 /**
@@ -484,6 +485,7 @@ class InteractionModel {
     requestingUserId?: string,
     isAgentAdmin?: boolean,
     filters?: {
+      organizationId?: string;
       profileId?: string;
       externalAgentId?: string;
       userId?: string;
@@ -497,6 +499,10 @@ class InteractionModel {
 
     // Build where clauses
     const conditions: SQL[] = [];
+
+    if (filters?.organizationId) {
+      conditions.push(interactionBelongsToOrganization(filters.organizationId));
+    }
 
     // Access control filter
     if (requestingUserId && !isAgentAdmin) {
@@ -640,6 +646,7 @@ class InteractionModel {
     requestingUserId?: string;
     isAgentAdmin?: boolean;
     filters?: {
+      organizationId?: string;
       profileId?: string;
       externalAgentId?: string;
       userId?: string;
@@ -651,6 +658,9 @@ class InteractionModel {
     const { pagination, sorting, requestingUserId, isAgentAdmin, filters } =
       params;
     const conditions: SQL[] = [];
+    if (filters?.organizationId) {
+      conditions.push(interactionBelongsToOrganization(filters.organizationId));
+    }
     if (requestingUserId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         requestingUserId,
@@ -777,10 +787,13 @@ class InteractionModel {
   }
 
   static async findById(
-    id: string,
+    idOrScope: string | { id: string; organizationId: string },
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<Interaction | null> {
+    const id = typeof idOrScope === "string" ? idOrScope : idOrScope.id;
+    const organizationId =
+      typeof idOrScope === "string" ? undefined : idOrScope.organizationId;
     const [row] = await db
       .select({
         interaction: schema.interactionsTable,
@@ -794,7 +807,14 @@ class InteractionModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .where(eq(schema.interactionsTable.id, id));
+      .where(
+        and(
+          eq(schema.interactionsTable.id, id),
+          ...(organizationId
+            ? [interactionBelongsToOrganization(organizationId)]
+            : []),
+        ),
+      );
 
     if (!row) {
       return null;
@@ -993,16 +1013,22 @@ class InteractionModel {
    * Used for filtering dropdowns in the UI
    * Returns agent info (id and displayName) for the dropdown to display names but filter by id
    */
-  static async getUniqueExternalAgentIds(
-    requestingUserId?: string,
-    isAgentAdmin?: boolean,
+  static async getUniqueExternalAgentIds(params: {
+    requestingUserId?: string;
+    isAgentAdmin?: boolean;
     /** Narrow to rows attributed to this user (the own-logs log:read view). */
-    ownUserId?: string,
-  ): Promise<{ id: string; displayName: string }[]> {
+    ownUserId?: string;
+    organizationId?: string;
+  }): Promise<{ id: string; displayName: string }[]> {
+    const { requestingUserId, isAgentAdmin, ownUserId, organizationId } =
+      params;
     // Build where clause for access control
     const conditions: SQL[] = [
       isNotNull(schema.interactionsTable.externalAgentId),
     ];
+    if (organizationId) {
+      conditions.push(interactionBelongsToOrganization(organizationId));
+    }
     if (ownUserId) {
       conditions.push(eq(schema.interactionsTable.userId, ownUserId));
     }
@@ -1051,12 +1077,17 @@ class InteractionModel {
    * Used for filtering dropdowns in the UI
    * Returns user info (id and name) for the dropdown to display names but filter by id
    */
-  static async getUniqueUserIds(
-    requestingUserId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<UserInfo[]> {
+  static async getUniqueUserIds(params: {
+    requestingUserId?: string;
+    isAgentAdmin?: boolean;
+    organizationId?: string;
+  }): Promise<UserInfo[]> {
+    const { requestingUserId, isAgentAdmin, organizationId } = params;
     // Build where clause for access control
     const conditions: SQL[] = [isNotNull(schema.interactionsTable.userId)];
+    if (organizationId) {
+      conditions.push(interactionBelongsToOrganization(organizationId));
+    }
 
     if (requestingUserId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
@@ -1300,6 +1331,7 @@ class InteractionModel {
     requestingUserId?: string,
     isAgentAdmin?: boolean,
     filters?: {
+      organizationId?: string;
       profileId?: string;
       userId?: string;
       source?: InteractionSource;
@@ -1332,6 +1364,7 @@ class InteractionModel {
       requestingUserId ?? null,
       isAgentAdmin ?? false,
       filters?.profileId ?? null,
+      filters?.organizationId ?? null,
       filters?.userId ?? null,
       filters?.source ?? null,
       filters?.client ?? null,
@@ -1422,6 +1455,7 @@ class InteractionModel {
     requestingUserId?: string,
     isAgentAdmin?: boolean,
     filters?: {
+      organizationId?: string;
       profileId?: string;
       userId?: string;
       source?: InteractionSource;
@@ -1518,6 +1552,7 @@ class InteractionModel {
     requestingUserId?: string,
     isAgentAdmin?: boolean,
     filters?: {
+      organizationId?: string;
       profileId?: string;
       userId?: string;
       source?: InteractionSource;
@@ -1530,6 +1565,10 @@ class InteractionModel {
   ): Promise<SQL | undefined | typeof SESSION_ACCESS_DENIED> {
     // Build where clauses for access control
     const conditions: SQL[] = [];
+
+    if (filters?.organizationId) {
+      conditions.push(interactionBelongsToOrganization(filters.organizationId));
+    }
 
     if (requestingUserId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(

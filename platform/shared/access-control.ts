@@ -566,7 +566,8 @@ export const permissionDescriptions: Record<string, string> = {
     "View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
   "agentSettings:update":
     "Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
-  "llmCost:read": "View LLM usage cost statistics and analytics",
+  "llmCost:read":
+    "View organization-wide LLM usage cost statistics and analytics",
 
   // Other
   "chat:read": "View and access chat conversations",
@@ -584,8 +585,10 @@ export const permissionDescriptions: Record<string, string> = {
   "project:read-all":
     "View chats and Agent Runtime runs that other members started in any project you can access. Without this, you only see the sessions you started yourself — including in projects you own.",
   "file:manage": "List, read, write, and delete files in chats and projects",
-  "log:read": "View your own LLM proxy and MCP tool call logs",
-  "log:admin": "View every user's LLM proxy and MCP tool call logs",
+  "log:read":
+    "View your own LLM proxy and MCP tool call logs in the active organization",
+  "log:admin":
+    "View every LLM proxy and MCP tool call log in the active organization",
 
   // Administration
   "member:read": "View organization members and their roles",

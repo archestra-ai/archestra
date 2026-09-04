@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -31,6 +31,21 @@ Archestra stores both raw spend and savings. Savings can come from:
 Reading organization-wide costs requires the `llmCost:read` permission. You can still open **My Usage** from your user menu without it.
 
 ![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-costs-and-limits_costs.webp)
+
+### API Permissions
+
+Cost analytics and raw logs use separate permissions. Grant only the rows and level of detail the integration needs:
+
+| API data | Required permissions | Visibility |
+|----------|----------------------|------------|
+| Organization totals, teams, agents, models, and savings | `llmCost:read` | Every matching interaction in the active organization. Agent permissions do not narrow these aggregates. |
+| Per-user statistics | `llmCost:read`; add `member:read` | Without `member:read`, only the caller's own usage is returned. With it, identified users across the active organization are returned. |
+| Per-app statistics | `llmCost:read` and `app:read` | Apps visible to the caller. `app:admin` includes every app in the active organization. |
+| Per-skill statistics | `llmCost:read` and `skill:read` | Skills visible to the caller. `skill:admin` includes every skill in the active organization. |
+| Own LLM and MCP logs | `log:read` | Rows attributed to the caller in the active organization. |
+| All LLM and MCP logs | `log:read` and `log:admin` | Every row in the active organization, including unattributed traffic. Agent and MCP-server permissions do not change this visibility. |
+
+`llmProxy:read` only grants access to the LLM Proxy and its connection details. It does not grant cost analytics or log access.
 
 ## My Usage
 
@@ -74,7 +89,7 @@ For authenticated attribution, use a [passthrough virtual key](platform-llm-prox
 
 Set `X-Archestra-Agent-Id` to record which client made the request. Use a stable value for each application. See [Custom Headers](platform-llm-proxy#custom-headers) for both headers.
 
-Use `GET /api/interactions` for request-level exports. Each row includes `userId`, `externalAgentId`, credential references, tokens, and cost. `GET /api/interactions/sessions` groups the same data into sessions and resolves virtual key details. Organization-wide interaction exports require `log:admin`.
+Use `GET /api/interactions` for request-level exports. Each row includes `userId`, `externalAgentId`, credential references, tokens, and cost. `GET /api/interactions/sessions` groups the same data into sessions and resolves virtual key details. Your own rows require `log:read`; organization-wide interaction exports require both `log:read` and `log:admin`. These permissions apply independently of agent permissions.
 
 A shared credential without user context cannot be split by person later. Report that traffic by virtual key or authenticated application instead.
 
@@ -90,7 +105,7 @@ The estimate in the last two columns answers "was this app worth building". It a
 
 One chat can build several apps. When it does, the whole chat's spend is reported for each of them rather than divided, and the build cost is marked to say so.
 
-The same data is available from the API at `GET /api/statistics/apps`.
+The same data is available from the API at `GET /api/statistics/apps`. The endpoint requires `llmCost:read` and `app:read`, and reports only apps visible to the caller unless they also have `app:admin`.
 
 ## Per-Skill Cost
 
@@ -100,7 +115,7 @@ Context tokens is the skill's own footprint: the tokens its instructions added, 
 
 Cost on those turns is the spend of the turns that ran with the skill in context. Those turns carried the conversation as well as the skill, and two skills active in one chat are each credited with the same turns. Read it as an upper bound on the skill's influence, not as a bill.
 
-The same data is available from the API at `GET /api/statistics/skills`.
+The same data is available from the API at `GET /api/statistics/skills`. The endpoint requires `llmCost:read` and `skill:read`, and reports only skills visible to the caller unless they also have `skill:admin`.
 
 ## Subscription vs Metered Cost
 

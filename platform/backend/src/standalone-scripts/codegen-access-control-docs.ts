@@ -147,9 +147,9 @@ Team admins do **not** automatically receive organization-level team permissions
 
 Team roles are also separate from resource actions named \`:team-admin\`. For example, \`agent:team-admin\` controls team-scoped agent management; it does not make the user an admin member of every team.
 
-### Agents, MCP Gateways, and LLM Proxies
+### Agents and MCP Gateways
 
-\`agent\`, \`mcpGateway\`, and \`llmProxy\` share the same scope model:
+\`agent\` and \`mcpGateway\` share the same scope model:
 
 - \`personal\`: the author can manage their own records
 - \`team\`: requires \`<resource>:team-admin\` and membership in at least one assigned team
@@ -160,6 +160,15 @@ Examples:
 - \`agent:delete\` alone does **not** allow deleting every agent
 - \`agent:team-admin\` allows managing team-scoped agents only in teams the user belongs to
 - \`agent:admin\` bypasses those scope restrictions
+
+### LLM Proxy
+
+Each organization has one LLM Proxy. It is not personal, team-scoped, or controlled by agent permissions:
+
+- \`llmProxy:read\` lets a caller view the proxy and its connection details
+- \`llmProxy:update\` lets a caller change proxy configuration
+- Proxy request logs use the separate \`log\` resource
+- Organization-wide cost analytics use the separate \`llmCost\` resource
 
 ### Visibility-Scoped Credentials
 
@@ -190,7 +199,7 @@ The selector visibility permissions are UI toggles. They should be treated indep
 
 ### MCP Registry And Installation Records
 
-Some MCP-related resources also apply runtime scope checks in addition to RBAC, but their rules differ from agents, MCP gateways, and LLM proxies:
+Some MCP-related resources also apply runtime scope checks in addition to RBAC, but their rules differ from agents and MCP gateways:
 
 - Internal MCP catalog items can be \`personal\`, \`team\`, or \`org\`
 - Organization-wide catalog items require \`mcpServerInstallation:admin\`
@@ -232,9 +241,9 @@ Permissions in Archestra are defined using a \`resource:action\` format, where:
 - **Resource**: The type of object or feature being accessed (e.g., \`agent\`, \`mcpGateway\`, \`llmProxy\`)
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
-For example, the permission \`agent:create\` allows creating new agents, \`mcpGateway:update\` allows updating MCP gateways, whereas \`llmProxy:read\` would allow reading LLM proxies.
+For example, \`agent:create\` allows creating new agents, \`mcpGateway:update\` allows updating MCP gateways, and \`llmProxy:read\` allows viewing the organization's LLM Proxy and its connection details. Cost analytics and logs use separate permissions.
 
-Two resources distinguish an own-records view from an organization-wide one: \`log:read\` shows only the caller's own LLM proxy and MCP tool-call records, while \`log:admin\` shows every user's; \`auditLog:read\` and \`auditLog:admin\` split the audit trail the same way. This is what makes a deliberately-restricted admin role practical — its holders keep full visibility into their own activity without seeing anyone else's.
+Two resources distinguish an own-records view from an organization-wide one: \`log:read\` shows only the caller's own LLM proxy and MCP tool-call records in the active organization, while \`log:admin\` shows every record there, including unattributed traffic. Agent and MCP-server permissions do not change this log visibility. \`auditLog:read\` and \`auditLog:admin\` split the audit trail between the caller's actions and the organization-wide trail. This is what makes a deliberately-restricted admin role practical — its holders keep full visibility into their own activity without seeing anyone else's.
 
 ## Predefined Roles
 
@@ -277,7 +286,7 @@ Grant users only the minimum permissions necessary for their role. Start with th
 Combine roles with team-based access control for fine-grained resource access:
 
 1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
-2. **Assign Agents, MCP Gateways, LLM Proxies, and MCP Servers** to specific teams
+2. **Assign Agents, MCP Gateways, and MCP Servers** to specific teams
 3. **Add users to teams** based on their role and responsibilities
 
 #### Default Team
@@ -286,11 +295,11 @@ New users are automatically added to the "Default Team" when they accept an invi
 
 #### Team Access Control Rules
 
-**For MCP Gateways, LLM Proxies, and Agents:**
+**For MCP Gateways and Agents:**
 
-- Users can only see agents assigned to teams they belong to
-- Exception: Users with \`agent:admin\` permission can see all agents
-- Exception: Agents with no team assignment are visible to all users
+- Users can only see team-scoped agents and gateways assigned to teams they belong to
+- The resource's \`:admin\` action bypasses its scope restrictions
+- Resources with no team assignment are visible to all users
 
 **For MCP Servers:**
 
@@ -308,7 +317,7 @@ In **Auto** tool mode, each caller can only discover and run tools from MCP serv
 
 **Associated Artifacts:**
 
-Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for agents and MCP servers they have access to.
+Policies and tool assignments follow the access rules of their associated resources. Interaction and MCP tool-call logs are different: \`log:read\` shows the caller's own attributed records and \`log:admin\` shows every record in the active organization, regardless of agent or MCP-server access.
 
 ### Regular Review
 

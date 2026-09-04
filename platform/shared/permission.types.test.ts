@@ -20,11 +20,13 @@ describe("permission.types", () => {
     }
   });
 
-  test("every non-internal resource appears in at least one category", () => {
+  test("every non-internal resource appears in exactly one category", () => {
     const allCategorizedResources = Object.values(resourceCategories).flat();
     for (const resource of resources) {
       if (internalResources.includes(resource)) continue;
-      expect(allCategorizedResources).toContain(resource);
+      expect(
+        allCategorizedResources.filter((candidate) => candidate === resource),
+      ).toHaveLength(1);
     }
   });
 

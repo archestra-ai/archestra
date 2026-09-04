@@ -9,7 +9,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
+import { userHasPermission } from "@/auth";
 import {
   InteractionModel,
   KnowledgeBaseConnectorModel,
@@ -32,7 +32,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetInteractions,
-        description: "Get all interactions with pagination and sorting",
+        description:
+          "Get interactions in the active organization with pagination and sorting. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.",
         tags: ["Interaction"],
         querystring: z
           .object({
@@ -99,12 +100,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
 
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
       // log:read scopes the view to the caller's own attributed rows;
-      // log:admin lifts it (the agent-visibility filter below still applies).
+      // log:admin lifts it within the active organization.
       const canSeeAllLogs = await userHasPermission(
         user.id,
         organizationId,
@@ -116,7 +113,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           userId: user.id,
           email: user.email,
-          isAgentAdmin,
           canSeeAllLogs,
           profileId,
           externalAgentId,
@@ -133,9 +129,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await InteractionModel.findAllPaginated(
         pagination,
         sorting,
-        user.id,
-        isAgentAdmin,
+        undefined,
+        undefined,
         {
+          organizationId,
           profileId,
           externalAgentId,
           userId: canSeeAllLogs ? userId : user.id,
@@ -163,7 +160,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInteractionSummaries,
         description:
-          "Get paginated interaction metadata without request and response payloads",
+          "Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.",
         tags: ["Interaction"],
         querystring: z
           .object({
@@ -208,10 +205,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
       const canSeeAllLogs = await userHasPermission(
         user.id,
         organizationId,
@@ -222,9 +215,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InteractionModel.findSummariesPaginated({
           pagination: { limit, offset },
           sorting: { sortBy, sortDirection },
-          requestingUserId: user.id,
-          isAgentAdmin,
           filters: {
+            organizationId,
             profileId,
             externalAgentId,
             userId: canSeeAllLogs ? userId : user.id,
@@ -245,7 +237,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInteractionSessions,
         description:
-          "Get all interaction sessions grouped by session ID with aggregated stats",
+          "Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns only the caller's attributed rows; `log:admin` returns every row in the organization. Agent permissions do not change log visibility.",
         tags: ["Interaction"],
         querystring: z
           .object({
@@ -301,10 +293,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       const cursorQuery = { limit, cursor };
 
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
       const canSeeAllLogs = await userHasPermission(
         user.id,
         organizationId,
@@ -316,7 +304,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           userId: user.id,
           email: user.email,
-          isAgentAdmin,
           canSeeAllLogs,
           profileId,
           filterUserId: userId,
@@ -332,9 +319,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const result = await InteractionModel.getSessionsCursor(
         cursorQuery,
-        user.id,
-        isAgentAdmin,
+        undefined,
+        undefined,
         {
+          organizationId,
           profileId,
           userId: canSeeAllLogs ? userId : user.id,
           source,
@@ -365,7 +353,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUniqueExternalAgentIds,
         description:
-          "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)",
+          "Get external agent IDs from visible logs in the active organization. `log:read` returns identifiers from the caller's attributed rows; `log:admin` returns identifiers from every row in the organization.",
         tags: ["Interaction"],
         response: constructResponseSchema(
           z.array(
@@ -378,11 +366,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
       const canSeeAllLogs = await userHasPermission(
         user.id,
         organizationId,
@@ -391,9 +374,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       const externalAgentIds = await InteractionModel.getUniqueExternalAgentIds(
-        user.id,
-        isAgentAdmin,
-        canSeeAllLogs ? undefined : user.id,
+        {
+          ownUserId: canSeeAllLogs ? undefined : user.id,
+          organizationId,
+        },
       );
 
       return reply.send(externalAgentIds);
@@ -408,17 +392,12 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUniqueUserIds,
         description:
-          "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)",
+          "Get user IDs represented in visible logs in the active organization. `log:read` returns the caller's identity; `log:admin` returns every represented user in the organization.",
         tags: ["Interaction"],
         response: constructResponseSchema(z.array(UserInfoSchema)),
       },
     },
     async ({ user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
       const canSeeAllLogs = await userHasPermission(
         user.id,
         organizationId,
@@ -431,10 +410,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send([{ id: user.id, name: user.name }]);
       }
 
-      const userIds = await InteractionModel.getUniqueUserIds(
-        user.id,
-        isAgentAdmin,
-      );
+      const userIds = await InteractionModel.getUniqueUserIds({
+        organizationId,
+      });
 
       return reply.send(userIds);
     },
@@ -445,7 +423,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetInteraction,
-        description: "Get interaction by ID",
+        description:
+          "Get an interaction in the active organization by ID. `log:read` returns only a row attributed to the caller; `log:admin` can return any row in the organization. Agent permissions do not change log visibility.",
         tags: ["Interaction"],
         params: z.object({
           interactionId: UuidIdSchema,
@@ -454,16 +433,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { interactionId }, user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
+      const interaction = await InteractionModel.findById({
+        id: interactionId,
         organizationId,
       });
-
-      const interaction = await InteractionModel.findById(
-        interactionId,
-        user.id,
-        isAgentAdmin,
-      );
 
       if (!interaction) {
         throw new ApiError(404, "Interaction not found");
@@ -482,20 +455,10 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Interaction not found");
       }
 
-      // `interactions` carries no organization of its own, and findById waives
-      // its access check for agent admins — so for a KB interaction, whose
-      // profile is always null, the connector is the only thing tying the row to
-      // an organization. Treat a connector owned by another one as not found
-      // rather than serving the row's payload across the tenant boundary.
-      // A connector that no longer exists cannot be placed, and stays readable
-      // so its logs survive the connector.
+      // Enrich knowledge-base interactions with their connector metadata.
       const connector = interaction.connectorId
         ? await KnowledgeBaseConnectorModel.findById(interaction.connectorId)
         : null;
-
-      if (connector && connector.organizationId !== organizationId) {
-        throw new ApiError(404, "Interaction not found");
-      }
 
       // Name the virtual key(s) this request authenticated with. `auth_method`
       // alone says only that *a* virtual key was used, which is the least

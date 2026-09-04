@@ -54,11 +54,10 @@ describe("StatisticsModel", () => {
         outputTokens: 80,
       });
 
-      const stats = await StatisticsModel.getTeamStatistics(
-        "24h",
-        users[0].id,
-        true,
-      );
+      const stats = await StatisticsModel.getTeamStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
 
       expect(
         Object.fromEntries(
@@ -75,9 +74,7 @@ describe("StatisticsModel", () => {
     test("excludes interactions for soft-deleted agents", async ({
       makeAgent,
       makeInteraction,
-      makeUser,
     }) => {
-      const user = await makeUser();
       const activeAgent = await makeAgent({ name: "Active Stats Agent" });
       const deletedAgent = await makeAgent({ name: "Deleted Stats Agent" });
       await makeInteraction(activeAgent.id, {
@@ -93,23 +90,20 @@ describe("StatisticsModel", () => {
 
       await AgentModel.delete(deletedAgent.id);
 
-      const result = await StatisticsModel.getAgentStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getAgentStatistics({
+        timeframe: "24h",
+        organizationId: activeAgent.organizationId,
+      });
 
       expect(result.map((row) => row.agentId)).toContain(activeAgent.id);
       expect(result.map((row) => row.agentId)).not.toContain(deletedAgent.id);
     });
 
     test("reports every proxy-attributed interaction against the organization's single LLM Proxy", async ({
-      makeUser,
       makeOrganization,
       makeAgent,
       makeInteraction,
     }) => {
-      const user = await makeUser();
       const org = await makeOrganization();
       const llmProxy = await AgentModel.getOrgLlmProxy(org.id);
       // Rows that predate the single-proxy consolidation: still in the table so
@@ -138,11 +132,10 @@ describe("StatisticsModel", () => {
       await makeInteraction(legacyProfile.id, { cost: "100", createdAt });
       await makeInteraction(chatAgent.id, { cost: "500", createdAt });
 
-      const result = await StatisticsModel.getAgentStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getAgentStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
 
       const proxyRows = result.filter((row) => row.agentType === "llm_proxy");
       expect(proxyRows).toHaveLength(1);
@@ -170,12 +163,10 @@ describe("StatisticsModel", () => {
     });
 
     test("leaves proxy rows alone when their organization has no elected LLM Proxy", async ({
-      makeUser,
       makeOrganization,
       makeAgent,
       makeInteraction,
     }) => {
-      const user = await makeUser();
       const org = await makeOrganization();
       const orphanProxy = await makeAgent({
         organizationId: org.id,
@@ -184,11 +175,10 @@ describe("StatisticsModel", () => {
       });
       await makeInteraction(orphanProxy.id, { cost: "7" });
 
-      const result = await StatisticsModel.getAgentStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getAgentStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
 
       // Spend is real whether or not an elected proxy exists to fold it into.
       expect(
@@ -199,12 +189,10 @@ describe("StatisticsModel", () => {
 
   describe("getModelStatistics", () => {
     test("excludes subscription traffic from billed spend and reports it separately", async ({
-      makeUser,
       makeOrganization,
       makeAgent,
       makeInteraction,
     }) => {
-      const user = await makeUser();
       const org = await makeOrganization();
       const agent = await makeAgent({ organizationId: org.id });
 
@@ -225,22 +213,20 @@ describe("StatisticsModel", () => {
         model: "gpt-4o",
       });
 
-      const savings = await StatisticsModel.getCostSavingsStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const savings = await StatisticsModel.getCostSavingsStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
       // Billed spend (the "Actual Cost" line) counts only metered cost; the
       // subscription list-price is reported separately, never as spend.
       expect(savings.totalActualCost).toBeCloseTo(2, 5);
       expect(savings.totalSubscriptionCost).toBeCloseTo(5, 5);
 
       // Per-model "Cost" is billed spend only.
-      const models = await StatisticsModel.getModelStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const models = await StatisticsModel.getModelStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
       const gpt4o = models.find((m) => m.model === "gpt-4o");
       expect(gpt4o?.cost).toBeCloseTo(2, 5);
     });
@@ -254,7 +240,6 @@ describe("StatisticsModel", () => {
       sortDirection: "desc" as const,
       includeTimeSeries: false,
       includeModels: false,
-      isAgentAdmin: true,
       canReadAllUsers: true,
     };
 
@@ -294,6 +279,7 @@ describe("StatisticsModel", () => {
 
       const result = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         requestingUserId: alice.id,
       });
 
@@ -341,6 +327,7 @@ describe("StatisticsModel", () => {
 
       const result = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         requestingUserId: user.id,
       });
 
@@ -374,6 +361,7 @@ describe("StatisticsModel", () => {
 
       const result = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         requestingUserId: user.id,
       });
 
@@ -417,6 +405,7 @@ describe("StatisticsModel", () => {
 
       const firstPage = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         pagination: { limit: 1, offset: 0 },
         requestingUserId: heavy.id,
       });
@@ -428,6 +417,7 @@ describe("StatisticsModel", () => {
 
       const secondPage = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         pagination: { limit: 1, offset: 1 },
         requestingUserId: heavy.id,
       });
@@ -435,6 +425,7 @@ describe("StatisticsModel", () => {
 
       const ascending = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         pagination: { limit: 1, offset: 0 },
         sortDirection: "asc",
         requestingUserId: heavy.id,
@@ -469,6 +460,7 @@ describe("StatisticsModel", () => {
 
       const lean = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         requestingUserId: user.id,
       });
       expect(lean.data[0].models).toBeUndefined();
@@ -476,6 +468,7 @@ describe("StatisticsModel", () => {
 
       const enriched = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         includeModels: true,
         includeTimeSeries: true,
         requestingUserId: user.id,
@@ -517,6 +510,7 @@ describe("StatisticsModel", () => {
 
       const result = await StatisticsModel.getUserStatistics({
         ...baseParams,
+        organizationId: org.id,
         requestingUserId: caller.id,
         canReadAllUsers: false,
       });
@@ -529,28 +523,23 @@ describe("StatisticsModel", () => {
 
   describe("edge cases", () => {
     test("should handle empty results gracefully", async ({
-      makeUser,
       makeOrganization,
     }) => {
-      const user = await makeUser();
-      await makeOrganization();
+      const org = await makeOrganization();
 
       // No agents or teams created, should return empty arrays
-      const teamResult = await StatisticsModel.getTeamStatistics(
-        "24h",
-        user.id,
-        true,
-      );
-      const agentResult = await StatisticsModel.getAgentStatistics(
-        "24h",
-        user.id,
-        true,
-      );
-      const modelResult = await StatisticsModel.getModelStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const teamResult = await StatisticsModel.getTeamStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
+      const agentResult = await StatisticsModel.getAgentStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
+      const modelResult = await StatisticsModel.getModelStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
 
       expect(teamResult).toEqual([]);
       expect(agentResult).toEqual([]);
@@ -1045,12 +1034,10 @@ describe("StatisticsModel", () => {
 
   describe("getCostSavingsStatistics", () => {
     test("reports real spend as actual cost and reconciles the savings breakdown", async ({
-      makeUser,
       makeOrganization,
       makeAgent,
       makeInteraction,
     }) => {
-      const user = await makeUser();
       const org = await makeOrganization();
       const agent = await makeAgent({ organizationId: org.id });
 
@@ -1064,11 +1051,10 @@ describe("StatisticsModel", () => {
         cacheSavings: "0.30",
       });
 
-      const result = await StatisticsModel.getCostSavingsStatistics(
-        "24h",
-        user.id,
-        true,
-      );
+      const result = await StatisticsModel.getCostSavingsStatistics({
+        timeframe: "24h",
+        organizationId: org.id,
+      });
 
       // Actual cost is the real spend — NOT real spend minus toon savings (the
       // savings are already baked into `cost`, so subtracting them double-counts).

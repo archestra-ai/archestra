@@ -52,7 +52,7 @@ import type {
 } from "@/types";
 import { isUuid } from "@/utils/uuid";
 import AgentModel from "./agent";
-import AgentTeamModel from "./agent-team";
+import { interactionBelongsToOrganization } from "./log-organization";
 
 class StatisticsModel {
   /**
@@ -243,24 +243,12 @@ class StatisticsModel {
   /**
    * Get team statistics
    */
-  static async getTeamStatistics(
-    timeframe: StatisticsTimeFrame,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<TeamStatistics[]> {
+  static async getTeamStatistics(params: {
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+  }): Promise<TeamStatistics[]> {
+    const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
-
-    // Get accessible agent IDs for users that are not agent admins
-    let accessibleAgentIds: string[] = [];
-    if (userId && !isAgentAdmin) {
-      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-    }
 
     // Base query for team statistics
     // Use stored cost from interactions instead of recalculating with average prices
@@ -295,9 +283,8 @@ class StatisticsModel {
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
-          ...(accessibleAgentIds.length > 0
-            ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
-            : []),
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.teamsTable.organizationId, organizationId),
         ),
       )
       .groupBy(
@@ -328,6 +315,7 @@ class StatisticsModel {
         schema.teamMembersTable,
         eq(schema.teamsTable.id, schema.teamMembersTable.teamId),
       )
+      .where(eq(schema.teamsTable.organizationId, organizationId))
       .groupBy(schema.teamsTable.id);
 
     // Get agent counts per team
@@ -341,6 +329,7 @@ class StatisticsModel {
         schema.agentTeamsTable,
         eq(schema.teamsTable.id, schema.agentTeamsTable.teamId),
       )
+      .where(eq(schema.teamsTable.organizationId, organizationId))
       .groupBy(schema.teamsTable.id);
 
     // Aggregate data by team
@@ -388,24 +377,12 @@ class StatisticsModel {
   /**
    * Get agent statistics
    */
-  static async getAgentStatistics(
-    timeframe: StatisticsTimeFrame,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<AgentStatistics[]> {
+  static async getAgentStatistics(params: {
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+  }): Promise<AgentStatistics[]> {
+    const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
-
-    // Get accessible agent IDs for users that are non-agent admins
-    let accessibleAgentIds: string[] = [];
-    if (userId && !isAgentAdmin) {
-      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-    }
 
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
@@ -443,9 +420,7 @@ class StatisticsModel {
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
-          ...(accessibleAgentIds.length > 0
-            ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
-            : []),
+          eq(schema.agentsTable.organizationId, organizationId),
         ),
       )
       .groupBy(
@@ -525,25 +500,12 @@ class StatisticsModel {
   /**
    * Get model statistics
    */
-  static async getModelStatistics(
-    timeframe: StatisticsTimeFrame,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<ModelStatistics[]> {
+  static async getModelStatistics(params: {
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+  }): Promise<ModelStatistics[]> {
+    const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
-
-    // Get accessible agent IDs for users that are non-agent admins
-    let accessibleAgentIds: string[] = [];
-    if (userId && !isAgentAdmin) {
-      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-    }
 
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
@@ -559,19 +521,10 @@ class StatisticsModel {
         cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
       })
       .from(schema.interactionsTable)
-      .innerJoin(
-        schema.agentsTable,
-        and(
-          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
-          notDeleted(schema.agentsTable),
-        ),
-      )
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
-          ...(accessibleAgentIds.length > 0
-            ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
-            : []),
+          interactionBelongsToOrganization(organizationId),
         ),
       )
       .groupBy(
@@ -656,14 +609,13 @@ class StatisticsModel {
    */
   static async getUserStatistics(params: {
     timeframe: StatisticsTimeFrame;
+    organizationId: string;
     pagination: PaginationQuery;
     sortBy: UserStatisticsSortBy;
     sortDirection: SortDirection;
     includeTimeSeries: boolean;
     includeModels: boolean;
-    /** Caller, used for agent-access scoping. */
-    requestingUserId?: string;
-    isAgentAdmin?: boolean;
+    requestingUserId: string;
     /**
      * When false the caller may only see their own usage. Per-user usage is
      * employee-level data, so it is gated more tightly than the aggregate
@@ -673,40 +625,23 @@ class StatisticsModel {
   }): Promise<PaginatedResult<UserStatistics>> {
     const {
       timeframe,
+      organizationId,
       pagination,
       sortBy,
       sortDirection,
       includeTimeSeries,
       includeModels,
       requestingUserId,
-      isAgentAdmin,
       canReadAllUsers,
     } = params;
 
-    // Scope to agents the caller can see, matching the sibling statistics
-    // aggregations.
     const scopeConditions: SQL[] = [
       ...StatisticsModel.timeframeConditions(timeframe),
+      interactionBelongsToOrganization(organizationId),
     ];
-
-    if (requestingUserId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        requestingUserId,
-        false,
-      );
-      if (accessibleAgentIds.length === 0) {
-        return createPaginatedResult([], 0, pagination);
-      }
-      scopeConditions.push(
-        inArray(schema.interactionsTable.profileId, accessibleAgentIds),
-      );
-    }
 
     // Without permission to read the roster, a caller sees only themselves.
     if (!canReadAllUsers) {
-      if (!requestingUserId) {
-        return createPaginatedResult([], 0, pagination);
-      }
       scopeConditions.push(
         eq(schema.interactionsTable.userId, requestingUserId),
       );
@@ -1458,26 +1393,29 @@ class StatisticsModel {
   /**
    * Get overview statistics
    */
-  static async getOverviewStatistics(
-    timeframe: StatisticsTimeFrame,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<OverviewStatistics> {
+  static async getOverviewStatistics(params: {
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+  }): Promise<OverviewStatistics> {
+    const { timeframe, organizationId } = params;
     const [teamStats, agentStats, modelStats] = await Promise.all([
-      StatisticsModel.getTeamStatistics(timeframe, userId, isAgentAdmin),
-      StatisticsModel.getAgentStatistics(timeframe, userId, isAgentAdmin),
-      StatisticsModel.getModelStatistics(timeframe, userId, isAgentAdmin),
+      StatisticsModel.getTeamStatistics({ timeframe, organizationId }),
+      StatisticsModel.getAgentStatistics({ timeframe, organizationId }),
+      StatisticsModel.getModelStatistics({ timeframe, organizationId }),
     ]);
 
-    const totalRequests = teamStats.reduce(
-      (sum, team) => sum + team.requests,
+    // Model statistics cover every organization interaction. Team statistics
+    // intentionally omit usage with no team assignment, so deriving totals
+    // from them under-counts organization-wide usage.
+    const totalRequests = modelStats.reduce(
+      (sum, model) => sum + model.requests,
       0,
     );
-    const totalTokens = teamStats.reduce(
-      (sum, team) => sum + team.inputTokens + team.outputTokens,
+    const totalTokens = modelStats.reduce(
+      (sum, model) => sum + model.inputTokens + model.outputTokens,
       0,
     );
-    const totalCost = teamStats.reduce((sum, team) => sum + team.cost, 0);
+    const totalCost = modelStats.reduce((sum, model) => sum + model.cost, 0);
 
     const topTeam =
       teamStats.length > 0
@@ -1513,33 +1451,12 @@ class StatisticsModel {
   /**
    * Get cost savings statistics
    */
-  static async getCostSavingsStatistics(
-    timeframe: StatisticsTimeFrame,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<CostSavingsStatistics> {
+  static async getCostSavingsStatistics(params: {
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+  }): Promise<CostSavingsStatistics> {
+    const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
-
-    // Get accessible agent IDs for users that are non-agent admins
-    let accessibleAgentIds: string[] = [];
-    if (userId && !isAgentAdmin) {
-      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return {
-          totalBaselineCost: 0,
-          totalActualCost: 0,
-          totalSavings: 0,
-          totalSubscriptionCost: 0,
-          totalToonSavings: 0,
-          totalCacheSavings: 0,
-          timeSeries: [],
-        };
-      }
-    }
 
     const query = db
       .select({
@@ -1564,19 +1481,10 @@ class StatisticsModel {
         subscriptionCost: subscriptionCostSum("DECIMAL"),
       })
       .from(schema.interactionsTable)
-      .innerJoin(
-        schema.agentsTable,
-        and(
-          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
-          notDeleted(schema.agentsTable),
-        ),
-      )
       .where(
         and(
           ...StatisticsModel.timeframeConditions(timeframe),
-          ...(accessibleAgentIds.length > 0
-            ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
-            : []),
+          interactionBelongsToOrganization(organizationId),
         ),
       )
       .groupBy(

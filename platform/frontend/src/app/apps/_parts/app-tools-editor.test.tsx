@@ -317,4 +317,19 @@ describe("AppToolsEditor", () => {
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(fetchCatalogToolsMock).not.toHaveBeenCalled();
   });
+
+  it("honors a per-app read-only state despite the global update permission", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AppToolsEditor appId={APP_ID} readOnly />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("create_issue")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(fetchCatalogToolsMock).not.toHaveBeenCalled();
+  });
 });

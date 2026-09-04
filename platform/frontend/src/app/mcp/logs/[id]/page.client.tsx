@@ -10,7 +10,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { JsonCodeBlock } from "@/components/json-code-block";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading";
 import {
   LockedChatContentUnavailable,
   LockedChatContentUnavailableLabel,
@@ -75,11 +75,7 @@ function McpToolCallDetail({
   // owns its own chrome now, so returning bare content would leave a reader
   // staring at a spinner with no title and no way back to the list.
   if (isPending) {
-    return (
-      <ToolCallShell>
-        <LoadingState label="Loading tool call…" />
-      </ToolCallShell>
-    );
+    return <ToolCallShell>null</ToolCallShell>;
   }
 
   if (isLoadingError) {

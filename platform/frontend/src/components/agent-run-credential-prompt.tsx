@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  CompactWarning,
+  CompactWarningText,
+} from "@/components/ui/compact-warning";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
@@ -64,17 +68,14 @@ export function AgentRuntimeCredentialPrompt({
     <>
       {/* Deliberately slimmer than an <Alert>: this sits directly under the
           composer, where a full padded alert block dwarfs the input row. */}
-      <div
-        role="alert"
-        className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/50 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-200"
-      >
-        <KeyRound className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+      <CompactWarning className="mt-2">
+        <KeyRound />
         <span className="font-medium">
           {missing.length === 1
             ? `${missing[0].label} is required`
             : `${missing.length} connections are required`}
         </span>
-        <span className="text-amber-800 dark:text-amber-300">{helperText}</span>
+        <CompactWarningText>{helperText}</CompactWarningText>
         {definition ? (
           <Button
             type="button"
@@ -97,7 +98,7 @@ export function AgentRuntimeCredentialPrompt({
             </Link>
           </Button>
         )}
-      </div>
+      </CompactWarning>
       {connecting && (
         <RuntimeCredentialConnectionDialog
           definition={connecting}

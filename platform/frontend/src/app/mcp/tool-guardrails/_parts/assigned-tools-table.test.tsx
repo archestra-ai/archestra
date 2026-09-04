@@ -153,7 +153,7 @@ describe("AssignedToolsTable", () => {
     const onToolClick = vi.fn();
     render(<AssignedToolsTable onToolClick={onToolClick} />);
 
-    expect(screen.getByText("Allow always")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Allow always" })).toBeVisible();
     expect(screen.getByText("Safe")).toBeVisible();
 
     const row = screen.getByText("search_documents").closest("tr");
@@ -162,11 +162,26 @@ describe("AssignedToolsTable", () => {
     expect(onToolClick).toHaveBeenCalledTimes(1);
   });
 
+  it("sets a call policy from a single click on the Calls picker", () => {
+    const onToolClick = vi.fn();
+    render(<AssignedToolsTable onToolClick={onToolClick} />);
+
+    // Every action is its own button, so switching policy takes one click —
+    // no dropdown to open first.
+    fireEvent.click(screen.getByRole("button", { name: "Block always" }));
+
+    expect(mocks.callPolicyMutation).toHaveBeenCalledWith({
+      toolId: "tool-1",
+      action: "block_always",
+    });
+    expect(onToolClick).not.toHaveBeenCalled();
+  });
+
   it("keeps inline policy controls from opening row details", () => {
     const onToolClick = vi.fn();
     render(<AssignedToolsTable onToolClick={onToolClick} />);
 
-    fireEvent.click(screen.getByText("Allow always"));
+    fireEvent.click(screen.getByRole("button", { name: "Allow always" }));
     expect(onToolClick).not.toHaveBeenCalled();
   });
 });

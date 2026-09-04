@@ -283,12 +283,25 @@ describe("the container bootstrap", () => {
     // A one-shot agent writes its whole answer in its final instant; without
     // the drain the pane exit tears down pipe-pane first and the transcript
     // ends up empty.
-    expect(script()).toContain('agent session exited"; sleep 2; exit');
+    expect(script()).toContain("exit-code; sleep 2; exit");
+  });
+
+  it("gives detached TUIs a browser-sized canvas before anyone attaches", () => {
+    expect(script()).toContain("tmux new-session -d -x 120 -y 40 -s agent");
   });
 
   it("lets terminal wheel events scroll tmux history", () => {
     expect(script()).toContain("tmux set-option -t agent mouse on");
     expect(script().indexOf("mouse on")).toBeLessThan(
+      script().indexOf("tmux respawn-pane"),
+    );
+  });
+
+  it("shows runtime-reported attention states in every attached terminal", () => {
+    expect(script()).toContain("@archestra_attention 0");
+    expect(script()).toContain("@archestra_attention_label");
+    expect(script()).toContain("status-left");
+    expect(script().indexOf("status-left")).toBeLessThan(
       script().indexOf("tmux respawn-pane"),
     );
   });

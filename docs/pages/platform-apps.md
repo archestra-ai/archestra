@@ -32,6 +32,8 @@ Run or author an app at `/a/:slug` (no chat chrome, no sidebar), or run it from 
 
 App settings offers four choices under "Who can use this app". **Personal** keeps it to you. **Users** shares it with people you name — a colleague, for example. **Teams** shares it with whole teams. **Organization** opens it to everyone.
 
+Visibility grants use access, not edit access. Team members can use a team app, but membership alone does not let them change it. App management follows the platform's [scoped resource permissions](./platform-access-control#scoped-resources).
+
 Sharing a chat does not share the apps it renders. Each viewer resolves an app against that app's own visibility. An app you have not shared with someone shows an access message in their view — a personal app in a chat you shared, for example. The chat's share dialog warns you when this will happen, and names the apps, so you can share them with the same people first.
 
 Disabling an app (in App settings) pulls it back without deleting it. It leaves everyone else's gallery, and its launch tool leaves every agent surface. To chat, a disabled app does not exist: it is not listed, and no conversation can read, edit, publish, or delete it — not even yours. You still see it in your own gallery, marked Disabled; enable it there to keep building.

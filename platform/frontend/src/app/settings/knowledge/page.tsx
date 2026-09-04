@@ -51,7 +51,7 @@ import {
   type LlmProviderApiKeyFormValues,
   PROVIDER_CONFIG,
 } from "@/components/llm-provider-api-key-form";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
@@ -339,7 +339,7 @@ function ApiKeySelector({
   }, [keys, value, onChange, isPending, autoSelectFirstKey]);
 
   if (isPending) {
-    return <LoadingState />;
+    return null;
   }
 
   if (!hasKeys) {
@@ -427,7 +427,7 @@ function RerankerModelSelector({
   }
 
   if (modelsLoading) {
-    return <LoadingState />;
+    return null;
   }
 
   const rerankerItems = models.map((model) => ({
@@ -506,7 +506,7 @@ function OcrModelSelector({
   }
 
   if (modelsLoading) {
-    return <LoadingState />;
+    return null;
   }
 
   return (
@@ -1162,10 +1162,7 @@ function KnowledgeSettingsContent() {
   }
 
   return (
-    <LoadingWrapper
-      isPending={isInitialLoading}
-      loadingFallback={<LoadingState variant="page" />}
-    >
+    <LoadingWrapper isPending={isInitialLoading} loadingFallback={null}>
       <SettingsSectionStack>
         <SettingsBlock
           id="embedding-configuration"

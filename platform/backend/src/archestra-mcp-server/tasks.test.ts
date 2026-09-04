@@ -244,6 +244,9 @@ describe("task tools", () => {
           task_id: task.id,
           prompt: "Add a character counter.",
           state: "TASK_STATE_WORKING",
+          hard_deadline_at: expect.any(String),
+          last_model_activity_at: null,
+          attention_state: null,
           agent: { id: callingAgent.id, name: callingAgent.name },
           requester: { kind: "user", id: actorId },
           thread: {

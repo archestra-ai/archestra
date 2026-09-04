@@ -743,3 +743,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @fatih-hevesli
 - @bferanmi806-sketch
 - @guillaume-flambard
+- @SoulDev07

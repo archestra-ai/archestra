@@ -6,8 +6,6 @@ import { useEffect, useState } from "react";
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
-// SPDX-SnippetEnd
-import { LoadingState } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -124,7 +122,7 @@ export default function McpSettingsPage() {
   };
 
   if (isPending) {
-    return <LoadingState variant="page" />;
+    return null;
   }
 
   return (

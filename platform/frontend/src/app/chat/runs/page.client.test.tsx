@@ -24,6 +24,7 @@ const terminalState = vi.hoisted(() => ({
     showManualCommand?: boolean;
     showDisconnectedStatus?: boolean;
     onCommandChange?: (command: string | null) => void;
+    onError?: () => void;
   } | null,
 }));
 
@@ -137,6 +138,18 @@ describe("AgentRunChatSession", () => {
     });
   });
 
+  it("refreshes run state when completion wins the terminal attach race", () => {
+    queryState.value.data = run({
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+    });
+
+    render(<AgentRunChatSession taskId="task-1" />);
+    act(() => terminalState.props?.onError?.());
+
+    expect(queryState.value.refetch).toHaveBeenCalledOnce();
+  });
+
   it("moves agent and terminal details into the run actions menu", async () => {
     const user = userEvent.setup();
     queryState.value.data = run({
@@ -237,7 +250,9 @@ describe("AgentRunChatSession", () => {
     expect(
       screen.getByText(/viewing its terminal output in read-only mode/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Read-only terminal");
+    expect(
+      screen.getByText("Read-only terminal").closest("[role=status]"),
+    ).toHaveTextContent("Read-only terminal");
     // None of the owner-only controls are rendered.
     expect(
       screen.queryByRole("button", { name: "Stop" }),
@@ -276,6 +291,9 @@ function run(overrides: Record<string, unknown>) {
     prompt: "Implement the small feature",
     state: "TASK_STATE_SUBMITTED",
     statusReason: null,
+    startedAt: "2099-08-28T17:00:00.000Z",
+    hardDeadlineAt: "2100-08-31T17:00:00.000Z",
+    lastModelActivityAt: "2099-08-28T17:00:00.000Z",
     endedAt: null,
     // The viewer is the run's owner unless a test overrides this — owners get
     // the interactive terminal and the Stop/Share/actions controls.

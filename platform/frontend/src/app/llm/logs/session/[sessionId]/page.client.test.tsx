@@ -3,7 +3,7 @@ import {
   CLAUDE_CODE_CLIENT_ID,
   CLAUDE_DESKTOP_CLIENT_ID,
 } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -54,7 +54,7 @@ describe("SessionDetailPage", () => {
     } as unknown as ReturnType<typeof useInteraction>);
   });
 
-  it("shows a loading state while session interactions are loading", async () => {
+  it("says nothing at all while session interactions are loading", async () => {
     vi.mocked(useInteractionSummaries).mockReturnValue({
       data: undefined,
       isLoading: true,
@@ -62,9 +62,12 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(
-      await screen.findByRole("status", { name: "Loading session logs…" }),
-    ).toBeVisible();
+    // The wait is reported by the sidebar toggle's spinner, the one place the
+    // app says it is loading. What matters here is that the area does not
+    // announce an empty result before the fetch has settled.
+    await waitFor(() => {
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
     expect(
       screen.queryByText("No interactions found for this session"),
     ).not.toBeInTheDocument();

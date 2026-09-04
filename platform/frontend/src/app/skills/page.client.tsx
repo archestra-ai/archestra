@@ -235,6 +235,7 @@ function SkillsList() {
 
   const {
     data: skills,
+    isPending: isDeletedSkillsPending,
     isFetching: isDeletedSkillsFetching,
     isLoadingError: isDeletedSkillsLoadError,
     refetch: refetchSkills,
@@ -248,6 +249,7 @@ function SkillsList() {
   );
   const {
     data: activeSkills = [],
+    isPending: isActiveSkillsPending,
     isFetching: isActiveSkillsFetching,
     isLoadingError: isActiveSkillsLoadError,
     refetch: refetchActiveSkills,
@@ -263,10 +265,13 @@ function SkillsList() {
     : isActiveSkillsLoadError;
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
-  const { data: externalSkills = [], isFetching: isExternalSkillsFetching } =
-    useExternalMcpSkills({
-      enabled: showMcpSkills,
-    });
+  const {
+    data: externalSkills = [],
+    isPending: isExternalSkillsPending,
+    isFetching: isExternalSkillsFetching,
+  } = useExternalMcpSkills({
+    enabled: showMcpSkills,
+  });
   const visibleExternalSkills = sourceRepo
     ? []
     : filterExternalMcpSkills({
@@ -274,8 +279,11 @@ function SkillsList() {
         search,
         scope: scopeFilter.scope,
       });
-  const { data: pluginSkills = [], isFetching: isPluginSkillsFetching } =
-    usePluginSkills({ enabled: showPluginSkills });
+  const {
+    data: pluginSkills = [],
+    isPending: isPluginSkillsPending,
+    isFetching: isPluginSkillsFetching,
+  } = usePluginSkills({ enabled: showPluginSkills });
   const visiblePluginSkills = sourceRepo
     ? []
     : filterPluginSkills({
@@ -467,6 +475,25 @@ function SkillsList() {
     (showStandaloneSkills && totalStandaloneSkills > 0) ||
     (showMcpSkills && visibleExternalSkills.length > 0) ||
     (showPluginSkills && visiblePluginSkills.length > 0);
+  /**
+   * Nothing has come back yet on this view, so the page cannot tell whether it
+   * is about to show a list or an empty state.
+   *
+   * Rendering the list branch meanwhile — which is what happens when the only
+   * signal is `showEmptyState` — puts the filter bar, the table and the "Add
+   * new skill" button on screen for a moment and then replaces the lot with
+   * the empty state, measured at ~250ms of a layout that was never real.
+   *
+   * `isPending` alone would not do: a disabled query stays pending forever, so
+   * the MCP and plugin lists would hold this true whenever their toggles are
+   * off. Pairing it with `isFetching` reads "pending *and* actually in flight",
+   * which is only true during a first load of a query that is switched on.
+   */
+  const isInitialSkillsLoad =
+    ((isDeletedView ? isDeletedSkillsPending : isActiveSkillsPending) &&
+      isFetching) ||
+    (showMcpSkills && isExternalSkillsPending && isExternalSkillsFetching) ||
+    (showPluginSkills && isPluginSkillsPending && isPluginSkillsFetching);
   const showEmptyState =
     !isFetching &&
     !(showMcpSkills && isExternalSkillsFetching) &&
@@ -789,7 +816,8 @@ function SkillsList() {
         title="Skills"
         description={SKILLS_DESCRIPTION}
         actionButton={
-          !showEmptyState && (
+          !showEmptyState &&
+          !isInitialSkillsLoad && (
             <PermissionButton permissions={{ skill: ["create"] }} asChild>
               <Link href="/skills/new">
                 <Plus className="h-4 w-4" />
@@ -800,7 +828,7 @@ function SkillsList() {
         }
       >
         <TableCardView storageKey="archestra-skills-view" defaultMode="table">
-          {showEmptyState ? (
+          {isInitialSkillsLoad ? null : showEmptyState ? (
             <SkillsEmptyState />
           ) : (
             <>

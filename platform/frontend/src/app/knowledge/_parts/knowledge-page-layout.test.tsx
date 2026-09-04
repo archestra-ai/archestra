@@ -192,10 +192,13 @@ describe("KnowledgePageLayout", () => {
   });
 
   describe("loading state", () => {
-    it("shows the shared loading state when isPending is true", () => {
+    it("holds the content area empty while isPending is true", () => {
       renderLayout(true);
 
-      expect(screen.getByRole("status", { name: "Loading…" })).toBeVisible();
+      // The sidebar toggle's spinner is the one place the app reports that it
+      // is loading, so this area draws no indicator of its own — it just does
+      // not claim anything until it knows what to show.
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
       expect(screen.queryByTestId("content")).not.toBeInTheDocument();
       expect(
         screen.queryByText("Embedding configuration required"),

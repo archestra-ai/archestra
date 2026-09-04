@@ -82,6 +82,7 @@ interface ExecTerminalProps {
   /** Whether a closed PTY should add a status banner above its retained frame. */
   showDisconnectedStatus?: boolean;
   onCommandChange?: (command: string | null) => void;
+  onError?: () => void;
   onClosed?: () => void;
 }
 
@@ -95,6 +96,7 @@ export function ExecTerminal({
   disconnectedLabel = "Session terminated",
   showDisconnectedStatus = true,
   onCommandChange,
+  onError,
   onClosed,
 }: ExecTerminalProps) {
   // Read through a ref so a new transport object on every render cannot
@@ -103,6 +105,8 @@ export function ExecTerminal({
   transportRef.current = transport;
   const onClosedRef = useRef(onClosed);
   onClosedRef.current = onClosed;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
   const onCommandChangeRef = useRef(onCommandChange);
   onCommandChangeRef.current = onCommandChange;
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -236,6 +240,7 @@ export function ExecTerminal({
             if (disposed) return;
             setStatus("error");
             setErrorMessage(message);
+            onErrorRef.current?.();
           },
           onClosed: (reason) => {
             if (disposed) return;

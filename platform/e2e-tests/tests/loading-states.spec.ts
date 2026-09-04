@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
 
 /**
@@ -79,6 +80,57 @@ test.describe("loading states", () => {
     for (const label of BOOT_LOADER_LABELS) {
       expect(seen).not.toContain(label);
     }
+  });
+
+  test("the sign-in page holds its loading indicator in one place", async ({
+    browser,
+  }) => {
+    // The auth surface stacks two gates: the session check above the shell,
+    // and the route's own Suspense boundary inside it. They used to draw
+    // full-area loaders with different geometry — the second derived its
+    // height from `100dvh - 12rem`, chrome the auth pages do not have — so the
+    // indicator jumped up the screen partway through a reload. Both now centre
+    // in the box the layout actually gives them.
+    //
+    // A fresh unauthenticated context: the project-level admin storage state
+    // would bounce this navigation off /auth/sign-in before the gates render.
+    const context = await browser.newContext({ storageState: undefined });
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      const centres: number[] = [];
+      (window as unknown as { __centres: number[] }).__centres = centres;
+      const sample = () => {
+        for (const element of document.querySelectorAll("output")) {
+          const indicator = element.querySelector(".animate-spin");
+          if (!indicator) continue;
+          const box = element.getBoundingClientRect();
+          if (box.height < 200) continue; // full-area loaders only
+          centres.push(Math.round(box.y + box.height / 2));
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+
+    await page.goto(`${UI_BASE_URL}/auth/sign-in`);
+    // Deliberately not a role query: the auth surface nests the shell's <main>
+    // inside the auth page's own, so getByRole("main") is a strict-mode
+    // violation here rather than a wait.
+    await page.waitForLoadState("networkidle");
+
+    const centres = await page.evaluate(
+      () => (window as unknown as { __centres: number[] }).__centres,
+    );
+
+    // Two or more samples means the handover between the gates was caught, and
+    // that is the moment the indicator used to jump ~55px up the screen. One
+    // sample means the page resolved inside a frame and there was no handover
+    // to see; either way it must never have drawn a loader in two places.
+    const spread =
+      centres.length > 1 ? Math.max(...centres) - Math.min(...centres) : 0;
+    expect(spread).toBeLessThanOrEqual(16);
+
+    await context.close();
   });
 
   test("an empty result is only reported once the list has actually loaded", async ({

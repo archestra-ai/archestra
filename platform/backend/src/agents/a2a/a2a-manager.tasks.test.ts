@@ -187,6 +187,8 @@ describe("A2AManager full task mode", () => {
       workloadName: "agent-runtime-recovery",
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
+      activeDeadlineSeconds: null,
+      attentionState: null,
       virtualApiKeyId: null,
       completionTarget: null,
       completionNotificationClaimedAt: null,

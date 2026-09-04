@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import { LoadingState } from "@/components/loading";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -128,9 +127,7 @@ export default function NewMcpCatalogItemPage() {
       <div className="space-y-6">
         {/* Resolve the catalog setting before rendering so a disabled org never
             flashes the source chooser before falling back to the form. */}
-        {isOrganizationPending ? (
-          <LoadingState variant="page" />
-        ) : (
+        {isOrganizationPending ? null : (
           <>
             {catalogEnabled && step === "source" && !browsingCatalog && (
               <div className="grid gap-4 sm:grid-cols-2">

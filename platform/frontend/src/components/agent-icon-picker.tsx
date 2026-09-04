@@ -42,6 +42,8 @@ interface AgentIconPickerProps {
   value: string | null;
   onChange: (icon: string | null) => void;
   className?: string;
+  /** Show the current icon without allowing it to be changed or removed. */
+  disabled?: boolean;
   /** Show a "Logos" tab with pre-built service brand logos */
   showLogos?: boolean;
   fallbackType?: AgentIconPickerFallback;
@@ -51,6 +53,7 @@ export function AgentIconPicker({
   value,
   onChange,
   className,
+  disabled = false,
   showLogos = false,
   fallbackType = "agent",
 }: AgentIconPickerProps) {
@@ -127,13 +130,22 @@ export function AgentIconPicker({
               : Bot;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={disabled ? false : open}
+      onOpenChange={(next) => {
+        if (!disabled) setOpen(next);
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={value ? "Change icon" : "Choose icon"}
+          aria-label={disabled ? "Icon" : value ? "Change icon" : "Choose icon"}
+          disabled={disabled}
           className={cn(
-            "relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed hover:border-primary/50 hover:bg-accent transition-colors cursor-pointer",
+            "relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed transition-colors",
+            disabled
+              ? "cursor-default opacity-80"
+              : "cursor-pointer hover:border-primary/50 hover:bg-accent",
             value && "border-solid border-border",
             className,
           )}
@@ -153,7 +165,7 @@ export function AgentIconPicker({
           ) : (
             <FallbackIcon className="h-5 w-5 text-muted-foreground" />
           )}
-          {value && (
+          {value && !disabled && (
             // biome-ignore lint/a11y/useSemanticElements: can't use <button> here as it's nested inside PopoverTrigger's <button>
             <div
               role="button"

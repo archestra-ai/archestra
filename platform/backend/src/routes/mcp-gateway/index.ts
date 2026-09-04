@@ -7,9 +7,15 @@ import { z } from "zod";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, McpToolCallModel } from "@/models";
+import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
-import { UuidOrSlugSchema } from "@/types";
+import {
+  AgentRunAttentionStateSchema,
+  type AgentRunRecord,
+  ApiError,
+  constructResponseSchema,
+  UuidOrSlugSchema,
+} from "@/types";
 import { getPublicRequestOrigin } from "../request-origin";
 import {
   deriveStatePrincipal,
@@ -47,6 +53,7 @@ import {
   deriveAuthMethod,
   describeGatewayAuthFailure,
   ensureRequestSocketDestroySoon,
+  extractBearerToken,
   extractPassthroughHeaders,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
@@ -358,6 +365,56 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         }),
       };
+    },
+  );
+
+  // Native Agent Runtime clients use their existing MCP gateway credential to
+  // publish a non-lifecycle attention signal. This stays separate from A2A
+  // task state: a CLI waiting at its prompt is still a live, completable run.
+  fastify.post(
+    `${endpoint}/:profileId/runtime-status`,
+    {
+      schema: {
+        operationId: "reportAgentRuntimeStatus",
+        tags: ["MCP Gateway"],
+        params: z.object({ profileId: UuidOrSlugSchema }),
+        body: z.object({
+          taskId: z.string().uuid(),
+          attentionState: z.union([AgentRunAttentionStateSchema, z.null()]),
+        }),
+        response: constructResponseSchema(z.object({ updated: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const token = extractBearerToken(request);
+      const profileId = await AgentModel.resolveIdFromIdOrSlug(
+        request.params.profileId,
+      );
+      if (!profileId || !token) {
+        throw new ApiError(401, "Unauthorized");
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      if (!tokenAuth) {
+        throw new ApiError(401, "Unauthorized");
+      }
+
+      const run = await AgentRunModel.findByTaskId(request.body.taskId);
+      if (
+        !run ||
+        run.agentId !== profileId ||
+        !runtimeTokenMatchesRun({ run, tokenAuth })
+      ) {
+        // Do not disclose another actor's task to a token that merely reaches
+        // the same Agent.
+        throw new ApiError(404, "Run not found");
+      }
+
+      const updated = await AgentRunModel.updateAttentionState({
+        taskId: request.body.taskId,
+        attentionState: request.body.attentionState,
+      });
+      return reply.send({ updated });
     },
   );
 
@@ -696,6 +753,24 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 function readHeader(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function runtimeTokenMatchesRun(params: {
+  run: Pick<AgentRunRecord, "actorId" | "actorKind" | "organizationId">;
+  tokenAuth: TokenAuthContext;
+}): boolean {
+  if (params.tokenAuth.organizationId !== params.run.organizationId) {
+    return false;
+  }
+  switch (params.run.actorKind) {
+    case "user":
+      return params.tokenAuth.userId === params.run.actorId;
+    case "team":
+      return params.tokenAuth.teamId === params.run.actorId;
+    case "organization":
+    case "system":
+      return params.tokenAuth.isOrganizationToken;
+  }
 }
 
 export default mcpGatewayRoutes;

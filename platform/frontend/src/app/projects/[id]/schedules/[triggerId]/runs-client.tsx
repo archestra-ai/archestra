@@ -2,7 +2,6 @@
 
 import { Loader2, Play } from "lucide-react";
 import { useParams } from "next/navigation";
-import { LoadingState } from "@/components/loading";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
@@ -33,7 +32,7 @@ export function ProjectScheduleRunsClient() {
   };
 
   if (triggerLoading) {
-    return <LoadingState label="Loading schedule runs…" variant="viewport" />;
+    return null;
   }
 
   return (

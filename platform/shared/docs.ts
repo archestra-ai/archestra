@@ -59,6 +59,7 @@ export const DocsPage = {
   PlatformResetUserPassword: "platform-reset-user-password",
   PlatformSecretsManagement: "platform-secrets-management",
   PlatformSlack: "platform-slack",
+  PlatformSsoRoleMapping: "platform-sso-role-mapping",
   PlatformSsoTeamSync: "platform-sso-team-sync",
   PlatformTelegram: "platform-telegram",
   PlatformSupportedLlmProviders: "platform-supported-llm-providers",

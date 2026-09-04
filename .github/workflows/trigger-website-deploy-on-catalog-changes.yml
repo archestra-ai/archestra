@@ -17,4 +17,5 @@ jobs:
     name: Trigger Website Deploy
     uses: ./.github/workflows/trigger-website-deploy.yml
     secrets:
-      WEBSITE_DEPLOY_GITHUB_TOKEN: ${{ secrets.WEBSITE_DEPLOY_GITHUB_TOKEN }}
+      ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
+      ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}

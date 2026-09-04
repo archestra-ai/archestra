@@ -43,6 +43,7 @@ import type {
 import { extractTaggedText } from "@/utils/generate-tagged-text";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import { estimateToolsTokens } from "./context-window-breakdown";
 import {
   estimateFileTokens,
   isTextLikeMediaType,
@@ -108,6 +109,8 @@ export type ContextCompactionParams = {
   agentLlmApiKeyId?: string | null;
   messages: ChatMessage[];
   systemPrompt?: string;
+  /** AI SDK tool definitions included in the main model request. */
+  tools?: Record<string, unknown>;
   trigger: ConversationCompactionTrigger;
   onCompactionStart?: () => void;
   abortSignal?: AbortSignal;
@@ -210,6 +213,7 @@ async function runCompactMessagesForChat(
       provider: params.provider,
       selectedModel: params.selectedModel,
       systemPrompt: params.systemPrompt,
+      tools: params.tools,
       messages: existingMessages,
     });
     messagesTokenEstimate = decision.estimatedTokens;
@@ -359,6 +363,7 @@ export function __testEstimateChatMessagesTokens(params: {
   provider: SupportedProvider;
   model?: string;
   systemPrompt?: string;
+  tools?: Record<string, unknown>;
   messages: ChatMessage[];
 }): number {
   return estimateChatMessagesTokens(params);
@@ -535,6 +540,7 @@ async function shouldAutoCompact(params: {
   provider: SupportedProvider;
   selectedModel: string;
   systemPrompt?: string;
+  tools?: Record<string, unknown>;
   messages: ChatMessage[];
 }): Promise<{ shouldCompact: boolean; estimatedTokens: number }> {
   const estimatedTokens = estimateChatMessagesTokens({
@@ -1269,6 +1275,7 @@ function estimateChatMessagesTokens(params: {
    */
   model?: string;
   systemPrompt?: string;
+  tools?: Record<string, unknown>;
   messages: ChatMessage[];
 }): number {
   const tokenizer = getTokenizer(params.provider, params.model);
@@ -1288,8 +1295,15 @@ function estimateChatMessagesTokens(params: {
   const systemTokens = params.systemPrompt
     ? Math.ceil(params.systemPrompt.length / 4)
     : 0;
+  const toolTokens = params.tools
+    ? estimateToolsTokens({
+        provider: params.provider,
+        model: params.model ?? "",
+        tools: params.tools,
+      })
+    : 0;
 
-  return messageTokens + systemTokens + extraTokens;
+  return messageTokens + systemTokens + toolTokens + extraTokens;
 }
 
 function getMessageTextForTokenEstimate(message: ChatMessage): {

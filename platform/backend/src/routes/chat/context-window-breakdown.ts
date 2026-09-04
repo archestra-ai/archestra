@@ -28,6 +28,21 @@ export const PDF_BYTES_PER_TOKEN = TOKEN_ESTIMATE.pdfBytesPerToken;
 export const BINARY_BYTES_PER_TOKEN = TOKEN_ESTIMATE.binaryBytesPerToken;
 export const IMAGE_TOKEN_MAX_ESTIMATE = TOKEN_ESTIMATE.imageTokenMaxEstimate;
 
+/** Estimate the fixed context cost of the tool definitions sent on a turn. */
+export function estimateToolsTokens(params: {
+  provider: SupportedProvider;
+  model: string;
+  tools: Record<string, unknown>;
+}): number {
+  const tokenizer = getTokenizer(params.provider, params.model);
+  return Object.entries(params.tools).reduce((total, [name, tool]) => {
+    const serialized = serializeToolForEstimate(name, tool);
+    return serialized
+      ? total + estimateTextTokens(tokenizer, serialized)
+      : total;
+  }, 0);
+}
+
 // Keep the streamed payload bounded: ship the biggest contributors per category
 // and fold the rest into a single "Other" row so totals still reconcile.
 const MAX_ITEMS_PER_CATEGORY = 12;

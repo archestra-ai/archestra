@@ -1241,6 +1241,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     inputModalities: modelRow?.inputModalities ?? null,
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     systemPrompt,
+                    tools: supportsToolCalling ? mcpTools : undefined,
                     abortSignal: chatAbortController.signal,
                     emit: (event) => writer.write(event),
                     // LockedChat: never generate/persist a compaction summary.

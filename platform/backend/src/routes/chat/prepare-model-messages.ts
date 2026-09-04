@@ -25,6 +25,7 @@ import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache"
 import {
   assertRequestWithinProviderPayloadLimit,
   providerAttachmentLimitBytes,
+  providerImageAttachmentLimitBytes,
 } from "./normalization/enforce-request-size-limit";
 import { materializeAttachments } from "./normalization/materialize-attachments";
 import { prepareMessagesForProvider } from "./normalization/prepare-for-provider";
@@ -92,6 +93,8 @@ export async function buildModelMessages(params: {
   inputModalities?: ModelInputModality[] | null;
   agentLlmApiKeyId?: string | null;
   systemPrompt?: string;
+  /** AI SDK tool definitions included in the main model request. */
+  tools?: Record<string, unknown>;
   abortSignal?: AbortSignal;
   emit: (event: CompactionStreamEvent) => void;
   /**
@@ -254,6 +257,11 @@ async function buildModelMessagesForProvider(params: {
     config.chat.attachmentInlineBytesLimit,
     providerLimit ?? Number.POSITIVE_INFINITY,
   );
+  const providerImageLimit = providerImageAttachmentLimitBytes(params.provider);
+  const inlineImageByteLimit = Math.min(
+    inlineByteLimit,
+    providerImageLimit ?? Number.POSITIVE_INFINITY,
+  );
   const materialized = await materializeAttachments({
     messages: params.messages,
     conversationId: params.conversationId,
@@ -264,6 +272,7 @@ async function buildModelMessagesForProvider(params: {
       PROVIDERS_WITHOUT_DOCUMENT_CONTENT_PARTS.has(params.provider),
     sandboxAvailable: params.sandboxAvailable,
     inlineByteLimit,
+    inlineImageByteLimit,
     conversationKey: params.conversationKey ?? null,
   });
   // Reject oversized inline attachments here, before the provider call, so the

@@ -190,7 +190,10 @@ describe("ModelSelector coverage matrix", () => {
   it("shows the loading spinner while a real fetch is in flight", () => {
     setQuery({ isPending: true, isFetching: true, isLoading: true });
     renderSelector({ variant: "default" });
-    expect(screen.getByText("Loading models...")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Loading models" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Loading models...")).not.toBeInTheDocument();
   });
 
   // A disabled query is `isPending` yet never fetches, so it must not render the

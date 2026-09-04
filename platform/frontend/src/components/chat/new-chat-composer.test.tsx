@@ -46,7 +46,7 @@ vi.mock("@/lib/agent-runtime.query", () => ({
 
 vi.mock("@/lib/agent.query", () => ({
   useDefaultAgentId: () => ({ data: null }),
-  useInternalAgents: () => ({
+  useChatAgents: () => ({
     data: [
       {
         id: "runtime-agent",

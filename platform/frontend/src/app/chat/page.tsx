@@ -102,7 +102,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
-import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
 import {
   useAgentRuntimePreflight,
   useStartAgentRun,
@@ -434,9 +434,9 @@ export function ChatPageContent({
   const canUseProviderSettings =
     canReadLlmProvider === true && canReadLlmModels === true;
 
-  // Fetch internal agents for dialog editing
+  // Fetch the compact roster needed to resolve the new-chat agent.
   const { data: internalAgents = [], isPending: isLoadingAgents } =
-    useInternalAgents({ enabled: hasChatAccess });
+    useChatAgents({ enabled: hasChatAccess });
   const { data: defaultAgentId } = useDefaultAgentId();
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const startAgentRunMutation = useStartAgentRun();
@@ -1851,6 +1851,14 @@ export function ChatPageContent({
       ? (conversationAgentId ?? promptAgentId ?? undefined)
       : (initialAgentId ?? undefined);
 
+  // Browser setup fans out through the agent's tools, delegations, enabled
+  // subagents, and installation state. On a new chat none of that can affect
+  // the first useful composer render, so let the roster and model settle first
+  // instead of making those requests compete with initialization.
+  const shouldCheckBrowserTools =
+    !!browserToolsAgentId &&
+    (Boolean(conversationId) || (!isLoadingAgents && !isModelsLoading));
+
   const playwrightSetupAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
@@ -1858,7 +1866,9 @@ export function ChatPageContent({
       : (initialAgentId ?? undefined);
 
   const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
-    useHasPlaywrightMcpTools(browserToolsAgentId, conversationToolsStateId);
+    useHasPlaywrightMcpTools(browserToolsAgentId, conversationToolsStateId, {
+      enabled: shouldCheckBrowserTools,
+    });
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
@@ -1876,7 +1886,10 @@ export function ChatPageContent({
     conversationToolsStateId,
     {
       enabled:
-        !isReadOnlyConversation && hasChatAccess && canUpdateAgent !== false,
+        shouldCheckBrowserTools &&
+        !isReadOnlyConversation &&
+        hasChatAccess &&
+        canUpdateAgent !== false,
     },
   );
   // Two different answers, and they must not be spelled the same way.

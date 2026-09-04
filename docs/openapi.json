@@ -45391,6 +45391,18 @@
             "name": "includeTools",
             "required": false,
             "description": "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "chat"
+              ]
+            },
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "description": "Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it."
           }
         ],
         "responses": {

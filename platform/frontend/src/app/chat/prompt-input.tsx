@@ -357,9 +357,16 @@ const PromptInputContent = ({
   const skillSlashCommandsEnabled = orgData?.skillToolsEnabled ?? false;
   // Scoped to the conversation agent's environment: a slash command must not
   // offer a skill the backend's activation gate would refuse.
+  // The catalog can be hundreds of kilobytes and a blank composer has no use
+  // for it. Start the query only when the draft can actually be a command.
+  const isSkillCommandDraft = controller.textInput.value
+    .trimStart()
+    .startsWith("/");
   const { data: skillsData } = useSkillsPaginated(
     { limit: 100, forAgentId: agentId ?? undefined },
-    { enabled: skillSlashCommandsEnabled && !!agentId },
+    {
+      enabled: skillSlashCommandsEnabled && !!agentId && isSkillCommandDraft,
+    },
   );
   const skillCommands = useMemo<SkillCommand[]>(() => {
     if (!skillSlashCommandsEnabled || !skillsData?.data) {
@@ -422,7 +429,7 @@ const PromptInputContent = ({
   // Restore draft on mount or conversation change
   useEffect(() => {
     isRestored.current = false;
-    const savedDraft = localStorage.getItem(storageKey);
+    const savedDraft = getRestorableDraft(localStorage, storageKey);
     if (savedDraft) {
       controller.textInput.setInput(savedDraft);
     } else {
@@ -1352,3 +1359,19 @@ const ArchestraPromptInput = ({
 };
 
 export default ArchestraPromptInput;
+
+// Older clients could leave serialized nullish sentinels in prompt storage.
+// They are state markers, not user drafts, and briefly painting one into the
+// controlled textarea exposes the literal word during chat initialization.
+function getRestorableDraft(storage: Storage, key: string): string | null {
+  const draft = storage.getItem(key);
+  if (!draft) return null;
+
+  const normalized = draft.trim().toLowerCase();
+  if (normalized === "null" || normalized === "undefined") {
+    storage.removeItem(key);
+    return null;
+  }
+
+  return draft;
+}

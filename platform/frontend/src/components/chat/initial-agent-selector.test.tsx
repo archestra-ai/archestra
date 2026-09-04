@@ -5,80 +5,68 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { InitialAgentSelector } from "./initial-agent-selector";
 
-vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/config/config.query");
-
-vi.mock("@/lib/agent.query", () => ({
-  useAgentCredentialReadiness: () => ({ data: undefined }),
-  useCreateProfile: () => ({ mutate: vi.fn() }),
-  useInternalAgents: () => ({
-    data: [
-      {
-        id: "agent-1",
-        name: "Alpha Agent",
-        agentType: "agent",
-        scope: "org",
-        authorId: null,
-        description: null,
-        icon: null,
-        systemPrompt: null,
-        runtime: null,
-        accessAllTools: true,
-      },
-      {
-        id: "agent-2",
-        name: "Beta Agent",
-        agentType: "agent",
-        scope: "org",
-        authorId: null,
-        description: null,
-        icon: null,
-        systemPrompt: null,
-        runtime: null,
-        accessAllTools: true,
-      },
-      {
-        id: "agent-3",
-        name: "Gamma Agent",
-        agentType: "agent",
-        scope: "org",
-        authorId: null,
-        description: null,
-        icon: null,
-        systemPrompt: null,
-        runtime: null,
-        accessAllTools: true,
-      },
-    ],
-  }),
-  useUpdateProfile: () => ({ mutate: vi.fn() }),
-}));
-
-vi.mock("@/lib/agent-tools.query", () => ({
-  useAgentDelegations: () => ({ data: [] }),
-  useAllProfileTools: () => ({ data: { data: [] } }),
-  useAssignTool: () => ({ mutate: vi.fn() }),
-  useRemoveAgentDelegation: () => ({ mutate: vi.fn() }),
-  useSyncAgentDelegations: () => ({ mutate: vi.fn() }),
-  useUnassignTool: () => ({ mutate: vi.fn() }),
-}));
-
-vi.mock("@/lib/knowledge/connector.query", () => ({
-  useConnectors: () => ({ data: [] }),
-}));
-
-vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
-  useKnowledgeBases: () => ({ data: [] }),
-}));
-
-vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  fetchCatalogTools: vi.fn(),
-  useCatalogTools: () => ({ data: [] }),
-  useInternalMcpCatalog: () => ({ data: [] }),
-}));
-
-vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
-  useMcpInstallOrchestrator: () => ({
+const {
+  agents,
+  mockUseAgentCredentialReadiness,
+  mockUseAgentDelegations,
+  mockUseAllProfileTools,
+  mockUseConnectors,
+  mockUseInternalMcpCatalog,
+  mockUseKnowledgeBases,
+  mockUseMcpInstallOrchestrator,
+  mockUseProfile,
+} = vi.hoisted(() => ({
+  agents: [
+    {
+      id: "agent-1",
+      name: "Alpha Agent",
+      agentType: "agent",
+      scope: "org",
+      authorId: null,
+      description: null,
+      icon: null,
+      systemPrompt: null,
+      runtime: null,
+      accessAllTools: true,
+    },
+    {
+      id: "agent-2",
+      name: "Beta Agent",
+      agentType: "agent",
+      scope: "org",
+      authorId: null,
+      description: null,
+      icon: null,
+      systemPrompt: null,
+      runtime: null,
+      accessAllTools: true,
+    },
+    {
+      id: "agent-3",
+      name: "Gamma Agent",
+      agentType: "agent",
+      scope: "org",
+      authorId: null,
+      description: null,
+      icon: null,
+      systemPrompt: null,
+      runtime: null,
+      accessAllTools: true,
+    },
+  ],
+  mockUseAgentCredentialReadiness: vi.fn((_options?: unknown) => ({
+    data: undefined,
+  })),
+  mockUseAgentDelegations: vi.fn((_agentId?: string, _options?: unknown) => ({
+    data: [],
+  })),
+  mockUseAllProfileTools: vi.fn((_options?: unknown) => ({
+    data: { data: [] },
+  })),
+  mockUseConnectors: vi.fn((_options?: unknown) => ({ data: [] })),
+  mockUseInternalMcpCatalog: vi.fn((_options?: unknown) => ({ data: [] })),
+  mockUseKnowledgeBases: vi.fn((_options?: unknown) => ({ data: [] })),
+  mockUseMcpInstallOrchestrator: vi.fn((_options?: unknown) => ({
     closeLocalInstall: vi.fn(),
     closeNoAuthInstall: vi.fn(),
     closeOAuth: vi.fn(),
@@ -93,7 +81,54 @@ vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
     noAuthCatalogItem: null,
     selectedCatalogItem: null,
     triggerInstallByCatalogId: vi.fn(),
-  }),
+  })),
+  mockUseProfile: vi.fn((id: string | undefined, _options?: unknown) => ({
+    data: agents.find((agent) => agent.id === id),
+  })),
+}));
+
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
+
+vi.mock("@/lib/agent.query", () => ({
+  useAgentCredentialReadiness: (options?: unknown) =>
+    mockUseAgentCredentialReadiness(options),
+  useChatAgents: () => ({ data: agents }),
+  useCreateProfile: () => ({ mutate: vi.fn() }),
+  useInternalAgents: () => ({ data: agents }),
+  useProfile: (id: string | undefined, options?: unknown) =>
+    mockUseProfile(id, options),
+  useUpdateProfile: () => ({ mutate: vi.fn() }),
+}));
+
+vi.mock("@/lib/agent-tools.query", () => ({
+  useAgentDelegations: (agentId?: string, options?: unknown) =>
+    mockUseAgentDelegations(agentId, options),
+  useAllProfileTools: (options?: unknown) => mockUseAllProfileTools(options),
+  useAssignTool: () => ({ mutate: vi.fn() }),
+  useRemoveAgentDelegation: () => ({ mutate: vi.fn() }),
+  useSyncAgentDelegations: () => ({ mutate: vi.fn() }),
+  useUnassignTool: () => ({ mutate: vi.fn() }),
+}));
+
+vi.mock("@/lib/knowledge/connector.query", () => ({
+  useConnectors: (options?: unknown) => mockUseConnectors(options),
+}));
+
+vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
+  useKnowledgeBases: (options?: unknown) => mockUseKnowledgeBases(options),
+}));
+
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  fetchCatalogTools: vi.fn(),
+  useCatalogTools: () => ({ data: [] }),
+  useInternalMcpCatalog: (options?: unknown) =>
+    mockUseInternalMcpCatalog(options),
+}));
+
+vi.mock("@/lib/mcp/mcp-install-orchestrator.hook", () => ({
+  useMcpInstallOrchestrator: (options?: unknown) =>
+    mockUseMcpInstallOrchestrator(options),
 }));
 
 vi.mock("@/components/chat/mcp-install-dialogs", () => ({
@@ -168,5 +203,40 @@ describe("InitialAgentSelector keyboard navigation", () => {
 
     await user.keyboard("{ArrowUp}{Enter}");
     expect(onAgentChange).toHaveBeenCalledWith("agent-3");
+  });
+
+  it("defers management queries until the picker opens", async () => {
+    const user = userEvent.setup();
+    render(
+      <InitialAgentSelector currentAgentId="agent-1" onAgentChange={vi.fn()} />,
+    );
+
+    expect(mockUseAgentCredentialReadiness).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+    expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+    expect(mockUseAllProfileTools).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(mockUseKnowledgeBases).toHaveBeenLastCalledWith({ enabled: false });
+    expect(mockUseConnectors).toHaveBeenLastCalledWith({ enabled: false });
+    expect(mockUseProfile).toHaveBeenCalledWith("agent-1", { enabled: false });
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(mockUseAgentCredentialReadiness).toHaveBeenLastCalledWith({
+      enabled: true,
+    });
+    expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
+      enabled: true,
+    });
+    expect(mockUseAllProfileTools).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
+    expect(mockUseKnowledgeBases).toHaveBeenLastCalledWith({ enabled: true });
+    expect(mockUseConnectors).toHaveBeenLastCalledWith({ enabled: true });
+    expect(mockUseProfile).toHaveBeenCalledWith("agent-1", { enabled: true });
   });
 });

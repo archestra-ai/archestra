@@ -73,8 +73,10 @@ import {
 } from "@/components/ui/tooltip";
 import {
   useAgentCredentialReadiness,
+  useChatAgents,
   useCreateProfile,
   useInternalAgents,
+  useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
@@ -129,13 +131,22 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
   onAgentChange,
 }: InitialAgentSelectorProps) {
-  const { data: allAgents = [] } = useInternalAgents();
-  const { data: credentialReadiness } = useAgentCredentialReadiness();
+  const { data: allAgents = [] } = useChatAgents();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [highlightedAgentId, setHighlightedAgentId] = useState<string | null>(
+    null,
+  );
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [cloningAgentId, setCloningAgentId] = useState<string | null>(null);
+  const { data: credentialReadiness } = useAgentCredentialReadiness({
+    enabled: open,
+  });
   const readinessByAgent = useMemo(
     () => indexReadinessByAgent(credentialReadiness),
     [credentialReadiness],
   );
-  const installOrchestrator = useMcpInstallOrchestrator();
+  const installOrchestrator = useMcpInstallOrchestrator({ enabled: open });
   // Connecting is per server, so several missing ones are walked one at a time:
   // each install refreshes readiness, and the row re-offers whatever is left.
   const connectMissing = useCallback(
@@ -150,14 +161,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const userId = session?.user?.id;
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
   const createProfile = useCreateProfile();
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [highlightedAgentId, setHighlightedAgentId] = useState<string | null>(
-    null,
-  );
   const agentListboxId = useId();
   const agentOptionRefs = useRef(new Map<string, HTMLButtonElement>());
-  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const cloningStartedForRef = useRef<string | null>(null);
   const [dialogView, setDialogView] = useState<
     | "settings"
     | "add-tool"
@@ -191,11 +197,19 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     [filteredAgents, readinessByAgent],
   );
 
-  const currentAgent = useMemo(
+  const currentAgentSummary = useMemo(
     () =>
       allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
     [allAgents, currentAgentId],
   );
+  // The roster omits large embedded icons and editing-only fields. Hydrate one
+  // record only after the picker opens; that detail response can itself be
+  // large, so it must not compete with the first useful composer render.
+  const { data: currentAgentDetail } = useProfile(
+    currentAgentSummary?.id ?? undefined,
+    { enabled: open },
+  );
+  const currentAgent = currentAgentDetail ?? currentAgentSummary;
   const displayAgentName = currentAgent?.name ?? "Select agent";
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
   const shouldLoadAgentManagementDetails = open || !!editingAgentId;
@@ -220,12 +234,15 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     knowledgeSource: ["read"],
   });
   const { data: catalogItems = [] } = useInternalMcpCatalog({
-    enabled: !!canReadMcpRegistry,
+    enabled: shouldLoadAgentManagementDetails && !!canReadMcpRegistry,
   });
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId: effectiveAgentId ?? undefined },
     skipPagination: true,
-    enabled: !!effectiveAgentId && !!canReadToolPolicy,
+    enabled:
+      shouldLoadAgentManagementDetails &&
+      !!effectiveAgentId &&
+      !!canReadToolPolicy,
   });
 
   const assignedCatalogs = useMemo(() => {
@@ -238,6 +255,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 
   const { data: triggerDelegations = [] } = useAgentDelegations(
     effectiveAgentId ?? undefined,
+    { enabled: shouldLoadAgentManagementDetails },
   );
   const triggerSubagents = useMemo(() => {
     const targetIds = new Set(triggerDelegations.map((d) => d.id));
@@ -246,10 +264,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 
   // Knowledge base data for connector icons in avatar group
   const { data: knowledgeBasesData } = useKnowledgeBases({
-    enabled: !!canReadKnowledgeBase,
+    enabled: shouldLoadAgentManagementDetails && !!canReadKnowledgeBase,
   });
   const { data: connectorsData } = useConnectors({
-    enabled: !!canReadKnowledgeBase,
+    enabled: shouldLoadAgentManagementDetails && !!canReadKnowledgeBase,
   });
 
   const allKnowledgeBases = knowledgeBasesData ?? [];
@@ -345,10 +363,35 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     }
   }, [currentAgentId]);
 
-  const editingAgent = useMemo(
-    () => allAgents.find((a) => a.id === editingAgentId) ?? null,
-    [allAgents, editingAgentId],
-  );
+  const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
+  const { data: cloningAgent } = useProfile(cloningAgentId ?? undefined);
+
+  useEffect(() => {
+    if (!cloningAgent || cloningStartedForRef.current === cloningAgent.id) {
+      return;
+    }
+
+    cloningStartedForRef.current = cloningAgent.id;
+    setCloningAgentId(null);
+    createProfile.mutate(
+      {
+        name: `Copy ${cloningAgent.name}`,
+        scope: "personal",
+        agentType: "agent",
+        description: cloningAgent.description,
+        systemPrompt: cloningAgent.systemPrompt,
+        icon: cloningAgent.icon,
+      },
+      {
+        onSuccess: (newAgent) => {
+          if (newAgent?.id) {
+            onAgentChange(newAgent.id);
+            setEditingAgentId(newAgent.id);
+          }
+        },
+      },
+    );
+  }, [cloningAgent, createProfile, onAgentChange]);
 
   const editingKbs = useMemo(() => {
     const ids = editingAgent?.knowledgeBaseIds ?? [];
@@ -559,25 +602,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                               setOpen(false);
                               setEditingAgentId(agent.id);
                             } else {
-                              createProfile.mutate(
-                                {
-                                  name: `Copy ${agent.name}`,
-                                  scope: "personal",
-                                  agentType: "agent",
-                                  description: agent.description,
-                                  systemPrompt: agent.systemPrompt,
-                                  icon: agent.icon,
-                                },
-                                {
-                                  onSuccess: (newAgent) => {
-                                    if (newAgent?.id) {
-                                      onAgentChange(newAgent.id);
-                                      setOpen(false);
-                                      setEditingAgentId(newAgent.id);
-                                    }
-                                  },
-                                },
-                              );
+                              setOpen(false);
+                              cloningStartedForRef.current = null;
+                              setCloningAgentId(agent.id);
                             }
                           }}
                         >
@@ -633,7 +660,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
         >
           <DialogTitle className="sr-only">Agent Settings</DialogTitle>
 
-          {dialogView === "settings" && (
+          {!editingAgent ? (
+            <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              <span>Loading agent…</span>
+            </div>
+          ) : dialogView === "settings" ? (
             <AgentSettingsView
               agent={editingAgent}
               onAddTool={() => setDialogView("add-tool")}
@@ -648,7 +680,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               matchedKnowledgeBases={editingKbs}
               matchedConnectors={editingConnectors}
             />
-          )}
+          ) : null}
 
           {dialogView === "add-tool" && editingAgent && (
             <AddToolView

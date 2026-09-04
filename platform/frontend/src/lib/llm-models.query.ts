@@ -15,6 +15,7 @@ import {
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -67,6 +68,10 @@ export function useLlmModels(params?: LlmModelsParams) {
     // preventing display name flicker (e.g. "Claude Opus 4.1" → raw ID → back).
     placeholderData: keepPreviousData,
     enabled: params?.enabled,
+    // The model list is small, contains no credentials, and is required to
+    // replace the new-chat composer's loading placeholder with the saved model.
+    // Restoring it makes a refresh immediately usable while revalidation runs.
+    meta: PERSISTED_QUERY_META,
   });
 }
 

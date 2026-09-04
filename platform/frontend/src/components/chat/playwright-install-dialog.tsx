@@ -50,11 +50,13 @@ export function usePlaywrightSetupRequired(
   }, []);
 
   const { data: profileTools = [], isLoading: isLoadingTools } =
-    useProfileToolsWithIds(agentId);
-  const { data: enabledToolsData } =
-    useConversationEnabledTools(conversationId);
+    useProfileToolsWithIds(agentId, { enabled: options?.enabled });
+  const { data: enabledToolsData } = useConversationEnabledTools(
+    conversationId,
+    { enabled: options?.enabled },
+  );
   const { data: delegatedAgents = [], isLoading: isLoadingDelegations } =
-    useAgentDelegations(agentId);
+    useAgentDelegations(agentId, { enabled: options?.enabled });
 
   // Check if current user has Playwright installed using lightweight queries only
   // (no mutations) to avoid interfering with install state in the dialog/right panel
@@ -142,6 +144,7 @@ export function usePlaywrightSetupRequired(
     queries: enabledSubAgentIds.map((id) => ({
       queryKey: ["agents", id, "tools", "mcp-only"] as const,
       queryFn: () => fetchAgentMcpTools(id),
+      enabled: options?.enabled ?? true,
     })),
   });
 

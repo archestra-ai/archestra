@@ -20,6 +20,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   ilike,
   inArray,
   isNotNull,
@@ -875,13 +876,17 @@ class AgentModel {
        * "not requested" rather than "none assigned".
        */
       includeTools?: boolean;
+      /**
+       * Return the compact roster used to initialize chat. The response keeps
+       * the full Agent wire shape for compatibility, but fields the chat does
+       * not consume are empty and oversized embedded icons are omitted.
+       */
+      view?: "chat";
     },
   ): Promise<Agent[]> {
     // Tools are attached afterwards as slim refs via one batched query:
     // joining them here multiplied every agent row (system prompt included)
     // by that agent's tool count.
-    let query = db.select().from(schema.agentsTable).$dynamic();
-
     // Build where conditions
     const whereConditions: SQL[] = [
       getAgentStatusCondition(options?.status ?? "active"),
@@ -949,12 +954,14 @@ class AgentModel {
       whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
     }
 
-    // Apply all where conditions if any exist
-    if (whereConditions.length > 0) {
-      query = query.where(and(...whereConditions));
-    }
-
-    const rows = await query;
+    const where = and(...whereConditions);
+    const rows =
+      options?.view === "chat"
+        ? await db
+            .select(CHAT_AGENT_ROW_COLUMNS)
+            .from(schema.agentsTable)
+            .where(where)
+        : await db.select().from(schema.agentsTable).where(where);
 
     const agents: Agent[] = rows.map((agent) => ({
       ...agent,
@@ -968,10 +975,13 @@ class AgentModel {
     }));
     const agentIds = agents.map((agent) => agent.id);
 
+    const isChatView = options?.view === "chat";
+
     // Populate tools, teams, and labels for all agents with bulk queries to
-    // avoid N+1
+    // avoid N+1. Chat starts from scalar configuration plus a few small
+    // relation lists; editing fetches the individual full agent on demand.
     const [toolRows, teamsMap, usersMap, labelsMap] = await Promise.all([
-      agentIds.length > 0 && options?.includeTools !== false
+      agentIds.length > 0 && options?.includeTools !== false && !isChatView
         ? db
             .select({
               agentId: schema.agentToolsTable.agentId,
@@ -984,9 +994,15 @@ class AgentModel {
             )
             .where(inArray(schema.agentToolsTable.agentId, agentIds))
         : Promise.resolve([]),
-      AgentTeamModel.getTeamDetailsForAgents(agentIds),
-      AgentUserModel.getUserDetailsForAgents(agentIds),
-      AgentLabelModel.getLabelsForAgents(agentIds),
+      isChatView
+        ? Promise.resolve(new Map())
+        : AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      isChatView
+        ? Promise.resolve(new Map())
+        : AgentUserModel.getUserDetailsForAgents(agentIds),
+      isChatView
+        ? Promise.resolve(new Map())
+        : AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
     const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
@@ -1002,7 +1018,7 @@ class AgentModel {
     }
 
     await Promise.all([
-      AgentModel.populateAuthorNames(agents),
+      isChatView ? Promise.resolve() : AgentModel.populateAuthorNames(agents),
       AgentModel.populateKnowledgeBaseIds(agents),
       AgentModel.populateConnectorIds(agents),
       AgentModel.populateSuggestedPrompts(agents),
@@ -4039,3 +4055,17 @@ function mostRecent(a: Date | null, b: Date | null): Date | null {
 }
 
 export default AgentModel;
+
+// The chat roster appears before the picker opens. Emoji and short URL icons
+// are cheap enough to keep inline; base64 image data is fetched only for the
+// selected agent through the existing detail endpoint.
+const MAX_INLINE_CHAT_AGENT_ICON_CHARS = 1_024;
+const CHAT_AGENT_ROW_COLUMNS = {
+  ...getTableColumns(schema.agentsTable),
+  systemPrompt: sql<string | null>`null`,
+  icon: sql<string | null>`case
+    when length(${schema.agentsTable.icon}) <= ${MAX_INLINE_CHAT_AGENT_ICON_CHARS}
+      then ${schema.agentsTable.icon}
+    else null
+  end`,
+};

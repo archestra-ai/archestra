@@ -343,7 +343,7 @@ vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({
-  useSkillsPaginated: () => mockUseSkillsPaginated(),
+  useSkillsPaginated: (...args: unknown[]) => mockUseSkillsPaginated(...args),
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -1342,6 +1342,28 @@ describe("ArchestraPromptInput", () => {
       });
     });
 
+    it("does not load the skills catalog for a blank composer", () => {
+      mockControllerState.value = "";
+
+      render(<ArchestraPromptInput {...defaultProps} />);
+
+      expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
+        { limit: 100, forAgentId: defaultProps.agentId },
+        { enabled: false },
+      );
+    });
+
+    it("loads the skills catalog when the draft starts with a slash", () => {
+      mockControllerState.value = "/";
+
+      render(<ArchestraPromptInput {...defaultProps} />);
+
+      expect(mockUseSkillsPaginated).toHaveBeenCalledWith(
+        { limit: 100, forAgentId: defaultProps.agentId },
+        { enabled: true },
+      );
+    });
+
     it("submits a bare skill command with skill metadata and an empty prompt", () => {
       const onSubmit = vi.fn();
       mockControllerState.value = "/my-skill";
@@ -1604,6 +1626,18 @@ describe("ArchestraPromptInput", () => {
     // The new-chat draft key is agent-independent (so a typed prompt survives
     // an agent switch); the agentId prop below no longer affects the key.
     const draftKey = NEW_CHAT_DRAFT_STORAGE_KEY;
+
+    it.each([
+      "null",
+      "undefined",
+    ])("discards a serialized %s sentinel instead of painting it into the composer", (sentinel) => {
+      localStorage.setItem(draftKey, sentinel);
+
+      render(<ArchestraPromptInput {...defaultProps} agentId={agentId} />);
+
+      expect(mockTextInputSetInput).toHaveBeenCalledWith("");
+      expect(localStorage.getItem(draftKey)).toBeNull();
+    });
 
     it("keeps the saved draft when the consumer rejects the submit", () => {
       const text = "draft text the user typed";

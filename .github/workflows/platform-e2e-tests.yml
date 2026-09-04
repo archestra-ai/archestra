@@ -1,11 +1,12 @@
 name: Platform E2E Tests
 
 # Runs automatically in merge queue as the required E2E gate.
-# Trusted same-repo PR updates prebuild the Platform and MCP images so a
+# Trusted public-repo PR updates prebuild the Platform and MCP images so a
 # later merge-group run can retag them instead of compiling on the queue
-# critical path. Untrusted PRs keep the placeholder checks. Add the "run-e2e"
-# label to trigger the full E2E suite on demand. Remove and re-add the
-# label to re-trigger after new commits.
+# critical path. Untrusted PRs and private mirrors keep the placeholder checks
+# because their event contexts cannot authenticate to the public image
+# registry. Add the "run-e2e" label to trigger the full E2E suite on demand.
+# Remove and re-add the label to re-trigger after new commits.
 #
 # MCP idle-hibernation coverage stays OFF the merge queue: the leg is ~10
 # minutes of mostly serial waiting, which every queued merge was paying.
@@ -54,7 +55,9 @@ env:
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
   # Dependabot PRs use the same restricted secret context as forks even though
   # their branches live in this repository and report head.repo.fork=false.
-  UNTRUSTED_PR: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') }}
+  # Private mirrors also do not carry the canonical repository's GAR identity;
+  # keep them on the local-image/artifact path for explicitly requested E2E.
+  UNTRUSTED_PR: ${{ github.event.repository.private || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]')) }}
 
 jobs:
   # NOTE: there are deliberately NO same-named "placeholder" jobs for the
@@ -78,9 +81,10 @@ jobs:
     # Excludes EVERY e2e-triggering label: a label event that starts the real
     # build must not also run this placeholder under the same check names (the
     # duplicate-name masking hazard the NOTE above forbids re-adding). Every
-    # trusted same-repo PR event runs the real builder instead; this placeholder
-    # remains only for ordinary untrusted events that cannot access the registry.
-    if: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') && (github.event.action != 'labeled' || (github.event.label.name != 'run-e2e' && github.event.label.name != 'run-e2e-hibernation')) }}
+    # trusted public-repo PR event runs the real builder instead; this
+    # placeholder remains only for ordinary events that cannot access the
+    # registry, including private-mirror PRs.
+    if: ${{ github.event_name == 'pull_request' && (github.event.repository.private || github.event.pull_request.head.repo.fork == true || github.event.pull_request.user.login == 'dependabot[bot]') && (github.event.action != 'labeled' || (github.event.label.name != 'run-e2e' && github.event.label.name != 'run-e2e-hibernation')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -96,7 +100,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' || (github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.

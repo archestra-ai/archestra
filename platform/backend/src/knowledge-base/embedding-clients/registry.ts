@@ -2,6 +2,7 @@ import type {
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
+import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { callAzureEmbedding } from "./azure";
 import { callBedrockEmbedding } from "./bedrock";
 import { callCohereEmbedding } from "./cohere";
@@ -52,6 +53,16 @@ const OPENAI_WIRE_FIXED_DIMENSION: EmbeddingAdapter = {
   discriminator: "openai:embeddings",
 };
 
+const OPENROUTER_WIRE: EmbeddingAdapter = {
+  call: (params) =>
+    callOpenAIEmbedding({
+      ...params,
+      apiKey: params.apiKey ?? KEYLESS_PLACEHOLDER,
+      headers: openRouterAttributionHeaders(),
+    }),
+  discriminator: "openai:embeddings",
+};
+
 /**
  * Which embedding client (if any) each provider uses.
  *
@@ -99,7 +110,7 @@ export const EMBEDDING_ADAPTERS: Record<
 
   // OpenAI-compatible, honor the `dimensions` parameter.
   openai: OPENAI_WIRE,
-  openrouter: OPENAI_WIRE,
+  openrouter: OPENROUTER_WIRE,
   zhipuai: OPENAI_WIRE,
 
   // OpenAI-compatible, fixed native dimension — drop `dimensions`.

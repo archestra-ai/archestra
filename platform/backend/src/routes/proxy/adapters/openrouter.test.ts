@@ -3,6 +3,33 @@ import { describe, expect, test } from "@/test";
 import { Openrouter } from "@/types";
 import { openrouterAdapterFactory } from "./openrouter";
 
+describe("openrouterAdapterFactory.createClient", () => {
+  test("per-key attribution overrides configured defaults", () => {
+    const client = openrouterAdapterFactory.createClient("test-key", {
+      baseUrl: "https://openrouter.example/api/v1",
+      source: "api",
+      defaultHeaders: {
+        "X-Custom-Auth": "keep-me",
+        "http-referer": "https://caller.example",
+        "X-OpenRouter-Title": "Caller",
+        "X-Title": "Legacy caller",
+        "X-OpenRouter-App-Visibility": "hidden",
+      },
+    }) as unknown as {
+      _options: { defaultHeaders: Record<string, string> };
+    };
+
+    expect(client._options.defaultHeaders).toEqual({
+      "X-Custom-Auth": "keep-me",
+      "http-referer": "https://caller.example",
+      "X-OpenRouter-Title": "Caller",
+      "X-Title": "Legacy caller",
+      "X-OpenRouter-App-Visibility": "hidden",
+      "X-OpenRouter-Categories": "general-chat,personal-agent",
+    });
+  });
+});
+
 function createResponse(
   message: Openrouter.Types.ChatCompletionsResponse["choices"][0]["message"],
 ): Openrouter.Types.ChatCompletionsResponse {

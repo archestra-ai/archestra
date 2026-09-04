@@ -8,6 +8,7 @@ import { RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import config from "@/config";
 import logger from "@/logging";
 import { constructResponseSchema, Openrouter, UuidIdSchema } from "@/types";
@@ -26,6 +27,10 @@ const openrouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     upstream: config.llm.openrouter.baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
+    replyOptions: {
+      rewriteRequestHeaders: (_request, headers) =>
+        openRouterAttributionHeaders(headers),
+    },
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,

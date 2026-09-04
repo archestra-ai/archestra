@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelInputModalitySchema, ModelOutputModalitySchema } from "@/types";
@@ -62,14 +63,14 @@ export async function fetchOpenrouterModels(
       url: joinBaseUrl(baseUrl, "/models"),
       apiKey,
       errorLabel: "OpenRouter models",
-      extraHeaders,
+      extraHeaders: openRouterAttributionHeaders(extraHeaders),
       schema: OpenRouterGenerationModelsResponseSchema,
     }),
     fetchModelsWithBearerAuth({
       url: joinBaseUrl(baseUrl, "/embeddings/models"),
       apiKey,
       errorLabel: "OpenRouter embedding models",
-      extraHeaders,
+      extraHeaders: openRouterAttributionHeaders(extraHeaders),
       schema: OpenRouterEmbeddingModelsResponseSchema,
     }),
   ]);

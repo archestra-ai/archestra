@@ -1,5 +1,61 @@
 # Changelog
 
+## [1.3.49](https://github.com/archestra-ai/archestra/compare/platform-v1.3.48...platform-v1.3.49) (2026-09-04)
+
+
+### Features
+
+* **agent-runtime:** preserve native TUIs in delegated runs ([#7674](https://github.com/archestra-ai/archestra/issues/7674)) ([2c44a4f](https://github.com/archestra-ai/archestra/commit/2c44a4fe35297eee72e76dda91c0cf8b01b55850))
+* **agent-runtime:** surface run liveness and attention ([#7669](https://github.com/archestra-ai/archestra/issues/7669)) ([803dfd3](https://github.com/archestra-ai/archestra/commit/803dfd35307de028e392555bd34f18abf0095f24))
+* **agent:** add OpenCode background execution ([#7646](https://github.com/archestra-ai/archestra/issues/7646)) ([cde21ae](https://github.com/archestra-ai/archestra/commit/cde21ae1631b81a7e1c3e165922fe25cb083542d))
+* **agent:** retain complete execution transcripts ([#7643](https://github.com/archestra-ai/archestra/issues/7643)) ([2ad0198](https://github.com/archestra-ai/archestra/commit/2ad01981dd0b761002d30cca9c1e83edf0061552))
+* **agents:** rename background execution to Agent Runtime ([#7658](https://github.com/archestra-ai/archestra/issues/7658)) ([904dd78](https://github.com/archestra-ai/archestra/commit/904dd7873834d2634f85808f72295a99cc956776))
+* **apps:** add direct version rollback ([#7671](https://github.com/archestra-ai/archestra/issues/7671)) ([a7b54e3](https://github.com/archestra-ai/archestra/commit/a7b54e38a278a2aabd84d34f7627e12682e6ac47))
+* **apps:** embed chat images server-side ([#7677](https://github.com/archestra-ai/archestra/issues/7677)) ([0f756d7](https://github.com/archestra-ai/archestra/commit/0f756d76270d82cdcbe8dc2a7817314139784f7a))
+* **skills,plugins:** make each record's own page its settings, on one page ([#7660](https://github.com/archestra-ai/archestra/issues/7660)) ([38aa7fd](https://github.com/archestra-ai/archestra/commit/38aa7fd86662a95c3fc2868aa45296d4ffa22d26))
+* **teams:** label the team-member role by what it grants ([#7666](https://github.com/archestra-ai/archestra/issues/7666)) ([e4c80d7](https://github.com/archestra-ai/archestra/commit/e4c80d7d7eb3f3f1bb9e4e8dc31119311b94a9f7))
+
+
+### Bug Fixes
+
+* **agent-runtime:** preserve startup progress across reloads ([#7684](https://github.com/archestra-ai/archestra/issues/7684)) ([7ce1f5f](https://github.com/archestra-ai/archestra/commit/7ce1f5f2b2e5dc67331d0c7b1acf4f7de3e98d90))
+* **agents:** clear legacy duplicate assistant defaults ([#7685](https://github.com/archestra-ai/archestra/issues/7685)) ([e9d99f2](https://github.com/archestra-ai/archestra/commit/e9d99f2ca51e6d80d271f163e648fa7f2895ad41))
+* **chat:** focus prompt after selecting an agent ([#7673](https://github.com/archestra-ai/archestra/issues/7673)) ([ccbac4e](https://github.com/archestra-ai/archestra/commit/ccbac4e3c340722ab50f79579dcfe141e6dd3e45))
+* **chat:** include tool schemas in compaction and guard Bedrock images ([#7686](https://github.com/archestra-ai/archestra/issues/7686)) ([fe200b4](https://github.com/archestra-ai/archestra/commit/fe200b4d2b363f7964d0a099e6e1544947582efb))
+* **deps:** raise fast-uri to 3.1.6 for CVE-2026-75899/75931/75975/76172 ([#7647](https://github.com/archestra-ai/archestra/issues/7647)) ([e7a04bd](https://github.com/archestra-ai/archestra/commit/e7a04bd78f6a4c13a50f8b8a72180853aa0efb4b))
+* **deps:** update TOON to address CVE-2026-82404 ([#7676](https://github.com/archestra-ai/archestra/issues/7676)) ([fd390c2](https://github.com/archestra-ai/archestra/commit/fd390c2764d6e147aca32810b9684a174fabb014))
+* **docker:** bump dagger's x/crypto pin to 0.56.0 ([#7665](https://github.com/archestra-ai/archestra/issues/7665)) ([943bf96](https://github.com/archestra-ai/archestra/commit/943bf96ac64a18a22335b777eea82783cc849091))
+* **frontend:** center execution terminal states ([#7645](https://github.com/archestra-ai/archestra/issues/7645)) ([177ff06](https://github.com/archestra-ai/archestra/commit/177ff066d8f53690c72d30f32cb86285d5a86d45))
+* **frontend:** identify MCP installs by owner ([#7652](https://github.com/archestra-ai/archestra/issues/7652)) ([debcf8d](https://github.com/archestra-ai/archestra/commit/debcf8d671fddac021901fc58ef2a0c7f9560ffe))
+* **frontend:** one loader on the auth surface, and feedback where the click was ([#7663](https://github.com/archestra-ai/archestra/issues/7663)) ([20ba7fa](https://github.com/archestra-ai/archestra/commit/20ba7fa7b376edf52754d840cd6fe5a0887e59ec))
+* **frontend:** raise light-mode theme chrome to WCAG contrast minimums ([#7659](https://github.com/archestra-ai/archestra/issues/7659)) ([c4ef09b](https://github.com/archestra-ai/archestra/commit/c4ef09ba2fe3deed1c748f8324c6a5fb0e5229c1))
+* **frontend:** restore the Subagents control on MCP gateways ([#7681](https://github.com/archestra-ai/archestra/issues/7681)) ([f4641ab](https://github.com/archestra-ai/archestra/commit/f4641abd98560a9e405783bd75e2f8c5d8778aaa))
+* **frontend:** show saved restricted environments in selectors ([#7689](https://github.com/archestra-ai/archestra/issues/7689)) ([4e1f942](https://github.com/archestra-ai/archestra/commit/4e1f9426605b5a4d21b20f3225bb07edb1876162))
+* **guardrails:** restore one-click Calls policy picker ([#7672](https://github.com/archestra-ai/archestra/issues/7672)) ([46788f7](https://github.com/archestra-ai/archestra/commit/46788f7597675c2a2a216f7af29d0811a9d3fde0))
+* **llm:** apply configured upstream timeout to Bedrock ([#7668](https://github.com/archestra-ai/archestra/issues/7668)) ([8fe75c8](https://github.com/archestra-ai/archestra/commit/8fe75c88bf11d0b7a6f9ee5b167d57e61afbc0cc))
+* **oauth:** honor registered client authentication method ([#7650](https://github.com/archestra-ai/archestra/issues/7650)) ([0e8c325](https://github.com/archestra-ai/archestra/commit/0e8c3258ba59c79cb475860e1d8720626d052c0d))
+* **openrouter:** apply attribution to all request paths ([#7682](https://github.com/archestra-ai/archestra/issues/7682)) ([a8bce5e](https://github.com/archestra-ai/archestra/commit/a8bce5e8b23d73e62b3feeeaf2027c580a9baa2a))
+* **rbac:** align cost and log permissions with API scope ([#7687](https://github.com/archestra-ai/archestra/issues/7687)) ([1b49ecd](https://github.com/archestra-ai/archestra/commit/1b49ecd240185c68c12cb5169c1b1f9d107d8366))
+* **tests:** stabilize attachment ordering and local backend resource use ([#7688](https://github.com/archestra-ai/archestra/issues/7688)) ([8c2367c](https://github.com/archestra-ai/archestra/commit/8c2367c469761d50d488de683887ac8c1d69519c))
+* **ui:** align app permissions and table sizing ([#7670](https://github.com/archestra-ai/archestra/issues/7670)) ([17f9cc8](https://github.com/archestra-ai/archestra/commit/17f9cc86e39491a9b51efb0954daa013ec0f9315))
+
+
+### Performance Improvements
+
+* **api:** bound large list endpoint payloads ([#7644](https://github.com/archestra-ai/archestra/issues/7644)) ([8ce40b9](https://github.com/archestra-ai/archestra/commit/8ce40b97d2422a04562a8dfc1e73c825765ec4b5))
+* **chat:** defer service icon catalog from initial load ([#7653](https://github.com/archestra-ai/archestra/issues/7653)) ([9019f23](https://github.com/archestra-ai/archestra/commit/9019f23cf76f02c2ccf626ec78c882dec9f3d065))
+* **chat:** streamline new chat initialization ([#7680](https://github.com/archestra-ai/archestra/issues/7680)) ([adb2307](https://github.com/archestra-ai/archestra/commit/adb230701e6887e6e65fb3329191179cb890e452))
+
+
+### Dependencies
+
+* bump the rust-dependencies group in /platform/archestra-rs with 2 updates ([#7654](https://github.com/archestra-ai/archestra/issues/7654)) ([36cbdc9](https://github.com/archestra-ai/archestra/commit/36cbdc9a81e616e5b27746370198af571fb1905b))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump qs from 6.15.2 to 6.16.0 in /platform/mcp_server_docker_image ([#7641](https://github.com/archestra-ai/archestra/issues/7641)) ([f3d232e](https://github.com/archestra-ai/archestra/commit/f3d232e1302d61f700f37dcc16e9d894d77f1f34))
+
 ## [1.3.48](https://github.com/archestra-ai/archestra/compare/platform-v1.3.47...platform-v1.3.48) (2026-09-03)
 
 

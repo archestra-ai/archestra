@@ -17,6 +17,7 @@ use crate::config::types::ToolExposureMode;
 use crate::elicitation::{ElicitationAnswer, ElicitationParse, answer_for, parse_elicitation_event};
 
 const DEFAULT_CHAT_TIMEOUT_S: f64 = 1800.0;
+const TOOLS_PAGE_SIZE: usize = 100;
 
 /// Sampling temperature pinned on every benchmark chat request. Greedy decoding (`0.0`) is the main
 /// lever against run-to-run variance — see the reproducibility notes in the repo README.
@@ -558,10 +559,35 @@ impl EvalClient {
         )
     }
 
-    pub async fn list_tools(&self, search: Option<&str>) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
-        let params = search.map(|s| vec![("search".to_string(), s.to_string())]);
-        let slice = params.as_deref();
-        items(self.request(Method::GET, "/api/tools", slice, None).await?)
+    pub async fn list_tools(&self) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
+        let mut all = Vec::new();
+        loop {
+            let params = vec![
+                ("limit".to_string(), TOOLS_PAGE_SIZE.to_string()),
+                ("offset".to_string(), all.len().to_string()),
+            ];
+
+            let body = self.request(Method::GET, "/api/tools", Some(&params), None).await?;
+            let total = pagination_total(&body, "GET /api/tools")?;
+            let page = items(body)?;
+            let page_len = page.len();
+            all.extend(page);
+
+            let Some(total) = total else {
+                // Compatibility with platform versions that predate the paginated tools response.
+                return Ok(all);
+            };
+            if all.len() >= total {
+                return Ok(all);
+            }
+            if page_len == 0 {
+                return Err(ContractError(format!(
+                    "GET /api/tools: pagination gap after {} of {total} tools",
+                    all.len()
+                ))
+                .into());
+            }
+        }
     }
 
     pub async fn bulk_assign_tools(
@@ -1075,6 +1101,23 @@ fn items(body: JsonValue) -> Result<Vec<HashMap<String, JsonValue>>, ClientError
         .collect()
 }
 
+fn pagination_total(body: &JsonValue, context: &str) -> Result<Option<usize>, ClientError> {
+    let JsonValue::Object(obj) = body else {
+        return Ok(None);
+    };
+    let Some(pagination) = obj.get("pagination") else {
+        return Ok(None);
+    };
+    let total = pagination.get("total").and_then(JsonValue::as_u64).ok_or_else(|| {
+        ContractError(format!(
+            "{context}: paginated response is missing integer `pagination.total`: {body}"
+        ))
+    })?;
+    usize::try_from(total)
+        .map(Some)
+        .map_err(|_| ContractError(format!("{context}: `pagination.total` exceeds usize: {total}")).into())
+}
+
 fn require_secure_transport(base_url: &str) -> Result<(), ClientError> {
     if let Ok(parsed) = url::Url::parse(base_url) {
         if parsed.scheme() == "https" {
@@ -1192,6 +1235,10 @@ fn sandbox_readiness(body: &JsonValue) -> SandboxReadiness {
 mod tests {
     use super::*;
 
+    use axum::{Json, Router, extract::Query, routing::get};
+    use std::sync::Mutex as StdMutex;
+    use tokio::net::TcpListener;
+
     #[test]
     fn test_sandbox_readiness_classifies_each_state() {
         use serde_json::json;
@@ -1298,6 +1345,48 @@ mod tests {
         let body = serde_json::json!([{"id": "1"}]);
         let got = items(body).unwrap();
         assert_eq!(got.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn list_tools_walks_paginated_response_to_find_later_tools() {
+        let queries = Arc::new(StdMutex::new(Vec::<HashMap<String, String>>::new()));
+        let app = Router::new().route(
+            "/api/tools",
+            get({
+                let queries = Arc::clone(&queries);
+                move |Query(query): Query<HashMap<String, String>>| {
+                    let queries = Arc::clone(&queries);
+                    async move {
+                        queries.lock().unwrap().push(query.clone());
+                        let offset = query.get("offset").map(String::as_str).unwrap_or("0");
+                        let data = if offset == "0" {
+                            serde_json::json!([{"id": "newer", "name": "newer_tool"}])
+                        } else {
+                            serde_json::json!([{"id": "todo", "name": "archestra__todo_write"}])
+                        };
+                        Json(serde_json::json!({
+                            "data": data,
+                            "pagination": {"total": 2}
+                        }))
+                    }
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let client = EvalClient::new(format!("http://{addr}"), None);
+        let tools = client.list_tools().await.unwrap();
+        server.abort();
+
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[1]["name"], "archestra__todo_write");
+        let queries = queries.lock().unwrap();
+        assert_eq!(queries.len(), 2);
+        assert_eq!(queries[0].get("limit").map(String::as_str), Some("100"));
+        assert_eq!(queries[0].get("offset").map(String::as_str), Some("0"));
+        assert_eq!(queries[1].get("offset").map(String::as_str), Some("1"));
     }
 
     #[test]

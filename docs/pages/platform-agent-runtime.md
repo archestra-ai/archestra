@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated runtime
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -383,8 +383,9 @@ the run.
 ## View Runs from an Agent
 
 An Agent with Agent Runtime configured has a **Runs** tab. A running run opens
-its live terminal, while a completed run opens its retained terminal output;
-there is no separate output-mode selector. Use this tab to:
+its live terminal. A completed Claude Code run opens a readable transcript.
+Use the selector to switch to its terminal replay. Other runtime images open
+their retained terminal output. Use this tab to:
 
 - review run outcomes and timestamps
 - read live or retained container logs
@@ -396,13 +397,15 @@ the Agent session automatically. Press `Ctrl-b`, then `d`, to detach without
 stopping the run. For a raw diagnostic shell, set
 `ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH=0` on the exec command.
 
-After the pod is removed, Archestra retains the complete container transcript
-as independently compressed chunks and replays those chunks into the terminal
-view. Native TUI recordings preserve their original terminal geometry and
-scale as one canvas to fit narrower viewers, with scrolling as a fallback at
-very small widths. They do not reflow and jumble the interface. The transcript
-follows the run's task retention period, which is
-90 days by default. Set
+After the pod is removed, Archestra retains two forms of Claude Code history.
+The readable transcript lists messages and tool activity in chronological
+order. The terminal replay preserves the complete PTY recording. Archestra
+stores only normalized fields from Claude Code's native transcript.
+
+Other runtime images retain the complete terminal recording. Native TUI
+recordings preserve their original terminal geometry. They scale as one canvas
+to fit narrower viewers. The history follows the run's task retention period,
+which is 90 days by default. Set
 `ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES` to cap the
 uncompressed transcript size accepted from one run. A run beyond that ceiling
 keeps its final 1 MiB instead, and the terminal labels the recording

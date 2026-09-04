@@ -5,6 +5,10 @@ import {
   AgentRuntimeOutputCapture,
   RETAINED_LOG_BYTES,
 } from "./output-capture";
+import {
+  AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_END,
+  AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START,
+} from "./runtime-contract";
 
 describe("AgentRuntimeOutputCapture", () => {
   test("recovers the complete transcript after the live stream ends early", async () => {
@@ -79,6 +83,58 @@ describe("AgentRuntimeOutputCapture", () => {
     expect(Buffer.byteLength(capture.retainedLogs)).toBe(RETAINED_LOG_BYTES);
     expect(capture.retainedLogs.endsWith(finalLine)).toBe(true);
   });
+
+  test("separates a normalized readable transcript from terminal output", async () => {
+    const readable = JSON.stringify({
+      version: 1,
+      provider: "claude-code",
+      entries: [
+        { type: "message", role: "user", text: "Start here" },
+        { type: "message", role: "assistant", text: "Finished there" },
+      ],
+    });
+    const encoded = Buffer.from(readable).toString("base64");
+    const protocol = `${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START}${encoded}${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_END}`;
+    const onTextDelta = vi.fn();
+    const capture = new AgentRuntimeOutputCapture({
+      backend: outputBackend({
+        liveChunks: [
+          `terminal beginning\n${protocol.slice(0, 17)}`,
+          protocol.slice(17, -11),
+          `${protocol.slice(-11)}terminal end\n`,
+        ],
+      }),
+      session,
+      onTextDelta,
+    });
+
+    await capture.follow();
+
+    expect(capture.completeTranscript).toBe(
+      "terminal beginning\nterminal end\n",
+    );
+    expect(capture.retainedLogs).toBe("terminal beginning\nterminal end\n");
+    expect(JSON.parse(capture.readableTranscript ?? "")).toEqual(
+      JSON.parse(readable),
+    );
+    expect(onTextDelta.mock.calls.flat().join("")).toBe(
+      "terminal beginning\nterminal end\n",
+    );
+  });
+
+  test("ignores malformed readable transcript protocol", async () => {
+    const capture = new AgentRuntimeOutputCapture({
+      backend: outputBackend({
+        live: `before\n${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START}${Buffer.from("not json").toString("base64")}${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_END}after\n`,
+      }),
+      session,
+    });
+
+    await capture.follow();
+
+    expect(capture.readableTranscript).toBeNull();
+    expect(capture.completeTranscript).toBe("before\nafter\n");
+  });
 });
 
 const session = {
@@ -86,13 +142,17 @@ const session = {
 } as AgentRunRecord;
 
 function outputBackend(params: {
-  live: string;
+  live?: string;
+  liveChunks?: string[];
   snapshot?: string;
   snapshotError?: Error;
 }): Pick<AgentRuntimeBackendDriver, "streamOutput" | "snapshotOutput"> {
   return {
     async streamOutput({ destination }) {
-      destination.end(params.live);
+      for (const chunk of params.liveChunks ?? [params.live ?? ""]) {
+        destination.write(chunk);
+      }
+      destination.end();
     },
     async snapshotOutput({ destination }) {
       if (params.snapshotError) throw params.snapshotError;

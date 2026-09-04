@@ -47,7 +47,12 @@ if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
     previous="$argument"
   done
   transcript="$ARCHESTRA_AGENT_RUNTIME_DIR/transcript.jsonl"
-  printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"Claude finished the task."}]}}' > "$transcript"
+  printf '%s\n' \
+    '{"type":"user","timestamp":"2026-09-04T10:00:00Z","message":{"content":"Build the feature."}}' \
+    '{"type":"assistant","timestamp":"2026-09-04T10:00:01Z","message":{"content":[{"type":"text","text":"I will inspect the code."},{"type":"tool_use","id":"tool-1","name":"Read","input":{"file_path":"src/app.ts"}}]}}' \
+    '{"type":"user","timestamp":"2026-09-04T10:00:02Z","message":{"content":[{"type":"tool_result","tool_use_id":"tool-1","content":"export const ready = true;"}]}}' \
+    '{"type":"assistant","timestamp":"2026-09-04T10:00:03Z","message":{"content":[{"type":"text","text":"Claude finished the task."}]}}' \
+    > "$transcript"
   hook_script="$(jq -r '.hooks.Stop[0].hooks[0].command' "$settings")"
   printf '{"transcript_path":"%s"}' "$transcript" | "$hook_script"
   trap 'exit 0' TERM
@@ -91,11 +96,61 @@ fi
       expect(args).toContain("--strict-mcp-config");
       expect(args.at(-1)).toBe("Run the task.");
       expect(args.includes("--print")).toBe(false);
+      const settings = JSON.parse(
+        await readFile(path.join(runtime, "claude-settings.json"), "utf8"),
+      );
+      expect(settings.hooks.Stop[0].hooks[0].command).toBe(
+        path.join(runtime, "transcript-hook.sh"),
+      );
 
       if (mode === "one_shot") {
         expect(args).toContain("--settings");
         expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
         expect(result.stdout).toContain("Claude finished the task.");
+        expect(
+          JSON.parse(
+            await readFile(
+              path.join(runtime, "readable-transcript.json"),
+              "utf8",
+            ),
+          ),
+        ).toEqual({
+          version: 1,
+          provider: "claude-code",
+          entries: [
+            {
+              type: "message",
+              role: "user",
+              text: "Build the feature.",
+              timestamp: "2026-09-04T10:00:00Z",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              text: "I will inspect the code.",
+              timestamp: "2026-09-04T10:00:01Z",
+            },
+            {
+              type: "tool_call",
+              name: "Read",
+              input: '{"file_path":"src/app.ts"}',
+              toolCallId: "tool-1",
+              timestamp: "2026-09-04T10:00:01Z",
+            },
+            {
+              type: "tool_result",
+              text: "export const ready = true;",
+              toolCallId: "tool-1",
+              timestamp: "2026-09-04T10:00:02Z",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              text: "Claude finished the task.",
+              timestamp: "2026-09-04T10:00:03Z",
+            },
+          ],
+        });
       }
     } finally {
       await rm(root, { recursive: true, force: true });

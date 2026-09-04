@@ -3186,6 +3186,13 @@
       "when": 1788525889947,
       "tag": "0454_clear-legacy-personal-assistant-defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 455,
+      "version": "7",
+      "when": 1788537205453,
+      "tag": "0455_wise_queen_noir",
+      "breakpoints": true
     }
   ]
 }

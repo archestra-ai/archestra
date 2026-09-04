@@ -286,6 +286,19 @@ describe("the container bootstrap", () => {
     expect(script()).toContain("exit-code; sleep 2; exit");
   });
 
+  it("frames a bounded readable transcript after terminal capture ends", () => {
+    const bootstrap = script();
+
+    expect(bootstrap).toContain(
+      '[ "$(wc -c < /var/run/archestra/readable-transcript.json)" -le 16777216 ]',
+    );
+    expect(bootstrap).toContain("archestra-readable-transcript=base64");
+    expect(bootstrap).toContain("archestra-readable-transcript=end");
+    expect(bootstrap.indexOf("while tmux has-session")).toBeLessThan(
+      bootstrap.indexOf("archestra-readable-transcript=base64"),
+    );
+  });
+
   it("gives detached TUIs a browser-sized canvas before anyone attaches", () => {
     expect(script()).toContain("tmux new-session -d -x 120 -y 40 -s agent");
   });

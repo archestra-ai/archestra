@@ -730,7 +730,15 @@ export function ChatSidebarSection({
               className="cursor-pointer flex-1"
             >
               <span className="flex min-w-0 flex-1 items-center gap-2">
-                <RunStateIcon state={run.state} className="size-3.5" />
+                <RunStateIcon
+                  state={run.state}
+                  attentionState={run.attentionState}
+                  startedAt={run.startedAt}
+                  endedAt={run.endedAt}
+                  hardDeadlineAt={run.hardDeadlineAt}
+                  lastModelActivityAt={run.lastModelActivityAt}
+                  className="size-3.5"
+                />
                 <TruncatedText
                   message={run.title}
                   maxLength={MAX_TITLE_LENGTH}

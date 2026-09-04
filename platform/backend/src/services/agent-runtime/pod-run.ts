@@ -105,6 +105,7 @@ async function startAgentRunSession(params: {
     workloadName: spec.frozenName,
     backend: backend.name,
     runtimeScope,
+    activeDeadlineSeconds: spec.activeDeadlineSeconds,
     virtualApiKeyId,
     completionTarget: params.completionTarget,
   });
@@ -393,6 +394,7 @@ function delayMs(ms: number, signal?: AbortSignal): Promise<void> {
  * whole transcript is the answer, exactly as before.
  */
 const FINAL_ANSWER_FENCE = "===ARCHESTRA-FINAL-ANSWER===";
+const FINAL_ANSWER_END_FENCE = "===ARCHESTRA-FINAL-ANSWER-END===";
 
 /**
  * Take what a runtime fenced as its final answer, else the whole transcript.
@@ -403,7 +405,9 @@ const FINAL_ANSWER_FENCE = "===ARCHESTRA-FINAL-ANSWER===";
 export function extractFinalAnswer(transcript: string): string {
   const start = transcript.lastIndexOf(FINAL_ANSWER_FENCE);
   if (start === -1) return transcript;
-  const answer = transcript.slice(start + FINAL_ANSWER_FENCE.length);
+  const answerStart = start + FINAL_ANSWER_FENCE.length;
+  const end = transcript.indexOf(FINAL_ANSWER_END_FENCE, answerStart);
+  const answer = transcript.slice(answerStart, end === -1 ? undefined : end);
   // A fence with nothing after it means the runtime died mid-write; the
   // transcript is worth more than an empty string.
   return answer.trim() === "" ? transcript : answer.replace(/^\r?\n/, "");

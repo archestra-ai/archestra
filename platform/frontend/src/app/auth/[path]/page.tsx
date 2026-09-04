@@ -32,7 +32,7 @@ export default async function AuthPage({
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingState variant="page" />}>
+      <Suspense fallback={<LoadingState variant="fill" />}>
         <AuthPageWithInvitationCheck path={path} />
       </Suspense>
     </ErrorBoundary>

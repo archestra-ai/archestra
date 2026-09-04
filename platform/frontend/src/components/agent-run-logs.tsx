@@ -38,6 +38,15 @@ export function AgentRunLogs({
   } = useDeploymentLogAutoScroll();
 
   useEffect(() => {
+    let receivedOutput = false;
+    let emptyRetryCount = 0;
+    let emptyRetryTimer: ReturnType<typeof setTimeout> | undefined;
+    const subscribeToLogs = () => {
+      websocketService.send({
+        type: "subscribe_agent_run_logs",
+        payload: { runId: run.taskId },
+      });
+    };
     setContent("");
     setError(undefined);
     setIsStreaming(!run.endedAt);
@@ -49,6 +58,7 @@ export function AgentRunLogs({
         "agent_run_logs",
         (message: AgentRunLogsMessage) => {
           if (message.payload.runId === run.taskId) {
+            receivedOutput = true;
             setContent((value) => value + message.payload.logs);
             followNewOutput();
           }
@@ -67,6 +77,15 @@ export function AgentRunLogs({
         "agent_run_logs_ended",
         (message: AgentRunLogsEndedMessage) => {
           if (message.payload.runId === run.taskId) {
+            if (!receivedOutput && emptyRetryCount < EMPTY_LOG_RETRY_LIMIT) {
+              emptyRetryCount += 1;
+              setIsStreaming(true);
+              emptyRetryTimer = setTimeout(
+                subscribeToLogs,
+                EMPTY_LOG_RETRY_DELAY_MS * emptyRetryCount,
+              );
+              return;
+            }
             setIsStreaming(false);
             if (message.payload.source) {
               setRetainedStatus({
@@ -78,11 +97,9 @@ export function AgentRunLogs({
         },
       ),
     ];
-    websocketService.send({
-      type: "subscribe_agent_run_logs",
-      payload: { runId: run.taskId },
-    });
+    subscribeToLogs();
     return () => {
+      if (emptyRetryTimer) clearTimeout(emptyRetryTimer);
       for (const unsubscribe of subscriptions) unsubscribe();
       websocketService.send({
         type: "unsubscribe_agent_run_logs",
@@ -128,6 +145,9 @@ export function AgentRunLogs({
     />
   );
 }
+
+const EMPTY_LOG_RETRY_LIMIT = 3;
+const EMPTY_LOG_RETRY_DELAY_MS = 250;
 
 function RetainedTranscriptStatus({
   status,

@@ -63169,6 +63169,24 @@
                       "runtimeScope": {
                         "type": "string"
                       },
+                      "attentionState": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "input_required",
+                              "auth_required"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
                       "virtualApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -63206,6 +63224,15 @@
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "hardDeadlineAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "lastModelActivityAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
                       }
                     },
                     "required": [
@@ -63222,12 +63249,15 @@
                       "workloadName",
                       "backend",
                       "runtimeScope",
+                      "attentionState",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",
                       "state",
                       "statusReason",
-                      "stateChangedAt"
+                      "stateChangedAt",
+                      "hardDeadlineAt",
+                      "lastModelActivityAt"
                     ],
                     "additionalProperties": false
                   }
@@ -63946,6 +63976,24 @@
                           "runtimeScope": {
                             "type": "string"
                           },
+                          "attentionState": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "input_required",
+                                  "auth_required"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
                           "virtualApiKeyId": {
                             "nullable": true,
                             "type": "string",
@@ -63980,6 +64028,15 @@
                             "type": "string"
                           },
                           "stateChangedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "hardDeadlineAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "lastModelActivityAt": {
                             "nullable": true,
                             "type": "string",
                             "format": "date-time"
@@ -64033,12 +64090,15 @@
                           "workloadName",
                           "backend",
                           "runtimeScope",
+                          "attentionState",
                           "virtualApiKeyId",
                           "startedAt",
                           "endedAt",
                           "state",
                           "statusReason",
                           "stateChangedAt",
+                          "hardDeadlineAt",
+                          "lastModelActivityAt",
                           "prompt",
                           "agent",
                           "projectName",
@@ -64421,6 +64481,24 @@
                     "runtimeScope": {
                       "type": "string"
                     },
+                    "attentionState": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "input_required",
+                            "auth_required"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
                     "virtualApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -64455,6 +64533,15 @@
                       "type": "string"
                     },
                     "stateChangedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hardDeadlineAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastModelActivityAt": {
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
@@ -64515,12 +64602,15 @@
                     "workloadName",
                     "backend",
                     "runtimeScope",
+                    "attentionState",
                     "virtualApiKeyId",
                     "startedAt",
                     "endedAt",
                     "state",
                     "statusReason",
                     "stateChangedAt",
+                    "hardDeadlineAt",
+                    "lastModelActivityAt",
                     "prompt",
                     "agent",
                     "projectName",
@@ -64883,6 +64973,24 @@
                     "runtimeScope": {
                       "type": "string"
                     },
+                    "attentionState": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "input_required",
+                            "auth_required"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
                     "virtualApiKeyId": {
                       "nullable": true,
                       "type": "string",
@@ -64917,6 +65025,15 @@
                       "type": "string"
                     },
                     "stateChangedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hardDeadlineAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastModelActivityAt": {
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
@@ -64970,12 +65087,15 @@
                     "workloadName",
                     "backend",
                     "runtimeScope",
+                    "attentionState",
                     "virtualApiKeyId",
                     "startedAt",
                     "endedAt",
                     "state",
                     "statusReason",
                     "stateChangedAt",
+                    "hardDeadlineAt",
+                    "lastModelActivityAt",
                     "prompt",
                     "agent",
                     "projectName",
@@ -280529,6 +280649,313 @@
         }
       }
     },
+    "/v1/mcp/{profileId}/runtime-status": {
+      "post": {
+        "operationId": "reportAgentRuntimeStatus",
+        "tags": [
+          "MCP Gateway"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "attentionState": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "input_required",
+                          "auth_required"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "nullable": true,
+                        "enum": [
+                          null
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "taskId",
+                  "attentionState"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "profileId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "updated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mcp-oauth-clients/labels/keys": {
       "get": {
         "operationId": "mcpOauthClientLabelKeys",
@@ -345326,6 +345753,24 @@
                       "runtimeScope": {
                         "type": "string"
                       },
+                      "attentionState": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "input_required",
+                              "auth_required"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
                       "virtualApiKeyId": {
                         "nullable": true,
                         "type": "string",
@@ -345360,6 +345805,15 @@
                         "type": "string"
                       },
                       "stateChangedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "hardDeadlineAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "lastModelActivityAt": {
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
@@ -345420,12 +345874,15 @@
                       "workloadName",
                       "backend",
                       "runtimeScope",
+                      "attentionState",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",
                       "state",
                       "statusReason",
                       "stateChangedAt",
+                      "hardDeadlineAt",
+                      "lastModelActivityAt",
                       "prompt",
                       "agent",
                       "projectName",

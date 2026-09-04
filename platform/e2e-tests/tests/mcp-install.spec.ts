@@ -26,10 +26,13 @@ test.describe("MCP Install", () => {
     adminPage,
     extractCookieHeaders,
   }) => {
-    // Tool discovery allows up to 120 seconds; leave room for the catalog and
-    // Kubernetes setup that happens before that readiness window begins.
-    test.setTimeout(180_000);
-
+    // The pod for this install runs `npx @upstash/context7-mcp`, which
+    // downloads the package from npm at container start — the pod is Ready
+    // long before the MCP process can answer. The backend's discovery loop
+    // (6 connect attempts, each with a 30s initialize timeout) tolerates up
+    // to ~3.5 minutes of that; the default 60s test timeout does not, and
+    // cut discovery short whenever npm was merely slow rather than down.
+    test.setTimeout(240_000);
     const CONTEXT7_CATALOG_ITEM_NAME = "context7";
 
     await deleteCatalogItem(
@@ -88,10 +91,14 @@ test.describe("MCP Install", () => {
     await goToMcpRegistry(adminPage);
     await waitForMcpServerCard(adminPage, CONTEXT7_CATALOG_ITEM_NAME);
 
-    // Check that tools are discovered
+    // Check that tools are discovered. The wait must cover the backend's full
+    // discovery budget (see the timeout note at the top of this test).
     await waitForMcpServerToolsDiscovered(
       adminPage,
       CONTEXT7_CATALOG_ITEM_NAME,
+      {
+        timeoutMs: 200_000,
+      },
     );
 
     // cleanup

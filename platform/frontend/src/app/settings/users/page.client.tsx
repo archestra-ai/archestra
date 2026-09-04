@@ -27,7 +27,7 @@ import {
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading";
 import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
@@ -141,7 +141,7 @@ function UsersPageContent() {
     : {};
 
   return (
-    <LoadingWrapper isPending={isOrgPending} loadingFallback={<LoadingState />}>
+    <LoadingWrapper isPending={isOrgPending} loadingFallback={null}>
       {activeOrg ? (
         <div className="space-y-6" {...tabPanelProps}>
           {activeTab === "users" ? (
@@ -626,7 +626,7 @@ function MembersTab({
         </FilterBar>
       </CollectionFilters>
 
-      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
+      <LoadingWrapper isPending={isPending} loadingFallback={null}>
         <BulkActions
           count={selectedMembers.length}
           noun="user"
@@ -1013,7 +1013,7 @@ function InvitationsTab({
         />
       </CollectionFilters>
 
-      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
+      <LoadingWrapper isPending={isPending} loadingFallback={null}>
         <DataTable
           columns={columns}
           data={invitations}

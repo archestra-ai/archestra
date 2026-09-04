@@ -75,7 +75,15 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   }
 
   if (!footerString) {
-    return null;
+    // Keep the footer's slot open while /health resolves. As a block footer it
+    // sits under content that centres in the remaining space, so appearing
+    // late would shift that content — including the auth surface's loading
+    // indicator — up by half this height.
+    return inline ? null : (
+      <div aria-hidden="true" className="py-4 text-xs">
+        &nbsp;
+      </div>
+    );
   }
 
   const className = inline

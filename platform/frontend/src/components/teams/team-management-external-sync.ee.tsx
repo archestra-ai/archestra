@@ -171,6 +171,25 @@ export function TeamManagementExternalSyncSection({
   return (
     <div className="space-y-6">
       <div className="grid max-w-3xl gap-4">
+        <div className="rounded-lg border bg-muted/30 p-3 text-xs">
+          <p>
+            Syncs <span className="font-medium">membership</span> only — matched
+            users join as{" "}
+            <span className="font-medium">Not able to edit team</span>. Org-wide
+            roles are synced separately by{" "}
+            {canUpdateIdentityProviders && selectedIdentityProvider ? (
+              <Link
+                href={`/settings/identity-providers?edit=${selectedIdentityProvider.id}&section=role-mapping`}
+                className="text-primary hover:underline"
+              >
+                Role Mapping
+              </Link>
+            ) : (
+              <span className="font-medium">Role Mapping</span>
+            )}{" "}
+            in the identity provider&apos;s settings.
+          </p>
+        </div>
         <div className="space-y-2">
           <Label>Identity Provider</Label>
           <FieldDescription>

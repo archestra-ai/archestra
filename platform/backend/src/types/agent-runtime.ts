@@ -23,6 +23,15 @@ export const AgentRunActorKindSchema = z.enum([
 ]);
 export type AgentRunActorKind = z.infer<typeof AgentRunActorKindSchema>;
 
+/** Non-lifecycle attention signal reported by a native runtime client. */
+export const AgentRunAttentionStateSchema = z.enum([
+  "input_required",
+  "auth_required",
+]);
+export type AgentRunAttentionState = z.infer<
+  typeof AgentRunAttentionStateSchema
+>;
+
 /**
  * How a steer message reaches the running process.
  *
@@ -188,6 +197,7 @@ export const SelectAgentRunRecordSchema = createSelectSchema(
 ).extend({
   backend: AgentRuntimeBackendSchema,
   actorKind: AgentRunActorKindSchema,
+  attentionState: z.union([AgentRunAttentionStateSchema, z.null()]),
   completionTarget: AgentRunCompletionTargetSchema.nullable(),
 });
 export const InsertAgentRunRecordSchema = createInsertSchema(
@@ -196,6 +206,9 @@ export const InsertAgentRunRecordSchema = createInsertSchema(
   .extend({
     backend: AgentRuntimeBackendSchema,
     actorKind: AgentRunActorKindSchema,
+    attentionState: z
+      .union([AgentRunAttentionStateSchema, z.null()])
+      .optional(),
     completionTarget: AgentRunCompletionTargetSchema.nullable().optional(),
   })
   .omit({ id: true, startedAt: true, endedAt: true });
@@ -205,10 +218,15 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
   completionTarget: true,
   completionNotificationClaimedAt: true,
   completionNotifiedAt: true,
+  activeDeadlineSeconds: true,
 }).extend({
   state: A2ATaskStateSchema,
   statusReason: z.string().nullable(),
   stateChangedAt: z.date().nullable(),
+  /** Effective Kubernetes lifetime limit, resolved for this run. */
+  hardDeadlineAt: z.date(),
+  /** Most recent model-router request attributed to this run. */
+  lastModelActivityAt: z.date().nullable(),
 });
 
 /** A user's durable run session as rendered in Chat and its sidebar. */

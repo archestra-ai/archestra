@@ -17952,12 +17952,15 @@ export type GetAgentRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
     }>;
 };
 
@@ -18156,12 +18159,15 @@ export type GetMyAgentRunsResponses = {
             workloadName: string;
             backend: 'kubernetes';
             runtimeScope: string;
+            attentionState: 'input_required' | 'auth_required' | null;
             virtualApiKeyId: string | null;
             startedAt: string;
             endedAt: string | null;
             state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
             statusReason: string | null;
             stateChangedAt: string | null;
+            hardDeadlineAt: string;
+            lastModelActivityAt: string | null;
             prompt: string;
             agent: {
                 id: string;
@@ -18361,12 +18367,15 @@ export type GetMyAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
         prompt: string;
         agent: {
             id: string;
@@ -18477,12 +18486,15 @@ export type UpdateAgentRunResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
         prompt: string;
         agent: {
             id: string;
@@ -71476,6 +71488,94 @@ export type McpGatewayPostResponses = {
     200: unknown;
 };
 
+export type ReportAgentRuntimeStatusData = {
+    body: {
+        taskId: string;
+        attentionState: 'input_required' | 'auth_required' | null;
+    };
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}/runtime-status';
+};
+
+export type ReportAgentRuntimeStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReportAgentRuntimeStatusError = ReportAgentRuntimeStatusErrors[keyof ReportAgentRuntimeStatusErrors];
+
+export type ReportAgentRuntimeStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updated: boolean;
+    };
+};
+
+export type ReportAgentRuntimeStatusResponse = ReportAgentRuntimeStatusResponses[keyof ReportAgentRuntimeStatusResponses];
+
 export type McpOauthClientLabelKeysData = {
     body?: never;
     path?: never;
@@ -88766,12 +88866,15 @@ export type GetProjectRunsResponses = {
         workloadName: string;
         backend: 'kubernetes';
         runtimeScope: string;
+        attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         statusReason: string | null;
         stateChangedAt: string | null;
+        hardDeadlineAt: string;
+        lastModelActivityAt: string | null;
         prompt: string;
         agent: {
             id: string;

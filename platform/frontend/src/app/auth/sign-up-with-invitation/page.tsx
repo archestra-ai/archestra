@@ -109,15 +109,15 @@ function SignUpWithInvitationContent() {
 
   if (isCheckingInvitation && invitationId) {
     return (
-      <main className="h-full flex items-center justify-center">
-        <LoadingState variant="page" />
+      <main className="h-full flex flex-col">
+        <LoadingState variant="fill" />
       </main>
     );
   }
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingState variant="page" />}>
+      <Suspense fallback={<LoadingState variant="fill" />}>
         <main className="h-full flex items-center justify-center p-4">
           <div className="w-full max-w-sm space-y-4">
             <AppLogo />

@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDeferredEnabled } from "@/lib/hooks/use-deferred-enabled";
 import {
   type SkillShareLink,
   useCreateSkillShareLink,
@@ -786,12 +787,27 @@ export type ConnectSkill = Pick<
 export function useAllSkills(params?: {
   enabled?: boolean;
   forAgentId?: string | null;
+  /**
+   * Hold the fetch back until the page has settled.
+   *
+   * This walks the whole skill catalogue a page at a time, and every row
+   * carries the skill's full `content`, so it is the heaviest thing the
+   * connection page asks for by a wide margin — and it feeds the review step,
+   * which nobody reads before the step above it. Deferring keeps it out of the
+   * burst that renders the part of the page people act on first.
+   */
+  deferMs?: number;
 }) {
   const forAgentId = params?.forAgentId ?? null;
+  const enabled = useDeferredEnabled(
+    params?.enabled ?? true,
+    params?.deferMs ?? 0,
+  );
+
   return useQuery({
     queryKey: ["skills", "connect-all", forAgentId],
     queryFn: () => fetchAllSkills(forAgentId),
-    enabled: params?.enabled,
+    enabled,
   });
 }
 

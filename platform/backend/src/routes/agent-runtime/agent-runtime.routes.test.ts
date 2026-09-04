@@ -10,6 +10,7 @@ import {
   A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
+  InteractionModel,
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -138,7 +139,35 @@ describe("Agent Runtime routes", () => {
       workloadName: `agent-run-${selectedTask.id}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
+      activeDeadlineSeconds: 3_600,
       virtualApiKeyId: null,
+    });
+    const latestInteraction = await InteractionModel.create({
+      profileId: agent.id,
+      runId: selectedTask.id,
+      request: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "Continue the run" }],
+      },
+      response: {
+        id: "test-response",
+        object: "chat.completion",
+        created: Date.now(),
+        model: "gpt-4",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "Continuing",
+              refusal: null,
+            },
+            finish_reason: "stop",
+            logprobs: null,
+          },
+        ],
+      },
+      type: "openai:chatCompletions",
     });
     await A2ATaskModel.transitionStateWithEvent({
       id: selectedTask.id,
@@ -180,14 +209,21 @@ describe("Agent Runtime routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([
+    const [listedRun] = response.json();
+    expect(listedRun).toEqual(
       expect.objectContaining({
         taskId: selectedTask.id,
         agentId: agent.id,
         state: "TASK_STATE_FAILED",
         statusReason: "The run process exited with status 1",
       }),
-    ]);
+    );
+    expect(
+      Date.parse(listedRun.hardDeadlineAt) - Date.parse(listedRun.startedAt),
+    ).toBe(3_600_000);
+    expect(listedRun.lastModelActivityAt).toBe(
+      latestInteraction.createdAt.toISOString(),
+    );
   });
 
   test("keeps every run endpoint unavailable when no run backend is enabled", async () => {

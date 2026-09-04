@@ -42,7 +42,7 @@ import {
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -865,42 +865,44 @@ export default function LimitsPage() {
           </FilterBar>
         </CollectionFilters>
 
-        <LoadingWrapper
-          isPending={(isPending || isFetching) && limits.length === 0}
-          loadingFallback={<LoadingState variant="page" />}
+        {/* The table reports its own first load, rather than a centred loader
+            standing in for it: swapping a full-height indicator out for the
+            table put the toolbar, headers and pagination on screen a beat
+            after the wait had already visibly ended, so one navigation read as
+            loader, then chrome, then rows. The table keeps its shape from the
+            first frame and fills in. */}
+        <BulkActions
+          count={selectedLimits.length}
+          noun="limit"
+          onClear={clearSelection}
+          busy={bulkDeleteLimits.isPending}
+          selectAllMatching={selectAllMatching}
         >
-          <BulkActions
-            count={selectedLimits.length}
-            noun="limit"
-            onClear={clearSelection}
-            busy={bulkDeleteLimits.isPending}
-            selectAllMatching={selectAllMatching}
+          <PermissionButton
+            permissions={{ llmLimit: ["delete"] }}
+            variant="destructive"
+            size="sm"
+            onClick={() => setIsBulkDeleteDialogOpen(true)}
           >
-            <PermissionButton
-              permissions={{ llmLimit: ["delete"] }}
-              variant="destructive"
-              size="sm"
-              onClick={() => setIsBulkDeleteDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-              <span>Delete</span>
-            </PermissionButton>
-          </BulkActions>
-          <DataTable
-            columns={columns}
-            data={filteredLimits}
-            getRowId={(limit) => limit.id}
-            rowSelection={rowSelection}
-            onRowSelectionChange={setRowSelection}
-            onPageRowIdsChange={onPageRowIdsChange}
-            hideSelectedCount
-            emptyIcon={CircleDollarSign}
-            emptyMessage="No limits configured"
-            hasActiveFilters={hasActiveFilters}
-            filteredEmptyMessage="No limits match your filters"
-            onClearFilters={clearFilters}
-          />
-        </LoadingWrapper>
+            <Trash2 className="h-4 w-4" />
+            <span>Delete</span>
+          </PermissionButton>
+        </BulkActions>
+        <DataTable
+          columns={columns}
+          data={filteredLimits}
+          getRowId={(limit) => limit.id}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          onPageRowIdsChange={onPageRowIdsChange}
+          hideSelectedCount
+          emptyIcon={CircleDollarSign}
+          emptyMessage="No limits configured"
+          hasActiveFilters={hasActiveFilters}
+          filteredEmptyMessage="No limits match your filters"
+          onClearFilters={clearFilters}
+          isLoading={(isPending || isFetching) && limits.length === 0}
+        />
       </BulkActionsScope>
 
       <FormDialog

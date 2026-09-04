@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import type React from "react";
 import { Button } from "@/components/ui/button";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
   TooltipContent,
@@ -101,18 +102,27 @@ export function McpAppRefreshButton({
   );
 }
 
-export function McpAppSettingsButton({ onClick }: { onClick: () => void }) {
+export function McpAppSettingsButton({
+  onClick,
+  disabledReason,
+}: {
+  onClick: () => void;
+  disabledReason?: string;
+}) {
   return (
-    <Button
+    <PermissionButton
+      permissions={{ app: ["update"] }}
       type="button"
       onClick={onClick}
+      disabled={!!disabledReason}
+      tooltip={disabledReason}
       variant="ghost"
       size="sm"
       className={LABELED_BUTTON_CLASS}
     >
       <Settings className="h-3.5 w-3.5" />
       Settings
-    </Button>
+    </PermissionButton>
   );
 }
 

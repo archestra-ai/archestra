@@ -17,7 +17,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
@@ -322,7 +322,7 @@ function ApiKeysCardContent() {
         </div>
         <LoadingWrapper
           isPending={(isPending || isFetching) && apiKeys.length === 0}
-          loadingFallback={<LoadingState variant="page" />}
+          loadingFallback={null}
         >
           <BulkActionsScope>
             <CollectionFilters>

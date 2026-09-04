@@ -8,7 +8,6 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { FilterBar } from "@/components/filter-bar";
-import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -59,7 +58,7 @@ function NewPluginGate() {
   const enabled = useFeature("plugins");
 
   if (enabled === undefined) {
-    return <LoadingState label="Loading plugins…" variant="page" />;
+    return null;
   }
 
   if (!enabled) {

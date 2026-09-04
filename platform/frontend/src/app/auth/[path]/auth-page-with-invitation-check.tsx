@@ -46,8 +46,8 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   // sign-up-with-invitation page
   if (invitationId && isSignUpPath) {
     return (
-      <main className="h-full flex items-center justify-center">
-        <LoadingState />
+      <main className="h-full flex flex-col">
+        <LoadingState variant="fill" />
       </main>
     );
   }

@@ -1,7 +1,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FilterBar } from "@/components/filter-bar";
 import { TableCardView } from "@/components/table-card-view";
 import { AppSection, matchesKind } from "./page.client";
@@ -30,10 +30,47 @@ vi.mock("@/lib/app.query", () => ({
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
+  useSession: () => ({ data: { user: { id: "user-1" } } }),
 }));
+
+vi.mock("@/lib/organization.query", () => ({
+  useOrganizationMembers: () => ({ data: [] }),
+}));
+
+const { appAccessState } = vi.hoisted(() => ({
+  appAccessState: { canEdit: true, canDeleteApp: true },
+}));
+
+vi.mock("@/lib/apps/use-app-access", () => {
+  const access = {
+    isAdmin: true,
+    isTeamAdmin: true,
+    canUpdate: true,
+    canDelete: true,
+    currentUserId: "user-1",
+    userTeamIds: new Set<string>(),
+    isPending: false,
+    canModify: true,
+  };
+  return {
+    useAppAccessContext: () => access,
+    useAppAccess: () => ({ ...access, ...appAccessState }),
+    computeAppAccess: () => ({ ...access, ...appAccessState }),
+    appActionDisabledReason: () =>
+      appAccessState.canEdit
+        ? undefined
+        : "Only an admin can change this org-wide app",
+  };
+});
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
+}));
+
+vi.mock("@/lib/teams/team.query", () => ({
+  useAssignableTeams: () => ({
+    data: [{ id: "leadership", name: "Leadership" }],
+  }),
 }));
 
 vi.mock("@/components/ui/permission-button", () => ({
@@ -115,6 +152,11 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   requiresInput: false,
 };
 
+beforeEach(() => {
+  appAccessState.canEdit = true;
+  appAccessState.canDeleteApp = true;
+});
+
 describe("matchesKind", () => {
   it("matches every app when kind is all", () => {
     expect(matchesKind(ownedApp, "all")).toBe(true);
@@ -170,6 +212,23 @@ describe("AppSection cards", () => {
     expect(screen.queryByText("1 app selected")).not.toBeInTheDocument();
   });
 
+  it("keeps an owned app out of bulk selection when scope rules deny changes", () => {
+    appAccessState.canEdit = false;
+    appAccessState.canDeleteApp = false;
+    renderAppSection([ownedApp]);
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Select My Owned App",
+    });
+    expect(checkbox).toBeDisabled();
+    expect(
+      screen.getByTitle("Only an admin can change this org-wide app"),
+    ).toContainElement(checkbox);
+
+    fireEvent.click(checkbox);
+    expect(screen.queryByText("1 app selected")).not.toBeInTheDocument();
+  });
+
   it("shift-selects owned card ranges while skipping an external MCP app", () => {
     renderAppSection([
       ownedApp,
@@ -189,11 +248,51 @@ describe("AppSection cards", () => {
       screen.getByText("2 apps selected", { selector: '[aria-hidden="true"]' }),
     ).toBeVisible();
   });
+
+  it("keeps Sharing compact while the app name absorbs table width", () => {
+    const { container } = renderAppSection([ownedApp], "table");
+
+    expect(container.querySelector('th[data-column-id="sharing"]')).toHaveStyle(
+      { width: "160px" },
+    );
+    expect(
+      (container.querySelector('th[data-column-id="name"]') as HTMLElement)
+        .style.width,
+    ).toBe("");
+  });
+
+  it("warns about losing chat authoring access in bulk visibility too", () => {
+    renderAppSection([
+      {
+        ...ownedApp,
+        scope: "team",
+        teams: [{ id: "leadership", name: "Leadership" }],
+      },
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select My Owned App" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit visibility" }));
+
+    expect(
+      screen.getByText("You are not a member of the selected teams."),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/will not be able to modify this app through chat/i),
+    ).toBeVisible();
+  });
 });
 
-function renderAppSection(apps: AppListItem[] = [ownedApp, externalApp]) {
+function renderAppSection(
+  apps: AppListItem[] = [ownedApp, externalApp],
+  defaultMode: "cards" | "table" = "cards",
+) {
   return render(
-    <TableCardView storageKey="apps-test-view" defaultMode="cards">
+    <TableCardView
+      storageKey={`apps-test-view-${defaultMode}`}
+      defaultMode={defaultMode}
+    >
       <FilterBar>
         <span>Filters</span>
       </FilterBar>

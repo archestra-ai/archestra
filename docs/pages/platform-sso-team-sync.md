@@ -24,7 +24,7 @@ Archestra supports automatic team membership synchronization based on user group
 1. Admin configures an Archestra team and links it to one or more external IdP groups
 2. When a user logs in via SSO, their group memberships are extracted from the SSO token
 3. Archestra compares the user's IdP groups against the external groups linked to each team
-4. **Added:** users in a linked group are automatically added to the team, without the ability to edit it — see [Teams](/docs/platform-teams)
+4. **Added:** users in a linked group are automatically added to the team
 5. **Removed:** users no longer in any linked group are automatically removed (if they were added via sync)
 6. **Manual members preserved:** members added manually to a team are never removed by sync
 
@@ -184,4 +184,3 @@ When editing an existing OIDC provider, check **Latest ID token claims** in the 
 
 - [Role Mapping](/docs/platform-sso-role-mapping) — map IdP claims to Archestra roles using Handlebars
 - [Identity Providers](/docs/platform-identity-providers) — provider list and SSO setup
-- [Teams](/docs/platform-teams) — the Edit Team screen, and choosing who can edit a team

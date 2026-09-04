@@ -1508,6 +1508,60 @@ describe("agent routes", () => {
       expect((await findAgent("&includeTools=true")).tools).toHaveLength(1);
     });
 
+    test("returns a compact roster for chat without changing the default response", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const embeddedIcon = `data:image/png;base64,${"A".repeat(2_048)}`;
+      const systemPrompt = "Follow the configured operating instructions.";
+      const agent = await makeAgent({
+        name: `Compact Chat Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+        icon: embeddedIcon,
+        systemPrompt,
+      });
+      const tool = await makeTool({});
+      await makeAgentTool(agent.id, tool.id);
+
+      const chatResponse = await app.inject({
+        method: "GET",
+        url: "/api/agents/all?excludeBuiltIn=true&view=chat",
+      });
+
+      expect(chatResponse.statusCode).toBe(200);
+      const chatAgent = chatResponse
+        .json()
+        .find((candidate: { id: string }) => candidate.id === agent.id);
+      expect(chatAgent).toMatchObject({
+        id: agent.id,
+        name: agent.name,
+        icon: null,
+        systemPrompt: null,
+        tools: [],
+        teams: [],
+        users: [],
+        labels: [],
+      });
+
+      const defaultResponse = await app.inject({
+        method: "GET",
+        url: "/api/agents/all?excludeBuiltIn=true",
+      });
+
+      expect(defaultResponse.statusCode).toBe(200);
+      const fullAgent = defaultResponse
+        .json()
+        .find((candidate: { id: string }) => candidate.id === agent.id);
+      expect(fullAgent).toMatchObject({
+        icon: embeddedIcon,
+        systemPrompt,
+      });
+      expect(fullAgent.tools).toHaveLength(1);
+    });
+
     test("should exclude built-in agents when excludeBuiltIn=true", async ({
       makeAgent,
       seedAndAssignArchestraTools,

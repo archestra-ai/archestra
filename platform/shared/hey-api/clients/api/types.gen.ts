@@ -13409,6 +13409,10 @@ export type GetAllAgentsData = {
          * Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
          */
         includeTools?: boolean;
+        /**
+         * Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it.
+         */
+        view?: 'chat';
     };
     url: '/api/agents/all';
 };

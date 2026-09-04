@@ -4,7 +4,7 @@ import type { FileUIPart } from "ai";
 import { useMemo } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
-import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import { useMemberDefaultModel } from "@/lib/chat/chat.query";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
@@ -56,7 +56,7 @@ export function NewChatComposer({
   isProjectLoading?: boolean;
   isSubmitting?: boolean;
 }) {
-  const { data: internalAgents = [] } = useInternalAgents();
+  const { data: internalAgents = [] } = useChatAgents();
   const { data: defaultAgentId } = useDefaultAgentId();
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider();

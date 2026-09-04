@@ -3,7 +3,7 @@ title: "API Reference"
 category: Archestra Platform
 description: "Interactive API documentation for Archestra"
 order: 6
-lastUpdated: 2026-08-02
+lastUpdated: 2026-09-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -28,6 +28,8 @@ from **Settings → Service Accounts**, assign a role, and create an API key.
 Service account requests authorize from the service account's assigned role.
 Disable or delete the service account to stop all of its keys, or delete an
 individual key when rotating credentials.
+
+See [LLM API Permissions](platform-access-control#llm-api-permissions) for cost and log export roles.
 
 Use service accounts for CI, scheduled jobs, shared integrations, and production
 automation that should not depend on an individual user remaining active.

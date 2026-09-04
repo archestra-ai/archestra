@@ -112,6 +112,70 @@ describe("enrichOpenApiWithRbac", () => {
     expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
   });
 
+  it("documents row-level log scope alongside the static permission", () => {
+    const spec = {
+      paths: {
+        "/api/interactions": {
+          get: {
+            operationId: RouteId.GetInteractions,
+            description: "List interactions",
+          },
+        },
+      },
+    };
+
+    const enriched = enrichOpenApiWithRbac(spec);
+    const operation = enriched.paths["/api/interactions"].get as {
+      description?: string;
+      "x-required-permissions"?: {
+        kind: "dynamic" | "none" | "static";
+        note?: string;
+        permissions: string[];
+      };
+    };
+
+    expect(operation["x-required-permissions"]).toEqual({
+      kind: "static",
+      note: expect.stringContaining("`log:admin` includes"),
+      permissions: ["log:read"],
+    });
+    expect(operation.description).toContain(
+      "`log:admin` includes every row in the active organization.",
+    );
+  });
+
+  it("documents the extra permission that widens per-user statistics", () => {
+    const spec = {
+      paths: {
+        "/api/statistics/users": {
+          get: {
+            operationId: RouteId.GetUserStatistics,
+            description: "List user statistics",
+          },
+        },
+      },
+    };
+
+    const enriched = enrichOpenApiWithRbac(spec);
+    const operation = enriched.paths["/api/statistics/users"].get as {
+      description?: string;
+      "x-required-permissions"?: {
+        kind: "dynamic" | "none" | "static";
+        note?: string;
+        permissions: string[];
+      };
+    };
+
+    expect(operation["x-required-permissions"]).toEqual({
+      kind: "static",
+      note: expect.stringContaining("`member:read` includes"),
+      permissions: ["llmCost:read"],
+    });
+    expect(operation.description).toContain(
+      "`member:read` includes identified users across the active organization.",
+    );
+  });
+
   it("documents public api routes as not requiring authentication", () => {
     const spec = {
       paths: {

@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { AppAccessModel, SkillTeamModel, StatisticsModel } from "@/models";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
@@ -75,23 +75,19 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetTeamStatistics,
-        description: "Get team statistics",
+        description:
+          "Get usage statistics for every team in the active organization.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(z.array(TeamStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
+    async ({ query: { timeframe }, organizationId }, reply) => {
       return reply.send(
-        await StatisticsModel.getTeamStatistics(
+        await StatisticsModel.getTeamStatistics({
           timeframe,
-          user.id,
-          isAgentAdmin,
-        ),
+          organizationId,
+        }),
       );
     },
   );
@@ -101,24 +97,19 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetAgentStatistics,
-        description: "Get agent statistics",
+        description:
+          "Get usage statistics for every agent in the active organization.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(z.array(AgentStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
+    async ({ query: { timeframe }, organizationId }, reply) => {
       return reply.send(
-        await StatisticsModel.getAgentStatistics(
+        await StatisticsModel.getAgentStatistics({
           timeframe,
-          user.id,
-          isAgentAdmin,
-        ),
+          organizationId,
+        }),
       );
     },
   );
@@ -128,24 +119,19 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetModelStatistics,
-        description: "Get model statistics",
+        description:
+          "Get model usage statistics for every interaction in the active organization.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(z.array(ModelStatisticsSchema)),
       },
     },
-    async ({ query: { timeframe }, user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
+    async ({ query: { timeframe }, organizationId }, reply) => {
       return reply.send(
-        await StatisticsModel.getModelStatistics(
+        await StatisticsModel.getModelStatistics({
           timeframe,
-          user.id,
-          isAgentAdmin,
-        ),
+          organizationId,
+        }),
       );
     },
   );
@@ -156,7 +142,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetUserStatistics,
         description:
-          "Get per-user usage statistics (requests, tokens, cost and model mix), for AI-adoption reporting. Paginated because user cardinality is unbounded. Only traffic that carries a resolved user identity is included; requests authenticated with a shared credential and no user context are not attributed to anyone.",
+          "Get organization-wide per-user usage statistics (requests, tokens, cost and model mix), for AI-adoption reporting. Paginated because user cardinality is unbounded. Only traffic that carries a resolved user identity is included; requests authenticated with a shared credential and no user context are not attributed to anyone. Callers without `member:read` see only their own usage.",
         tags: ["Statistics"],
         querystring: UserStatisticsQuerySchema,
         response: constructResponseSchema(
@@ -182,11 +168,6 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
       // Seeing other people's usage implies seeing the roster, so it is gated
       // on the same permission that gates the full member list. Without it the
       // model narrows results to the caller's own usage.
@@ -200,13 +181,13 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await StatisticsModel.getUserStatistics({
           timeframe,
+          organizationId,
           pagination: { limit, offset },
           sortBy: sortBy ?? "totalTokens",
           sortDirection,
           includeTimeSeries,
           includeModels,
           requestingUserId: user.id,
-          isAgentAdmin,
           canReadAllUsers,
         }),
       );
@@ -358,24 +339,19 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetOverviewStatistics,
-        description: "Get overview statistics",
+        description:
+          "Get organization-wide usage totals and leaders for the active organization. Agent administration permission is not required.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(OverviewStatisticsSchema),
       },
     },
-    async ({ query: { timeframe }, user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
+    async ({ query: { timeframe }, organizationId }, reply) => {
       return reply.send(
-        await StatisticsModel.getOverviewStatistics(
+        await StatisticsModel.getOverviewStatistics({
           timeframe,
-          user.id,
-          isAgentAdmin,
-        ),
+          organizationId,
+        }),
       );
     },
   );
@@ -385,24 +361,19 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetCostSavingsStatistics,
-        description: "Get cost savings statistics",
+        description:
+          "Get organization-wide cost savings statistics for the active organization. Agent administration permission is not required.",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
         response: constructResponseSchema(CostSavingsStatisticsSchema),
       },
     },
-    async ({ query: { timeframe }, user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
+    async ({ query: { timeframe }, organizationId }, reply) => {
       return reply.send(
-        await StatisticsModel.getCostSavingsStatistics(
+        await StatisticsModel.getCostSavingsStatistics({
           timeframe,
-          user.id,
-          isAgentAdmin,
-        ),
+          organizationId,
+        }),
       );
     },
   );

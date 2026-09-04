@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
+import { hasPermission } from "@/auth";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -33,7 +33,6 @@ describe("GET /api/statistics/users", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
 
-    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(true);
     setCanReadAllUsers(true);
 
     app = createFastifyInstance();
@@ -236,6 +235,138 @@ describe("GET /api/statistics/users", () => {
       topModel: "gpt-4o",
     });
   });
+
+  test("includes usage from agents with no team in overview totals", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      name: "Unteamed Agent",
+      scope: "org",
+    });
+    await makeInteraction(agent.id, {
+      inputTokens: 30,
+      outputTokens: 20,
+      cost: "1.5000000000",
+      model: "gpt-4o",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/overview?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      totalRequests: 1,
+      totalTokens: 50,
+      totalCost: 1.5,
+      topAgent: "Unteamed Agent",
+      topModel: "gpt-4o",
+    });
+  });
+
+  test("reports every interaction in the active organization and excludes other organizations", async ({
+    makeAgent,
+    makeInteraction,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const agentOwner = await makeUser();
+    const organizationTeam = await makeTeam(organizationId, agentOwner.id, {
+      name: "Organization Team",
+    });
+    const organizationAgent = await makeAgent({
+      organizationId,
+      authorId: agentOwner.id,
+      name: "Organization Agent",
+      scope: "personal",
+      teams: [organizationTeam.id],
+    });
+    await makeInteraction(organizationAgent.id, {
+      userId: agentOwner.id,
+      inputTokens: 60,
+      outputTokens: 40,
+      cost: "2.0000000000",
+      model: "organization-model",
+    });
+
+    const otherOrganization = await makeOrganization();
+    const otherTeam = await makeTeam(otherOrganization.id, agentOwner.id, {
+      name: "Other Organization Team",
+    });
+    const otherAgent = await makeAgent({
+      organizationId: otherOrganization.id,
+      authorId: agentOwner.id,
+      name: "Other Organization Agent",
+      scope: "org",
+      teams: [otherTeam.id],
+    });
+    await makeInteraction(otherAgent.id, {
+      userId: agentOwner.id,
+      inputTokens: 900,
+      outputTokens: 100,
+      cost: "20.0000000000",
+      model: "other-organization-model",
+    });
+
+    const [teams, agents, models, users, overview, savings] = await Promise.all(
+      [
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/teams?timeframe=24h",
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/agents?timeframe=24h",
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/models?timeframe=24h",
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/users?timeframe=24h",
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/overview?timeframe=24h",
+        }),
+        app.inject({
+          method: "GET",
+          url: "/api/statistics/cost-savings?timeframe=24h",
+        }),
+      ],
+    );
+
+    expect(teams.json().map((row: { teamId: string }) => row.teamId)).toEqual([
+      organizationTeam.id,
+    ]);
+    expect(
+      agents.json().map((row: { agentId: string }) => row.agentId),
+    ).toEqual([organizationAgent.id]);
+    expect(models.json().map((row: { model: string }) => row.model)).toEqual([
+      "organization-model",
+    ]);
+    expect(users.json().data).toEqual([
+      expect.objectContaining({
+        userId: agentOwner.id,
+        totalTokens: 100,
+        billedCost: 2,
+      }),
+    ]);
+    expect(overview.json()).toMatchObject({
+      totalRequests: 1,
+      totalTokens: 100,
+      totalCost: 2,
+      topAgent: "Organization Agent",
+      topModel: "organization-model",
+    });
+    expect(savings.json().totalActualCost).toBe(2);
+  });
 });
 
 describe("GET /api/statistics/apps", () => {
@@ -248,7 +379,6 @@ describe("GET /api/statistics/apps", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
 
-    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(true);
     vi.mocked(hasPermission).mockResolvedValue({ success: true } as Awaited<
       ReturnType<typeof hasPermission>
     >);
@@ -357,7 +487,6 @@ describe("GET /api/statistics/skills", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
 
-    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(true);
     vi.mocked(hasPermission).mockResolvedValue({ success: true } as Awaited<
       ReturnType<typeof hasPermission>
     >);
@@ -450,7 +579,6 @@ describe("GET /api/statistics/me", () => {
 
     // The caller is deliberately given nothing: this endpoint is the one
     // statistics view that must work without cost or roster permissions.
-    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
     vi.mocked(hasPermission).mockResolvedValue({
       success: false,
     } as Awaited<ReturnType<typeof hasPermission>>);
@@ -667,7 +795,6 @@ describe("GET /api/statistics/me/breakdown", () => {
 
     // Same deliberate absence of permissions as the sibling endpoint: this cut
     // reports only the caller's own activity, so it must work with none.
-    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
     vi.mocked(hasPermission).mockResolvedValue({
       success: false,
     } as Awaited<ReturnType<typeof hasPermission>>);

@@ -169,8 +169,14 @@ function getRbacMetadata(operationId: string): RequiredPermissionsExtension {
     };
   }
 
+  const note =
+    STATIC_ROUTE_PERMISSION_NOTES[
+      operationId as keyof typeof STATIC_ROUTE_PERMISSION_NOTES
+    ];
+
   return {
     kind: "static",
+    ...(note ? { note } : {}),
     permissions,
   };
 }
@@ -242,6 +248,7 @@ function createPermissionSection(
         (permission) =>
           `\`${permission}\`: ${permissionDescriptions[permission] ?? "No description available"}`,
       ),
+      ...(metadata.note ? ["", metadata.note] : []),
     ].join("\n");
   }
 
@@ -289,6 +296,41 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Restricted to the built-in Admin and Platform Admin roles. No permission grants it: `skill:delete` and even `skill:admin` reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the skill exists.",
   [RouteId.PermanentlyDeleteProject]:
     "Restricted to the built-in Admin and Platform Admin roles. No permission grants it: `project:delete`, `project:admin`, and ownership of the project all reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the project exists.",
+} satisfies Partial<Record<RouteId, string>>;
+
+const STATIC_ROUTE_PERMISSION_NOTES = {
+  [RouteId.GetInteractions]:
+    "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+  [RouteId.GetInteractionSummaries]:
+    "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+  [RouteId.GetInteractionSessions]:
+    "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+  [RouteId.GetUniqueExternalAgentIds]:
+    "`log:read` returns identifiers from rows attributed to the caller. `log:admin` includes identifiers from every row in the active organization.",
+  [RouteId.GetUniqueUserIds]:
+    "`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
+  [RouteId.GetInteraction]:
+    "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
+  [RouteId.GetMcpToolCalls]:
+    "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
+  [RouteId.GetMcpToolCall]:
+    "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
+  [RouteId.GetTeamStatistics]:
+    "Returns aggregate team usage for the active organization.",
+  [RouteId.GetAgentStatistics]:
+    "Returns aggregate usage for every agent in the active organization.",
+  [RouteId.GetModelStatistics]:
+    "Returns aggregate model usage for the active organization.",
+  [RouteId.GetOverviewStatistics]:
+    "Returns aggregate usage for the active organization.",
+  [RouteId.GetCostSavingsStatistics]:
+    "Returns aggregate cost savings for the active organization.",
+  [RouteId.GetUserStatistics]:
+    "Returns the caller's usage. `member:read` includes identified users across the active organization.",
+  [RouteId.GetAppStatistics]:
+    "App details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.",
+  [RouteId.GetSkillStatistics]:
+    "Skill details are limited to skills visible to the caller; `skill:admin` includes every skill in the active organization.",
 } satisfies Partial<Record<RouteId, string>>;
 
 const PUBLIC_UNAUTHENTICATED_ROUTE_IDS = new Set<RouteId>([

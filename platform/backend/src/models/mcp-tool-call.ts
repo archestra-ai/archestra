@@ -42,6 +42,7 @@ import {
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
+import { mcpToolCallBelongsToOrganization } from "./log-organization";
 
 /**
  * Builds a search condition for MCP tool calls across server name, method,
@@ -103,6 +104,7 @@ class McpToolCallModel {
     userId?: string,
     isMcpServerAdmin?: boolean,
     filters?: {
+      organizationId?: string;
       startDate?: Date;
       endDate?: Date;
       search?: string;
@@ -181,6 +183,7 @@ class McpToolCallModel {
     userId?: string,
     isMcpServerAdmin?: boolean,
     filters?: {
+      organizationId?: string;
       agentId?: string;
       startDate?: Date;
       endDate?: Date;
@@ -286,6 +289,7 @@ class McpToolCallModel {
     userId?: string,
     isMcpServerAdmin?: boolean,
     filters?: {
+      organizationId?: string;
       agentId?: string;
       startDate?: Date;
       endDate?: Date;
@@ -295,6 +299,10 @@ class McpToolCallModel {
     },
   ): Promise<SQL[] | null> {
     const conditions: SQL[] = [];
+
+    if (filters?.organizationId) {
+      conditions.push(mcpToolCallBelongsToOrganization(filters.organizationId));
+    }
 
     if (filters?.agentId) {
       conditions.push(eq(schema.mcpToolCallsTable.agentId, filters.agentId));
@@ -344,10 +352,13 @@ class McpToolCallModel {
   }
 
   static async findById(
-    id: string,
+    idOrScope: string | { id: string; organizationId: string },
     userId?: string,
     isMcpServerAdmin?: boolean,
   ): Promise<McpToolCall | null> {
+    const id = typeof idOrScope === "string" ? idOrScope : idOrScope.id;
+    const organizationId =
+      typeof idOrScope === "string" ? undefined : idOrScope.organizationId;
     const [mcpToolCall] = await db
       .select({
         ...getTableColumns(schema.mcpToolCallsTable),
@@ -369,7 +380,14 @@ class McpToolCallModel {
         schema.appsTable,
         eq(schema.mcpToolCallsTable.appId, schema.appsTable.id),
       )
-      .where(eq(schema.mcpToolCallsTable.id, id));
+      .where(
+        and(
+          eq(schema.mcpToolCallsTable.id, id),
+          ...(organizationId
+            ? [mcpToolCallBelongsToOrganization(organizationId)]
+            : []),
+        ),
+      );
 
     if (!mcpToolCall) {
       return null;

@@ -155078,7 +155078,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all interactions with pagination and sorting\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get interactions in the active organization with pagination and sorting. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -189438,6 +189438,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
           "permissions": [
             "log:read"
           ]
@@ -189450,7 +189451,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get paginated interaction metadata without request and response payloads\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get paginated interaction metadata in the active organization without request and response payloads. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -190012,6 +190013,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
           "permissions": [
             "log:read"
           ]
@@ -190024,7 +190026,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all interaction sessions grouped by session ID with aggregated stats\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get interaction sessions in the active organization, grouped by session ID with aggregated statistics. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -190716,6 +190718,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
           "permissions": [
             "log:read"
           ]
@@ -190728,7 +190731,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get external agent IDs from visible logs in the active organization. `log:read` returns identifiers from the caller's attributed rows; `log:admin` returns identifiers from every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns identifiers from rows attributed to the caller. `log:admin` includes identifiers from every row in the active organization.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -190987,6 +190990,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`log:read` returns identifiers from rows attributed to the caller. `log:admin` includes identifiers from every row in the active organization.",
           "permissions": [
             "log:read"
           ]
@@ -190999,7 +191003,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get user IDs represented in visible logs in the active organization. `log:read` returns the caller's identity; `log:admin` returns every represented user in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -191258,6 +191262,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
           "permissions": [
             "log:read"
           ]
@@ -191270,7 +191275,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get interaction by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get an interaction in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -225477,6 +225482,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
           "permissions": [
             "log:read"
           ]
@@ -290628,7 +290634,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get all MCP tool calls with cursor pagination\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get MCP tool calls in the active organization with cursor pagination. `log:read` returns rows attributed to the caller. `log:admin` includes every row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -291112,6 +291118,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`log:read` returns rows attributed to the caller. `log:admin` includes every row in the active organization.",
           "permissions": [
             "log:read"
           ]
@@ -291124,7 +291131,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get MCP tool call by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
+        "description": "Get an MCP tool call in the active organization by ID. `log:read` permits a row attributed to the caller. `log:admin` permits any row in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -291521,6 +291528,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "`log:read` permits a row attributed to the caller. `log:admin` permits any row in the active organization.",
           "permissions": [
             "log:read"
           ]
@@ -374615,7 +374623,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get team statistics\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get usage statistics for every team in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate team usage for the active organization.",
         "parameters": [
           {
             "schema": {
@@ -374950,6 +374958,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "Returns aggregate team usage for the active organization.",
           "permissions": [
             "llmCost:read"
           ]
@@ -374962,7 +374971,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get agent statistics\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get usage statistics for every agent in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate usage for every agent in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -375301,6 +375310,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "Returns aggregate usage for every agent in the active organization.",
           "permissions": [
             "llmCost:read"
           ]
@@ -375313,7 +375323,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get model statistics\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get model usage statistics for every interaction in the active organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate model usage for the active organization.",
         "parameters": [
           {
             "schema": {
@@ -375644,6 +375654,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "Returns aggregate model usage for the active organization.",
           "permissions": [
             "llmCost:read"
           ]
@@ -375656,7 +375667,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get per-user usage statistics (requests, tokens, cost and model mix), for AI-adoption reporting. Paginated because user cardinality is unbounded. Only traffic that carries a resolved user identity is included; requests authenticated with a shared credential and no user context are not attributed to anyone.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get organization-wide per-user usage statistics (requests, tokens, cost and model mix), for AI-adoption reporting. Paginated because user cardinality is unbounded. Only traffic that carries a resolved user identity is included; requests authenticated with a shared credential and no user context are not attributed to anyone. Callers without `member:read` see only their own usage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns the caller's usage. `member:read` includes identified users across the active organization.",
         "parameters": [
           {
             "schema": {
@@ -376174,6 +376185,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "Returns the caller's usage. `member:read` includes identified users across the active organization.",
           "permissions": [
             "llmCost:read"
           ]
@@ -377051,7 +377063,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe — the baseline is returned alongside so the estimate is auditable. Paginated. Apps outside the caller's visibility are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe — the baseline is returned alongside so the estimate is auditable. Paginated. Apps outside the caller's visibility are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nApp details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -377516,6 +377528,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "App details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.",
           "permissions": [
             "app:read",
             "llmCost:read"
@@ -377529,7 +377542,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get per-skill cost. `contextTokens` is the skill's own footprint — the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone — they are computed for the returned page, so they are not a sortable column. Paginated; skills outside the caller's scope are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "description": "Get per-skill cost. `contextTokens` is the skill's own footprint — the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone — they are computed for the returned page, so they are not a sortable column. Paginated; skills outside the caller's scope are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)\n\nSkill details are limited to skills visible to the caller; `skill:admin` includes every skill in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -377960,6 +377973,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "Skill details are limited to skills visible to the caller; `skill:admin` includes every skill in the active organization.",
           "permissions": [
             "llmCost:read",
             "skill:read"
@@ -377973,7 +377987,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get overview statistics\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get organization-wide usage totals and leaders for the active organization. Agent administration permission is not required.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate usage for the active organization.",
         "parameters": [
           {
             "schema": {
@@ -378277,6 +378291,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "Returns aggregate usage for the active organization.",
           "permissions": [
             "llmCost:read"
           ]
@@ -378289,7 +378304,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get cost savings statistics\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "description": "Get organization-wide cost savings statistics for the active organization. Agent administration permission is not required.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nReturns aggregate cost savings for the active organization.",
         "parameters": [
           {
             "schema": {
@@ -378629,6 +378644,7 @@
         },
         "x-required-permissions": {
           "kind": "static",
+          "note": "Returns aggregate cost savings for the active organization.",
           "permissions": [
             "llmCost:read"
           ]

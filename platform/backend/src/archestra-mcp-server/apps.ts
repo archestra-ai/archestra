@@ -2,12 +2,14 @@ import {
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
+  TOOL_LIST_APP_VERSIONS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_RESTORE_APP_VERSION_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SET_APP_LABELS_SHORT_NAME,
   TOOL_SET_APP_LOCK_SHORT_NAME,
@@ -72,6 +74,7 @@ import {
   validateAppHtmlStatic,
 } from "@/services/apps/app-ui-policy";
 import { mergeStaleBaseDocument } from "@/services/apps/app-version-merge";
+import { restoreAppVersion } from "@/services/apps/app-version-restore";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
@@ -194,6 +197,22 @@ const ReadAppSchema = z.strictObject({
     ),
 });
 
+const RestoreAppVersionSchema = z.strictObject({
+  appId: appIdField("The app id."),
+  version: z
+    .number()
+    .int()
+    .positive()
+    .describe("The historical version to restore."),
+  baseVersion: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "The current head version. This prevents overwriting a newer edit that landed after the rollback was requested.",
+    ),
+});
+
 const EditAppSchema = z.strictObject({
   appId: appIdField("The app id."),
   baseVersion: z
@@ -307,6 +326,18 @@ const AppSummaryOutputSchema = z.object({
     .describe(
       "Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app.",
     ),
+});
+
+const ListAppVersionsOutputSchema = z.object({
+  appId: z.string(),
+  latestVersion: z.number(),
+  versions: z.array(
+    z.object({
+      version: z.number(),
+      createdAt: z.string(),
+      current: z.boolean(),
+    }),
+  ),
 });
 
 const ReadAppOutputSchema = z.object({
@@ -862,6 +893,37 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_LIST_APP_VERSIONS_SHORT_NAME,
+    title: "List App Versions",
+    description:
+      "List the immutable versions of an app, newest first, without returning their HTML. Use this before restore_app_version when the user did not provide an exact version number; the result identifies the current version and makes 'previous version' unambiguous.",
+    schema: GetAppSchema,
+    outputSchema: ListAppVersionsOutputSchema,
+    async handler({ args, context }) {
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({ ...auth, appId: args.appId });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
+      const versions = (await AppVersionModel.listSummariesForApp(app.id)).map(
+        (version) => ({
+          version: version.version,
+          createdAt: version.createdAt.toISOString(),
+          current: version.version === app.latestVersion,
+        }),
+      );
+      const structured = {
+        appId: app.id,
+        latestVersion: app.latestVersion,
+        versions,
+      };
+      return structuredSuccessResult(
+        structured,
+        fencedBlock(JSON.stringify(structured, null, 2), "json"),
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_RENDER_APP_SHORT_NAME,
     title: "Render App",
     description:
@@ -966,6 +1028,53 @@ const registry = defineArchestraTools([
         },
         `App "${escapeAppNameForModelText(app.name)}" (${app.id}) version ${row.version}, ${byteSize} bytes${windowNote}:\n\n${fencedBlock(html, "html")}`,
       );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_RESTORE_APP_VERSION_SHORT_NAME,
+    title: "Restore App Version",
+    description:
+      "Restore a historical app version directly on the server as a new head version. Use this for every rollback instead of calling read_app and reproducing old HTML through edit_app. Pass the app's current latestVersion as baseVersion; the call fails if another edit wins the race. The historical version stays immutable, assigned tools and metadata are unchanged, and a version identical to the current head is a no-op.",
+    schema: RestoreAppVersionSchema,
+    outputSchema: AppSummaryOutputSchema,
+    async handler({ args, context }) {
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({
+        ...auth,
+        appId: args.appId,
+        modify: true,
+      });
+      if ("error" in gate) return gate.error;
+
+      try {
+        const restored = await restoreAppVersion(args);
+        const { app } = restored;
+        const noOp = app.latestVersion === args.baseVersion;
+        const warningsNote = formatWarningsNote(restored.warnings);
+        return structuredSuccessResult(
+          {
+            id: app.id,
+            name: app.name,
+            description: app.description,
+            scope: app.scope,
+            latestVersion: app.latestVersion,
+            labels: app.labels.map((label) => ({
+              key: label.key,
+              value: label.value,
+            })),
+            ...(restored.warnings.length > 0
+              ? { warnings: restored.warnings }
+              : {}),
+          },
+          noOp
+            ? `Version ${args.version} is byte-identical to the current version of app "${escapeAppNameForModelText(app.name)}"; nothing was restored.${nextEditBaseVersionHint(app.latestVersion)}`
+            : `Restored app "${escapeAppNameForModelText(app.name)}" from version ${args.version} as new head version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${warningsNote}`,
+        );
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
     },
   }),
   defineArchestraTool({

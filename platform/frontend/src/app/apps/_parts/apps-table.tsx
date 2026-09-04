@@ -8,6 +8,7 @@ import type {
 } from "@tanstack/react-table";
 import {
   AppWindow,
+  History,
   Loader2,
   Pin,
   PinOff,
@@ -19,6 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LabelTags } from "@/components/label-tags";
+import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-history-dialog";
 import { ScopeBadge } from "@/components/scope-badge";
 import {
   type TableRowAction,
@@ -72,6 +74,7 @@ export function AppsTable({
   // resets it.
   const [openingKey, setOpeningKey] = useState<string | null>(null);
   const [deletingApp, setDeletingApp] = useState<OwnedApp | null>(null);
+  const [historyApp, setHistoryApp] = useState<OwnedApp | null>(null);
 
   const handleOpen = async (app: AppListItem) => {
     if (openingKey) return;
@@ -243,6 +246,14 @@ export function AppsTable({
         onClick: () => onOpenSettings({ id: app.id }),
       },
       {
+        icon: <History className="h-4 w-4" />,
+        label: "Version history",
+        permissions: { app: ["update"] },
+        disabled: !!settingsDisabledReason,
+        disabledTooltip: settingsDisabledReason,
+        onClick: () => setHistoryApp(app),
+      },
+      {
         icon: <SquareArrowOutUpRight className="h-4 w-4" />,
         label: "Open in new tab",
         onClick: () => window.open(`/a/${app.id}`, "_blank", "noreferrer"),
@@ -313,6 +324,15 @@ export function AppsTable({
           }}
         />
       )}
+      {historyApp ? (
+        <AppVersionHistoryDialog
+          app={historyApp}
+          open
+          onOpenChange={(open) => {
+            if (!open) setHistoryApp(null);
+          }}
+        />
+      ) : null}
     </>
   );
 }

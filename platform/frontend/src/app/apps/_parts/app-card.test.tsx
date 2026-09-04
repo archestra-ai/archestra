@@ -47,6 +47,17 @@ vi.mock("./app-delete-dialog", () => ({
     open ? <div data-testid="delete-dialog">Delete {app.name}</div> : null,
 }));
 
+vi.mock("@/components/mcp-app/app-version-history-dialog", () => ({
+  AppVersionHistoryDialog: ({
+    open,
+    app,
+  }: {
+    open: boolean;
+    app: { name: string };
+  }) =>
+    open ? <div data-testid="version-history">History {app.name}</div> : null,
+}));
+
 // Stub the catalog icon (its real render pulls appearance settings via react
 // query); the card test only asserts which icon value flows into it.
 vi.mock("@/components/mcp-catalog-icon", () => ({
@@ -273,6 +284,16 @@ describe("OwnedAppCard", () => {
     ).toHaveAttribute("href", "/a/owned-1");
   });
 
+  it("opens version history from the overflow menu", () => {
+    render(<AppCard app={ownedApp} />);
+
+    expect(screen.queryByTestId("version-history")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: /version history/i }));
+    expect(screen.getByTestId("version-history")).toHaveTextContent(
+      "History My Owned App",
+    );
+  });
+
   it("links to the app's slug when it has one", () => {
     render(<AppCard app={{ ...ownedApp, slug: "sales-dashboard" }} />);
 
@@ -287,7 +308,7 @@ describe("OwnedAppCard", () => {
     );
   });
 
-  it("disables settings and delete with the scope reason when the app is outside the caller's scope", () => {
+  it("disables settings, version history, and delete when the app is outside the caller's scope", () => {
     const onOpenSettings = vi.fn();
     vi.mocked(useAppAccess).mockReturnValue({
       isAdmin: false,
@@ -305,8 +326,12 @@ describe("OwnedAppCard", () => {
     render(<AppCard app={ownedApp} onOpenSettings={onOpenSettings} />);
 
     const settings = screen.getByRole("menuitem", { name: "Settings" });
+    const versionHistory = screen.getByRole("menuitem", {
+      name: "Version history",
+    });
     const deleteAction = screen.getByRole("menuitem", { name: "Delete" });
     expect(settings).toHaveAttribute("aria-disabled", "true");
+    expect(versionHistory).toHaveAttribute("aria-disabled", "true");
     expect(deleteAction).toHaveAttribute("aria-disabled", "true");
     expect(
       document.getElementById(
@@ -315,8 +340,10 @@ describe("OwnedAppCard", () => {
     ).toHaveTextContent("Only an admin can change this org-wide app");
 
     fireEvent.click(settings);
+    fireEvent.click(versionHistory);
     fireEvent.click(deleteAction);
     expect(onOpenSettings).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("version-history")).not.toBeInTheDocument();
     expect(screen.queryByTestId("delete-dialog")).not.toBeInTheDocument();
   });
 

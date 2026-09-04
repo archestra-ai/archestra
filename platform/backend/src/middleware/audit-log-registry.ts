@@ -259,6 +259,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdParam: "appId",
     fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
   },
+  // A version restore is a write-forward update, not a new app. Register the
+  // POST explicitly so it cannot be discarded as a walk-up create.
+  "/api/apps/:appId/versions/:version/restore": {
+    resourceType: "app",
+    resourceIdParam: "appId",
+    action: "app.updated",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
   // Tool assignment changes the app's effective tool surface; appToolsTable is
   // audited:false ("parent carries the signal"), so record app.updated with the
   // app snapshot instead of inheriting app.created from the POST walk-up.

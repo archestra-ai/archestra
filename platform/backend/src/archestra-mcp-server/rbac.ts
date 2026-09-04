@@ -211,8 +211,10 @@ export const TOOL_PERMISSIONS: Record<
   // refine mutates the app head (persists its spec), mirroring edit_app.
   refine_app: { resource: "app", action: "update" },
   list_apps: { resource: "app", action: "read" },
+  list_app_versions: { resource: "app", action: "read" },
   render_app: { resource: "app", action: "read" },
   read_app: { resource: "app", action: "read" },
+  restore_app_version: { resource: "app", action: "update" },
   edit_app: { resource: "app", action: "update" },
   // set_app_tools replaces an app's assigned tool set; assertCallerMayModifyApp
   // is the real authority, app:update is the floor (mirrors edit_app).

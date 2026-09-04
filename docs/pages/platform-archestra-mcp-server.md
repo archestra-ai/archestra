@@ -2659,8 +2659,10 @@ Required RBAC permission: `file:manage`
 | `scaffold_app` | Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. | `app:create` |
 | `refine_app` | Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. | `app:update` |
 | `list_apps` | List apps visible to the caller, optionally filtered by name or labels — use it to find an app's id. | `app:read` |
+| `list_app_versions` | List the immutable versions of an app, newest first, without returning their HTML. | `app:read` |
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
+| `restore_app_version` | Restore a historical app version directly on the server as a new head version. | `app:update` |
 | `edit_app` | The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to s... | `app:update` |
 | `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
 | `set_app_labels` | Replace an app's labels with exactly the set you pass ([] clears them). | `app:update` |
@@ -2782,6 +2784,27 @@ Required RBAC permission: `app:read`
 | `apps[].labels[].value` | `string` | Yes | The label value. |
 | `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
+#### list_app_versions
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `appId` | `string` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+| `versions` | `object[]` | Yes |  |
+| `versions[].version` | `number` | Yes |  |
+| `versions[].createdAt` | `string` | Yes |  |
+| `versions[].current` | `boolean` | Yes |  |
+
 #### render_app
 
 Required RBAC permission: `app:read`
@@ -2832,6 +2855,32 @@ Required RBAC permission: `app:read`
 | `offset` | `number` | Yes | Effective 0-based character offset of the returned window (0 for a full read; clamped to the end when past it). |
 | `hasMore` | `boolean` | Yes | True when the document continues past the returned window. |
 | `html` | `string` | Yes | The stored HTML, pre-injection (no SDK/base CSS) — the requested character window when offset/limit was passed. |
+
+#### restore_app_version
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `version` | `integer` | Yes | The historical version to restore. |
+| `baseVersion` | `integer` | Yes | The current head version. This prevents overwriting a newer edit that landed after the rollback was requested. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+| `labels` | `object[]` | Yes | Key-value labels for organization/categorization. |
+| `labels[].key` | `string` | Yes | The label key. |
+| `labels[].value` | `string` | Yes | The label value. |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
 #### edit_app
 

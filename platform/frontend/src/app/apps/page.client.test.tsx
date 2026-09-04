@@ -81,6 +81,10 @@ vi.mock("@/components/ui/permission-button", () => ({
   ),
 }));
 
+vi.mock("@/components/mcp-app/app-version-history-dialog", () => ({
+  AppVersionHistoryDialog: () => null,
+}));
+
 vi.mock("./_parts/app-delete-dialog", () => ({
   AppDeleteDialog: () => null,
 }));

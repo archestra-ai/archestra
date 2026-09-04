@@ -357,6 +357,7 @@ async function persistTranscript(params: {
       runId: params.session.id,
       transcript: params.output.completeTranscript,
       observedBytes: params.output.observedTranscriptBytes,
+      readableTranscript: params.output.readableTranscript,
     })
     .catch((error) => {
       logger.warn(

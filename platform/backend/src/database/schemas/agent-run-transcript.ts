@@ -4,6 +4,7 @@ import {
   integer,
   pgTable,
   primaryKey,
+  text,
   uuid,
 } from "drizzle-orm/pg-core";
 import agentRunsTable from "./agent-run";
@@ -34,6 +35,41 @@ export const agentRunTranscriptChunksTable = pgTable(
   (table) => [
     primaryKey({
       name: "agent_run_transcript_chunks_pk",
+      columns: [table.runId, table.sequence],
+    }),
+  ],
+);
+
+export const agentRunReadableTranscriptsTable = pgTable(
+  "agent_run_readable_transcripts",
+  {
+    runId: uuid("run_id")
+      .primaryKey()
+      .references(() => agentRunsTable.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    version: integer("version").notNull(),
+    uncompressedBytes: integer("uncompressed_bytes").notNull(),
+    compressedBytes: integer("compressed_bytes").notNull(),
+    chunkCount: integer("chunk_count").notNull(),
+  },
+);
+
+export const agentRunReadableTranscriptChunksTable = pgTable(
+  "agent_run_readable_transcript_chunks",
+  {
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => agentRunReadableTranscriptsTable.runId, {
+        onDelete: "cascade",
+      }),
+    sequence: integer("sequence").notNull(),
+    uncompressedBytes: integer("uncompressed_bytes").notNull(),
+    compressedBytes: integer("compressed_bytes").notNull(),
+    data: bytea("data").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "agent_run_readable_transcript_chunks_pk",
       columns: [table.runId, table.sequence],
     }),
   ],

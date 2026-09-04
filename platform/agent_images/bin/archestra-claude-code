@@ -91,13 +91,96 @@ esac
 "${attention_command}" set "${label}"
 HOOK
 chmod 0700 "${attention_hook}"
-jq -n --arg cmd "${attention_hook}" '{hooks:{
+transcript_hook="${runtime_dir}/transcript-hook.sh"
+cat > "${transcript_hook}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+payload="$(cat)"
+transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
+printf '%s\n' '{"hook_event_name":"Stop"}' \
+  | "${runtime_dir}/attention-hook.sh" \
+  >/dev/null 2>&1 || true
+
+if [[ -n "${transcript}" && -r "${transcript}" ]]; then
+  readable_tmp="${runtime_dir}/readable-transcript.tmp.json"
+  if jq -s '
+    def timestamp($entry):
+      if ($entry.timestamp | type) == "string"
+      then {timestamp:$entry.timestamp}
+      else {}
+      end;
+    def content_text:
+      if . == null then ""
+      elif type == "string" then .
+      elif type == "array" then
+        [ .[]
+          | if type == "string" then .
+            elif type == "object" and .type == "text" and (.text | type) == "string" then .text
+            else empty
+            end
+        ] | join("\n")
+      else tostring
+      end;
+    {
+      version:1,
+      provider:"claude-code",
+      entries:[
+        .[] as $entry
+        | select($entry.type == "user" or $entry.type == "assistant")
+        | ($entry.message.content // empty) as $content
+        | if ($content | type) == "string" then
+            select($content != "")
+            | ({type:"message", role:$entry.type, text:$content} + timestamp($entry))
+          elif ($content | type) == "array" then
+            $content[]
+            | if .type == "text" and (.text | type) == "string" and .text != "" then
+                ({type:"message", role:$entry.type, text:.text} + timestamp($entry))
+              elif .type == "tool_use" and (.name | type) == "string" then
+                ({type:"tool_call", name:.name} + timestamp($entry)
+                  + (if (.id | type) == "string" then {toolCallId:.id} else {} end)
+                  + (if .input != null then {input:(.input | tojson)} else {} end))
+              elif .type == "tool_result" then
+                (.content | content_text) as $text
+                | ({type:"tool_result", text:(if $text == "" then "[Non-text result omitted]" else $text end)}
+                  + timestamp($entry)
+                  + (if (.tool_use_id | type) == "string" then {toolCallId:.tool_use_id} else {} end)
+                  + (if .is_error == true then {isError:true} else {} end))
+              else empty
+              end
+          else empty
+          end
+      ]
+    }
+  ' "${transcript}" > "${readable_tmp}" 2>/dev/null; then
+    mv "${readable_tmp}" "${runtime_dir}/readable-transcript.json"
+  else
+    rm -f "${readable_tmp}"
+  fi
+fi
+
+if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" ]]; then
+  if [[ -n "${transcript}" && -r "${transcript}" ]]; then
+    jq -rs '[.[]
+        | select(.type == "assistant")
+        | .message.content
+        | if type == "array" then (map(select(.type == "text") | .text) | join("")) else . end
+        | select(. != null and . != "")
+      ] | last // ""' "${transcript}" > "${runtime_dir}/final-answer.txt" 2>/dev/null || true
+  fi
+  touch "${runtime_dir}/turn-complete"
+fi
+HOOK
+chmod 0700 "${transcript_hook}"
+
+jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript_hook}" '{hooks:{
   Notification:[{
     matcher:"permission_prompt|idle_prompt|elicitation_dialog|elicitation_complete|elicitation_response|auth_success",
-    hooks:[{type:"command",command:$cmd}]
+    hooks:[{type:"command",command:$attention_cmd}]
   }],
-  UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$cmd}]}],
-  PostToolUse:[{matcher:"",hooks:[{type:"command",command:$cmd}]}]
+  UserPromptSubmit:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
+  PostToolUse:[{matcher:"",hooks:[{type:"command",command:$attention_cmd}]}],
+  Stop:[{matcher:"",hooks:[{type:"command",command:$transcript_cmd}]}]
 }}' > "${settings_file}"
 args+=(--settings "${settings_file}")
 
@@ -129,38 +212,7 @@ case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
 
     answer_file="${runtime_dir}/final-answer.txt"
     done_marker="${runtime_dir}/turn-complete"
-    hook_script="${runtime_dir}/stop-hook.sh"
-    settings_tmp="${runtime_dir}/claude-settings.tmp.json"
     rm -f "${answer_file}" "${done_marker}"
-
-    # The hook is handed the session JSON on stdin, including the transcript
-    # path. The last assistant text in that JSONL is the final answer —
-    # written before the marker so the watchdog never sees a marker without
-    # an answer beside it.
-    cat > "${hook_script}" <<'HOOK'
-#!/usr/bin/env bash
-set -euo pipefail
-runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
-payload="$(cat)"
-transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
-printf '%s\n' '{"hook_event_name":"Stop"}' \
-  | "${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}/attention-hook.sh" \
-  >/dev/null 2>&1 || true
-if [[ -n "${transcript}" && -r "${transcript}" ]]; then
-  jq -rs '[.[]
-      | select(.type == "assistant")
-      | .message.content
-      | if type == "array" then (map(select(.type == "text") | .text) | join("")) else . end
-      | select(. != null and . != "")
-    ] | last // ""' "${transcript}" > "${runtime_dir}/final-answer.txt" 2>/dev/null || true
-fi
-touch "${runtime_dir}/turn-complete"
-HOOK
-    chmod 0700 "${hook_script}"
-    jq --arg cmd "${hook_script}" \
-      '.hooks.Stop=[{matcher:"",hooks:[{type:"command",command:$cmd}]}]' \
-      "${settings_file}" > "${settings_tmp}"
-    mv "${settings_tmp}" "${settings_file}"
 
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     exec "${script_dir}/archestra-tui-run" \

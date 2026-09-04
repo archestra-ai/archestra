@@ -477,7 +477,11 @@ export type AgentRunAttachClosedMessage = {
 
 export type AgentRunLogsMessage = {
   type: "agent_run_logs";
-  payload: { runId: string; logs: string };
+  payload: {
+    runId: string;
+    logs: string;
+    channel?: "terminal" | "readable";
+  };
 };
 
 export type AgentRunLogsErrorMessage = {
@@ -492,6 +496,11 @@ export type AgentRunLogsEndedMessage = {
     source?: "full" | "tail";
     truncated?: boolean;
     totalBytes?: number;
+    readable?: {
+      provider: string;
+      version: number;
+      totalBytes: number;
+    };
   };
 };
 

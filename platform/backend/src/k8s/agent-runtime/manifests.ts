@@ -6,6 +6,8 @@ import {
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_DIR,
   AGENT_RUNTIME_INPUTS_READY_FILE,
+  AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE,
+  AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES,
   AGENT_RUNTIME_SHELL_INIT_SCRIPT,
   AGENT_RUNTIME_STEER_FIFO,
 } from "@/services/agent-runtime/runtime-contract";
@@ -127,6 +129,14 @@ function buildAgentRuntimeBootstrapScript(): string {
     // Hold PID 1 for exactly as long as the session lives, so the Job
     // completes when the agent is done rather than when tmux forks away.
     `while tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; do sleep 5; done`,
+    // Provider-native transcript files are normalized by maintained images.
+    // Frame the bounded artifact separately from the PTY stream; output capture
+    // removes this protocol before terminal persistence or live delivery.
+    `if [ -s ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE} ] && command -v base64 >/dev/null 2>&1 && [ "$(wc -c < ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE})" -le ${AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES} ]; then`,
+    `  printf '\\033]777;archestra-readable-transcript=base64\\007'`,
+    `  base64 < ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE} | tr -d '\\n'`,
+    `  printf '\\033]777;archestra-readable-transcript=end\\007'`,
+    "fi",
     `if [ ! -f ${exitCodeFile} ]; then`,
     '  echo "agent-runtime: agent session ended without an exit status" >&2',
     "  exit 1",

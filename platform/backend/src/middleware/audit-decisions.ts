@@ -662,6 +662,15 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "storage chunks owned by an Agent run transcript",
   },
+  agentRunReadableTranscriptsTable: {
+    audited: false,
+    reason:
+      "task-owned readable execution output; the Agent run surface is the record of the work",
+  },
+  agentRunReadableTranscriptChunksTable: {
+    audited: false,
+    reason: "storage chunks owned by a readable Agent run transcript",
+  },
   agentRunInputsTable: {
     audited: false,
     reason:

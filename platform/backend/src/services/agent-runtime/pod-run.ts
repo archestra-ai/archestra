@@ -75,10 +75,12 @@ async function startAgentRunSession(params: {
     defaultNetworkPolicy: organization?.defaultNetworkPolicy,
   });
   const inputFiles = await AgentRunInputModel.findByTaskId(params.taskId);
+  const runId = randomUUID();
 
   const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
     runtime: params.runtime,
     taskId: params.taskId,
+    runId,
     agentId: params.agentId,
     actor: params.actor,
     organizationId: params.organizationId,
@@ -94,6 +96,7 @@ async function startAgentRunSession(params: {
   // objects, so a crash between the two must leave a record, not an orphan.
   const placeholderTitle = toPlaceholderTitle(params.task ?? "Run");
   const session = await AgentRunModel.create({
+    id: runId,
     organizationId: params.organizationId,
     taskId: params.taskId,
     agentId: params.runtime.agentId,

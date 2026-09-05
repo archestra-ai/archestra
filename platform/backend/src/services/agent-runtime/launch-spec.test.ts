@@ -41,6 +41,7 @@ describe("buildAgentRunLaunchSpec", () => {
       makeLlmProviderApiKey,
       makeAgent,
     });
+    const runId = crypto.randomUUID();
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: {
@@ -49,9 +50,11 @@ describe("buildAgentRunLaunchSpec", () => {
           { key: "CUSTOM_SETTING", value: "preserved" },
           { key: "OPENAI_BASE_URL", value: "https://bypass.invalid" },
           { key: "ARCHESTRA_MCP_GATEWAY_TOKEN", value: "bypass-token" },
+          { key: "ARCHESTRA_AGENT_RUNTIME_RUN_ID", value: "bypass-run" },
         ],
       },
       taskId: crypto.randomUUID(),
+      runId,
       agentId: setup.agent.id,
       actor: {
         id: setup.user.id,
@@ -72,6 +75,7 @@ describe("buildAgentRunLaunchSpec", () => {
       ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "selected-model",
       ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER: "gemini",
       ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH: "16384",
+      ARCHESTRA_AGENT_RUNTIME_RUN_ID: runId,
       ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
       ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
       OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
@@ -136,6 +140,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: runtime(agent, "openai_responses"),
       taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
       agentId: agent.id,
       actor: {
         id: user.id,
@@ -182,6 +187,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "openai_responses"),
       taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
       agentId: setup.agent.id,
       actor: {
         id: "system",
@@ -232,6 +238,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { spec } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "anthropic"),
       taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
       agentId: setup.agent.id,
       actor: {
         id: setup.user.id,
@@ -277,6 +284,7 @@ describe("buildAgentRunLaunchSpec", () => {
       buildAgentRunLaunchSpec({
         runtime: runtime(setup.agent, "anthropic"),
         taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
         agentId: setup.agent.id,
         actor: {
           id: setup.user.id,
@@ -315,6 +323,7 @@ describe("buildAgentRunLaunchSpec", () => {
       buildAgentRunLaunchSpec({
         runtime: runtime(setup.agent, "openai_chat"),
         taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
         agentId: setup.agent.id,
         actor: {
           id: setup.user.id,
@@ -370,6 +379,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { spec } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
       taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
       agentId: setup.agent.id,
       actor: {
         id: setup.user.id,
@@ -424,10 +434,12 @@ describe("buildAgentRunLaunchSpec", () => {
       value: "claude-subscription-token",
     });
     const taskId = crypto.randomUUID();
+    const runId = crypto.randomUUID();
 
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
       taskId,
+      runId,
       agentId: setup.agent.id,
       actor: {
         id: setup.user.id,
@@ -464,6 +476,7 @@ describe("buildAgentRunLaunchSpec", () => {
       "1000000",
     );
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH).toBe("16384");
+    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(runId);
 
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
     expect(virtualKey?.keyType).toBe("passthrough");
@@ -495,6 +508,7 @@ describe("buildAgentRunLaunchSpec", () => {
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
         taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
         agentId: setup.agent.id,
         actor: {
           id: setup.user.id,
@@ -548,6 +562,7 @@ describe("buildAgentRunLaunchSpec", () => {
     const { virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: configuredRuntime,
       taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
       agentId: setup.agent.id,
       actor: {
         id: setup.user.id,
@@ -592,6 +607,7 @@ describe("buildAgentRunLaunchSpec", () => {
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
         taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
         agentId: setup.agent.id,
         actor: {
           id: setup.user.id,
@@ -649,6 +665,7 @@ describe("buildAgentRunLaunchSpec", () => {
       buildAgentRunLaunchSpec({
         runtime: configuredRuntime,
         taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
         agentId: setup.agent.id,
         actor: {
           id: setup.user.id,

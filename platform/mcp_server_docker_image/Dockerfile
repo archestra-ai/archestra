@@ -133,9 +133,10 @@ RUN apk add --no-cache \
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
    # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
-   # CVE-2026-6276, CVE-2026-5773: curl/libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
-   # The base image ships 8.19.0-r0; the explicit `apk add curl` above installs it, so
-   # curl/libcurl must be listed here to be upgraded to the fixed version.
+   # Fixed-version-available curl/libcurl vulnerabilities are resolved in 8.22.0-r0.
+   # The explicit `apk add curl` above installs them, so explicit floors below ensure
+   # a cached layer cannot retain the older packages.
+   # Fixed-version-available util-linux vulnerabilities are resolved in 2.41.6-r0.
    # CVE-2026-11824, CVE-2026-11822: sqlite vulnerabilities (HIGH) fixed in 3.53.4-r0.
    # The pinned python:3.12-alpine base ships sqlite-libs 3.51.2-r0 (a python3
    # runtime dependency), so it must be upgraded explicitly here.
@@ -146,7 +147,9 @@ RUN apk add --no-cache \
    # No 1.25.x release carries the CVE-2026-46600 fix (the line ends at 1.25.13
    # upstream), so this moves to the same 1.26.6 toolchain the platform image's
    # go-builder stage already uses.
-   apk upgrade --no-cache nodejs bind openssl zlib expat curl libcurl sqlite-libs && \
+   apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
+   apk add --no-cache --upgrade "curl>=8.22.0-r0" "libcurl>=8.22.0-r0" \
+       "util-linux>=2.41.6-r0" && \
    # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,
    # CVE-2026-14457, CVE-2026-14456: OpenSSL vulnerabilities (HIGH) fixed in 3.5.8-r0.
    # `openssl` is already in the bare `apk upgrade` list above, but that cannot express a

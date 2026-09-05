@@ -29,7 +29,9 @@ import A2AMessageModel from "./a2a/message";
  * task's state machine is the record of how the work is going.
  */
 class AgentRunModel {
-  static async create(run: InsertAgentRunRecord): Promise<AgentRunRecord> {
+  static async create(
+    run: InsertAgentRunRecord & { id?: AgentRunRecord["id"] },
+  ): Promise<AgentRunRecord> {
     const [created] = await db
       .insert(schema.agentRunsTable)
       .values(run)

@@ -78,6 +78,8 @@ export async function buildAgentRunLaunchSpec(params: {
   runtime: ResolvedAgentRuntime;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
+  /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
+  runId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
   agentId: string;
   actor: A2AActor;
@@ -257,6 +259,7 @@ export async function buildAgentRunLaunchSpec(params: {
     ),
     ARCHESTRA_AGENT_RUNTIME_AGENT_ID: params.runtime.agentId,
     ARCHESTRA_AGENT_RUNTIME_AGENT_NAME: agent.name,
+    ARCHESTRA_AGENT_RUNTIME_RUN_ID: params.runId,
     ARCHESTRA_AGENT_RUNTIME_TASK_ID: params.taskId,
     ARCHESTRA_AGENT_RUNTIME_MODEL: runtimeModel,
     // Native CLIs use provider-published model slugs for local metadata and
@@ -392,6 +395,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH",
   "ARCHESTRA_AGENT_RUNTIME_MODEL_PROVIDER",
   "ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL",
+  "ARCHESTRA_AGENT_RUNTIME_RUN_ID",
   "ARCHESTRA_AGENT_RUNTIME_STEER_FIFO",
   "ARCHESTRA_AGENT_RUNTIME_TASK_ID",
   "ARCHESTRA_LLM_PROXY_PROTOCOL",

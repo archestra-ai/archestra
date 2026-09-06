@@ -40,6 +40,27 @@ describe("buildTaskCompletionNotification", () => {
     ).toBe(output);
   });
 
+  test("reduces a verbose PR completion report to its review link", () => {
+    const output = [
+      "The implementation is complete, but here is a long internal chronology.",
+      "The policy gate required an audience-narrowing remedy before one operation.",
+      "A raw push was blocked, so delivery used a repository-specific workaround.",
+      "A local configuration file was unavailable and another login path was used.",
+      "The pull request description could not be edited through the first command.",
+      "Validation eventually passed after several unrelated diagnostics and retries.",
+      "Review: https://github.com/example/project/pull/42#issuecomment-123456",
+      "The task is ready for human review and promotion.",
+    ].join("\n");
+
+    expect(
+      buildTaskCompletionNotification({
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output,
+      }),
+    ).toBe("PR ready: https://github.com/example/project/pull/42");
+  });
+
   test("does not narrate a working task before it has a useful result", () => {
     expect(
       buildTaskCompletionNotification({

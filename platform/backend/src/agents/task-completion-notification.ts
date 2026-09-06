@@ -16,7 +16,7 @@ export function buildTaskCompletionNotification(params: {
 
   if (params.state === "TASK_STATE_COMPLETED") {
     const output = conciseOutput(params.output);
-    if (output) {
+    if (output && isCompactCompletionReport(output)) {
       return output;
     }
 
@@ -25,7 +25,7 @@ export function buildTaskCompletionNotification(params: {
       return `PR ready: ${pullRequestUrl}`;
     }
 
-    return "Task finished.";
+    return output || "Task finished.";
   }
 
   const outcome =
@@ -41,6 +41,13 @@ function findPullRequestUrl(output: string): string | null {
     /https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/\d+/g,
   );
   return matches?.at(-1) ?? null;
+}
+
+function isCompactCompletionReport(output: string): boolean {
+  return (
+    output.length <= MAX_COMPLETION_REPORT_CHARS &&
+    output.split("\n").length <= MAX_COMPLETION_REPORT_LINES
+  );
 }
 
 function conciseOutput(output: string): string {
@@ -92,3 +99,6 @@ function looksLikeTerminalControlStream(output: string): boolean {
   );
   return (bareControlSequences?.length ?? 0) >= 3;
 }
+
+const MAX_COMPLETION_REPORT_CHARS = 600;
+const MAX_COMPLETION_REPORT_LINES = 6;

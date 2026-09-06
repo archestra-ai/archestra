@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 
 import {
   MISSING_CREDENTIAL_BEHAVIOR_OPTIONS,
+  MISSING_CREDENTIAL_SUMMARY,
   MISSING_CREDENTIAL_TONE,
   TOOL_CONNECTION_PROMPTING,
 } from "./agent-form.utils";
@@ -129,13 +130,21 @@ export function AgentToolBehaviorSettings({
           <Label htmlFor="missing-credential-behavior">
             Missing connections
           </Label>
-          {/* The question, not the answer: the select beside this already
-              names the choice, and the menu spells out what each one does.
-              Repeating the chosen option's whole sentence here said the same
-              thing three times in one row. */}
+          {/* Purpose first, then the current status stated inline: the closed
+              select shows only a terse label and Radix leaves the menu
+              unmounted while the setting is read. The status line changes with
+              the selection; when All mode pins the behavior it reports the
+              pinned effect instead. Spans keep machine-translate from
+              re-parenting a bare node next to the link. */}
           <FieldDescription>
-            When to ask a user to connect credentials.{" "}
-            {locked && <>All mode always asks when a tool needs it. </>}
+            <span>{MISSING_CREDENTIAL_SUMMARY} </span>
+            {locked ? (
+              <span>All mode always asks when a tool needs it. </span>
+            ) : (
+              <span>
+                {TOOL_CONNECTION_PROMPTING[missingCredentialBehavior]}{" "}
+              </span>
+            )}
             <ExternalDocsLink
               href={toolConnectionsDocsUrl}
               className="underline"

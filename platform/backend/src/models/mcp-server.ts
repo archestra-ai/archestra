@@ -50,6 +50,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
 import McpServerUserModel from "./mcp-server-user";
+import TeamModel from "./team";
 import { toolUiResourceUriSql } from "./tool";
 
 // Run-time install precedence for an external app (mcp-apps.md FR-31): the
@@ -211,13 +212,12 @@ class McpServerModel {
     const mcpServers = await db
       .select({ mcpServerId: schema.mcpServersTable.id })
       .from(schema.mcpServersTable)
-      .innerJoin(
-        schema.teamMembersTable,
-        eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
-      )
       .where(
         and(
-          eq(schema.teamMembersTable.userId, userId),
+          TeamModel.effectiveMembershipCondition({
+            userId,
+            teamIdColumn: schema.mcpServersTable.teamId,
+          }),
           eq(schema.mcpServersTable.scope, "team"),
           // Active installs only — a soft-deleted team install grants no access.
           notDeleted(schema.mcpServersTable),
@@ -285,13 +285,6 @@ class McpServerModel {
           eq(schema.mcpServerUsersTable.userId, userId),
         ),
       )
-      .leftJoin(
-        schema.teamMembersTable,
-        and(
-          eq(schema.teamMembersTable.teamId, schema.mcpServersTable.teamId),
-          eq(schema.teamMembersTable.userId, userId),
-        ),
-      )
       .where(
         and(
           // Active installs only — a soft-deleted install grants nothing.
@@ -306,7 +299,10 @@ class McpServerModel {
             // Shared with them.
             and(
               eq(schema.mcpServersTable.scope, "team"),
-              isNotNull(schema.teamMembersTable.userId),
+              TeamModel.effectiveMembershipCondition({
+                userId,
+                teamIdColumn: schema.mcpServersTable.teamId,
+              }),
             ),
             eq(schema.mcpServersTable.scope, "org"),
           ),
@@ -381,14 +377,13 @@ class McpServerModel {
     const result = await db
       .select()
       .from(schema.mcpServersTable)
-      .innerJoin(
-        schema.teamMembersTable,
-        eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
-      )
       .where(
         and(
           eq(schema.mcpServersTable.id, mcpServerId),
-          eq(schema.teamMembersTable.userId, userId),
+          TeamModel.effectiveMembershipCondition({
+            userId,
+            teamIdColumn: schema.mcpServersTable.teamId,
+          }),
           eq(schema.mcpServersTable.scope, "team"),
           // Active installs only — a soft-deleted team install grants no access.
           notDeleted(schema.mcpServersTable),

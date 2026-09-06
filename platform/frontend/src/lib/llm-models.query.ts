@@ -15,7 +15,10 @@ import {
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
-import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import {
+  BOOTSTRAP_QUERY_RETRY,
+  PERSISTED_QUERY_META,
+} from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -68,6 +71,10 @@ export function useLlmModels(params?: LlmModelsParams) {
     // preventing display name flicker (e.g. "Claude Opus 4.1" → raw ID → back).
     placeholderData: keepPreviousData,
     enabled: params?.enabled,
+    // The new-chat composer resolves its default model from this catalog.
+    // Recover from a transient fetch failure rather than latching an empty
+    // catalog into "Select model" (T-1317).
+    retry: BOOTSTRAP_QUERY_RETRY,
     // The model list is small, contains no credentials, and is required to
     // replace the new-chat composer's loading placeholder with the saved model.
     // Restoring it makes a refresh immediately usable while revalidation runs.

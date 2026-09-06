@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   index,
   pgTable,
@@ -10,24 +11,31 @@ import type { TeamMemberRole } from "@/types/team-role";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
-export const team = pgTable("team", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organizationsTable.id, { onDelete: "cascade" }),
-  createdBy: text("created_by")
-    .notNull()
-    .references(() => usersTable.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").notNull(),
-  updatedAt: timestamp("updated_at")
-    .$onUpdate(() => /* @__PURE__ */ new Date())
-    .notNull(),
-  convertToolResultsToToon: boolean("convert_tool_results_to_toon")
-    .notNull()
-    .default(false),
-});
+export const team = pgTable(
+  "team",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    parentId: text("parent_team_id").references((): AnyPgColumn => team.id, {
+      onDelete: "set null",
+    }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at")
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+    convertToolResultsToToon: boolean("convert_tool_results_to_toon")
+      .notNull()
+      .default(false),
+  },
+  (table) => [index("team_parent_team_id_idx").on(table.parentId)],
+);
 
 export const teamMember = pgTable(
   "team_member",

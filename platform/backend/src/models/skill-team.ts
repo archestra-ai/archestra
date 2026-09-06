@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import SkillUserModel from "./skill-user";
+import TeamModel from "./team";
 
 /**
  * Team assignments and scope-based access for skills.
@@ -48,11 +49,11 @@ class SkillTeamModel {
         INNER JOIN skills s ON su.skill_id = s.id
         WHERE su.user_id = ${userId} AND s.organization_id = ${organizationId}
       UNION
-      SELECT st.skill_id AS id
-        FROM skill_team st
-        INNER JOIN skills s ON st.skill_id = s.id
-        INNER JOIN team_member tm ON st.team_id = tm.team_id
-        WHERE tm.user_id = ${userId} AND s.scope = 'team'
+      SELECT skill_team.skill_id AS id
+        FROM skill_team
+        INNER JOIN skills s ON skill_team.skill_id = s.id
+        WHERE ${TeamModel.effectiveMembershipCondition({ userId, teamIdColumn: schema.skillTeamsTable.teamId })}
+          AND s.scope = 'team'
           AND s.organization_id = ${organizationId}
     `);
     return result.rows.map((r) => r.id);
@@ -96,14 +97,13 @@ class SkillTeamModel {
         const [match] = await db
           .select({ teamId: schema.skillTeamsTable.teamId })
           .from(schema.skillTeamsTable)
-          .innerJoin(
-            schema.teamMembersTable,
-            eq(schema.skillTeamsTable.teamId, schema.teamMembersTable.teamId),
-          )
           .where(
             and(
               eq(schema.skillTeamsTable.skillId, skill.id),
-              eq(schema.teamMembersTable.userId, userId),
+              TeamModel.effectiveMembershipCondition({
+                userId,
+                teamIdColumn: schema.skillTeamsTable.teamId,
+              }),
             ),
           )
           .limit(1);

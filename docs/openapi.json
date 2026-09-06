@@ -378736,6 +378736,10 @@
                           "organizationId": {
                             "type": "string"
                           },
+                          "parentId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdBy": {
                             "type": "string"
                           },
@@ -378823,6 +378827,25 @@
                               "admin",
                               "member"
                             ]
+                          },
+                          "descendantTeams": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -378830,6 +378853,7 @@
                           "name",
                           "description",
                           "organizationId",
+                          "parentId",
                           "createdBy",
                           "createdAt",
                           "updatedAt",
@@ -379145,6 +379169,10 @@
                   "description": {
                     "type": "string"
                   },
+                  "parentId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "convertToolResultsToToon": {
                     "type": "boolean"
                   },
@@ -379205,6 +379233,10 @@
                       "type": "string"
                     },
                     "organizationId": {
+                      "type": "string"
+                    },
+                    "parentId": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "createdBy": {
@@ -379294,6 +379326,25 @@
                         "admin",
                         "member"
                       ]
+                    },
+                    "descendantTeams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -379301,6 +379352,7 @@
                     "name",
                     "description",
                     "organizationId",
+                    "parentId",
                     "createdBy",
                     "createdAt",
                     "updatedAt",
@@ -379586,6 +379638,10 @@
                     "organizationId": {
                       "type": "string"
                     },
+                    "parentId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdBy": {
                       "type": "string"
                     },
@@ -379673,6 +379729,25 @@
                         "admin",
                         "member"
                       ]
+                    },
+                    "descendantTeams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -379680,6 +379755,7 @@
                     "name",
                     "description",
                     "organizationId",
+                    "parentId",
                     "createdBy",
                     "createdAt",
                     "updatedAt",
@@ -379947,6 +380023,10 @@
                   "description": {
                     "type": "string"
                   },
+                  "parentId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "convertToolResultsToToon": {
                     "type": "boolean"
                   },
@@ -380014,6 +380094,10 @@
                       "type": "string"
                     },
                     "organizationId": {
+                      "type": "string"
+                    },
+                    "parentId": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "createdBy": {
@@ -380103,6 +380187,25 @@
                         "admin",
                         "member"
                       ]
+                    },
+                    "descendantTeams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -380110,6 +380213,7 @@
                     "name",
                     "description",
                     "organizationId",
+                    "parentId",
                     "createdBy",
                     "createdAt",
                     "updatedAt",

@@ -5,6 +5,7 @@ import type { AgentAccessContext, LabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
 import AgentUserModel from "./agent-user";
+import TeamModel from "./team";
 import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
@@ -101,12 +102,7 @@ class AgentTeamModel {
 
     // 4. scope = 'team' AND user is in one of agent's teams
     if (agent.scope === "team") {
-      const userTeams = await db
-        .select({ teamId: schema.teamMembersTable.teamId })
-        .from(schema.teamMembersTable)
-        .where(eq(schema.teamMembersTable.userId, userId));
-
-      const teamIds = userTeams.map((t) => t.teamId);
+      const teamIds = await TeamModel.getUserTeamIds(userId);
 
       if (teamIds.length === 0) {
         logger.debug(

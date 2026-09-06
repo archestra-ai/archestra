@@ -7,6 +7,7 @@ import type {
   ProjectShare,
   ProjectShareVisibility,
 } from "@/types";
+import TeamModel from "./team";
 
 /** A project's share row with its team targets resolved. */
 type ProjectShareWithTeams = ProjectShare & {
@@ -136,11 +137,7 @@ class ProjectShareModel {
     }
     if (share.teamIds.length === 0) return false;
 
-    const memberships = await db
-      .select({ teamId: schema.teamMembersTable.teamId })
-      .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, params.userId));
-    const userTeamIds = new Set(memberships.map((m) => m.teamId));
+    const userTeamIds = new Set(await TeamModel.getUserTeamIds(params.userId));
     return share.teamIds.some((teamId) => userTeamIds.has(teamId));
   }
 
@@ -178,11 +175,7 @@ class ProjectShareModel {
         ),
       );
 
-    const memberships = await db
-      .select({ teamId: schema.teamMembersTable.teamId })
-      .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, params.userId));
-    const teamIds = memberships.map((m) => m.teamId);
+    const teamIds = await TeamModel.getUserTeamIds(params.userId);
     const teamShared =
       teamIds.length === 0
         ? []

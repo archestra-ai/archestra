@@ -133,6 +133,7 @@ export function makeTeam(overrides: Partial<Team> = {}): Team {
     name: "Test Team",
     description: null,
     organizationId: "test-org",
+    parentId: null,
     createdBy: "test-user-admin",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

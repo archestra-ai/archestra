@@ -125,6 +125,36 @@ describe("MCP Server Install - catalog access", () => {
     expect(res.json().scope).toBe("personal");
   });
 
+  test("a child-team member may install an item shared with an ancestor team", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    const parent = await makeTeam(organizationId, member.id);
+    const child = await makeTeam(organizationId, member.id, {
+      parentId: parent.id,
+    });
+    await makeTeamMember(child.id, member.id, { role: MEMBER_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: member.id,
+      scope: "team",
+      teams: [{ id: parent.id, level: "use" }],
+      serverType: "remote",
+      serverUrl: "https://example.test/mcp",
+    });
+
+    currentUser = member;
+    const res = await install({ catalogId: catalog.id, scope: "personal" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().scope).toBe("personal");
+  });
+
   test("a use-level team admin may not create a shared team install", async ({
     makeUser,
     makeMember,

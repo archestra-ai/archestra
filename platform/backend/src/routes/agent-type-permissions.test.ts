@@ -431,6 +431,102 @@ describe("agent type permission isolation (routes)", () => {
   });
 
   describe("scope enforcement", () => {
+    test("team RBAC applies to inherited parent resources but not sibling resources", async ({
+      makeCustomRole,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id);
+      const child = await makeTeam(organizationId, adminUser.id, {
+        parentId: parent.id,
+      });
+      const grandchild = await makeTeam(organizationId, adminUser.id, {
+        parentId: child.id,
+      });
+      const sibling = await makeTeam(organizationId, adminUser.id);
+
+      const createAgent = async (name: string, teamId: string) => {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name,
+            agentType: "agent",
+            teams: [teamId],
+            scope: "team",
+            labels: [],
+            knowledgeBaseIds: [],
+            connectorIds: [],
+          },
+        });
+        expect(response.statusCode).toBe(200);
+        return response.json() as { id: string };
+      };
+      const parentAgent = await createAgent("parent-agent", parent.id);
+      const childAgent = await createAgent("child-agent", child.id);
+      const siblingAgent = await createAgent("sibling-agent", sibling.id);
+
+      await makeCustomRole(organizationId, {
+        role: "hierarchy_editor",
+        permission: {
+          agent: ["read", "update", "team-admin"],
+        },
+      });
+      await makeMember(memberUser.id, organizationId, {
+        role: "hierarchy_editor",
+      });
+      await makeTeamMember(grandchild.id, memberUser.id);
+      const memberApp = await createAppForUser(memberUser);
+
+      const parentOnlyUser = await makeUser({
+        email: "parent-only@test.com",
+      });
+      await makeMember(parentOnlyUser.id, organizationId, {
+        role: "hierarchy_editor",
+      });
+      await makeTeamMember(parent.id, parentOnlyUser.id);
+      const parentOnlyApp = await createAppForUser(parentOnlyUser);
+
+      try {
+        const inheritedRead = await memberApp.inject({
+          method: "GET",
+          url: `/api/agents/${parentAgent.id}`,
+        });
+        expect(inheritedRead.statusCode).toBe(200);
+
+        const inheritedUpdate = await memberApp.inject({
+          method: "PUT",
+          url: `/api/agents/${parentAgent.id}`,
+          payload: { name: "updated-parent-agent" },
+        });
+        expect(inheritedUpdate.statusCode).toBe(200);
+
+        const siblingRead = await memberApp.inject({
+          method: "GET",
+          url: `/api/agents/${siblingAgent.id}`,
+        });
+        expect(siblingRead.statusCode).toBe(404);
+
+        const siblingUpdate = await memberApp.inject({
+          method: "PUT",
+          url: `/api/agents/${siblingAgent.id}`,
+          payload: { name: "must-not-change" },
+        });
+        expect(siblingUpdate.statusCode).toBe(403);
+
+        const childReadFromParent = await parentOnlyApp.inject({
+          method: "GET",
+          url: `/api/agents/${childAgent.id}`,
+        });
+        expect(childReadFromParent.statusCode).toBe(404);
+      } finally {
+        await memberApp.close();
+        await parentOnlyApp.close();
+      }
+    });
+
     test("admin can create shared agents with teams for the generic agent types", async ({
       makeTeam,
     }) => {

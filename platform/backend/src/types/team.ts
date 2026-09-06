@@ -23,6 +23,9 @@ export const SelectTeamSchema = createSelectSchema(schema.teamsTable).extend({
   // restricted to the caller's own teams; absent when a team manager lists teams
   // they may not belong to.
   myRole: TeamMemberRoleSchema.optional(),
+  descendantTeams: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .optional(),
 });
 
 export const InsertTeamSchema = createInsertSchema(schema.teamsTable);
@@ -36,6 +39,7 @@ export const CreateTeamBodySchema = z.object({
     .min(1, "Team name is required")
     .max(MAX_TEAM_NAME_LENGTH, "Team name must be at most 256 characters"),
   description: z.string().optional(),
+  parentId: z.string().nullable().optional(),
   convertToolResultsToToon: z.boolean().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),
 });
@@ -47,6 +51,7 @@ export const UpdateTeamBodySchema = z.object({
     .max(MAX_TEAM_NAME_LENGTH, "Team name must be at most 256 characters")
     .optional(),
   description: z.string().optional(),
+  parentId: z.string().nullable().optional(),
   convertToolResultsToToon: z.boolean().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),
 });

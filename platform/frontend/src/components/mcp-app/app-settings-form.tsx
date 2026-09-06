@@ -17,7 +17,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
   Select,
   SelectContent,
@@ -28,6 +27,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import {
+  TeamVisibilityPicker,
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -603,21 +603,11 @@ export function AppSettingsForm({
 
           {scope === "team" && (
             <div className="space-y-2">
-              <Label>Teams</Label>
-              <MultiSelectCombobox
+              <TeamVisibilityPicker
                 disabled={readOnly || !canShareTeams || hasNoTeams}
-                options={
-                  teams?.map((team) => ({
-                    value: team.id,
-                    label: team.name,
-                  })) ?? []
-                }
+                teams={teams ?? []}
                 value={teamIds}
                 onChange={setTeamIds}
-                placeholder={
-                  hasNoTeams ? "No teams available" : "Search teams…"
-                }
-                emptyMessage="No teams found."
               />
               <AppTeamAccessWarning
                 scope={scope}

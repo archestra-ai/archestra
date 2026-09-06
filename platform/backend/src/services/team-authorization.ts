@@ -37,6 +37,52 @@ export async function getTeamForOrg(params: {
   return team;
 }
 
+type TeamParentValidationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "parent_not_found" | "self_parent" | "cycle";
+    };
+
+/**
+ * Validate a hierarchy change without mutating it. The parent must live in the
+ * same organization, and the resulting graph must remain acyclic.
+ */
+export async function validateTeamParent(params: {
+  teamId?: string;
+  parentId: string | null;
+  organizationId: string;
+}): Promise<TeamParentValidationResult> {
+  if (params.parentId === null) {
+    return { ok: true };
+  }
+  if (params.parentId === params.teamId) {
+    return { ok: false, reason: "self_parent" };
+  }
+
+  const hierarchy = await TeamModel.getHierarchyForOrganization(
+    params.organizationId,
+  );
+  const parentById = new Map(hierarchy.map((team) => [team.id, team.parentId]));
+  if (!parentById.has(params.parentId)) {
+    return { ok: false, reason: "parent_not_found" };
+  }
+  if (!params.teamId) {
+    return { ok: true };
+  }
+
+  let currentId: string | null = params.parentId;
+  const visited = new Set<string>();
+  while (currentId !== null) {
+    if (currentId === params.teamId || visited.has(currentId)) {
+      return { ok: false, reason: "cycle" };
+    }
+    visited.add(currentId);
+    currentId = parentById.get(currentId) ?? null;
+  }
+  return { ok: true };
+}
+
 /**
  * Whether the caller may manage a team's membership: an org-level team manager
  * may manage any team; otherwise the caller must be an admin of that specific
@@ -111,18 +157,40 @@ export async function checkLastAdminInvariant(params: {
  * fatal (both current callers run this best-effort).
  */
 export async function cleanupCredentialSourcesAfterMemberRemoval(params: {
-  actingUserId: string;
   removedUserId: string;
   teamId: string;
   organizationId: string;
 }): Promise<number> {
-  const actingUserIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
-    userId: params.actingUserId,
+  const removedUserIsAgentAdmin = await hasAnyAgentTypeAdminPermission({
+    userId: params.removedUserId,
     organizationId: params.organizationId,
   });
-  return AgentToolModel.cleanupInvalidCredentialSourcesForUser(
-    params.removedUserId,
-    params.teamId,
-    actingUserIsAgentAdmin,
+
+  // Membership in a child grants access to resources assigned to every
+  // ancestor. Once that direct membership is removed, credential pins must be
+  // revalidated for the removed team and each ancestor whose resources may no
+  // longer be reachable.
+  const hierarchy = await TeamModel.getHierarchyForOrganization(
+    params.organizationId,
   );
+  const parentById = new Map(hierarchy.map((team) => [team.id, team.parentId]));
+  const affectedTeamIds: string[] = [];
+  const visited = new Set<string>();
+  let currentTeamId: string | null = params.teamId;
+
+  while (currentTeamId !== null && !visited.has(currentTeamId)) {
+    visited.add(currentTeamId);
+    affectedTeamIds.push(currentTeamId);
+    currentTeamId = parentById.get(currentTeamId) ?? null;
+  }
+
+  let cleanedCount = 0;
+  for (const teamId of affectedTeamIds) {
+    cleanedCount += await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
+      params.removedUserId,
+      teamId,
+      removedUserIsAgentAdmin,
+    );
+  }
+  return cleanedCount;
 }

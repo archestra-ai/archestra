@@ -24,6 +24,7 @@ import {
   checkLastAdminInvariant,
   cleanupCredentialSourcesAfterMemberRemoval,
   getTeamForOrg,
+  validateTeamParent,
 } from "@/services/team-authorization";
 import type {
   Team,
@@ -49,6 +50,10 @@ const TeamOutputItemSchema = z.object({
   id: z.string().describe("The team ID."),
   name: z.string().describe("The team name."),
   description: z.string().nullable().describe("The team description, if any."),
+  parentId: z
+    .string()
+    .nullable()
+    .describe("The parent team ID, or null when this is a root team."),
   organizationId: z.string().describe("The organization the team belongs to."),
   createdBy: z
     .string()
@@ -98,6 +103,9 @@ const CreateTeamToolArgsSchema = z
       .string()
       .optional()
       .describe("Optional human-readable description of the team."),
+    parent_id: UuidIdSchema.nullable()
+      .optional()
+      .describe("Optional parent team ID. Omit or pass null for a root team."),
     labels: z
       .array(LabelInputSchema)
       .optional()
@@ -141,6 +149,11 @@ const EditTeamToolArgsSchema = z
       .optional()
       .describe(
         "Optional new team description. Pass null to clear an existing description.",
+      ),
+    parent_id: UuidIdSchema.nullable()
+      .optional()
+      .describe(
+        "Move the team under this parent. Pass null to move it to the root; omit to leave the hierarchy unchanged.",
       ),
     labels: z
       .array(LabelInputSchema)
@@ -260,7 +273,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_TEAM_SHORT_NAME,
     title: "Create Team",
     description:
-      "Create a new team in the organization, optionally with key-value labels. Teams group users and control access to profiles and MCP servers.",
+      "Create a new team in the organization, optionally nested under a parent team and with key-value labels. Teams group users and control resource access.",
     schema: CreateTeamToolArgsSchema,
     outputSchema: z.object({ team: TeamOutputItemSchema }),
     async handler({ args, context }) {
@@ -300,7 +313,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_TEAM_SHORT_NAME,
     title: "Edit Team",
     description:
-      "Update a team's name, description, and/or labels. At least one field must be provided. Labels, when provided, replace the team's existing labels.",
+      "Update a team's name, description, parent, and/or labels. At least one field must be provided. Labels, when provided, replace the team's existing labels.",
     schema: EditTeamToolArgsSchema,
     outputSchema: z.object({ team: TeamOutputItemSchema }),
     async handler({ args, context }) {
@@ -523,6 +536,7 @@ function serializeTeam(team: Team, memberCount: number) {
     id: team.id,
     name: team.name,
     description: team.description ?? null,
+    parentId: team.parentId,
     organizationId: team.organizationId,
     createdBy: team.createdBy ?? null,
     memberCount,
@@ -577,11 +591,33 @@ async function handleCreateTeam(params: {
   }
 
   try {
+    const parentValidation = await validateTeamParent({
+      parentId: args.parent_id ?? null,
+      organizationId: context.organizationId,
+    });
+    if (!parentValidation.ok) {
+      return teamParentValidationError(parentValidation.reason);
+    }
+    if (
+      args.parent_id &&
+      !(await userHasPermission(
+        context.userId,
+        context.organizationId,
+        "team",
+        "update",
+      )) &&
+      !(await TeamModel.isUserTeamAdmin(args.parent_id, context.userId))
+    ) {
+      return errorResult(
+        "You can only create a child under a team you can manage.",
+      );
+    }
     const team = await TeamModel.create({
       name: args.name,
       description: args.description,
       organizationId: context.organizationId,
       createdBy: context.userId,
+      parentId: args.parent_id,
       labels: args.labels ? deduplicateLabels(args.labels) : undefined,
     });
 
@@ -737,6 +773,7 @@ async function handleEditTeam(params: {
     if (
       args.name === undefined &&
       args.description === undefined &&
+      args.parent_id === undefined &&
       args.labels === undefined
     ) {
       return errorResult("No fields provided to update.");
@@ -747,11 +784,23 @@ async function handleEditTeam(params: {
       return errorResult(`Team with ID ${args.id} not found.`);
     }
 
+    if (args.parent_id !== undefined) {
+      const parentValidation = await validateTeamParent({
+        teamId: args.id,
+        parentId: args.parent_id,
+        organizationId: context.organizationId,
+      });
+      if (!parentValidation.ok) {
+        return teamParentValidationError(parentValidation.reason);
+      }
+    }
+
     const updated = await TeamModel.update(args.id, {
       ...(args.name !== undefined ? { name: args.name } : {}),
       ...(args.description !== undefined
         ? { description: args.description }
         : {}),
+      ...(args.parent_id !== undefined ? { parentId: args.parent_id } : {}),
       ...(args.labels !== undefined
         ? { labels: deduplicateLabels(args.labels) }
         : {}),
@@ -771,6 +820,17 @@ async function handleEditTeam(params: {
   } catch (error) {
     return catchError(error, "updating team");
   }
+}
+
+function teamParentValidationError(
+  reason: "parent_not_found" | "self_parent" | "cycle",
+): CallToolResult {
+  const messages = {
+    parent_not_found: "Parent team not found.",
+    self_parent: "A team cannot be its own parent.",
+    cycle: "A team cannot be moved under one of its descendants.",
+  } as const;
+  return errorResult(messages[reason]);
 }
 
 async function handleDeleteTeam(params: {
@@ -1030,7 +1090,6 @@ async function handleRemoveTeamMember(params: {
     if (context.userId) {
       try {
         await cleanupCredentialSourcesAfterMemberRemoval({
-          actingUserId: context.userId,
           removedUserId: args.user_id,
           teamId: args.team_id,
           organizationId: context.organizationId,

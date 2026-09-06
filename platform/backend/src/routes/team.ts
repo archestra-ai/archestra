@@ -16,6 +16,7 @@ import {
   checkLastAdminInvariant,
   cleanupCredentialSourcesAfterMemberRemoval,
   getTeamForOrg,
+  validateTeamParent,
 } from "@/services/team-authorization";
 import {
   AddTeamExternalGroupBodySchema,
@@ -109,18 +110,39 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        body: { name, description, convertToolResultsToToon, labels },
+        body: { name, description, parentId, convertToolResultsToToon, labels },
         user,
         organizationId,
+        headers,
       },
       reply,
     ) => {
+      await assertValidTeamParent({
+        parentId: parentId ?? null,
+        organizationId,
+      });
+      if (parentId) {
+        const { success: canManageAllTeams } = await hasPermission(
+          { team: ["update"] },
+          headers,
+        );
+        if (
+          !canManageAllTeams &&
+          !(await TeamModel.isUserTeamAdmin(parentId, user.id))
+        ) {
+          throw new ApiError(
+            403,
+            "You can only create a child under a team you can manage",
+          );
+        }
+      }
       return reply.send(
         await TeamModel.create({
           name,
           description,
           organizationId,
           createdBy: user.id,
+          parentId,
           convertToolResultsToToon,
           labels,
         }),
@@ -193,6 +215,14 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!canUpdateTeams) {
         throw new ApiError(403, "You are not authorized to update this team");
+      }
+
+      if (body.parentId !== undefined) {
+        await assertValidTeamParent({
+          teamId: id,
+          parentId: body.parentId,
+          organizationId,
+        });
       }
 
       const team = await TeamModel.update(id, body);
@@ -482,7 +512,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // if they no longer have access to agents through other teams
       try {
         const cleanedCount = await cleanupCredentialSourcesAfterMemberRemoval({
-          actingUserId: user.id,
           removedUserId: userId,
           teamId: id,
           organizationId,
@@ -747,6 +776,23 @@ async function assertCanManageTeam(params: {
   if (!allowed) {
     throw new ApiError(403, `You must be a team admin to ${params.action}`);
   }
+}
+
+async function assertValidTeamParent(params: {
+  teamId?: string;
+  parentId: string | null;
+  organizationId: string;
+}) {
+  const result = await validateTeamParent(params);
+  if (result.ok) {
+    return;
+  }
+  const messages = {
+    parent_not_found: "Parent team not found",
+    self_parent: "A team cannot be its own parent",
+    cycle: "A team cannot be moved under one of its descendants",
+  } as const;
+  throw new ApiError(400, messages[result.reason]);
 }
 
 async function assertNotRemovingLastTeamAdmin(params: {

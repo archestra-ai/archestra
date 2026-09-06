@@ -73,6 +73,25 @@ describe("team tool execution", () => {
     expect(persisted?.name).toBe("Engineering");
   });
 
+  test("create_team can nest a team under an accessible parent", async ({
+    makeTeam,
+  }) => {
+    const parent = await makeTeam(organizationId, adminUserId, {
+      name: "Product",
+    });
+
+    const result = await executeArchestraTool(
+      toolName("create_team"),
+      { name: "Platform", parent_id: parent.id },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).team.parentId).toBe(parent.id);
+    const created = (result.structuredContent as any).team;
+    expect((await TeamModel.findById(created.id))?.parentId).toBe(parent.id);
+  });
+
   test("create_team assigns labels at creation time", async () => {
     const result = await executeArchestraTool(
       toolName("create_team"),
@@ -340,6 +359,37 @@ describe("team tool execution", () => {
     expect(result.isError).toBe(false);
     const persisted = await TeamModel.findById(team.id);
     expect(persisted?.description).toBeNull();
+  });
+
+  test("edit_team moves a team and rejects hierarchy cycles", async ({
+    makeTeam,
+  }) => {
+    const root = await makeTeam(organizationId, adminUserId);
+    const child = await makeTeam(organizationId, adminUserId, {
+      parentId: root.id,
+    });
+    const grandchild = await makeTeam(organizationId, adminUserId, {
+      parentId: child.id,
+    });
+
+    const moveResult = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: grandchild.id, parent_id: root.id },
+      mockContext,
+    );
+    expect(moveResult.isError).toBe(false);
+    expect((moveResult.structuredContent as any).team.parentId).toBe(root.id);
+
+    const cycleResult = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: root.id, parent_id: child.id },
+      mockContext,
+    );
+    expect(cycleResult.isError).toBe(true);
+    expect((cycleResult.content[0] as any).text).toContain(
+      "cannot be moved under one of its descendants",
+    );
+    expect((await TeamModel.findById(root.id))?.parentId).toBeNull();
   });
 
   test("edit_team replaces labels when provided", async ({ makeTeam }) => {

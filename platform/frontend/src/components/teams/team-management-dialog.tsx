@@ -9,7 +9,15 @@ import {
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Key, RefreshCw, Trash2, Users } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Key,
+  RefreshCw,
+  Trash2,
+  Users,
+} from "lucide-react";
 import {
   type ComponentType,
   useEffect,
@@ -18,11 +26,8 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import {
-  type ProfileLabel,
-  ProfileLabels,
-  type ProfileLabelsRef,
-} from "@/components/agent-labels";
+import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -46,13 +50,23 @@ import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useMemberSearch } from "@/lib/member.query";
 import { useActiveOrganization } from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
+import {
+  formatTeamPath,
+  getTeamDescendantIds,
+} from "@/lib/teams/team-hierarchy";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
-type TeamDialogSection = "team" | "token" | "vault-folder" | "external-groups";
+type TeamDialogSection =
+  | "team"
+  | "members"
+  | "token"
+  | "vault-folder"
+  | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
 
 /**
@@ -101,6 +115,7 @@ type TeamManagementDialogProps =
 
 const editNavItems = [
   { id: "team", label: "Team" },
+  { id: "members", label: "Members" },
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
 
@@ -132,6 +147,9 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
   const [name, setName] = useState(team?.name ?? "");
   const [description, setDescription] = useState(team?.description ?? "");
+  const [parentId, setParentId] = useState<string | null>(
+    team?.parentId ?? null,
+  );
   const [labels, setLabels] = useState<ProfileLabel[]>(team?.labels ?? []);
   const [memberChanges, setMemberChanges] = useState<StagedMemberChanges>(
     new Map(),
@@ -144,6 +162,9 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
   });
+  const { data: organizationTeams = [] } = useTeams({
+    enabled: open && (mode === "create" || canUpdateTeams),
+  });
   const { data: tokensData } = useTokens({
     enabled: open && mode === "edit" && canUpdateTeams,
   });
@@ -153,11 +174,11 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   );
   const navItems = useMemo(() => {
     if (mode === "create") {
-      return createNavItems;
+      return team ? [editNavItems[0], editNavItems[1]] : createNavItems;
     }
 
     if (readOnly) {
-      return [editNavItems[1]];
+      return [editNavItems[2]];
     }
 
     if (!canUpdateTeams) {
@@ -165,11 +186,17 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     }
 
     if (!byosEnabled) {
-      return [editNavItems[0], tokenNavItem, editNavItems[1]];
+      return [editNavItems[0], editNavItems[1], tokenNavItem, editNavItems[2]];
     }
 
-    return [editNavItems[0], tokenNavItem, vaultFolderNavItem, editNavItems[1]];
-  }, [byosEnabled, canUpdateTeams, mode, readOnly]);
+    return [
+      editNavItems[0],
+      editNavItems[1],
+      tokenNavItem,
+      vaultFolderNavItem,
+      editNavItems[2],
+    ];
+  }, [byosEnabled, canUpdateTeams, mode, readOnly, team]);
   const title =
     mode === "create"
       ? "Create Team"
@@ -192,18 +219,21 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       setCreatedTeam(null);
       setName("");
       setDescription("");
+      setParentId(null);
       setLabels([]);
       return;
     }
 
     setName(editTeam?.name ?? "");
     setDescription(editTeam?.description ?? "");
+    setParentId(editTeam?.parentId ?? null);
     setLabels(editTeam?.labels ?? []);
   }, [editTeam, initialSection, mode, open, readOnly]);
 
   useEffect(() => {
     const canShowActiveSection =
       (activeSection === "team" && !readOnly) ||
+      (activeSection === "members" && !!team && !readOnly) ||
       activeSection === "external-groups" ||
       (activeSection === "token" && canUpdateTeams && !readOnly) ||
       (activeSection === "vault-folder" &&
@@ -214,7 +244,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     if (!canShowActiveSection) {
       setActiveSection(readOnly ? "external-groups" : "team");
     }
-  }, [activeSection, byosEnabled, canUpdateTeams, readOnly]);
+  }, [activeSection, byosEnabled, canUpdateTeams, readOnly, team]);
 
   const saveTeam = useMutation({
     mutationFn: async () => {
@@ -222,12 +252,13 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       // Team details are only editable with org-level team management; a
       // team admin can still open the dialog to manage members, so skip the
       // details update they aren't allowed to make.
-      if (canEditDetails) {
+      if (canEditDetails && activeSection === "team") {
         // Flush any label typed into the picker but not yet committed.
         const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
         const body = {
           name: name.trim(),
           description: description.trim() || undefined,
+          parentId,
           labels: finalLabels.map(({ key, value }) => ({ key, value })),
         };
         const { data, error } = !team
@@ -358,8 +389,8 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           >
             Cancel
           </Button>
-          {activeSection === "team" &&
-          (canEditDetails || memberChanges.size > 0) ? (
+          {(activeSection === "team" && canEditDetails) ||
+          (activeSection === "members" && memberChanges.size > 0) ? (
             <Button type="submit" disabled={saveTeam.isPending}>
               {saveTeam.isPending
                 ? mode === "create" && !team
@@ -379,17 +410,25 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     >
       {activeSection === "team" && (
         <TeamSection
-          open={open}
           team={team}
-          showMembers={Boolean(team)}
           name={name}
           description={description}
+          parentId={parentId}
+          organizationTeams={organizationTeams}
+          canManageAllTeams={canUpdateTeams}
           labels={labels}
           labelsRef={labelsRef}
           onNameChange={setName}
           onDescriptionChange={setDescription}
+          onParentIdChange={setParentId}
           onLabelsChange={setLabels}
           readOnlyDetails={!canEditDetails}
+        />
+      )}
+      {activeSection === "members" && team && (
+        <TeamMembersSection
+          open={open}
+          team={team}
           memberChanges={memberChanges}
           onMemberChangesChange={setMemberChanges}
           onGoToExternalGroups={() => setActiveSection("external-groups")}
@@ -413,21 +452,32 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 }
 
 function TeamSection(props: {
-  open: boolean;
   team: Team | null;
-  showMembers: boolean;
   name: string;
   description: string;
+  parentId: string | null;
+  organizationTeams: Team[];
+  canManageAllTeams: boolean;
   labels: ProfileLabel[];
   labelsRef: React.Ref<ProfileLabelsRef>;
   onNameChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
+  onParentIdChange: (value: string | null) => void;
   onLabelsChange: (labels: ProfileLabel[]) => void;
   readOnlyDetails: boolean;
-  memberChanges: StagedMemberChanges;
-  onMemberChangesChange: (changes: StagedMemberChanges) => void;
-  onGoToExternalGroups: () => void;
 }) {
+  const descendantIds = new Set(
+    props.team
+      ? getTeamDescendantIds(props.organizationTeams, props.team.id)
+      : [],
+  );
+  const parentOptions = props.organizationTeams.filter(
+    (candidate) =>
+      candidate.id !== props.team?.id &&
+      !descendantIds.has(candidate.id) &&
+      (props.canManageAllTeams || candidate.myRole === ADMIN_ROLE_NAME),
+  );
+
   return (
     <div className="space-y-6">
       <div className="grid max-w-3xl gap-4">
@@ -450,83 +500,131 @@ function TeamSection(props: {
             disabled={props.readOnlyDetails}
           />
         </div>
+        <div className="space-y-2">
+          <Label>Parent Team</Label>
+          <Select
+            value={props.parentId ?? "root"}
+            onValueChange={(value) =>
+              props.onParentIdChange(value === "root" ? null : value)
+            }
+            disabled={props.readOnlyDetails}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="No parent team" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="root">No parent team</SelectItem>
+              {parentOptions.map((candidate) => (
+                <SelectItem key={candidate.id} value={candidate.id}>
+                  {formatTeamPath(props.organizationTeams, candidate.id)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            Nest this team in your organization hierarchy. Resource access is
+            inherited through the hierarchy; team administration is not.{" "}
+            <ExternalDocsLink
+              href={getDocsUrl(
+                DocsPage.PlatformAccessControl,
+                "team-hierarchies",
+              )}
+            >
+              Learn about inherited access
+            </ExternalDocsLink>
+            .
+          </FieldDescription>
+        </div>
         {props.readOnlyDetails ? (
-          props.labels.length > 0 && (
-            <div className="space-y-2">
-              <Label>Labels</Label>
-              <div className="flex flex-wrap gap-2">
-                {props.labels.map((label) => (
-                  <Badge
-                    key={label.key}
-                    variant="secondary"
-                    className="flex items-center gap-1"
-                  >
-                    <span className="font-semibold">{label.key}:</span>
-                    <span>{label.value}</span>
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )
+          <ReadOnlyAdvancedLabels labels={props.labels} />
         ) : (
-          <ProfileLabels
+          <AdvancedLabelsSection
             ref={props.labelsRef}
             labels={props.labels}
             onLabelsChange={props.onLabelsChange}
           />
         )}
       </div>
-
-      {props.showMembers && props.team && (
-        <>
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium">Members</h3>
-            <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-xs">
-              <p>
-                <span className="font-medium">Optional</span> — only for adding
-                members by hand.{" "}
-                <button
-                  type="button"
-                  onClick={props.onGoToExternalGroups}
-                  className="text-primary hover:underline"
-                >
-                  External Group Sync
-                </button>{" "}
-                syncs membership and{" "}
-                <ExternalDocsLink
-                  href={getDocsUrl(DocsPage.PlatformSsoRoleMapping)}
-                >
-                  Role Mapping
-                </ExternalDocsLink>{" "}
-                in your OIDC provider syncs roles — never this setting.
-              </p>
-              <div className="space-y-1 text-muted-foreground">
-                <p>
-                  <span className="font-medium text-foreground">
-                    Able to edit team
-                  </span>{" "}
-                  — rename it, manage members, rotate its token. This team only.
-                </p>
-                <p>
-                  <span className="font-medium text-foreground">
-                    Not able to edit team
-                  </span>{" "}
-                  — the default, and what sync assigns.
-                </p>
-              </div>
-            </div>
-            <MembersSection
-              open={props.open}
-              team={props.team}
-              changes={props.memberChanges}
-              onChangesChange={props.onMemberChangesChange}
-            />
-          </div>
-        </>
-      )}
     </div>
+  );
+}
+
+function TeamMembersSection(props: {
+  open: boolean;
+  team: Team;
+  memberChanges: StagedMemberChanges;
+  onMemberChangesChange: (changes: StagedMemberChanges) => void;
+  onGoToExternalGroups: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-xs">
+        <p>
+          <span className="font-medium">Optional:</span> add members manually,
+          or use{" "}
+          <button
+            type="button"
+            onClick={props.onGoToExternalGroups}
+            className="text-primary hover:underline"
+          >
+            External Group Sync
+          </button>{" "}
+          to sync membership. Configure roles through{" "}
+          <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoRoleMapping)}>
+            Role Mapping
+          </ExternalDocsLink>
+          .
+        </p>
+        <div className="space-y-1 text-muted-foreground">
+          <p>
+            <span className="font-medium text-foreground">
+              Able to edit team:
+            </span>{" "}
+            manage members and rotate this team&apos;s token.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">
+              Not able to edit team:
+            </span>{" "}
+            use resources available to the team. This is the default role from
+            group sync.
+          </p>
+        </div>
+      </div>
+      <MembersSection
+        open={props.open}
+        team={props.team}
+        changes={props.memberChanges}
+        onChangesChange={props.onMemberChangesChange}
+      />
+    </div>
+  );
+}
+
+function ReadOnlyAdvancedLabels({ labels }: { labels: ProfileLabel[] }) {
+  return (
+    <details className="group border-t pt-3">
+      <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium">
+        Advanced
+        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="flex flex-wrap gap-2 pt-4">
+        {labels.length === 0 ? (
+          <span className="text-sm text-muted-foreground">No labels</span>
+        ) : (
+          labels.map((label) => (
+            <Badge
+              key={label.key}
+              variant="secondary"
+              className="flex items-center gap-1"
+            >
+              <span className="font-semibold">{label.key}:</span>
+              <span>{label.value}</span>
+            </Badge>
+          ))
+        )}
+      </div>
+    </details>
   );
 }
 

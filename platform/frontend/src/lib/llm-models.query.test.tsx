@@ -106,10 +106,12 @@ describe("useLlmModels", () => {
     vi.mocked(archestraApiSdk.getLlmModels)
       .mockResolvedValueOnce({
         data: undefined,
-        error: { error: { message: "boom", type: "api_internal_error" } },
+        error: {
+          error: { message: "boom", type: "api_internal_server_error" },
+        },
         request: new Request("http://localhost/api/llm-models/available"),
         response: new Response(null),
-      } as Awaited<ReturnType<typeof archestraApiSdk.getLlmModels>>)
+      } as never)
       .mockResolvedValueOnce(makeGetLlmModelsResult([makeModel()]));
 
     const queryClient = new QueryClient({

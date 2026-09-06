@@ -158,7 +158,9 @@ describe("chat agent roster", () => {
     sdk.getAllAgents
       .mockResolvedValueOnce({
         data: undefined,
-        error: { error: { message: "boom", type: "api_internal_error" } },
+        error: {
+          error: { message: "boom", type: "api_internal_server_error" },
+        },
       } as never)
       .mockResolvedValueOnce({
         data: [{ id: "agent-1", name: "Agent" }],

@@ -76,6 +76,7 @@ const mockGetAzureOpenAiBearerTokenProvider = vi.hoisted(() => vi.fn());
 
 vi.mock("@/clients/azure-openai-credentials", () => ({
   getAzureOpenAiBearerTokenProvider: mockGetAzureOpenAiBearerTokenProvider,
+  isAnthropicAzureFoundryEntraIdEnabled: vi.fn(() => false),
   isAzureOpenAiEntraIdEnabled: mockIsAzureOpenAiEntraIdEnabled,
 }));
 

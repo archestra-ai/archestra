@@ -7,6 +7,7 @@ vi.mock("@/observability");
 
 vi.mock("@/clients/azure-openai-credentials", () => ({
   getAzureOpenAiBearerTokenProvider: vi.fn(() => async () => "entra-token"),
+  isAnthropicAzureFoundryEntraIdEnabled: vi.fn(() => false),
   isAzureOpenAiEntraIdEnabled: vi.fn(() => false),
 }));
 

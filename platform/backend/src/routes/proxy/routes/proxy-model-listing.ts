@@ -64,8 +64,9 @@ export async function resolveProxyModelsApiKey(params: {
   request: Pick<FastifyRequest, "ip">;
   provider: SupportedProvider;
   token: string | undefined;
+  allowKeyless?: boolean;
 }): Promise<ResolvedProxyModelsKey> {
-  const { request, provider, token } = params;
+  const { request, provider, token, allowKeyless = false } = params;
 
   if (!token) {
     throw new ApiError(
@@ -88,11 +89,11 @@ export async function resolveProxyModelsApiKey(params: {
       expectedProvider: provider,
       expectedOrganizationId: null,
     });
-    if (!resolved.apiKey) {
+    if (!resolved.apiKey && !allowKeyless) {
       throw new ApiError(401, `Could not resolve an API key for ${provider}.`);
     }
     assertSubscriptionCredentialForProvider({
-      apiKey: resolved.apiKey,
+      apiKey: resolved.apiKey ?? "",
       provider,
     });
     await virtualKeyRateLimiter.recordSuccess({ credential: token });
@@ -106,7 +107,7 @@ export async function resolveProxyModelsApiKey(params: {
     // baseUrl), and a custom inference gateway may not serve `/models`. Fall
     // back to the provider default (undefined) when no base is configured.
     return {
-      apiKey: resolved.apiKey,
+      apiKey: resolved.apiKey ?? "",
       baseUrl: providerKey?.baseUrl ?? undefined,
       extraHeaders: providerKey?.extraHeaders ?? null,
     };

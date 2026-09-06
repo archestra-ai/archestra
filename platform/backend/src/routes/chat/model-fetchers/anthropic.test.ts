@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import config, { type AnthropicWifConfig } from "@/config";
 import { ApiError } from "@/types";
-import { fetchAnthropicModels } from "./anthropic";
+import {
+  fetchAnthropicModels,
+  fetchAnthropicModelsViaVertexAi,
+} from "./anthropic";
 
 // No module mocks: drive the real WIF client + fetcher through the fetch
 // boundary and real config, keeping this file in the fast vitest project.
@@ -68,6 +72,7 @@ describe("fetchAnthropicModels", () => {
   beforeEach(() => {
     anthropicWorkloadIdentity.resetForTests();
     config.llm.anthropic.wif = null;
+    config.llm.anthropic.vertexAi.enabled = false;
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "");
   });
@@ -156,5 +161,83 @@ describe("fetchAnthropicModels", () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.statusCode).toBe(502);
+  });
+
+  test("discovers versioned and alias Claude models from Vertex AI", async () => {
+    config.llm.anthropic.vertexAi.enabled = true;
+    config.llm.anthropic.vertexAi.project = "test-project";
+    vi.spyOn(anthropicVertexClient, "getRequestHeaders").mockResolvedValue(
+      new Headers({ Authorization: "Bearer google-token" }),
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (!url.searchParams.has("pageToken")) {
+        return new Response(
+          JSON.stringify({
+            publisherModels: [
+              {
+                name: "publishers/anthropic/models/claude-opus-4-1",
+                versionId: "20250805",
+              },
+              {
+                name: "publishers/other/models/not-claude",
+                versionId: "default",
+              },
+            ],
+            nextPageToken: "next-page",
+          }),
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          publisherModels: [
+            {
+              name: "publishers/anthropic/models/claude-sonnet-5",
+              versionId: "default",
+            },
+          ],
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchAnthropicModelsViaVertexAi()).resolves.toEqual([
+      {
+        id: "claude-opus-4-1@20250805",
+        displayName: "Claude Opus 4.1",
+        provider: "anthropic",
+      },
+      {
+        id: "claude-sonnet-5",
+        displayName: "Claude Sonnet 5",
+        provider: "anthropic",
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("routes keyless Anthropic model discovery through Vertex AI", async () => {
+    config.llm.anthropic.vertexAi.enabled = true;
+    config.llm.anthropic.vertexAi.project = "test-project";
+    vi.spyOn(anthropicVertexClient, "getRequestHeaders").mockResolvedValue(
+      new Headers({ Authorization: "Bearer google-token" }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          publisherModels: [
+            {
+              name: "publishers/anthropic/models/claude-sonnet-5",
+              versionId: "default",
+            },
+          ],
+        }),
+      ),
+    );
+
+    await expect(fetchAnthropicModels("", null)).resolves.toMatchObject([
+      { id: "claude-sonnet-5", provider: "anthropic" },
+    ]);
   });
 });

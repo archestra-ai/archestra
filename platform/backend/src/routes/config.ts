@@ -6,6 +6,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
@@ -130,6 +131,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
               anthropicWifEnabled: z.boolean(),
+              anthropicKeylessAuthEnabled: z.boolean(),
               bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
               incomingEmail: z.object({
@@ -269,6 +271,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
           anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+          anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
           bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
           incomingEmail: getEmailProviderInfo(),

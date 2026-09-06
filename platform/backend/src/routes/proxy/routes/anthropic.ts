@@ -3,6 +3,7 @@ import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import config from "@/config";
 import logger from "@/logging";
 import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
@@ -148,6 +149,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       request,
       provider: "anthropic",
       token: extractAnthropicToken(request.headers),
+      allowKeyless: isAnthropicKeylessAuthEnabled(),
     });
     logger.debug({ agentId }, "[UnifiedProxy] Listing Anthropic models");
     return toAnthropicModelsList(

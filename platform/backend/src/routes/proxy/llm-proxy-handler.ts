@@ -31,7 +31,8 @@ import {
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
+import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
@@ -2499,12 +2500,16 @@ function createDownstreamAbortSignal(params: {
  * caller-supplied Authorization value is not a credential and cannot stand in
  * for authentication.
  *
- * Azure (Entra ID) and Anthropic (workload identity) are deliberately absent:
- * both fall back to server credentials only when no caller key is present, so a
- * key supplied there is a genuine provider secret that the upstream validates.
+ * Azure (Entra ID) and Anthropic workload identity are deliberately absent:
+ * both fall back to server credentials only when no caller key is present. In
+ * Anthropic Vertex AI mode, the configured Google credential always replaces
+ * caller credentials, matching Gemini's Vertex behavior.
  */
 function providerSuppliesServerCredential(providerName: string): boolean {
-  return providerName === "gemini" && isVertexAiEnabled();
+  return (
+    (providerName === "gemini" && isVertexAiEnabled()) ||
+    (providerName === "anthropic" && anthropicVertexClient.isEnabled())
+  );
 }
 
 function shouldUseKeylessProviderApiKey(params: {
@@ -2535,7 +2540,7 @@ function shouldUseKeylessProviderApiKey(params: {
   return isProviderApiKeyOptional({
     provider: row.provider,
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+    anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
   });
 }
 

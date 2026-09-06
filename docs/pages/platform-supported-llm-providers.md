@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-29
+lastUpdated: 2026-09-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -133,6 +133,16 @@ Claude Foundry deployments must exist in Azure before requests will work. Use th
 Azure requires Anthropic deployment metadata when creating Claude deployments: `industry`, `organizationName`, and `countryCode`. In Azure CLI this may require an ARM REST deployment call with `properties.modelProviderData`.
 
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
+
+### Anthropic on Vertex AI
+
+Archestra can use Claude models published through Google Vertex AI. This mode uses Application Default Credentials and requires no Anthropic API key.
+
+Set `ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED=true`, then configure the project and location. The default location is `global`. Archestra discovers Claude models from Model Garden and adds them to the Anthropic model picker.
+
+Enable each Claude model in Model Garden before using it. Google may require accepting provider terms during activation.
+
+See the [deployment environment variables](/docs/platform-deployment#environment-variables) for the full configuration.
 
 ### Workload Identity Federation (keyless)
 

@@ -19,7 +19,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission, userHasPermission } from "@/auth";
-import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   type BedrockSigV4Credentials,
@@ -465,7 +465,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 isProviderApiKeyOptional({
                   provider: data.provider,
                   azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-                  anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+                  anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
                 }) || data.apiKey
               );
             },
@@ -636,10 +636,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else if (
         body.provider === "anthropic" &&
         !actualApiKeyValue &&
-        anthropicWorkloadIdentity.isEnabled()
+        isAnthropicKeylessAuthEnabled()
       ) {
-        // Keyless Anthropic key backed by Workload Identity Federation —
-        // exercises the token exchange and model listing end to end.
+        // Exercise the configured keyless credential and model listing end to
+        // end, whether it comes from Vertex AI, WIF, or Azure Foundry.
         await testApiKeyOrThrow({
           organizationId,
           provider: body.provider,
@@ -671,7 +671,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+          anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
         })
       ) {
         throw new ApiError(
@@ -725,7 +725,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+          anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
         });
       if (canSync) {
         try {
@@ -1128,9 +1128,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         } else if (
           apiKeyFromDB.provider === "anthropic" &&
-          anthropicWorkloadIdentity.isEnabled()
+          isAnthropicKeylessAuthEnabled()
         ) {
-          // Keyless Anthropic WIF key — re-test with the updated runtime settings.
+          // Re-test the configured keyless Anthropic runtime settings.
           await testApiKeyOrThrow({
             organizationId,
             provider: apiKeyFromDB.provider,

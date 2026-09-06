@@ -73,7 +73,7 @@ export function CreateLlmProviderApiKeyDialog({
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
-  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
+  const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
   const { data: canCreateOrgScopedKey } = useHasPermissions({
@@ -106,7 +106,7 @@ export function CreateLlmProviderApiKeyDialog({
   const formValues = form.watch();
   const isValid = getIsCreateFormValid({
     azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-    anthropicWifEnabled: anthropicWifEnabled === true,
+    anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
     byosEnabled: Boolean(byosEnabled),
     values: formValues,
   });
@@ -281,13 +281,13 @@ function getDefaultFormValues(params: {
 
 function getIsCreateFormValid(params: {
   azureOpenAiEntraIdEnabled: boolean;
-  anthropicWifEnabled: boolean;
+  anthropicKeylessAuthEnabled: boolean;
   byosEnabled: boolean;
   values: LlmProviderApiKeyFormValues;
 }) {
   const {
     azureOpenAiEntraIdEnabled,
-    anthropicWifEnabled,
+    anthropicKeylessAuthEnabled,
     byosEnabled,
     values,
   } = params;
@@ -308,7 +308,7 @@ function getIsCreateFormValid(params: {
         : isProviderApiKeyOptional({
             provider: values.provider,
             azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
-            anthropicWifEnabled,
+            anthropicKeylessAuthEnabled,
           }) || values.apiKey),
   );
 }

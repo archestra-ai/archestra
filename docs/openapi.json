@@ -133788,6 +133788,9 @@
                         "anthropicWifEnabled": {
                           "type": "boolean"
                         },
+                        "anthropicKeylessAuthEnabled": {
+                          "type": "boolean"
+                        },
                         "bedrockIamAuthEnabled": {
                           "type": "boolean"
                         },
@@ -133942,6 +133945,7 @@
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
                         "anthropicWifEnabled",
+                        "anthropicKeylessAuthEnabled",
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
                         "incomingEmail",

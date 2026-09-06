@@ -166,7 +166,7 @@ export default function ApiKeysPage() {
   const bulkDeleteMutation = useBulkDeleteLlmProviderApiKeys();
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
-  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
+  const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -621,7 +621,7 @@ export default function ApiKeysPage() {
             isProviderApiKeyOptional({
               provider: row.original.provider,
               azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-              anthropicWifEnabled: anthropicWifEnabled === true,
+              anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
             }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -688,7 +688,7 @@ export default function ApiKeysPage() {
       openDeleteDialog,
       getKeyUsage,
       azureOpenAiEntraIdEnabled,
-      anthropicWifEnabled,
+      anthropicKeylessAuthEnabled,
       currentUserId,
       providerCatalog,
     ],

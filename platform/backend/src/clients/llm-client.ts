@@ -47,7 +47,8 @@ import {
 } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
-import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
+import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
@@ -401,7 +402,7 @@ export async function createLLMModelForAgent(params: {
   const isApiKeyOptional = isProviderApiKeyOptional({
     provider,
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+    anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
   });
 
   logger.info(
@@ -607,18 +608,24 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- Native SDK providers (use their own SDK, call client(modelName)) ---
 
   anthropic: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createAnthropic({
-        apiKey,
-        baseURL,
-        headers,
-        // Models that think by default return their thinking text only on
-        // request — see createAnthropicThinkingDisplayFetch.
-        fetch: createAnthropicThinkingDisplayFetch(fetch),
-      })(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) =>
+      direct && anthropicVertexClient.isEnabled()
+        ? anthropicVertexClient.createModel({
+            modelId: modelName,
+            fetch: createAnthropicThinkingDisplayFetch(fetch),
+          })
+        : createAnthropic({
+            apiKey,
+            baseURL,
+            headers,
+            // Models that think by default return their thinking text only on
+            // request — see createAnthropicThinkingDisplayFetch.
+            fetch: createAnthropicThinkingDisplayFetch(fetch),
+          })(modelName),
     defaultBaseUrl: config.llm.anthropic.baseUrl,
-    apiKeyRequiredMessage:
-      "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
+    apiKeyRequiredMessage: isAnthropicKeylessAuthEnabled()
+      ? undefined
+      : "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
     proxiedPathSuffix: "/v1",
   },
 

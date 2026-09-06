@@ -2573,6 +2573,14 @@ const config = {
         identityTokenFile: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE,
         identityToken: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN,
       }),
+      vertexAi: {
+        enabled: process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED === "true",
+        project: process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT || "",
+        location:
+          process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_LOCATION || "global",
+        credentialsFile:
+          process.env.ARCHESTRA_ANTHROPIC_VERTEX_AI_CREDENTIALS_FILE || "",
+      },
     },
     gemini: {
       baseUrl:

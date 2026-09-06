@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1157,6 +1157,20 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
+
+- **`ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED`** - Enable Claude through Vertex AI.
+  - Default: `false`
+  - Uses Application Default Credentials when no credentials file is set
+  - Do not enable another keyless Anthropic authentication mode at the same time
+
+- **`ARCHESTRA_ANTHROPIC_VERTEX_AI_PROJECT`** - Google Cloud project ID for Claude on Vertex AI.
+  - Required when: `ARCHESTRA_ANTHROPIC_VERTEX_AI_ENABLED=true`
+
+- **`ARCHESTRA_ANTHROPIC_VERTEX_AI_LOCATION`** - Vertex AI location for Claude requests.
+  - Default: `global`
+
+- **`ARCHESTRA_ANTHROPIC_VERTEX_AI_CREDENTIALS_FILE`** - Path to a Google Cloud service account JSON key file.
+  - Optional when Application Default Credentials are available
 
 - **`ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`**, **`ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`**, **`ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`** - Enable keyless Anthropic authentication via [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation).
   - All three are required, plus one identity token source (below). A partial configuration logs a warning at startup and disables WIF.

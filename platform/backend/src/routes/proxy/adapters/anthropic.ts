@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
+import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import {
   getAzureAiFoundryBearerTokenProvider,
@@ -1493,6 +1494,23 @@ export const anthropicAdapterFactory: LLMProvider<
     const isAuthToken = apiKey?.startsWith("Bearer:") ?? false;
     const token = isAuthToken && apiKey ? apiKey.slice(7) : undefined;
     const regularApiKey = isAuthToken ? undefined : apiKey;
+
+    if (anthropicVertexClient.isEnabled()) {
+      return new AnthropicProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
+        apiKey: null,
+        authToken: null,
+        baseURL: anthropicVertexClient.getApiRoot(),
+        fetch: anthropicVertexClient.createFetch(customFetch),
+        timeout: ANTHROPIC_CLIENT_TIMEOUT_MS,
+        defaultHeaders: {
+          ...options.defaultHeaders,
+          // The fetch wrapper replaces this sentinel with a fresh Google OAuth
+          // token and removes Anthropic-only authentication headers.
+          Authorization: "Bearer <vertex-ai-managed>",
+        },
+      });
+    }
 
     if (!apiKey && isAnthropicAzureFoundryEntraIdEnabled()) {
       return new AnthropicProvider({

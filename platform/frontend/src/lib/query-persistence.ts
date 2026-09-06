@@ -22,6 +22,18 @@ import {
 export const PERSISTED_QUERY_META = { persist: true } as const;
 
 /**
+ * Bounded retry for the shell/bootstrap queries the new-chat composer cannot
+ * draw without — the agent roster and the model catalog. The app-wide default
+ * is `retry: false`, so without this a single transient fetch failure of either
+ * strands the composer on its "Select agent" / "Select model" placeholders with
+ * no default selected: the new-chat screen stays mounted, so nothing refetches
+ * until the user navigates away and back (T-1317). These are idempotent GETs,
+ * so retrying a transient failure a few times is safe.
+ */
+export const BOOTSTRAP_QUERY_RETRY = (failureCount: number): boolean =>
+  failureCount < 3;
+
+/**
  * Restore the previous snapshot into `client`.
  *
  * Call this once on the client after mount. Queries already in flight keep

@@ -100,16 +100,10 @@ export const TOOL_CONNECTION_PROMPTING: Record<
 };
 
 /**
- * What the setting is for, ahead of what the chosen option does — the fixed
- * lead-in that {@link TOOL_CONNECTION_PROMPTING} is read against.
- *
- * The per-choice line names a consequence ("nothing up front", "the chat opens
- * by naming…") without ever saying which decision it is a consequence of, so a
- * reader who has not opened the menu has no anchor for it. This one sentence is
- * that anchor: it states the question the options answer, so the changing line
- * beneath it reads as "…and here is when". Kept record-neutral for the same
- * reason as the lines it precedes — one string has to serve an agent, a gateway
- * and a proxy alike.
+ * The fixed lead-in {@link TOOL_CONNECTION_PROMPTING} is read against. The
+ * per-choice line names a consequence without saying which decision it answers,
+ * so this states the question. Record-neutral, for the same reason as those
+ * lines — one string serves an agent, a gateway and a proxy alike.
  */
 export const MISSING_CREDENTIAL_SUMMARY =
   "Some tools need a credential the user must connect first. This decides when they are prompted for it.";

@@ -23,11 +23,9 @@ function renderSettings(overrides: Partial<Props> = {}) {
 }
 
 describe("AgentToolBehaviorSettings — missing-connections status", () => {
-  // What was reported as unclear: the closed control shows only a terse label
-  // ("When a tool needs it") and Radix keeps the menu — where each choice is
-  // spelled out — unmounted while the setting is merely being read. So the
-  // status has to be stated inline, and it has to say both what the setting is
-  // for and what the current choice does.
+  // Reported as unclear: the closed select shows only a terse label and the
+  // menu stays unmounted while the setting is read, so the status — what the
+  // setting is for and what the current choice does — must be stated inline.
 
   it("always states what the setting is for, whatever the choice", () => {
     for (const behavior of ["allow", "warn", "block"] as const) {
@@ -71,8 +69,7 @@ describe("AgentToolBehaviorSettings — missing-connections status", () => {
 
   it("keeps the purpose summary but reports the pinned effect when locked", () => {
     // All mode pins the behavior and disables the control, so the second line
-    // reports what All mode does instead of a per-choice line the reader
-    // cannot change — while the purpose summary still stands.
+    // reports the pinned effect while the purpose summary still stands.
     renderSettings({ locked: true, missingCredentialBehavior: "allow" });
 
     expect(screen.getByText(MISSING_CREDENTIAL_SUMMARY)).toBeInTheDocument();

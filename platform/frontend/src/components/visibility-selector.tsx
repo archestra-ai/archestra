@@ -1,10 +1,16 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { CheckIcon, ChevronDown } from "lucide-react";
+import { CheckIcon, ChevronDown, GitBranch } from "lucide-react";
 import { useState } from "react";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import {
+  formatTeamPath,
+  getTeamDescendantIds,
+  type TeamHierarchyNode,
+} from "@/lib/teams/team-hierarchy";
 
 export type VisibilityOption<Value extends string> = {
   value: Value;
@@ -170,6 +176,82 @@ export function VisibilitySelector<Value extends string>({
       </div>
 
       {children}
+    </div>
+  );
+}
+
+export function TeamVisibilityPicker({
+  teams,
+  value,
+  onChange,
+  disabled = false,
+  required = false,
+  unavailableMessage,
+}: {
+  teams: TeamHierarchyNode[];
+  value: string[];
+  onChange: (teamIds: string[]) => void;
+  disabled?: boolean;
+  required?: boolean;
+  unavailableMessage?: string;
+}) {
+  const selectedIds = new Set(value);
+  const inheritedIds = new Set(
+    value.flatMap((teamId) => getTeamDescendantIds(teams, teamId)),
+  );
+  const inheritedById = new Map<string, { id: string; name: string }>();
+  for (const team of teams) {
+    if (inheritedIds.has(team.id)) inheritedById.set(team.id, team);
+    if (selectedIds.has(team.id)) {
+      for (const descendant of team.descendantTeams ?? []) {
+        inheritedById.set(descendant.id, descendant);
+      }
+    }
+  }
+  const inheritedTeams = [...inheritedById.values()].filter(
+    (team) => !selectedIds.has(team.id),
+  );
+  const inheritedNames = inheritedTeams
+    .slice(0, 4)
+    .map((team) => team.name)
+    .join(", ");
+  const remainingCount = inheritedTeams.length - 4;
+  const inheritedAccessLabel = `Also available to ${inheritedTeams.length} child ${inheritedTeams.length === 1 ? "team" : "teams"}`;
+  const inheritedTeamNames = `${inheritedNames}${remainingCount > 0 ? `, and ${remainingCount} more` : ""}`;
+
+  return (
+    <div className="space-y-2">
+      <Label>Teams{required && <span> *</span>}</Label>
+      <MultiSelectCombobox
+        disabled={disabled}
+        options={teams.map((team) => ({
+          value: team.id,
+          label: team.name,
+          description:
+            team.parentId === null ? undefined : formatTeamPath(teams, team.id),
+        }))}
+        value={value}
+        onChange={onChange}
+        placeholder={
+          unavailableMessage ??
+          (teams.length === 0 ? "No teams available" : "Search teams...")
+        }
+        emptyMessage="No teams found."
+      />
+      {inheritedTeams.length > 0 && (
+        <div
+          className="flex gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"
+          aria-live="polite"
+        >
+          <GitBranch className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="font-medium">{inheritedAccessLabel}</p>
+            <p className="truncate text-muted-foreground">
+              {inheritedTeamNames}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

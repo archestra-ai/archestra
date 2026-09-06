@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Eye, GitBranch, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -88,6 +88,9 @@ export function TeamsList() {
   const { data: teams, isFetching: isLoading } = useTeams({
     name: search,
     labels: labelsParam ?? undefined,
+  });
+  const { data: hierarchyTeams = [] } = useTeams({
+    enabled: Boolean(search || labelsParam),
   });
   const { data: labelKeys } = useTeamLabelKeys();
   const { data: session } = useSession();
@@ -223,6 +226,26 @@ export function TeamsList() {
                 {team.description}
               </div>
             )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "parent",
+      header: "Parent team",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const parentId = row.original.parentId;
+        if (!parentId) {
+          return <span className="text-sm text-muted-foreground">Root</span>;
+        }
+        const parent = [...(teams ?? []), ...hierarchyTeams].find(
+          (candidate) => candidate.id === parentId,
+        );
+        return (
+          <div className="flex items-center gap-2 text-sm">
+            <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="truncate">{parent?.name ?? "Nested team"}</span>
           </div>
         );
       },

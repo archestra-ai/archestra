@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { TeamModel } from "@/models";
+import { AgentToolModel, TeamModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -137,6 +137,60 @@ describe("team routes", () => {
       await memberApp.close();
     });
 
+    test("a direct team listing includes descendant summaries for inherited resource access", async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const memberUser = await makeUser({ email: "hierarchy@test.com" });
+      await makeMember(memberUser.id, organizationId);
+      const parent = await makeTeam(organizationId, adminUser.id, {
+        name: "Product",
+      });
+      const child = await makeTeam(organizationId, adminUser.id, {
+        name: "Platform",
+        parentId: parent.id,
+      });
+      const grandchild = await makeTeam(organizationId, adminUser.id, {
+        name: "Runtime",
+        parentId: child.id,
+      });
+      await makeTeam(organizationId, adminUser.id, { name: "Unrelated" });
+      await makeTeamMember(parent.id, memberUser.id);
+
+      const memberApp = createFastifyInstance();
+      memberApp.addHook("onRequest", async (request) => {
+        (request as typeof request & { user: unknown }).user = memberUser;
+        (
+          request as typeof request & { organizationId: string }
+        ).organizationId = organizationId;
+      });
+      const { default: teamRoutes } = await import("./team");
+      await memberApp.register(teamRoutes);
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
+
+      const response = await memberApp.inject({
+        method: "GET",
+        url: "/api/teams?mine=true",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data).toEqual([
+        expect.objectContaining({
+          id: parent.id,
+          descendantTeams: expect.arrayContaining([
+            { id: child.id, name: "Platform" },
+            { id: grandchild.id, name: "Runtime" },
+          ]),
+        }),
+      ]);
+      await memberApp.close();
+    });
+
     test("member cannot get a team they do not belong to", async ({
       makeTeam,
       makeUser,
@@ -179,6 +233,51 @@ describe("team routes", () => {
       await memberApp.close();
     });
 
+    test("hierarchy access does not grant parent team administration", async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const childAdmin = await makeUser({ email: "child-admin@test.com" });
+      const newMember = await makeUser({ email: "new-parent-user@test.com" });
+      await makeMember(childAdmin.id, organizationId);
+      await makeMember(newMember.id, organizationId);
+      const parent = await makeTeam(organizationId, adminUser.id);
+      const child = await makeTeam(organizationId, adminUser.id, {
+        parentId: parent.id,
+      });
+      await makeTeamMember(child.id, childAdmin.id, { role: "admin" });
+
+      const childAdminApp = createFastifyInstance();
+      childAdminApp.addHook("onRequest", async (request) => {
+        (request as typeof request & { user: unknown }).user = childAdmin;
+        (
+          request as typeof request & { organizationId: string }
+        ).organizationId = organizationId;
+      });
+      const { default: teamRoutes } = await import("./team");
+      await childAdminApp.register(teamRoutes);
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
+
+      const readResponse = await childAdminApp.inject({
+        method: "GET",
+        url: `/api/teams/${parent.id}`,
+      });
+      const addResponse = await childAdminApp.inject({
+        method: "POST",
+        url: `/api/teams/${parent.id}/members`,
+        payload: { userId: newMember.id, role: "member" },
+      });
+
+      expect(readResponse.statusCode).toBe(404);
+      expect(addResponse.statusCode).toBe(403);
+      await childAdminApp.close();
+    });
+
     test("admin can get any team in the organization", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id, {
         name: "Any Team",
@@ -211,6 +310,197 @@ describe("team routes", () => {
       expect(team.name).toBe("New Team");
       expect(team.description).toBe("A brand new team");
       expect(team.id).toBeDefined();
+    });
+
+    test("creates a child team and returns its parent", async ({
+      makeTeam,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id, {
+        name: "Platform",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/teams",
+        payload: { name: "Runtime", parentId: parent.id },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        name: "Runtime",
+        parentId: parent.id,
+      });
+    });
+
+    test("moves a team within the hierarchy and can move it back to the root", async ({
+      makeTeam,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id);
+      const child = await makeTeam(organizationId, adminUser.id);
+
+      const moveResponse = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${child.id}`,
+        payload: { parentId: parent.id },
+      });
+      expect(moveResponse.statusCode).toBe(200);
+      expect(moveResponse.json().parentId).toBe(parent.id);
+
+      const rootResponse = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${child.id}`,
+        payload: { parentId: null },
+      });
+      expect(rootResponse.statusCode).toBe(200);
+      expect(rootResponse.json().parentId).toBeNull();
+    });
+
+    test("records a parent change in the team audit diff", async ({
+      makeTeam,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id);
+      const child = await makeTeam(organizationId, adminUser.id);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${child.id}`,
+        payload: { parentId: parent.id },
+      });
+      expect(response.statusCode).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "team",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find((entry) => entry.resourceId === child.id);
+      expect(row?.action).toBe("team.updated");
+      expect(row?.before?.parentId).toBeNull();
+      expect(row?.after?.parentId).toBe(parent.id);
+    });
+
+    test("rejects a parent from another organization", async ({
+      makeMember,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const otherOrganization = await makeOrganization();
+      await makeMember(adminUser.id, otherOrganization.id, { role: "admin" });
+      const otherTeam = await makeTeam(otherOrganization.id, adminUser.id);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/teams",
+        payload: { name: "Invalid child", parentId: otherTeam.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe("Parent team not found");
+    });
+
+    test("does not let an ordinary parent member broaden access through a child team", async ({
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id);
+      await makeTeamMember(parent.id, adminUser.id);
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/teams",
+        payload: { name: "Unauthorized child", parentId: parent.id },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toBe(
+        "You can only create a child under a team you can manage",
+      );
+    });
+
+    test("lets a direct parent-team admin create a child without org-wide team management", async ({
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id);
+      await makeTeamMember(parent.id, adminUser.id, { role: "admin" });
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/teams",
+        payload: { name: "Managed child", parentId: parent.id },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().parentId).toBe(parent.id);
+    });
+
+    test("rejects self-parenting", async ({ makeTeam }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${team.id}`,
+        payload: { parentId: team.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "A team cannot be its own parent",
+      );
+    });
+
+    test("rejects a cycle through an arbitrarily deep descendant", async ({
+      makeTeam,
+    }) => {
+      const root = await makeTeam(organizationId, adminUser.id);
+      const child = await makeTeam(organizationId, adminUser.id, {
+        parentId: root.id,
+      });
+      const grandchild = await makeTeam(organizationId, adminUser.id, {
+        parentId: child.id,
+      });
+      const greatGrandchild = await makeTeam(organizationId, adminUser.id, {
+        parentId: grandchild.id,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${root.id}`,
+        payload: { parentId: greatGrandchild.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "A team cannot be moved under one of its descendants",
+      );
+      expect((await TeamModel.findById(root.id))?.parentId).toBeNull();
+    });
+
+    test("moves direct children to the root when their parent is deleted", async ({
+      makeTeam,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id);
+      const child = await makeTeam(organizationId, adminUser.id, {
+        parentId: parent.id,
+      });
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/teams/${parent.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect((await TeamModel.findById(child.id))?.parentId).toBeNull();
     });
 
     test("rejects an oversized team name without persisting it", async () => {
@@ -748,6 +1038,113 @@ describe("team routes", () => {
       expect(
         members.some((m: { userId: string }) => m.userId === member.id),
       ).toBe(false);
+    });
+
+    test("removing a child member clears credential pins for ancestor resources", async ({
+      makeAgentTool,
+      makeInternalAgent,
+      makeMcpServer,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeTool,
+      makeUser,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id, {
+        name: "Parent",
+      });
+      const child = await makeTeam(organizationId, adminUser.id, {
+        name: "Child",
+        parentId: parent.id,
+      });
+      const member = await makeUser({ email: "nested-member@test.com" });
+      await makeMember(member.id, organizationId);
+      await makeTeamMember(child.id, member.id);
+
+      const connection = await makeMcpServer({
+        ownerId: member.id,
+        scope: "personal",
+      });
+      const tool = await makeTool({ catalogId: connection.catalogId });
+      const agent = await makeInternalAgent({
+        organizationId,
+        authorId: adminUser.id,
+        scope: "team",
+        teams: [parent.id],
+      });
+      await makeAgentTool(agent.id, tool.id, {
+        mcpServerId: connection.id,
+        credentialResolutionMode: "static",
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/teams/${child.id}/members/${member.id}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+      await expect(
+        AgentToolModel.findAssignmentsByAgent(agent.id),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          toolId: tool.id,
+          mcpServerId: null,
+        }),
+      ]);
+    });
+
+    test("removing one child membership preserves pins when another child still grants access", async ({
+      makeAgentTool,
+      makeInternalAgent,
+      makeMcpServer,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeTool,
+      makeUser,
+    }) => {
+      const parent = await makeTeam(organizationId, adminUser.id);
+      const firstChild = await makeTeam(organizationId, adminUser.id, {
+        parentId: parent.id,
+      });
+      const secondChild = await makeTeam(organizationId, adminUser.id, {
+        parentId: parent.id,
+      });
+      const member = await makeUser({ email: "multi-path-member@test.com" });
+      await makeMember(member.id, organizationId);
+      await makeTeamMember(firstChild.id, member.id);
+      await makeTeamMember(secondChild.id, member.id);
+
+      const connection = await makeMcpServer({
+        ownerId: member.id,
+        scope: "personal",
+      });
+      const tool = await makeTool({ catalogId: connection.catalogId });
+      const agent = await makeInternalAgent({
+        organizationId,
+        authorId: adminUser.id,
+        scope: "team",
+        teams: [parent.id],
+      });
+      await makeAgentTool(agent.id, tool.id, {
+        mcpServerId: connection.id,
+        credentialResolutionMode: "static",
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/teams/${firstChild.id}/members/${member.id}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+      await expect(
+        AgentToolModel.findAssignmentsByAgent(agent.id),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          toolId: tool.id,
+          mcpServerId: connection.id,
+        }),
+      ]);
     });
 
     test("cannot remove the last team admin", async ({

@@ -17,6 +17,8 @@ Identity Providers index.
 
 Archestra supports automatic team membership synchronization based on user group memberships from your identity provider. When users log in via SSO, they are automatically added to or removed from Archestra teams based on their IdP groups.
 
+Sync creates direct membership in the mapped team. If that team is nested, the user also receives resource access inherited from its parent teams. Team roles and team administration are not inherited. See [Team Hierarchies](/docs/platform-access-control#team-hierarchies) for the complete access rules.
+
 > **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## How team sync works

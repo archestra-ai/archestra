@@ -42,6 +42,10 @@ vi.mock("@/lib/teams/team-token.query", () => ({
   useTokens: useTokensMock,
 }));
 
+vi.mock("@/lib/teams/team.query", () => ({
+  useTeams: () => ({ data: [] }),
+}));
+
 describe("TeamManagementDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,6 +62,7 @@ describe("TeamManagementDialog", () => {
     renderDialog();
 
     expect(screen.getByText("Team")).toBeInTheDocument();
+    expect(screen.getByText("Members")).toBeInTheDocument();
     expect(screen.getByText("External Group Sync")).toBeInTheDocument();
     expect(screen.queryByText("MCP/A2A Gateway Token")).not.toBeInTheDocument();
     expect(screen.queryByText("Vault Folder")).not.toBeInTheDocument();
@@ -110,6 +115,7 @@ function makeTeam(): Team {
     name: "Team A",
     description: null,
     organizationId: "org-1",
+    parentId: null,
     createdBy: "user-1",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

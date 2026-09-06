@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import type { Plugin } from "@/types";
 import PluginUserModel from "./plugin-user";
+import TeamModel from "./team";
 
 class PluginTeamModel {
   static async getUserAccessiblePluginIds(params: {
@@ -30,10 +31,10 @@ class PluginTeamModel {
         WHERE pu.user_id = ${params.userId}
           AND p.organization_id = ${params.organizationId} AND p.deleted_at IS NULL
       UNION
-      SELECT pt.plugin_id AS id FROM plugin_team pt
-        INNER JOIN plugins p ON pt.plugin_id = p.id
-        INNER JOIN team_member tm ON pt.team_id = tm.team_id
-        WHERE tm.user_id = ${params.userId} AND p.scope = 'team'
+      SELECT plugin_team.plugin_id AS id FROM plugin_team
+        INNER JOIN plugins p ON plugin_team.plugin_id = p.id
+        WHERE ${TeamModel.effectiveMembershipCondition({ userId: params.userId, teamIdColumn: schema.pluginTeamsTable.teamId })}
+          AND p.scope = 'team'
           AND p.organization_id = ${params.organizationId} AND p.deleted_at IS NULL
     `);
     return result.rows.map((row) => row.id);
@@ -58,14 +59,13 @@ class PluginTeamModel {
     const [match] = await db
       .select({ teamId: schema.pluginTeamsTable.teamId })
       .from(schema.pluginTeamsTable)
-      .innerJoin(
-        schema.teamMembersTable,
-        eq(schema.pluginTeamsTable.teamId, schema.teamMembersTable.teamId),
-      )
       .where(
         and(
           eq(schema.pluginTeamsTable.pluginId, params.plugin.id),
-          eq(schema.teamMembersTable.userId, params.userId),
+          TeamModel.effectiveMembershipCondition({
+            userId: params.userId,
+            teamIdColumn: schema.pluginTeamsTable.teamId,
+          }),
         ),
       )
       .limit(1);

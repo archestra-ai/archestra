@@ -113,7 +113,6 @@ import { ExpandableText } from "@/components/ui/expandable-text";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
   Popover,
   PopoverContent,
@@ -143,6 +142,7 @@ import {
 } from "@/components/user-share-field";
 import {
   VisibilitySelector as SharedVisibilitySelector,
+  TeamVisibilityPicker,
   type VisibilityOption,
 } from "@/components/visibility-selector";
 
@@ -751,27 +751,21 @@ export function AccessLevelSelector({
 
       {choice === "team" && (
         <div className="space-y-2">
-          <Label>Teams{showTeamRequired && <span> *</span>}</Label>
-          <MultiSelectCombobox
+          <TeamVisibilityPicker
             disabled={
               !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
             }
-            options={
-              teams?.map((team) => ({
-                value: team.id,
-                label: team.name,
-              })) || []
-            }
+            teams={teams ?? []}
             value={assignedTeamIds}
             onChange={onTeamIdsChange}
-            placeholder={
+            required={showTeamRequired}
+            unavailableMessage={
               !canReadTeams
                 ? "Teams unavailable"
                 : hasNoAvailableTeams
                   ? "No teams available"
-                  : "Search teams..."
+                  : undefined
             }
-            emptyMessage="No teams found."
           />
           {!canReadTeams && (
             <PermissionRequirementHint

@@ -77,6 +77,7 @@ import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
+import TeamModel from "./team";
 import ToolModel from "./tool";
 
 class AgentModel {
@@ -2044,13 +2045,6 @@ class AgentModel {
         eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
       )
       .leftJoin(
-        schema.teamMembersTable,
-        and(
-          eq(schema.agentTeamsTable.teamId, schema.teamMembersTable.teamId),
-          eq(schema.teamMembersTable.userId, userId),
-        ),
-      )
-      .leftJoin(
         schema.agentUsersTable,
         and(
           eq(schema.agentsTable.id, schema.agentUsersTable.agentId),
@@ -2074,7 +2068,10 @@ class AgentModel {
             ),
             and(
               eq(schema.agentsTable.scope, "team"),
-              eq(schema.teamMembersTable.userId, userId),
+              TeamModel.effectiveMembershipCondition({
+                userId,
+                teamIdColumn: schema.agentTeamsTable.teamId,
+              }),
             ),
           ),
         ),
@@ -2170,13 +2167,6 @@ class AgentModel {
         schema.agentTeamsTable,
         eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
       )
-      .leftJoin(
-        schema.teamMembersTable,
-        and(
-          eq(schema.agentTeamsTable.teamId, schema.teamMembersTable.teamId),
-          eq(schema.teamMembersTable.userId, userId),
-        ),
-      )
       .where(
         and(
           ...baseConditions,
@@ -2188,7 +2178,10 @@ class AgentModel {
             ),
             and(
               eq(schema.agentsTable.scope, "team"),
-              eq(schema.teamMembersTable.userId, userId),
+              TeamModel.effectiveMembershipCondition({
+                userId,
+                teamIdColumn: schema.agentTeamsTable.teamId,
+              }),
             ),
           ),
         ),

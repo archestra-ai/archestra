@@ -43,10 +43,16 @@ vi.mock("@/components/ui/data-table", () => ({
     data: Team[];
   }) => {
     const actionsColumn = columns.find((column) => column.id === "actions");
+    const parentColumn = columns.find((column) => column.id === "parent");
     return (
       <div>
         {data.map((team) => (
           <div key={team.id}>
+            {typeof parentColumn?.cell === "function"
+              ? parentColumn.cell({
+                  row: { original: team },
+                } as Parameters<NonNullable<typeof parentColumn.cell>>[0])
+              : null}
             {typeof actionsColumn?.cell === "function"
               ? actionsColumn.cell({
                   row: { original: team },
@@ -183,6 +189,23 @@ describe("TeamsList", () => {
     expect(screen.getByText("Edit dialog for Team A")).toBeInTheDocument();
   });
 
+  it("shows the immediate parent in the hierarchy column", () => {
+    const parent = makeTeam({ id: "parent", name: "Product" });
+    const child = makeTeam({
+      id: "child",
+      name: "Platform",
+      parentId: parent.id,
+    });
+    vi.mocked(useTeams).mockReturnValue({
+      data: [parent, child],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useTeams>);
+
+    renderTeamsList();
+
+    expect(screen.getByText("Product")).toBeInTheDocument();
+  });
+
   it("keeps edit disabled for regular team members without team update or identity-provider read permission", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
@@ -268,6 +291,7 @@ function makeTeam(overrides: Partial<Team> = {}): Team {
     name: "Team A",
     description: null,
     organizationId: "org-1",
+    parentId: null,
     createdBy: "user-2",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

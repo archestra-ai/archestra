@@ -97933,6 +97933,7 @@ export type GetTeamsResponses = {
             name: string;
             description: string | null;
             organizationId: string;
+            parentId: string | null;
             createdBy: string;
             createdAt: string;
             updatedAt: string;
@@ -97952,6 +97953,10 @@ export type GetTeamsResponses = {
                 valueId?: string;
             }>;
             myRole?: 'admin' | 'member';
+            descendantTeams?: Array<{
+                id: string;
+                name: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -97970,6 +97975,7 @@ export type CreateTeamData = {
     body: {
         name: string;
         description?: string;
+        parentId?: string | null;
         convertToolResultsToToon?: boolean;
         labels?: Array<{
             key: string;
@@ -98057,6 +98063,7 @@ export type CreateTeamResponses = {
         name: string;
         description: string | null;
         organizationId: string;
+        parentId: string | null;
         createdBy: string;
         createdAt: string;
         updatedAt: string;
@@ -98076,6 +98083,10 @@ export type CreateTeamResponses = {
             valueId?: string;
         }>;
         myRole?: 'admin' | 'member';
+        descendantTeams?: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
@@ -98249,6 +98260,7 @@ export type GetTeamResponses = {
         name: string;
         description: string | null;
         organizationId: string;
+        parentId: string | null;
         createdBy: string;
         createdAt: string;
         updatedAt: string;
@@ -98268,6 +98280,10 @@ export type GetTeamResponses = {
             valueId?: string;
         }>;
         myRole?: 'admin' | 'member';
+        descendantTeams?: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
@@ -98277,6 +98293,7 @@ export type UpdateTeamData = {
     body: {
         name?: string;
         description?: string;
+        parentId?: string | null;
         convertToolResultsToToon?: boolean;
         labels?: Array<{
             key: string;
@@ -98366,6 +98383,7 @@ export type UpdateTeamResponses = {
         name: string;
         description: string | null;
         organizationId: string;
+        parentId: string | null;
         createdBy: string;
         createdAt: string;
         updatedAt: string;
@@ -98385,6 +98403,10 @@ export type UpdateTeamResponses = {
             valueId?: string;
         }>;
         myRole?: 'admin' | 'member';
+        descendantTeams?: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 

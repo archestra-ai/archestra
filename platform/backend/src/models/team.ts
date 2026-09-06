@@ -1,5 +1,15 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  getTableColumns,
+  ilike,
+  inArray,
+  type SQL,
+  type SQLWrapper,
+  sql,
+} from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
@@ -18,6 +28,29 @@ import TeamLabelModel from "./team-label";
 import TeamTokenModel from "./team-token";
 
 class TeamModel {
+  /** SQL predicate matching direct team membership plus every ancestor. */
+  static effectiveMembershipCondition(params: {
+    userId: string;
+    teamIdColumn: SQLWrapper;
+  }): SQL<boolean> {
+    return sql<boolean>`${params.teamIdColumn} IN (
+      WITH RECURSIVE effective_teams(team_id, organization_id) AS (
+        SELECT tm.team_id, direct_team.organization_id
+        FROM team_member tm
+        INNER JOIN team direct_team ON direct_team.id = tm.team_id
+        WHERE tm.user_id = ${params.userId}
+        UNION
+        SELECT parent_team.id, parent_team.organization_id
+        FROM team child_team
+        INNER JOIN effective_teams et ON child_team.id = et.team_id
+        INNER JOIN team parent_team
+          ON parent_team.id = child_team.parent_team_id
+          AND parent_team.organization_id = et.organization_id
+      )
+      SELECT team_id FROM effective_teams
+    )`;
+  }
+
   /**
    * Create a new team
    */
@@ -43,6 +76,7 @@ class TeamModel {
           id: teamId,
           name: input.name,
           description: input.description || null,
+          parentId: input.parentId ?? null,
           organizationId: input.organizationId,
           createdBy: input.createdBy,
           // Default of `false` is enforced by the column; passing `undefined`
@@ -119,6 +153,22 @@ class TeamModel {
       "TeamModel.findByOrganization: completed",
     );
     return teamsWithMembers;
+  }
+
+  /**
+   * Return the minimal organization-wide team graph used for hierarchy
+   * validation and access expansion.
+   */
+  static async getHierarchyForOrganization(
+    organizationId: string,
+  ): Promise<Array<{ id: string; parentId: string | null }>> {
+    return db
+      .select({
+        id: schema.teamsTable.id,
+        parentId: schema.teamsTable.parentId,
+      })
+      .from(schema.teamsTable)
+      .where(eq(schema.teamsTable.organizationId, organizationId));
   }
 
   /**
@@ -714,18 +764,8 @@ class TeamModel {
       { teamIds, userId },
       "TeamModel.isUserInAnyTeam: checking memberships",
     );
-    const [membership] = await db
-      .select({ teamId: schema.teamMembersTable.teamId })
-      .from(schema.teamMembersTable)
-      .where(
-        and(
-          inArray(schema.teamMembersTable.teamId, teamIds),
-          eq(schema.teamMembersTable.userId, userId),
-        ),
-      )
-      .limit(1);
-
-    const isMember = !!membership;
+    const userTeamIds = await TeamModel.getUserTeamIds(userId);
+    const isMember = teamIds.some((teamId) => userTeamIds.includes(teamId));
     logger.debug(
       { teamIds, userId, isMember },
       "TeamModel.isUserInAnyTeam: completed",
@@ -745,17 +785,51 @@ class TeamModel {
       { teamIds: params.teamIds, userCount: params.userIds.length },
       "TeamModel.findUserIdsInAnyTeam: checking memberships",
     );
-    const rows = await db
-      .select({ userId: schema.teamMembersTable.userId })
+    const memberships = await db
+      .select({
+        userId: schema.teamMembersTable.userId,
+        teamId: schema.teamMembersTable.teamId,
+        organizationId: schema.teamsTable.organizationId,
+      })
       .from(schema.teamMembersTable)
-      .where(
-        and(
-          inArray(schema.teamMembersTable.teamId, params.teamIds),
-          inArray(schema.teamMembersTable.userId, params.userIds),
-        ),
-      );
-
-    const userIds = [...new Set(rows.map((row) => row.userId))];
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(inArray(schema.teamMembersTable.userId, params.userIds));
+    const organizationIds = [
+      ...new Set(memberships.map((membership) => membership.organizationId)),
+    ];
+    const hierarchy =
+      organizationIds.length === 0
+        ? []
+        : await db
+            .select({
+              id: schema.teamsTable.id,
+              parentId: schema.teamsTable.parentId,
+              organizationId: schema.teamsTable.organizationId,
+            })
+            .from(schema.teamsTable)
+            .where(inArray(schema.teamsTable.organizationId, organizationIds));
+    const membershipsByUser = new Map<
+      string,
+      Array<{ teamId: string; organizationId: string }>
+    >();
+    for (const membership of memberships) {
+      const userMemberships = membershipsByUser.get(membership.userId) ?? [];
+      userMemberships.push({
+        teamId: membership.teamId,
+        organizationId: membership.organizationId,
+      });
+      membershipsByUser.set(membership.userId, userMemberships);
+    }
+    const targetIds = new Set(params.teamIds);
+    const userIds = params.userIds.filter((userId) =>
+      TeamModel.expandMembershipsToAncestors(
+        membershipsByUser.get(userId) ?? [],
+        hierarchy,
+      ).some((teamId) => targetIds.has(teamId)),
+    );
     logger.debug(
       { teamIds: params.teamIds, userCount: userIds.length },
       "TeamModel.findUserIdsInAnyTeam: completed",
@@ -764,16 +838,43 @@ class TeamModel {
   }
 
   /**
-   * Get all team IDs a user is a member of (used for authorization)
+   * Get all team IDs a user can access through direct membership. Membership
+   * in a child team inherits resource access from every ancestor team.
    */
   static async getUserTeamIds(userId: string): Promise<string[]> {
     logger.debug({ userId }, "TeamModel.getUserTeamIds: fetching team IDs");
     const teamMemberships = await db
-      .select({ teamId: schema.teamMembersTable.teamId })
+      .select({
+        teamId: schema.teamMembersTable.teamId,
+        organizationId: schema.teamsTable.organizationId,
+      })
       .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
       .where(eq(schema.teamMembersTable.userId, userId));
 
-    const teamIds = teamMemberships.map((membership) => membership.teamId);
+    const organizationIds = [
+      ...new Set(
+        teamMemberships.map((membership) => membership.organizationId),
+      ),
+    ];
+    const hierarchy =
+      organizationIds.length === 0
+        ? []
+        : await db
+            .select({
+              id: schema.teamsTable.id,
+              parentId: schema.teamsTable.parentId,
+              organizationId: schema.teamsTable.organizationId,
+            })
+            .from(schema.teamsTable)
+            .where(inArray(schema.teamsTable.organizationId, organizationIds));
+    const teamIds = TeamModel.expandMembershipsToAncestors(
+      teamMemberships,
+      hierarchy,
+    );
     logger.debug(
       { userId, count: teamIds.length },
       "TeamModel.getUserTeamIds: completed",
@@ -813,7 +914,13 @@ class TeamModel {
       "TeamModel.getTeammateUserIds: fetching teammate IDs",
     );
     // First get the user's team IDs
-    const userTeamIds = await TeamModel.getUserTeamIds(userId);
+    const directMemberships = await db
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.userId, userId));
+    const userTeamIds = directMemberships.map(
+      (membership) => membership.teamId,
+    );
 
     if (userTeamIds.length === 0) {
       logger.debug(
@@ -1323,6 +1430,7 @@ class TeamModel {
       name: team.name,
       description: team.description ?? null,
       organizationId: team.organizationId,
+      parentId: team.parentId,
       convertToolResultsToToon: team.convertToolResultsToToon,
       // Include role so a member role change (not just add/remove) diffs.
       members: members.map((m) => `${m.name} (${m.email}) [${m.role}]`).sort(),
@@ -1359,16 +1467,84 @@ class TeamModel {
     teams: (typeof schema.teamsTable.$inferSelect)[],
   ): Promise<Team[]> {
     const teamIds = teams.map((t) => t.id);
-    const [membersByTeam, labelsByTeam] = await Promise.all([
+    const organizationIds = [
+      ...new Set(teams.map((team) => team.organizationId)),
+    ];
+    const [membersByTeam, labelsByTeam, hierarchy] = await Promise.all([
       TeamModel.getTeamMembersBatch(teamIds),
       TeamLabelModel.getLabelsForTeams(teamIds),
+      organizationIds.length === 0
+        ? []
+        : db
+            .select({
+              id: schema.teamsTable.id,
+              name: schema.teamsTable.name,
+              parentId: schema.teamsTable.parentId,
+            })
+            .from(schema.teamsTable)
+            .where(inArray(schema.teamsTable.organizationId, organizationIds)),
     ]);
 
     return teams.map((team) => ({
       ...team,
       members: membersByTeam.get(team.id) || [],
       labels: labelsByTeam.get(team.id) || [],
+      descendantTeams: TeamModel.findDescendants(hierarchy, team.id),
     }));
+  }
+
+  private static findDescendants(
+    hierarchy: Array<{ id: string; name: string; parentId: string | null }>,
+    teamId: string,
+  ): Array<{ id: string; name: string }> {
+    const childrenByParent = new Map<
+      string,
+      Array<{ id: string; name: string }>
+    >();
+    for (const team of hierarchy) {
+      if (!team.parentId) continue;
+      const children = childrenByParent.get(team.parentId) ?? [];
+      children.push({ id: team.id, name: team.name });
+      childrenByParent.set(team.parentId, children);
+    }
+    const descendants: Array<{ id: string; name: string }> = [];
+    const visited = new Set([teamId]);
+    const queue = [...(childrenByParent.get(teamId) ?? [])];
+    for (const team of queue) {
+      if (visited.has(team.id)) continue;
+      visited.add(team.id);
+      descendants.push(team);
+      queue.push(...(childrenByParent.get(team.id) ?? []));
+    }
+    return descendants;
+  }
+
+  private static expandMembershipsToAncestors(
+    memberships: Array<{ teamId: string; organizationId: string }>,
+    hierarchy: Array<{
+      id: string;
+      parentId: string | null;
+      organizationId: string;
+    }>,
+  ): string[] {
+    const parentByTeam = new Map(
+      hierarchy.map((team) => [
+        `${team.organizationId}:${team.id}`,
+        team.parentId,
+      ]),
+    );
+    const expanded = new Set<string>();
+    for (const membership of memberships) {
+      let currentId: string | null = membership.teamId;
+      const visited = new Set<string>();
+      while (currentId !== null && !visited.has(currentId)) {
+        visited.add(currentId);
+        expanded.add(currentId);
+        currentId =
+          parentByTeam.get(`${membership.organizationId}:${currentId}`) ?? null;
+      }
+    }
+    return [...expanded];
   }
 }
 

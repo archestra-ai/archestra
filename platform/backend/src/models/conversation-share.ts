@@ -11,6 +11,7 @@ import type {
 } from "@/types";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationCompactionModel from "./conversation-compaction";
+import TeamModel from "./team";
 
 class ConversationShareModel {
   static async findByConversationId(params: {
@@ -303,13 +304,8 @@ class ConversationShareModel {
         return false;
       }
 
-      const memberships = await db
-        .select({ teamId: schema.teamMembersTable.teamId })
-        .from(schema.teamMembersTable)
-        .where(eq(schema.teamMembersTable.userId, params.userId));
-
       const userTeamIds = new Set(
-        memberships.map((membership) => membership.teamId),
+        await TeamModel.getUserTeamIds(params.userId),
       );
 
       return params.share.teamIds.some((teamId) => userTeamIds.has(teamId));

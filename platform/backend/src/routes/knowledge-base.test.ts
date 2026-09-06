@@ -4236,6 +4236,57 @@ describe("knowledge base permission configuration", () => {
       });
     });
 
+    test("connector visibility inherits from a parent team without crossing sibling branches", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const parent = await makeTeam(organizationId, user.id);
+      const child = await makeTeam(organizationId, user.id, {
+        parentId: parent.id,
+      });
+      const sibling = await makeTeam(organizationId, user.id);
+      await makeTeamMember(child.id, user.id);
+      const kb = await makeKnowledgeBase(organizationId);
+      const inherited = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          name: "Inherited Connector",
+          visibility: "team-scoped",
+          teamIds: [parent.id],
+        },
+      );
+      const hidden = await makeKnowledgeBaseConnector(kb.id, organizationId, {
+        name: "Sibling Connector",
+        visibility: "team-scoped",
+        teamIds: [sibling.id],
+      });
+
+      const listResponse = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=20&offset=0",
+      });
+      const listedIds = listResponse
+        .json()
+        .data.map((connector: { id: string }) => connector.id);
+      expect(listResponse.statusCode).toBe(200);
+      expect(listedIds).toContain(inherited.id);
+      expect(listedIds).not.toContain(hidden.id);
+
+      const inheritedResponse = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${inherited.id}`,
+      });
+      const hiddenResponse = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${hidden.id}`,
+      });
+      expect(inheritedResponse.statusCode).toBe(200);
+      expect(hiddenResponse.statusCode).toBe(404);
+    });
+
     test("PUT /api/connectors/:id refreshes document and chunk ACL when visibility changes", async ({
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,

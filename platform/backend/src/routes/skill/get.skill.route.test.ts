@@ -1,6 +1,7 @@
 import { SkillModel } from "@/models";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import skillRoutes from "./skill.routes";
+import { seedImportedSkill } from "./skill.test-helpers";
 
 describe("GET /api/skills/:id", () => {
   const ctx = useRouteTestApp(skillRoutes);
@@ -54,5 +55,61 @@ describe("GET /api/skills/:id", () => {
       const response = await ctx.app.inject({ method: "GET", url });
       expect(response.statusCode, url).toBe(400);
     }
+  });
+
+  test("a child-team member can read parent-team skills but not sibling-team skills", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const parent = await makeTeam(ctx.organizationId, ctx.user.id, {
+      name: "Product",
+    });
+    const child = await makeTeam(ctx.organizationId, ctx.user.id, {
+      name: "Platform",
+      parentId: parent.id,
+    });
+    const sibling = await makeTeam(ctx.organizationId, ctx.user.id, {
+      name: "Operations",
+    });
+    await makeTeamMember(child.id, ctx.user.id);
+
+    const parentSkill = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "parent-skill",
+      sourceRef: "parent/repo@main:SKILL.md",
+      scope: "team",
+      teamIds: [parent.id],
+    });
+    const childSkill = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "child-skill",
+      sourceRef: "child/repo@main:SKILL.md",
+      scope: "team",
+      teamIds: [child.id],
+    });
+    const siblingSkill = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "sibling-skill",
+      sourceRef: "sibling/repo@main:SKILL.md",
+      scope: "team",
+      teamIds: [sibling.id],
+    });
+
+    const parentResponse = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/${parentSkill.id}`,
+    });
+    const childResponse = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/${childSkill.id}`,
+    });
+    const siblingResponse = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/${siblingSkill.id}`,
+    });
+
+    expect(parentResponse.statusCode).toBe(200);
+    expect(childResponse.statusCode).toBe(200);
+    expect(siblingResponse.statusCode).toBe(404);
   });
 });

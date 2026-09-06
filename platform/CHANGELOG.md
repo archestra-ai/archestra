@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.50](https://github.com/archestra-ai/archestra/compare/platform-v1.3.49...platform-v1.3.50) (2026-09-06)
+
+
+### Features
+
+* **agent-runtime:** expose run id to workloads ([#7694](https://github.com/archestra-ai/archestra/issues/7694)) ([b5b4449](https://github.com/archestra-ai/archestra/commit/b5b4449a82fb732ae993415fa3c2e36201bc874f))
+* **llm:** support Anthropic models through Vertex AI ([#7700](https://github.com/archestra-ai/archestra/issues/7700)) ([ff3d3c9](https://github.com/archestra-ai/archestra/commit/ff3d3c94f0266f0282b5b9bd9552d55ce13f5869))
+* **teams:** add hierarchical access inheritance ([#7693](https://github.com/archestra-ai/archestra/issues/7693)) ([e2b635e](https://github.com/archestra-ai/archestra/commit/e2b635e0c5bce4736b458e1b6b809bedfe340119))
+
+
+### Bug Fixes
+
+* **agents:** preserve useful task lifecycle updates ([#7701](https://github.com/archestra-ai/archestra/issues/7701)) ([936fd7d](https://github.com/archestra-ai/archestra/commit/936fd7d295ad121542c6a4f49fc1120246770161))
+* **chat:** recover default selections after transient fetch failures ([#7698](https://github.com/archestra-ai/archestra/issues/7698)) ([fedabb6](https://github.com/archestra-ai/archestra/commit/fedabb675a15651fc84fd7eed2e982827228bfae))
+* **docker:** upgrade packages for fixed container CVEs ([#7697](https://github.com/archestra-ai/archestra/issues/7697)) ([fb59c38](https://github.com/archestra-ai/archestra/commit/fb59c3831c2ff3127273950609be05782e0d5766))
+* **mcp-runtime:** upgrade Alpine security packages ([#7695](https://github.com/archestra-ai/archestra/issues/7695)) ([eed3d53](https://github.com/archestra-ai/archestra/commit/eed3d539b24759c7024a0abbb82865186413f833))
+
 ## [1.3.49](https://github.com/archestra-ai/archestra/compare/platform-v1.3.48...platform-v1.3.49) (2026-09-04)
 
 

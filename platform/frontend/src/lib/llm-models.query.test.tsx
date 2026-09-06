@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -94,6 +94,34 @@ describe("useLlmModels", () => {
       queryClient.getQueryCache().find({ queryKey: ["llm-models", null] })
         ?.meta,
     ).toEqual(PERSISTED_QUERY_META);
+  });
+
+  // A transient catalog failure must self-heal: the app-wide default is
+  // `retry: false`, so without the query's own retry a single blip left the
+  // new-chat composer stranded on "Select model" with no default (T-1317).
+  it("recovers the model catalog after a transient fetch failure", async () => {
+    // Real timers + retryDelay: 0 so the retry is instant without the fake
+    // timers the other cases install for the lazy-sync refetch.
+    vi.useRealTimers();
+    vi.mocked(archestraApiSdk.getLlmModels)
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { error: { message: "boom", type: "api_internal_error" } },
+        request: new Request("http://localhost/api/llm-models/available"),
+        response: new Response(null),
+      } as Awaited<ReturnType<typeof archestraApiSdk.getLlmModels>>)
+      .mockResolvedValueOnce(makeGetLlmModelsResult([makeModel()]));
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+    });
+    const { result } = renderHook(() => useLlmModels(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toHaveLength(1);
+    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledTimes(2);
   });
 });
 

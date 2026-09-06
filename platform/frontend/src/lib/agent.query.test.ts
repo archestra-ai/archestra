@@ -150,4 +150,32 @@ describe("chat agent roster", () => {
       },
     });
   });
+
+  // A transient roster failure must self-heal: the app-wide default is
+  // `retry: false`, so without the query's own retry a single blip left the
+  // new-chat composer stranded on "Select agent" with no default (T-1317).
+  it("recovers the roster after a transient fetch failure", async () => {
+    sdk.getAllAgents
+      .mockResolvedValueOnce({
+        data: undefined,
+        error: { error: { message: "boom", type: "api_internal_error" } },
+      } as never)
+      .mockResolvedValueOnce({
+        data: [{ id: "agent-1", name: "Agent" }],
+        error: undefined,
+      } as never);
+
+    // retryDelay: 0 keeps the retry instant; the query's own retry still
+    // overrides the client-wide `retry: false`.
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useChatAgents(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([{ id: "agent-1", name: "Agent" }]);
+    expect(sdk.getAllAgents).toHaveBeenCalledTimes(2);
+  });
 });

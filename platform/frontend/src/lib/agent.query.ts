@@ -14,7 +14,10 @@ import {
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import {
+  BOOTSTRAP_QUERY_RETRY,
+  PERSISTED_QUERY_META,
+} from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -697,6 +700,10 @@ export function useChatAgents(params?: { enabled?: boolean }) {
     queryKey: chatAgentsQueryKey,
     queryFn: fetchChatAgents,
     enabled: params?.enabled,
+    // The new-chat composer resolves its default agent (and, in turn, its
+    // default model) from this roster. Recover from a transient fetch failure
+    // rather than latching an empty roster into "Select agent" (T-1317).
+    retry: BOOTSTRAP_QUERY_RETRY,
     meta: PERSISTED_QUERY_META,
   });
 }

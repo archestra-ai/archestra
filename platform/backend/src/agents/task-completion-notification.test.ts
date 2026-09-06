@@ -13,15 +13,31 @@ describe("buildTaskCompletionNotification", () => {
     ).toBeNull();
   });
 
-  test("posts a concise PR update after the background run completes", () => {
+  test("extracts a PR URL when the completed output is a native transcript", () => {
     expect(
       buildTaskCompletionNotification({
         state: "TASK_STATE_COMPLETED",
         statusReason: null,
         output:
-          "[tool] archestra__run_tool\nDone: https://github.com/example/project/pull/42\n[waiting for direction]",
+          "Initializing agent...\nhttps://github.com/example/project/pull/42\n[archestra] agent session exited",
       }),
     ).toBe("PR ready: https://github.com/example/project/pull/42");
+  });
+
+  test("keeps a useful completion report that also links to a PR", () => {
+    const output = [
+      "Private PR: https://github.com/example/project/pull/42",
+      "Exact review verdict: No findings.",
+      "The native review session was archived.",
+    ].join("\n");
+
+    expect(
+      buildTaskCompletionNotification({
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output,
+      }),
+    ).toBe(output);
   });
 
   test("does not narrate a working task before it has a useful result", () => {

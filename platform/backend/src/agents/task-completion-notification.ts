@@ -15,13 +15,17 @@ export function buildTaskCompletionNotification(params: {
   }
 
   if (params.state === "TASK_STATE_COMPLETED") {
+    const output = conciseOutput(params.output);
+    if (output) {
+      return output;
+    }
+
     const pullRequestUrl = findPullRequestUrl(params.output);
     if (pullRequestUrl) {
       return `PR ready: ${pullRequestUrl}`;
     }
 
-    const output = conciseOutput(params.output);
-    return output || "Task finished.";
+    return "Task finished.";
   }
 
   const outcome =

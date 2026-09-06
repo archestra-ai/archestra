@@ -65,7 +65,7 @@ class SystemKeyManager {
   private readonly keylessProviders: KeylessProviderConfig[] = [
     {
       provider: "gemini",
-      name: "Vertex AI",
+      name: "Vertex AI (Gemini)",
       isEnabled: () => isVertexAiEnabled(),
       customFetch: async () => {
         const models = await fetchGeminiModelsViaVertexAi();
@@ -90,7 +90,7 @@ class SystemKeyManager {
       // active at sync time, not the value captured at class construction.
       get name() {
         if (anthropicVertexClient.isEnabled()) {
-          return "Anthropic Vertex AI";
+          return "Vertex AI (Anthropic)";
         }
         return anthropicWorkloadIdentity.isEnabled()
           ? "Anthropic Workload Identity Federation"
@@ -163,7 +163,13 @@ class SystemKeyManager {
 
     if (enabled) {
       if (existingKey) {
-        // Key exists, sync models
+        // Keep auto-managed labels current when naming becomes more specific or
+        // when an Anthropic deployment changes its keyless auth method.
+        if (existingKey.name !== name) {
+          await LlmProviderApiKeyModel.update(existingKey.id, { name });
+        }
+
+        // Sync models after reconciling the system-managed metadata.
         logger.debug(
           { provider, apiKeyId: existingKey.id },
           "System key exists, syncing models",

@@ -14,7 +14,11 @@ ARG NODE_IMAGE=node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489
 FROM ${NODE_IMAGE}
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends tini \
+  && apt-get install -y --no-install-recommends tini libpcre2-8-0 \
+  # CVE-2026-86145: reject a repository snapshot that predates the pcre2 fix.
+  && dpkg --compare-versions \
+    "$(dpkg-query --show --showformat='${Version}' libpcre2-8-0)" \
+    ge 10.42-1+deb12u1 \
   && rm -rf /var/lib/apt/lists/*
 
 # The entrypoint is `node /app/server.mjs`, server.mjs imports nothing outside

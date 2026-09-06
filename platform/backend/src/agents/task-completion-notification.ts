@@ -100,5 +100,5 @@ function looksLikeTerminalControlStream(output: string): boolean {
   return (bareControlSequences?.length ?? 0) >= 3;
 }
 
-const MAX_COMPLETION_REPORT_CHARS = 600;
-const MAX_COMPLETION_REPORT_LINES = 6;
+const MAX_COMPLETION_REPORT_CHARS = 500;
+const MAX_COMPLETION_REPORT_LINES = 4;

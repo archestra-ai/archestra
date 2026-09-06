@@ -61,6 +61,24 @@ describe("buildTaskCompletionNotification", () => {
     ).toBe("PR ready: https://github.com/example/project/pull/42");
   });
 
+  test("enforces the four-line worker completion contract", () => {
+    const output = [
+      "CI is fully green and the implementation is complete.",
+      "Done — the setting now explains the selected behavior inline.",
+      "PR: https://github.com/example/project/pull/42",
+      "Validation: focused and full checks passed.",
+      "Demo: posted to the task thread.",
+    ].join("\n");
+
+    expect(
+      buildTaskCompletionNotification({
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output,
+      }),
+    ).toBe("PR ready: https://github.com/example/project/pull/42");
+  });
+
   test("does not narrate a working task before it has a useful result", () => {
     expect(
       buildTaskCompletionNotification({

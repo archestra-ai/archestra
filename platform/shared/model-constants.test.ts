@@ -145,12 +145,12 @@ describe("provider API key optional helpers", () => {
     ).toBe(true);
   });
 
-  test("treats Anthropic as optional only when Workload Identity Federation is enabled", () => {
+  test("treats Anthropic as optional when keyless authentication is enabled", () => {
     expect(isProviderApiKeyOptional({ provider: "anthropic" })).toBe(false);
     expect(
       isProviderApiKeyOptional({
         provider: "anthropic",
-        anthropicWifEnabled: true,
+        anthropicKeylessAuthEnabled: true,
       }),
     ).toBe(true);
   });
@@ -165,7 +165,7 @@ describe("provider API key optional helpers", () => {
       getProvidersWithOptionalApiKey({ azureEntraIdEnabled: true }),
     ).toEqual(["ollama", "ollama-native", "vllm", "azure"]);
     expect(
-      getProvidersWithOptionalApiKey({ anthropicWifEnabled: true }),
+      getProvidersWithOptionalApiKey({ anthropicKeylessAuthEnabled: true }),
     ).toEqual(["ollama", "ollama-native", "vllm", "anthropic"]);
   });
 });

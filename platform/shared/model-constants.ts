@@ -378,12 +378,16 @@ export function providerRequiresPerUserCredential(
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;
+  anthropicKeylessAuthEnabled?: boolean;
+  /** @deprecated Pass anthropicKeylessAuthEnabled instead. */
   anthropicWifEnabled?: boolean;
 }): boolean {
   return (
     PROVIDERS_WITH_OPTIONAL_API_KEY.has(params.provider) ||
     (params.provider === "azure" && params.azureEntraIdEnabled === true) ||
-    (params.provider === "anthropic" && params.anthropicWifEnabled === true)
+    (params.provider === "anthropic" &&
+      (params.anthropicKeylessAuthEnabled === true ||
+        params.anthropicWifEnabled === true))
   );
 }
 
@@ -479,13 +483,18 @@ export function isModelRouterSupportedProvider(
 
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
+  anthropicKeylessAuthEnabled?: boolean;
+  /** @deprecated Pass anthropicKeylessAuthEnabled instead. */
   anthropicWifEnabled?: boolean;
 }): SupportedProvider[] {
   const providers = [...PROVIDERS_WITH_OPTIONAL_API_KEY];
   if (params?.azureEntraIdEnabled === true) {
     providers.push("azure");
   }
-  if (params?.anthropicWifEnabled === true) {
+  if (
+    params?.anthropicKeylessAuthEnabled === true ||
+    params?.anthropicWifEnabled === true
+  ) {
     providers.push("anthropic");
   }
   return providers;

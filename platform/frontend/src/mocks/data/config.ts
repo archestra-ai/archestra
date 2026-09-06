@@ -47,6 +47,7 @@ export function makeConfig(
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,
       anthropicWifEnabled: false,
+      anthropicKeylessAuthEnabled: false,
       bedrockIamAuthEnabled: false,
       geminiVertexAiEnabled: false,
       incomingEmail: { enabled: false },

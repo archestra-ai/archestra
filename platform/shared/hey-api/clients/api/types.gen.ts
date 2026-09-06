@@ -36734,6 +36734,7 @@ export type GetConfigResponses = {
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;
             anthropicWifEnabled: boolean;
+            anthropicKeylessAuthEnabled: boolean;
             bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             incomingEmail: {

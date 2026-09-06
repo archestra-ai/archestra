@@ -9,7 +9,7 @@ import {
   type SupportedProvider,
   subscriptionKindFromCredential,
 } from "@archestra/shared";
-import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
@@ -182,7 +182,7 @@ export async function resolveProviderApiKey(params: {
       isProviderApiKeyOptional({
         provider,
         azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-        anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+        anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
       }) ||
       (provider === "gemini" && config.llm.gemini.vertexAi.enabled) ||
       (provider === "bedrock" && config.llm.bedrock.iamAuthEnabled)

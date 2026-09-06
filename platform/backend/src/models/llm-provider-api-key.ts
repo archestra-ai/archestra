@@ -10,7 +10,7 @@ import {
   subscriptionKindFromCredential,
 } from "@archestra/shared";
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
-import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
@@ -1255,7 +1255,7 @@ function canUseProviderApiKey(
 function getConfiguredProvidersWithOptionalApiKey(): SupportedProvider[] {
   const providers = getProvidersWithOptionalApiKey({
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+    anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
   });
   if (config.llm.gemini.vertexAi.enabled) {
     providers.push("gemini");

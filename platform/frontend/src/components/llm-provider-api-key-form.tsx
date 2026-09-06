@@ -499,7 +499,7 @@ export function LlmProviderApiKeyForm({
   const appName = useAppName();
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
-  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
+  const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -1406,7 +1406,8 @@ export function LlmProviderApiKeyForm({
                     {isProviderApiKeyOptional({
                       provider,
                       azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-                      anthropicWifEnabled: anthropicWifEnabled === true,
+                      anthropicKeylessAuthEnabled:
+                        anthropicKeylessAuthEnabled === true,
                     }) ? (
                       <span className="font-normal text-muted-foreground">
                         (optional)

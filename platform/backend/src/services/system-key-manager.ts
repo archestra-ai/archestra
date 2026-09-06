@@ -1,10 +1,8 @@
 import type { SupportedProvider } from "@archestra/shared";
+import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
+import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
-import {
-  isAnthropicAzureFoundryEntraIdEnabled,
-  isAzureOpenAiEntraIdEnabled,
-} from "@/clients/azure-openai-credentials";
-import { isAzureAiFoundryBaseUrl } from "@/clients/azure-url";
+import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
@@ -15,7 +13,10 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
-import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
+import {
+  fetchAnthropicModels,
+  fetchAnthropicModelsViaVertexAi,
+} from "@/routes/chat/model-fetchers/anthropic";
 import { fetchAzureModels } from "@/routes/chat/model-fetchers/azure";
 import { fetchBedrockModelsViaIam } from "@/routes/chat/model-fetchers/bedrock";
 import { fetchGeminiModelsViaVertexAi } from "@/routes/chat/model-fetchers/gemini";
@@ -64,7 +65,7 @@ class SystemKeyManager {
   private readonly keylessProviders: KeylessProviderConfig[] = [
     {
       provider: "gemini",
-      name: "Vertex AI",
+      name: "Vertex AI (Gemini)",
       isEnabled: () => isVertexAiEnabled(),
       customFetch: async () => {
         const models = await fetchGeminiModelsViaVertexAi();
@@ -82,26 +83,24 @@ class SystemKeyManager {
       },
     },
     {
-      // One entry covers both keyless Anthropic auth methods (Azure Foundry
-      // Entra ID and Workload Identity Federation): system keys are looked up
-      // per provider, so two "anthropic" entries would delete each other's key.
+      // One entry covers every keyless Anthropic auth method: system keys are
+      // looked up per provider, so separate entries would delete each other.
       provider: "anthropic",
       // Lazy so the created key's name reflects whichever method is actually
       // active at sync time, not the value captured at class construction.
       get name() {
+        if (anthropicVertexClient.isEnabled()) {
+          return "Vertex AI (Anthropic)";
+        }
         return anthropicWorkloadIdentity.isEnabled()
           ? "Anthropic Workload Identity Federation"
           : "Anthropic Azure Foundry Entra ID";
       },
-      isEnabled: () =>
-        (isAnthropicAzureFoundryEntraIdEnabled() &&
-          isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl)) ||
-        anthropicWorkloadIdentity.isEnabled(),
+      isEnabled: () => isAnthropicKeylessAuthEnabled(),
       customFetch: async () => {
-        const models = await fetchAnthropicModels(
-          "",
-          config.llm.anthropic.baseUrl,
-        );
+        const models = anthropicVertexClient.isEnabled()
+          ? await fetchAnthropicModelsViaVertexAi()
+          : await fetchAnthropicModels("", config.llm.anthropic.baseUrl);
         return models.map((m) => ({ id: m.id, displayName: m.displayName }));
       },
     },
@@ -164,7 +163,13 @@ class SystemKeyManager {
 
     if (enabled) {
       if (existingKey) {
-        // Key exists, sync models
+        // Keep auto-managed labels current when naming becomes more specific or
+        // when an Anthropic deployment changes its keyless auth method.
+        if (existingKey.name !== name) {
+          await LlmProviderApiKeyModel.update(existingKey.id, { name });
+        }
+
+        // Sync models after reconciling the system-managed metadata.
         logger.debug(
           { provider, apiKeyId: existingKey.id },
           "System key exists, syncing models",

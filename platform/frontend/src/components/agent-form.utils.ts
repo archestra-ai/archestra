@@ -100,6 +100,15 @@ export const TOOL_CONNECTION_PROMPTING: Record<
 };
 
 /**
+ * The fixed lead-in {@link TOOL_CONNECTION_PROMPTING} is read against. The
+ * per-choice line names a consequence without saying which decision it answers,
+ * so this states the question. Record-neutral, for the same reason as those
+ * lines — one string serves an agent, a gateway and a proxy alike.
+ */
+export const MISSING_CREDENTIAL_SUMMARY =
+  "Some tools need a credential the user must connect first. This decides when they are prompted for it.";
+
+/**
  * How each connectivity choice reads as a tone: an enforcement scale (lenient
  * → informational → fully enforced), never the error palette — the strictest
  * choice is a setting, not a failure.

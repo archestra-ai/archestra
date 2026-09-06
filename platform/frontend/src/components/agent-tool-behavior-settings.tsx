@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 
 import {
   MISSING_CREDENTIAL_BEHAVIOR_OPTIONS,
+  MISSING_CREDENTIAL_SUMMARY,
   MISSING_CREDENTIAL_TONE,
   TOOL_CONNECTION_PROMPTING,
 } from "./agent-form.utils";
@@ -129,13 +130,28 @@ export function AgentToolBehaviorSettings({
           <Label htmlFor="missing-credential-behavior">
             Missing connections
           </Label>
-          {/* The question, not the answer: the select beside this already
-              names the choice, and the menu spells out what each one does.
-              Repeating the chosen option's whole sentence here said the same
-              thing three times in one row. */}
+          {/* Purpose first, then current status. The trigger beside this shows
+              only the terse option label ("When a tool needs it"), and Radix
+              keeps the menu — where each choice is spelled out — unmounted
+              while the setting is merely being read, so the closed control was
+              four words with no statement of what they do. The fixed summary
+              says what the setting is for; the line under it states what the
+              chosen option does, so the control's status is legible without
+              reopening the menu, and changes as the selection changes. When All
+              mode has pinned the behavior the control is disabled, so the
+              second line reports the pinned effect instead of a choice the
+              reader cannot make. Each branch is a <span> so machine-translate
+              only ever swaps text within an element, never re-parents a bare
+              node next to the link. */}
           <FieldDescription>
-            When to ask a user to connect credentials.{" "}
-            {locked && <>All mode always asks when a tool needs it. </>}
+            <span>{MISSING_CREDENTIAL_SUMMARY} </span>
+            {locked ? (
+              <span>All mode always asks when a tool needs it. </span>
+            ) : (
+              <span>
+                {TOOL_CONNECTION_PROMPTING[missingCredentialBehavior]}{" "}
+              </span>
+            )}
             <ExternalDocsLink
               href={toolConnectionsDocsUrl}
               className="underline"

@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's inference and tools through Archestra
-lastUpdated: 2026-08-24
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,8 +22,8 @@ configuration profile. Cover:
   llmVirtualKey:create, Claude Desktop developer mode).
 - The end-to-end steps shown on the Connect page and mirrored in Claude Desktop:
   download profile -> Enable Developer Mode -> Configure Third-Party Inference ->
-  Import configuration -> Test connection -> Apply Changes + relaunch ->
-  connect the archestra-mcp-* connector via OAuth.
+  Import configuration -> Test connection -> Apply Changes + relaunch -> install
+  the shared-skills marketplace.
 Screenshots live in /docs/automated_screenshots/platform-claude-desktop-example_*.
 Don't restate obvious UI; keep it short.
 -->
@@ -66,7 +66,17 @@ Click **Apply Changes**, then **Relaunch now**.
 
 After the restart, the account indicator in the bottom-left reads **Gateway**. Inference is now flowing through Archestra LLM Proxy.
 
-## Step 6. Allow Claude Desktop access your MCP Gateway
+## Step 6. Install shared skills
+
+In Claude Desktop, go to **Settings → Plugins → Browse plugins**.
+
+![Claude Desktop Settings showing Plugins and Browse plugins](/docs/automated_screenshots/platform-claude-desktop-example_browse-plugins.webp)
+
+Install your shared-skills marketplace.
+
+![Installing the shared-skills marketplace from the Directory](/docs/automated_screenshots/platform-claude-desktop-example_install-shared-skills.webp)
+
+## Step 7. Allow Claude Desktop access to your MCP Gateway
 
 The gateway is added but not signed in. Open **Settings → Connectors**, select the new `archestra-mcp-*` connector, then click **Connect**.
 

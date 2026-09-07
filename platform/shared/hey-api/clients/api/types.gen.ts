@@ -80717,6 +80717,7 @@ export type GetOrganizationResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81037,6 +81038,7 @@ export type UpdateAppearanceSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81240,6 +81242,7 @@ export type UpdateSecuritySettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81438,6 +81441,7 @@ export type UpdateLlmSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81636,6 +81640,7 @@ export type UpdateMcpSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81834,6 +81839,7 @@ export type UpdateSkillsSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82033,6 +82039,7 @@ export type UpdateAgentSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82082,6 +82089,7 @@ export type UpdateConnectionSettingsData = {
         connectionShownProviders?: unknown;
         connectionSkillsEnabled?: boolean;
         connectionLlmProxyEnabled?: boolean;
+        connectionPluginsEnabled?: boolean;
         connectionBaseUrls?: Array<{
             url: string;
             description?: string;
@@ -82244,6 +82252,7 @@ export type UpdateConnectionSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82456,6 +82465,7 @@ export type UpdateIntegrationSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82664,6 +82674,7 @@ export type UpdateDefaultEnvironmentResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82864,6 +82875,7 @@ export type UpdateAuthSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -83069,6 +83081,7 @@ export type UpdateKnowledgeSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -83264,6 +83277,7 @@ export type DropEmbeddingConfigResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -83809,6 +83823,7 @@ export type CompleteOnboardingResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;

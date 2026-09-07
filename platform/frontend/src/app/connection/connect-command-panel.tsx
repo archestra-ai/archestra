@@ -155,6 +155,8 @@ interface ConnectCommandPanelProps {
   onBaseUrlChange: (url: string) => void;
   /** When false, shared skills are not offered in the setup. */
   skillsEnabled?: boolean;
+  /** When false, plugins are not offered in the setup. */
+  pluginsEnabled?: boolean;
 }
 
 /**
@@ -178,6 +180,7 @@ export function ConnectCommandPanel({
   baseUrlMetadata,
   onBaseUrlChange,
   skillsEnabled = true,
+  pluginsEnabled = true,
 }: ConnectCommandPanelProps) {
   const { eligible: skillsEligible, skills: allSkills } = useConnectSkills(
     llmProxyId,
@@ -215,13 +218,14 @@ export function ConnectCommandPanel({
     isPending: configPending,
     isError: configError,
   } = useConfig();
-  const pluginsEnabled = !configError && configData?.features.plugins === true;
+  const deploymentPluginsEnabled =
+    !configError && configData?.features.plugins === true;
   const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
     useHasPermissions({
       plugin: ["read", "admin"],
     });
   const pluginsQueryEnabled =
-    pluginsEnabled === true && canAdminPlugins === true;
+    pluginsEnabled && deploymentPluginsEnabled && canAdminPlugins === true;
   const { data: allPlugins, isPending: pluginsPending } =
     usePlugins(pluginsQueryEnabled);
   const plugins = useMemo(
@@ -235,8 +239,8 @@ export function ConnectCommandPanel({
     [allPlugins, client.id],
   );
   const pluginsLoading =
-    configPending ||
-    (pluginsEnabled && pluginsPermissionPending) ||
+    (pluginsEnabled && configPending) ||
+    (pluginsEnabled && deploymentPluginsEnabled && pluginsPermissionPending) ||
     (pluginsQueryEnabled && pluginsPending);
 
   // Toggle one skill, snapshotting the current selection into an explicit set
@@ -369,9 +373,14 @@ export function ConnectCommandPanel({
     [plugins, pluginSelectionContext],
   );
   const hasRunnableAnything = Boolean(
-    gateway || proxyActive || includeSkills || selectedPlugins.length,
+    gateway ||
+      proxyActive ||
+      includeSkills ||
+      (pluginsEnabled && selectedPlugins.length),
   );
-  const hasAnything = Boolean(hasRunnableAnything || plugins.length > 0);
+  const hasAnything = Boolean(
+    hasRunnableAnything || (pluginsEnabled && plugins.length > 0),
+  );
 
   // The setup command only registers the MCP gateway (`claude mcp add`); the
   // gateway authenticates over OAuth, so the user still finishes the handshake
@@ -440,7 +449,9 @@ export function ConnectCommandPanel({
     model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
-    pluginIds: selectedPlugins.map((plugin) => plugin.id).sort(),
+    pluginIds: pluginsEnabled
+      ? selectedPlugins.map((plugin) => plugin.id).sort()
+      : null,
   });
   const latestKeyRef = useRef(inputsKey);
   latestKeyRef.current = inputsKey;
@@ -457,7 +468,7 @@ export function ConnectCommandPanel({
         proxyAuth: ConnectProxyAuth | null;
         model: string | null;
         skillIds: string[] | null;
-        pluginIds: string[];
+        pluginIds: string[] | null;
       };
 
       let skills: CreateConnectionSetupBody["skills"];
@@ -472,7 +483,7 @@ export function ConnectCommandPanel({
         !inputs.gatewayId &&
         !inputs.proxyId &&
         !skills &&
-        inputs.pluginIds.length === 0
+        (!inputs.pluginIds || inputs.pluginIds.length === 0)
       ) {
         return;
       }
@@ -487,7 +498,7 @@ export function ConnectCommandPanel({
         proxyAuth: inputs.proxyAuth ?? undefined,
         model: inputs.model ?? undefined,
         skills,
-        pluginIds: inputs.pluginIds,
+        ...(inputs.pluginIds ? { pluginIds: inputs.pluginIds } : {}),
       });
       if (latestKeyRef.current !== key) return; // stale response
       setResult(created);
@@ -940,7 +951,7 @@ export function ConnectCommandPanel({
               )}
             </SetupSummaryRow>
           )}
-          {plugins.length > 0 && (
+          {pluginsEnabled && plugins.length > 0 && (
             <SetupSummaryRow
               done={selectedPlugins.length > 0 && client.id !== "cursor"}
               editable={!!pluginsEditor}

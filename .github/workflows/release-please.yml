@@ -55,7 +55,8 @@ jobs:
           VERSION=$(jq -r '.platform' .github/release-please/.release-please-manifest.json)
           OVERRIDE=$(jq -r '.packages.platform["release-as"] // empty' "$CONFIG")
           NEXT=${OVERRIDE:-$VERSION}
-          jq -e '.packages.platform.draft == true' "$CONFIG"
+          jq -e '.packages.platform.draft == true' "$CONFIG" \
+            || { echo "::error::Config must keep draft=true; releases are published by the approval job"; exit 1; }
           if [ "$BRANCH" = main ]; then
             [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.0-beta\.[1-9][0-9]*$ ]] \
               || { echo "::error::Main must release X.Y.0-beta.N"; exit 1; }
@@ -102,20 +103,75 @@ jobs:
       # Draft releases don't create the underlying git tag, but downstream build jobs
       # check out the tag ref (checkout_ref) and release-please needs the tag to exist
       # when calculating the next version (otherwise it creates bogus PRs with stale
-      # versions). So we create the tag ourselves, pinned to the release commit, before
-      # the next release PR is built below.
+      # versions). Resolve a just-created release or an interrupted matching draft before
+      # creating that tag ourselves, pinned to the release commit.
+      - name: Resolve release to publish or recover
+        id: resolve-release
+        env:
+          ACTION_RELEASE_CREATED: ${{ steps.release-please.outputs['platform--release_created'] }}
+          ACTION_VERSION: ${{ steps.release-please.outputs['platform--version'] }}
+          ACTION_TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
+          ACTION_RELEASE_SHA: ${{ steps.release-please.outputs['platform--sha'] }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED_VERSION: ${{ steps.policy.outputs.requested }}
+        run: |
+          if [ "$ACTION_RELEASE_CREATED" = "true" ] && [ "$ACTION_VERSION" != "$REQUESTED_VERSION" ]; then
+            echo "::error::Release-please produced a version other than the merged manifest."
+            exit 1
+          fi
+
+          SHOULD_PUBLISH=false
+          TAG_NAME=
+          RELEASE_SHA=
+          if [ "$ACTION_RELEASE_CREATED" = "true" ]; then
+            SHOULD_PUBLISH=true
+            TAG_NAME=$ACTION_TAG_NAME
+            RELEASE_SHA=$ACTION_RELEASE_SHA
+          else
+            EXPECTED_TAG=platform-v${REQUESTED_VERSION}
+            if RELEASE=$(gh release view "$EXPECTED_TAG" --json isDraft,targetCommitish 2>/dev/null); then
+              if [ "$(jq -r .isDraft <<<"$RELEASE")" = true ]; then
+                SHOULD_PUBLISH=true
+                TAG_NAME=$EXPECTED_TAG
+                RELEASE_SHA=$(jq -r .targetCommitish <<<"$RELEASE")
+                echo "Recovering draft release ${TAG_NAME}"
+              fi
+            fi
+          fi
+
+          if [ "$SHOULD_PUBLISH" = true ]; then
+            RELEASE=$(gh release view "$TAG_NAME" --json isDraft,targetCommitish)
+            [ "$(jq -r .isDraft <<<"$RELEASE")" = true ] \
+              || { echo "::error::Release ${TAG_NAME} is already published"; exit 1; }
+            [ "$(jq -r .targetCommitish <<<"$RELEASE")" = "$RELEASE_SHA" ] \
+              || { echo "::error::Draft ${TAG_NAME} does not target the selected release commit"; exit 1; }
+            git cat-file -e "${RELEASE_SHA}^{commit}" \
+              || { echo "::error::Release commit ${RELEASE_SHA} is unavailable in this checkout"; exit 1; }
+            git merge-base --is-ancestor "$RELEASE_SHA" "$GITHUB_SHA" \
+              || { echo "::error::Release commit ${RELEASE_SHA} is not on ${GITHUB_REF_NAME}"; exit 1; }
+          fi
+
+          {
+            echo "should_publish=${SHOULD_PUBLISH}"
+            echo "version=${REQUESTED_VERSION}"
+            echo "tag_name=${TAG_NAME}"
+            echo "checkout_ref=${TAG_NAME}"
+            echo "release_sha=${RELEASE_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Create git tag for draft release
-        if: ${{ steps.release-please.outputs['platform--release_created'] == 'true' }}
+        if: ${{ steps.resolve-release.outputs.should_publish == 'true' }}
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
-          RELEASE_SHA: ${{ steps.release-please.outputs['platform--sha'] }}
+          TAG_NAME: ${{ steps.resolve-release.outputs.tag_name }}
+          RELEASE_SHA: ${{ steps.resolve-release.outputs.release_sha }}
         run: |
-          test "$RELEASE_SHA" = "$GITHUB_SHA" || { echo "::error::Release commit differs from this run; dispatch from the release commit"; exit 1; }
           if gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" >/dev/null 2>&1; then
             EXISTING_SHA=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" --jq '.object.sha')
-            test "$EXISTING_SHA" = "$RELEASE_SHA"
+            test "$EXISTING_SHA" = "$RELEASE_SHA" \
+              || { echo "::error::Tag ${TAG_NAME} exists at ${EXISTING_SHA}, expected ${RELEASE_SHA}"; exit 1; }
           else
             gh api "repos/${GH_REPO}/git/refs" \
               -f ref="refs/tags/${TAG_NAME}" \
@@ -145,28 +201,6 @@ jobs:
         run: |
           echo "$RELEASE_OUTPUTS"
           echo "$PR_OUTPUTS"
-
-      - name: Resolve release to publish
-        id: resolve-release
-        env:
-          ACTION_RELEASE_CREATED: ${{ steps.release-please.outputs['platform--release_created'] }}
-          ACTION_VERSION: ${{ steps.release-please.outputs['platform--version'] }}
-          ACTION_TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          REQUESTED_VERSION: ${{ steps.policy.outputs.requested }}
-        run: |
-          if [ "$ACTION_RELEASE_CREATED" = "true" ] && [ "$ACTION_VERSION" != "$REQUESTED_VERSION" ]; then
-            echo "::error::Release-please produced a version other than the merged manifest."
-            exit 1
-          fi
-
-          {
-            echo "should_publish=${ACTION_RELEASE_CREATED:-false}"
-            echo "version=${ACTION_VERSION}"
-            echo "tag_name=${ACTION_TAG_NAME}"
-            echo "checkout_ref=${ACTION_TAG_NAME}"
-          } >> "${GITHUB_OUTPUT}"
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
@@ -328,9 +362,16 @@ jobs:
         run: |
           test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
           if [[ "$VERSION" != *-beta.* ]]; then
-            LATEST=$(gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name')
-            test "$(printf '%s\n' "$VERSION" "${LATEST#platform-v}" | sort -V | tail -1)" = "$VERSION" \
-              || { echo "::error::A newer stable release already exists"; exit 1; }
+            if LATEST=$(gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name' 2>/dev/null); then
+              test "$(printf '%s\n' "$VERSION" "${LATEST#platform-v}" | sort -V | tail -1)" = "$VERSION" \
+                || { echo "::error::A newer stable release already exists"; exit 1; }
+            fi
+            while IFS= read -r DRAFT_TAG; do
+              [[ "$DRAFT_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+              DRAFT_VERSION=${DRAFT_TAG#platform-v}
+              test "$(printf '%s\n' "$VERSION" "$DRAFT_VERSION" | sort -V | tail -1)" = "$VERSION" \
+                || { echo "::error::Incomplete stable release ${DRAFT_TAG} must be recovered before publishing ${TAG_NAME}"; exit 1; }
+            done < <(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.draft and (.prerelease | not)) | .tag_name')
           fi
 
       - name: Download saved chart
@@ -439,6 +480,7 @@ jobs:
           VERSION: ${{ needs.release-please.outputs.platform_version }}
           RP_RESULT: ${{ needs.release-please.result }}
           MCP_RESULT: ${{ needs.build-and-push-mcp-server-docker-image.result }}
+          AGENT_CATALOG_RESULT: ${{ needs.build-and-push-agent-catalog-images.result }}
           P4_SHIM_RESULT: ${{ needs.build-and-push-p4-shim-docker-image.result }}
           SANDBOX_RESULT: ${{ needs.build-and-push-sandbox-base-docker-image.result }}
           PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image-to-dockerhub.result }}
@@ -454,6 +496,7 @@ jobs:
           • release-please: \`${RP_RESULT}\`
           • platform image (Docker Hub): \`${PLATFORM_RESULT}\`
           • MCP server image: \`${MCP_RESULT}\`
+          • agent catalog images: \`${AGENT_CATALOG_RESULT}\`
           • p4 shim image: \`${P4_SHIM_RESULT}\`
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`

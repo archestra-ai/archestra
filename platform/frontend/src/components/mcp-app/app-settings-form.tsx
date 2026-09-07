@@ -10,10 +10,17 @@ import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
 import { AppTeamAccessWarning } from "@/components/mcp-app/app-team-access-warning";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
+} from "@/components/ui/dialog";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,22 +76,17 @@ type AppVisibilityChoice = ResourceVisibilityScope | "user";
 // and the side panel both open that dialog). It folds the previously separate
 // rename dialog, manage-tools dialog, and publish popover into one staged form
 // committed by a single Save: identity (name/description), the bound environment
-// + assigned tools, and visibility (scope + teams). The dialog owns the Save
-// button (wired to this form via `formId`) and Cancel; `onStatusChange` reports
-// saving/validity up so that button can disable/spin. Delete is intentionally
-// NOT here — it's a separate destructive action owned by each host.
+// + assigned tools, and visibility (scope + teams). It renders its own dialog
+// body and sticky footer (Cancel/Save), matching the identity-provider and roles
+// dialogs; `onBack` closes the host dialog. Delete is intentionally NOT here —
+// it's a separate destructive action owned by each host.
 export function AppSettingsForm({
   app,
   onBack,
-  formId,
-  onStatusChange,
 }: {
   app: App;
+  /** Closes the host dialog — called by Cancel and after a successful save. */
   onBack: () => void;
-  /** Ties the host's submit button to this form via the HTML `form` attr. */
-  formId: string;
-  /** Reports save button state (must be a stable callback, e.g. a setState). */
-  onStatusChange?: (status: { saving: boolean; disabled: boolean }) => void;
 }) {
   const {
     canEdit,
@@ -287,13 +289,9 @@ export function AppSettingsForm({
     assignTool.isPending ||
     unassignTool.isPending;
 
-  // Drive the top bar's save button (it lives outside this form).
-  useEffect(() => {
-    onStatusChange?.({
-      saving,
-      disabled: readOnly || saving || toolsLoading || selectionMissing,
-    });
-  }, [readOnly, saving, toolsLoading, selectionMissing, onStatusChange]);
+  // Save is blocked while access is resolving, for view-only users, mid-save,
+  // while tool assignments load, or when a shared scope has no recipients.
+  const saveDisabled = readOnly || saving || toolsLoading || selectionMissing;
 
   // Serializes the handler itself: the state-based `saving` guard lags a
   // render, so a rapid resubmit could reread a stale tool-diff snapshot and
@@ -408,12 +406,17 @@ export function AppSettingsForm({
   }
 
   return (
-    <form
-      id={formId}
-      onSubmit={onSubmit}
-      className="flex min-h-0 flex-1 flex-col"
-    >
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+    <DialogForm onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+      <DialogBody className="space-y-4">
+        {app.createdBy ? (
+          <div className="flex justify-end">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>Created by</span>
+              <CreatedByCell createdBy={app.createdBy} />
+            </span>
+          </div>
+        ) : null}
+
         {!isAccessPending && !canEdit ? (
           <Alert variant="info">
             <AlertTriangle />
@@ -684,7 +687,18 @@ export function AppSettingsForm({
             onLabelsChange={setLabels}
           />
         )}
-      </div>
-    </form>
+      </DialogBody>
+
+      <DialogStickyFooter className="mt-0">
+        <Button type="button" variant="outline" onClick={onBack}>
+          {!isAccessPending && !canEdit ? "Close" : "Cancel"}
+        </Button>
+        {!isAccessPending && canEdit ? (
+          <Button type="submit" disabled={saveDisabled}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        ) : null}
+      </DialogStickyFooter>
+    </DialogForm>
   );
 }

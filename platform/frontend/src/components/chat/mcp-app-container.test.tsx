@@ -101,13 +101,15 @@ vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
 
 // Stub the inline settings form: it pulls the environment/teams/auth query
 // chains, which aren't this suite's concern (covered by their own tests). Here
-// we only assert the panel chrome toggles it from the gear.
+// we only assert the panel chrome toggles it from the gear. The form owns its
+// own Cancel/Save footer, so the stub mirrors that.
 vi.mock("@/components/mcp-app/app-settings-form", () => ({
   AppSettingsForm: ({ onBack }: { onBack: () => void }) => (
     <div data-testid="settings-form">
       <button type="button" onClick={onBack}>
-        mock back
+        Cancel
       </button>
+      <button type="submit">Save</button>
     </div>
   ),
 }));

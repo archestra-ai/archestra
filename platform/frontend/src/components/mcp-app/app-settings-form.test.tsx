@@ -152,17 +152,8 @@ function toolsQuery(over: Record<string, unknown> = {}) {
 
 function renderForm(over: Partial<Parameters<typeof AppSettingsForm>[0]> = {}) {
   const onBack = vi.fn();
-  const onStatusChange = vi.fn();
-  const utils = render(
-    <AppSettingsForm
-      app={APP}
-      onBack={onBack}
-      formId="settings-form"
-      onStatusChange={onStatusChange}
-      {...over}
-    />,
-  );
-  return { onBack, onStatusChange, ...utils };
+  const utils = render(<AppSettingsForm app={APP} onBack={onBack} {...over} />);
+  return { onBack, ...utils };
 }
 
 function submitForm(container: HTMLElement) {
@@ -399,10 +390,11 @@ describe("AppSettingsForm save", () => {
     useAppToolsMock.mockReturnValue(
       toolsQuery({ data: undefined, isError: true }),
     );
-    const { container, onBack, onStatusChange } = renderForm();
+    const { container, onBack } = renderForm();
 
-    const lastStatus = onStatusChange.mock.calls.at(-1)?.[0];
-    expect(lastStatus).toEqual({ saving: false, disabled: false });
+    // Save stays enabled: identity/visibility still commit even though the tool
+    // diff is skipped while the assignments couldn't load.
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     // The editor is not rendered unseeded — it would show every assigned tool
     // unchecked and let the user stage edits the save would drop.
     expect(screen.queryByTestId("stage-tool-t2")).not.toBeInTheDocument();
@@ -416,7 +408,7 @@ describe("AppSettingsForm save", () => {
   });
 
   test("a background refetch does not overwrite the staged selection", async () => {
-    const { container, onBack, rerender, onStatusChange } = renderForm();
+    const { container, onBack, rerender } = renderForm();
 
     fireEvent.click(screen.getByTestId("stage-tool-t2"));
     // Refetch lands a changed server set while tool-2 is staged.
@@ -428,14 +420,7 @@ describe("AppSettingsForm save", () => {
         ],
       }),
     );
-    rerender(
-      <AppSettingsForm
-        app={APP}
-        onBack={onBack}
-        formId="settings-form"
-        onStatusChange={onStatusChange}
-      />,
-    );
+    rerender(<AppSettingsForm app={APP} onBack={onBack} />);
     submitForm(container);
 
     await waitFor(() => expect(onBack).toHaveBeenCalled());

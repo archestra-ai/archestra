@@ -371,6 +371,7 @@ jobs:
             while IFS= read -r RELEASE_TAG; do
               [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
               RELEASE_VERSION=${RELEASE_TAG#platform-v}
+              # Ubuntu's GNU sort -V orders the numeric stable versions accepted above.
               test "$(printf '%s\n' "$VERSION" "$RELEASE_VERSION" | sort -V | tail -1)" = "$VERSION" \
                 || { echo "::error::Newer stable release ${RELEASE_TAG} exists (published or draft); cannot publish ${TAG_NAME}"; exit 1; }
             done <<< "$STABLE_TAGS"
@@ -406,9 +407,9 @@ jobs:
         if: ${{ github.ref_name != 'main' }}
         shell: bash
         run: |
-          MCP_IMAGE=$(cat release-images/mcp-server-base)
+          test -s release-images/mcp-server-base
           PLATFORM_IMAGE=$(cat release-images/platform)
-          helm push "archestra-platform-${VERSION}.tgz" "oci://${MCP_IMAGE%/mcp-server-base@*}/helm-charts"
+          helm push "archestra-platform-${VERSION}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
           for file in release-images/*; do
             [ "${file##*/}" = platform ] && continue
             IMAGE=$(cat "$file")

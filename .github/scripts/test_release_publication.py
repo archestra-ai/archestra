@@ -1,9 +1,10 @@
-"""Exercise the real publication guard, stubbing only the GitHub CLI boundary."""
+"""Exercise publication scripts, stubbing only external CLI boundaries."""
 
 import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import textwrap
 import unittest
 
@@ -96,6 +97,41 @@ gh() {
         for version in ("1.3.51", "1.4.0-beta.1"):
             with self.subTest(version=version):
                 self.assert_blocked(self.run_guard(version=version, freeze="true"))
+
+    def test_chart_destination_is_independent_and_requires_mcp_reference(self):
+        section = WORKFLOW.read_text().split(
+            "      - name: Publish approved stable artifacts without rebuilding\n", 1
+        )[1].split("      - name:", 1)[0]
+        script = textwrap.dedent(section.split("        run: |\n", 1)[1])
+        mcp_image = "registry.example.invalid/relocated/mcp@sha256:" + "a" * 64
+        platform_image = "archestra/platform@sha256:" + "b" * 64
+        stub = "helm() { printf 'helm %s\\n' \"$*\"; }; docker() { printf 'docker %s\\n' \"$*\"; };\n"
+        for reference in (None, "", mcp_image):
+            with self.subTest(reference=reference), tempfile.TemporaryDirectory() as directory:
+                images = Path(directory) / "release-images"
+                images.mkdir()
+                (images / "platform").write_text(platform_image)
+                if reference is not None:
+                    (images / "mcp-server-base").write_text(reference)
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", stub + script],
+                    cwd=directory,
+                    env={**os.environ, "VERSION": "1.4.0"},
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if not reference:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(result.stdout, "")
+                    continue
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), [
+                    "helm push archestra-platform-1.4.0.tgz "
+                    "oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts",
+                    f"docker buildx imagetools create --tag registry.example.invalid/relocated/mcp:latest {mcp_image}",
+                    f"docker buildx imagetools create --tag archestra/platform:latest {platform_image}",
+                ])
 
 
 if __name__ == "__main__":

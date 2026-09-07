@@ -92,8 +92,7 @@ docker run \
 Open <http://localhost:3000>. Full Docker / Helm / Kubernetes instructions
 live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 
-`latest` tracks qualified stable releases; explicit `-beta.N` versions preview `main`.
-Fixes land on `main` for the next beta and are selectively backported to the supported stable line.
+`latest` tracks stable releases. Versions with `-beta.N` preview `main`.
 
 ## Ready for production
 
@@ -114,8 +113,8 @@ Fixes land on `main` for the next beta and are selectively backported to the sup
 - 🛡️ [**Security & bug bounty**](https://archestra.ai/docs/security)
 - 🤝 [**Contributing**](https://archestra.ai/docs/contributing) —
   set up the dev env, run e2e tests, open a PR.
-- [**Developer release guide**](platform/dev/RELEASE.md) —
-  rolling beta and patch lines, backports, cutovers, and qualification.
+- [**Release guide**](platform/dev/RELEASE.md) —
+  beta releases, stable patches, cutovers, and qualification.
 
 Thank you for continuously making **Archestra** better — you're awesome 🫶
 

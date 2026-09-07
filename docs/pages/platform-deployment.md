@@ -9,25 +9,26 @@ lastUpdated: 2026-09-07
 
 The Archestra Platform can be deployed using Docker for development and testing, or Helm for production environments. Both deployment methods provide access to the Admin UI on port 3000 and the API on port 9000.
 
-## Stable Versions And Upgrades
+## Release Channels And Upgrades
 
-Pin an exact chart version or image digest in production.
-Choose a published stable version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases).
-Docker `latest` follows the qualified stable release, not ongoing development.
-Versions ending in `-beta.N` preview `main` without moving `latest`.
-`ARCHESTRA_BETA` enables experimental features, not a beta release; keep it disabled unless needed.
+Pin an exact chart version or image tag in production.
+Select a published release from [GitHub Releases](https://github.com/archestra-ai/archestra/releases).
 
-Fixes land on `main` for the next beta.
-Maintainers selectively backport them into the supported `release/X.Y` branch using `git cherry-pick -x`.
-An already-cut candidate branch receives needed fixes through separate backports, not merges of `main`.
+### Release Channels
 
-Stable patches and first releases of new feature lines share one build, qualification, and approval pipeline.
-Only approved stable publication updates `latest`; "monthly" is a target cadence, not an automatic schedule.
-One published stable line receives fixes until the next qualified line replaces it.
-Older versions remain installable, but fixes require upgrading to the supported line.
+- **Stable:** Docker tag `latest` and default Helm charts track the current stable release.
+- **Beta:** Version tags ending in `-beta.N` preview upcoming features from the main branch.
+- **Experimental features:** The `ARCHESTRA_BETA` environment variable turns on experimental features in the application. It does not change the release version.
 
-Back up your database before upgrading and review the release's migration notes.
-Rolling back the application does not undo database migrations.
+Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next beta release.
+
+### Upgrade Safety
+
+1. Back up your PostgreSQL database before every upgrade.
+2. Read the release notes for migration notices.
+3. Apply the upgrade to a staging environment first.
+
+Rolling back the platform container does not revert database migrations.
 
 ## Docker Deployment
 
@@ -921,7 +922,7 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop; custom images can replace it and set their own command.
+- **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:<platform-version>`, including beta versions.
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.

@@ -1,58 +1,43 @@
 ---
 name: managing-archestra-releases
-description: "Guides rolling beta publication, stable patches, and new stable feature lines. Use when backporting main-branch fixes, cutting a candidate branch, qualifying artifacts, recovering publication, or approving a release."
+description: "Guides rolling beta releases, stable patches, and new stable feature branches. Use when backporting fixes, cutting release branches, testing artifacts, recovering failed runs, or approving releases."
 ---
 
 # Managing Archestra Releases
 
-Read `platform/dev/RELEASE.md` before acting; it is the release source of truth.
-Inspect the current branch, supported stable line, latest stable tag, release config/manifest,
-release PR, workflow run, and environment protections. Do not assume `release/1.3` remains supported.
+Always read `platform/dev/RELEASE.md` first. It is the authoritative release checklist.
+Do not assume `release/1.3` is always the active branch. Check current branches, tags, and settings before acting.
 
-## Choose The Publication Path
+## Publication Paths
 
-- `main` is the rolling beta line. Merging its release-please PR builds and publishes a beta
-  through `beta-release`, without moving `latest`. Ordinary feature/fix PRs do not themselves publish a versioned release.
-- Every `release/X.Y` uses the same stable pipeline, for both patches and its first feature release.
-  Merging its release-please PR builds the final artifacts; it does not publish them yet.
-  Qualify those artifacts, then approve protected `stable-release` to publish the saved chart/digests and update `latest`.
-- Starting a new feature line adds branch/config preparation, not another publication pipeline.
-  "Monthly" is the intended cadence, not a scheduled job.
+- **Beta (`main`):** Merging a release PR on `main` automatically publishes a beta release. It does not move the Docker `latest` tag.
+- **Stable (`release/X.Y`):** Merging a release PR on `release/X.Y` builds stable artifacts. Publication pauses for manual `stable-release` environment approval. Once approved, the workflow publishes the release and updates `latest`.
 
-## Propagate Fixes
+Starting a new stable branch adds configuration steps. It uses the same stable publication pipeline.
 
-- Land the fix on `main` first. It already belongs to the beta line and will ship with the next beta release PR.
-  Do not invent a separate beta branch or cherry-pick a commit back onto `main` when it is already there.
-- For the supported stable line, create a backport PR branch from `release/X.Y` and run `git cherry-pick -x <main-fix-sha>`.
-  Review the diff for unrelated features, broad refactors, or schema/migration changes; exclude them from patches.
-- If an already-cut candidate branch also needs a later fix from `main`, prepare a separate selective backport PR for it.
-  Do not merge all of `main` into stable or candidate branches. A candidate is not a second supported production line.
-- Resolve backport conflicts for each target without importing its release metadata from `main`.
-  Merge reviewed backport PRs before their release-please PRs. Both production and candidate releases use stable qualification.
+## Backporting Fixes
 
-## Cut A New Stable Line
+1. Land fixes on `main` first. Fixes on `main` ship automatically in the next beta release.
+2. Backport fixes to the active stable branch (`release/X.Y`):
+   - Branch from `origin/release/X.Y`.
+   - Use `git cherry-pick -x <main-commit-sha>`.
+   - Include only necessary bug fixes. Do not include features, refactors, or schema changes.
+3. If an unreleased candidate branch also needs the fix, open a separate backport PR targeting that branch.
+4. Never merge `main` directly into `release/X.Y` or candidate branches.
 
-Cut `release/X.Y` from a tested beta tag, not the latest `main`.
-Use a config-only PR with the checklist's stable settings and a temporary final-version `release-as`.
-Qualify a fresh final stable build; do not merely relabel beta artifacts.
-Remove the consumed stable override after publication. Then move maintenance to the new stable line
-and seed the next beta line on `main`; remove its override after the first beta builds.
-Use native release-please configuration, not a custom version helper or manual manifest bump.
-`draft: true` makes the GitHub release a draft; it does not make the release-please pull request a draft.
+## Cutting A New Stable Line
 
-## Approval And Recovery
+1. Create `release/X.Y` from a verified beta tag, never directly from `main`.
+2. Configure `.github/release-please/release-please-config.json` with temporary `release-as: X.Y.0` and `draft: true`.
+3. Test and qualify the actual release build artifacts. Do not simply retag beta images.
+4. After publication, remove `release-as` from `release/X.Y`.
+5. Update `main` to the next beta series (for example, `release-as: X.Y+1.0-beta.1`). Remove the override after the first beta builds.
 
-Require passing release PR checks and qualification of the exact saved final artifacts before stable approval.
-Verify required reviewers, prevented self-review, and `release/*` deployment restrictions;
-an auto-created environment is not a protected approval gate. Record only sanitized qualification evidence.
-Retry failed jobs in the original run using its saved artifacts after partial publication.
-Use workflow retry/approval controls; the workflow owns chart upload, release publication, and alias updates.
-Do not add manual release edits or `latest` movements after a retry or approval.
-Inspect completion before doing anything else. If state remains inconsistent, stop and investigate instead of publishing manually.
-If a retry requires fresh approval, obtain explicit approval authorization rather than assuming it from permission to retry.
-Never rebuild a partially published version, discard its draft, overwrite its tag, or move `latest` backward.
-For a rejected candidate that never started publication, cancel its run and delete only the draft, retaining its tag.
-Otherwise later pushes recover that rejected draft. A higher stable draft also blocks lower stable publication.
+## Safety And Recovery Rules
 
-Treat release-PR merges, environment approvals, draft deletion, and repository-setting changes as consequential.
-Do not perform them without explicit authorization. Preparing a backport or release plan is not authorization to publish.
+- **Testing gate:** Verify the exact saved build artifacts (`release-helm-chart` and `release-image-*`) before approving `stable-release`.
+- **Workflow owns publication:** The GitHub Actions workflow handles container image pushes, chart publication, and git tags. Never push release images, publish Helm charts, or update `latest` tags manually.
+- **Failed build:** Re-run failed jobs in the same workflow run.
+- **Failed qualification:** If testing fails before approval, cancel the run and delete the GitHub draft release. Keep the git tag. Never reuse a failed version number.
+- **Partial publication:** Re-run failed jobs in the original run using the saved artifacts. Never rebuild already published versions or move `latest` backward.
+- **Explicit authorization:** Merging release PRs, approving release environments, deleting draft releases, and modifying repository settings are consequential. Always obtain explicit user authorization before performing these actions.

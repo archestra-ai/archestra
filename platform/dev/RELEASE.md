@@ -1,122 +1,97 @@
 # Release Checklist
 
-There are two publication pipelines: beta on `main` and stable on `release/X.Y`.
-Stable patches and the first release of a new feature line use the same stable pipeline.
-Starting a feature line adds branch/config preparation; "monthly" is a target cadence, not a scheduled job.
-[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches)
-handles versions and changelogs. GitHub Actions handles builds.
-Only tested, approved stable releases move `latest`.
+Archestra uses two release pipelines:
+- **Beta:** Automatic releases from `main` (for example, `1.4.0-beta.2`).
+- **Stable:** Tested and approved releases from `release/X.Y` (for example, `1.3.52` or `1.4.0`).
+
+[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
 
 ## Release A Beta
 
-- [ ] Open the release-please PR targeting `main` (for example, `1.4.0-beta.2`).
-- [ ] Review the changelog, wait for PR checks, and merge.
-- [ ] Confirm the **Release Please** workflow publishes the beta.
-
-Done. Beta users can deploy it; stable users stay on `1.3.x`.
-Installing a beta does not enable the separate `ARCHESTRA_BETA` feature flag.
+1. [ ] Open the release-please PR on `main` (for example, `1.4.0-beta.2`).
+2. [ ] Review the changelog and confirm checks pass.
+3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the beta release.
 
 ## Ship A Stable Fix
 
-- [ ] Fix it on `main` first. This is already the beta line; its next release-please PR includes the fix.
-  Do not create a separate beta branch or cherry-pick the same fix back onto `main`.
-- [ ] Identify the supported stable branch, such as `release/1.3` before `1.4.0` publishes.
-  Create a backport PR branch from it and run `git cherry-pick -x <main-fix-sha>`.
-- [ ] Open and merge a reviewed, tested PR into that stable branch.
-  Include only needed fixes—no features, broad refactors, or schema/migration changes.
-- [ ] Review and merge the release-please PR for the next patch, such as `1.3.52`.
-- [ ] Complete **Test And Approve Stable** below.
+1. [ ] Land the fix on `main` first. The fix ships automatically in the next beta.
+2. [ ] Create a backport branch from the active stable branch (`release/X.Y`):
+   ```bash
+   git checkout -b backport/fix-name origin/release/X.Y
+   git cherry-pick -x <main-commit-sha>
+   ```
+3. [ ] Open a PR targeting `release/X.Y`. Confirm tests pass and merge.
+   - Only include necessary bug fixes. Do not include new features, refactors, or schema migrations.
+   - If an unreleased candidate branch (such as `release/1.4`) also needs the fix, repeat step 2 for that candidate branch.
+   - Never merge `main` into a release branch.
+4. [ ] Merge the generated release-please patch PR on `release/X.Y` (for example, `1.3.52`).
+5. [ ] Complete **Test And Approve Stable** below.
 
-If `release/1.4` was already cut from a beta before the fix landed, it does not inherit later `main` commits.
-When that candidate also needs the fix, use a separate `git cherry-pick -x` backport PR targeting it.
-The fix then reaches the rolling beta through `main`, and each selected stable/candidate branch through its own backport.
-Only one published stable line is supported; an unpublished candidate is not a second production line.
-Never merge all of `main` into a stable or candidate branch or copy its release metadata during conflict resolution.
+## Cut A New Stable Feature Line
 
-## Cut The Monthly Feature Release
+1. [ ] Choose a tested beta tag (for example, `platform-v1.4.0-beta.2`).
+2. [ ] Create `release/1.4` from that tag (not from `main`):
+   ```bash
+   git checkout -b release/1.4 platform-v1.4.0-beta.2
+   git push origin release/1.4
+   ```
+3. [ ] Open a PR to `release/1.4` configuring `.github/release-please/release-please-config.json` with the **Stable cut** settings below. Merge it.
+4. [ ] Merge the generated `1.4.0` release PR on `release/1.4`, then complete **Test And Approve Stable**.
+5. [ ] After `1.4.0` publishes, remove `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
+6. [ ] On `main`, open a PR setting the **Next beta** configuration below. Merge it.
+7. [ ] After `1.5.0-beta.1` publishes, remove `release-as` from `main`.
 
-- [ ] Pick a tested beta tag, such as `platform-v1.4.0-beta.2`.
-  Pause beta release PR merges during the cut.
-- [ ] Create `release/1.4` from that tag—not from the latest `main`.
-- [ ] In a config-only PR to `release/1.4`, set the stable column below.
-- [ ] Review and merge release-please's `1.4.0` PR, then **Test And Approve Stable**.
-- [ ] After publication, remove the consumed `release-as` from `release/1.4`.
-  Release-please numbers future patch PRs `1.4.1`, `1.4.2`, etc.
-- [ ] On `main`, set the next beta column below. Merge its release-please PR,
-  wait for `1.5.0-beta.1` to build, then remove the consumed `release-as`.
-- [ ] Resume beta releases. Send future stable fixes to `release/1.4`.
+### Release Please Configuration
 
 Edit `packages.platform` in `.github/release-please/release-please-config.json`:
 
-| Setting | Stable cut (`release/1.4`) | Next beta (`main`) |
+| Field | Stable cut (`release/1.4`) | Next beta (`main`) |
 | --- | --- | --- |
 | `versioning` | `always-bump-patch` | `prerelease` |
 | `prerelease` | `false` | `true` |
-| `prerelease-type` | Remove | `beta` |
+| `prerelease-type` | Remove field | `beta` |
 | `release-as` (temporary) | `1.4.0` | `1.5.0-beta.1` |
 | `draft` | `true` | `true` |
 
-`draft: true` controls the GitHub release, not whether the release-please pull request is a draft.
-Keep each branch's release metadata separate; do not merge it back into `main`.
-We support one stable line. If the next feature release is delayed, keep fixing the old line.
+`draft: true` creates a draft GitHub release. It does not make the pull request a draft.
 
 ## Test And Approve Stable
 
-The workflow builds first, then waits for **`stable-release` approval** in GitHub Actions.
-This applies to both patch releases and the first stable release of a new feature line.
-Merging an ordinary backport PR only contributes to the rolling release PR; it does not publish a versioned release.
-Merging the release-please PR starts the final build; stable publication still requires approval.
-Test this final build, not just the preceding beta:
+Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable-release` environment approval. Test these exact artifacts before approving:
 
-- [ ] Confirm release PR checks and all artifact builds passed.
-- [ ] Download `release-helm-chart` and `release-image-*` from that workflow run.
-  Install the saved chart in a disposable environment with `ARCHESTRA_BETA=false`;
-  confirm the running image digests match the saved references.
-- [ ] Check a fresh install and an upgrade from the latest stable patch using fictional data.
-  Exercise sign-in, permissions, chat, LLM proxy, MCP tools, workers, and changed behavior.
-  Confirm existing data and access restrictions survive the upgrade.
-- [ ] Check migrations/recovery, logs, and resource use on supported architectures and relevant deployment modes.
-- [ ] Have another maintainer approve `stable-release`, recording a short, sanitized test summary.
-  Never include customer details, secrets, private links, or raw logs.
-- [ ] Confirm the workflow publishes the stable release and chart and updates `latest`.
+1. [ ] Confirm all build jobs in the workflow run completed successfully.
+2. [ ] Download the `release-helm-chart` and `release-image-*` workflow artifacts.
+3. [ ] Install the saved chart in a test environment with `ARCHESTRA_BETA=false`. Confirm image digests match the build.
+4. [ ] Test a clean install and an upgrade from the previous stable version:
+   - Verify database migrations, sign-in, chat, MCP tools, LLM proxy, and background workers.
+   - Confirm existing data remains intact after upgrade.
+5. [ ] Have a second maintainer approve the `stable-release` environment in GitHub Actions.
+   - Add a brief, sanitized test summary in the approval comment. Never include sensitive data.
+6. [ ] Confirm the workflow publishes the GitHub release, updates Helm charts, and points Docker `latest` to the new version.
 
-Approval publishes the saved chart and image digests without rebuilding.
-Production users should still pin exact versions or digests.
+## Troubleshooting
 
-## If Something Fails
-
-- **Build failure:** inspect it and rerun failed jobs in the same run when safe.
-- **Failed testing before approval:** reject/cancel the waiting run and delete its GitHub draft, keeping the tag.
-  Otherwise later pushes automatically recover the rejected draft.
-  Clear any consumed `release-as`, backport the fix, and test a new version.
-  Never reuse a version or overwrite its tag.
-- **Partial publication:** inspect GitHub and registries before retrying.
-  Keep the draft and rerun failed jobs in the original run using its saved artifacts.
-  Let that workflow perform uploads, publication, and alias updates; do not perform those steps manually afterward.
-  Inspect the retry result. If state remains inconsistent, investigate rather than manually moving `latest` or editing the release.
-  Obtain explicit authorization if the retry requires fresh environment approval.
-  Never move `latest` backward or rebuild a published version.
-
-A higher stable draft blocks lower stable publication, including while qualification is pending.
-Cancel and discard an unapproved candidate before shipping an older-line fix.
-Never discard a draft after publication has started; recover that release first.
+- **Build failure:** Inspect the failure and re-run failed jobs in the same workflow run.
+- **Testing fails before approval:**
+  1. Cancel the workflow run.
+  2. Delete the GitHub draft release. Keep the git tag. (Unapproved draft releases block other releases).
+  3. Fix the issue on `main`, backport to the release branch, and cut a new version. Never reuse an existing version number.
+- **Partial publication:**
+  1. Do not publish artifacts or move `latest` manually.
+  2. Inspect GitHub releases and container registries.
+  3. Re-run failed jobs in the original workflow run using the saved artifacts.
+  4. If the retry fails or state remains inconsistent, stop and investigate.
 
 <details>
-<summary>One-time setup — before enabling this process</summary>
+<summary>One-time setup — initial rollout</summary>
 
-- [ ] Freeze old release automation, let publishing finish, and close obsolete release PRs.
-- [ ] Create `beta-release` without required approval.
-- [ ] Create `stable-release` with required reviewers, prevent self-review, and allow
-  deployments only from `release/*`, not `main`. Auto-created environments are unprotected.
-- [ ] Protect `release/*` with PR review and required test checks.
-- [ ] Create `release/1.3` from the latest published `1.3.x` tag, currently `platform-v1.3.51`.
-  Apply only release-tooling changes; keep the manifest at that tag's version. Set `versioning: always-bump-patch`,
-  `prerelease: false`, and `draft: true`; remove `release-as` and `prerelease-type`.
-- [ ] On `main`, use the beta settings above, but seed `release-as: 1.4.0-beta.1`.
-  Remove that override after the first beta builds.
-- [ ] Verify registry authentication works for release branches and the publication environment.
-- [ ] Lift the freeze when both branches and approvals are ready.
-
-Repository settings, branch creation, and publication require explicit authorization.
+1. [ ] Freeze existing release automation and close obsolete release PRs.
+2. [ ] Create GitHub environment `beta-release` without required approvals.
+3. [ ] Create GitHub environment `stable-release` with required reviewers, self-review prevention, and deployment restricted to `release/*`.
+4. [ ] Add branch protection rules for `release/*`.
+5. [ ] Create `release/1.3` from the latest stable tag (`platform-v1.3.51`). Set `versioning: always-bump-patch`, `prerelease: false`, and `draft: true`.
+6. [ ] On `main`, configure beta settings with temporary `release-as: 1.4.0-beta.1`.
+7. [ ] Confirm registry credentials work for release branches.
+8. [ ] Unfreeze releases once branches and environments are ready.
 
 </details>

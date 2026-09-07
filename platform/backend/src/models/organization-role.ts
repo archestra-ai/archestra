@@ -3,6 +3,7 @@ import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  OWNER_ROLE_NAME,
   type Permissions,
   PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
@@ -358,6 +359,15 @@ class OrganizationRoleModel {
     );
 
     if (!role) {
+      // better-auth assigns "owner" to the organization creator by default.
+      // That identifier is not one of our predefined roles and has no
+      // organization_roles row, so RBAC resolved to {} and impersonation
+      // (among everything else) failed for those members.
+      if (identifier === OWNER_ROLE_NAME) {
+        return OrganizationRoleModel.getPredefinedRolePermissions(
+          ADMIN_ROLE_NAME,
+        );
+      }
       logger.debug(
         { identifier },
         "OrganizationRoleModel.getPermissions: role not found, returning empty",

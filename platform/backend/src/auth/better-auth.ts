@@ -1,5 +1,6 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
+  ADMIN_ROLE_NAME,
   API_KEY_MAX_EXPIRATION_DAYS,
   API_KEY_MAX_NAME_LENGTH,
   API_KEY_MIN_EXPIRATION_DAYS,
@@ -161,6 +162,9 @@ export const auth = betterAuth({
     organization({
       requireEmailVerificationOnInvitation: false,
       allowUserToCreateOrganization: false, // Disable organization creation by users
+      // better-auth defaults this to "owner", which is not one of our
+      // predefined roles and left creators with an empty permission map.
+      creatorRole: ADMIN_ROLE_NAME,
       ac,
       dynamicAccessControl: {
         enabled: true,
@@ -223,7 +227,10 @@ export const auth = betterAuth({
         },
       },
     }),
-    admin(),
+    // Anyone with member:impersonate is synced to better-auth system
+    // role "admin". Without this flag, viewing-as another admin (the
+    // role debugger's job) is rejected as YOU_CANNOT_IMPERSONATE_ADMINS.
+    admin({ allowImpersonatingAdmins: true }),
     // Developer-only auto-login endpoint (self-guards to non-production + env var).
     devAutoLoginPlugin(),
     /**
@@ -749,13 +756,18 @@ async function assertCallerCanImpersonate(
   const { request, context } = ctx;
 
   type SessionUser = { id: string };
-  let user = (context?.session as { user?: SessionUser } | undefined)?.user;
+  type SessionData = { impersonatedBy?: string | null };
+  type SessionBundle = { user: SessionUser; session: SessionData };
+  const contextSession = context?.session as Partial<SessionBundle> | undefined;
+  let user = contextSession?.user;
+  let session = contextSession?.session;
 
-  if (!user && request) {
+  if ((!user || !session) && request) {
     try {
       const headers = new Headers(request.headers as HeadersInit);
       const resolved = await auth.api.getSession({ headers });
-      user = resolved?.user as SessionUser | undefined;
+      user ??= resolved?.user as SessionUser | undefined;
+      session ??= resolved?.session as SessionData | undefined;
     } catch (err) {
       logger.debug(
         { err },
@@ -814,6 +826,35 @@ async function assertCallerCanImpersonate(
       reason: "caller lacks the member:impersonate permission",
     });
     throw forbidden();
+  }
+
+  const denyTarget = async (reason: string) => {
+    await writeImpersonationAuditLog({
+      stash,
+      action: "auth.impersonation_started",
+      outcome: "denied",
+      path: "/admin/impersonate-user",
+      request,
+      reason,
+    });
+    throw forbidden();
+  };
+
+  if (session?.impersonatedBy) {
+    await denyTarget(
+      "an impersonated session cannot start another impersonation",
+    );
+  }
+
+  if (targetUserId === user.id) {
+    await denyTarget("a user cannot impersonate themselves");
+  }
+
+  if (targetUserId) {
+    const targetUserRecord = await UserModel.getById(targetUserId);
+    if (targetUserRecord?.organizationId !== userRecord.organizationId) {
+      await denyTarget("target user is not in the caller's organization");
+    }
   }
 
   // The org-level permission is the source of truth, but better-auth's own

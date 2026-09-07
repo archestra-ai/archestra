@@ -370,7 +370,12 @@ remember_disconnected() { printf '%s\\n' "$1" >> "$SKIP_FILE" 2>/dev/null || tru
 # — script, skip file, and the profile wrapper blocks. A leftover no-op hook
 # is a dependency that can only ever break a future claude launch (deleted
 # files, reconfigured shells); connect re-installs everything.
+# Set once the guard has removed itself, so later steps (e.g. the version-update
+# notice) don't advertise re-connecting to refresh a startup check that no
+# longer exists.
+GUARD_UNINSTALLED=0
 uninstall_guard() {
+  GUARD_UNINSTALLED=1
   rm -f "$GUARD_PATH" "$SKIP_FILE" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc"; do
     [ -f "$profile" ] || continue
@@ -863,8 +868,11 @@ offer_reconfigure_tail() {
 # can be read. Re-connecting needs a fresh one-time link only the user can fetch
 # from the page, so [U] shows the steps rather than doing it for them.
 notify_version_update() {
+  # Nothing to update if the guard just removed itself (every remote was
+  # disconnected this run), and the timed reads below already hold the advisory
+  # on screen — so no extra dwell is needed.
+  [ "$GUARD_UNINSTALLED" = "1" ] && return 0
   version_is_stale || return 0
-  GUARD_DWELL=1
   printf '%supdate:%s %sa newer %s setup is available.%s %s[U]%s%s for the steps to update this startup check%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$APP_NAME" "$C_RESET" "$C_TITLE" "$C_RESET" "$C_DIM" "$C_RESET"
   if [ "$PENDING_KEY_SET" = "1" ]; then
     # a [U] typed ahead during the probes (stashed by the closing beat) answers here

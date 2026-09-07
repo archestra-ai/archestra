@@ -110,6 +110,9 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain(
       "if ($key -and $key -ne 'c' -and $key -ne 'C') { $Script:PendingKey = $key; $key = '' }",
     );
+    // a guard that removed itself this run must not advertise an update for a
+    // startup check that no longer exists
+    expect(script).toContain("if ($Script:GuardUninstalled) { return }");
   });
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {

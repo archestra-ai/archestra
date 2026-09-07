@@ -862,6 +862,38 @@ describe("renderStartupGuardScript", () => {
     expect(existsSync(guardHome.skipFile)).toBe(false);
   });
 
+  test("interactive, disconnecting the last remote uninstalls the guard: no update nag for a guard that's gone", async () => {
+    // A single-remote guard whose only remote the platform reports down, plus a
+    // strictly-newer guard version in the same body. Answering the down prompt
+    // disconnects it and uninstalls the guard — so the update notice, which
+    // would tell you to re-run connect to refresh a startup check that no longer
+    // exists, must not fire.
+    const proxyOnly: StartupGuardContext = {
+      appName: "Archestra",
+      healthUrl: "https://archestra.example.com/v1/health?llm=profile-123",
+      proxy: {
+        provider: "anthropic",
+        providerLabel: "Anthropic",
+        url: "https://archestra.example.com/v1/anthropic/profile-123",
+        ref: "profile-123",
+        proxyName: "default_proxy",
+      },
+      mcp: null,
+      skills: null,
+    };
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderStartupGuardScript(proxyOnly, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"llm":"down","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
+      keys: "y",
+    });
+    // the down remote is disconnected and the guard removes itself…
+    expect(output).toContain("Disconnected");
+    expect(existsSync(guardHome.guardFile)).toBe(false);
+    // …and it never advertises an update for the guard it just uninstalled
+    expect(output).not.toContain("a newer Archestra setup is available");
+  });
+
   test("interactive, Bash 3.2 fallback hears Space between animation frames", async () => {
     const script = renderStartupGuardScript(
       CTX,

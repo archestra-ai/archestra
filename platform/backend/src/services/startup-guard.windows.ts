@@ -118,11 +118,17 @@ $ActiveRemotes = @($Remotes | Where-Object { $DisconnectedKinds -notcontains $_.
 
 function Add-ArchDisconnected([string]$Kind) { try { Add-Content -Path $SkipFile -Value $Kind } catch { } }
 
+# Set once the guard has removed itself, so later steps (e.g. the version-update
+# notice) don't advertise re-connecting to refresh a startup check that no
+# longer exists.
+$Script:GuardUninstalled = $false
+
 # Once nothing connected is left to check, the guard removes itself entirely
 # — script, skip file, and the profile wrapper blocks. A leftover no-op hook
 # is a dependency that can only ever break a future claude launch (deleted
 # files, reconfigured shells); connect re-installs everything.
 function Remove-ArchGuard {
+  $Script:GuardUninstalled = $true
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
   $profilePaths = @()
   $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -594,8 +600,11 @@ function Show-ArchReconfigureOffer {
 # steps and holds a beat longer so they can be read. Re-connecting needs a fresh
 # one-time link only the user can fetch, so [U] shows the steps.
 function Show-ArchVersionUpdate {
+  # Nothing to update if the guard just removed itself (every remote was
+  # disconnected this run); the timed reads below already hold the advisory on
+  # screen, so no extra dwell is needed.
+  if ($Script:GuardUninstalled) { return }
   if (-not (Test-ArchVersionStale)) { return }
-  $Script:Dwell = $true
   Clear-ArchLine
   Write-Arch 'update:' Yellow -NoNewline
   Write-Arch (' a newer ' + $AppName + ' setup is available. ') DarkGray -NoNewline

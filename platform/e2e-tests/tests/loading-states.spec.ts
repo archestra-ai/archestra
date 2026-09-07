@@ -133,6 +133,114 @@ test.describe("loading states", () => {
     await context.close();
   });
 
+  test("the sign-in surface never blanks, and its form lands in one place", async ({
+    browser,
+  }) => {
+    // One signed-out load used to run through five states: an indicator, an
+    // empty screen, the indicator again, an empty screen again, the card — and
+    // then the card shoved 55px down as the default-credentials banner landed
+    // above it in a vertically centred column. The blanks were the backend
+    // connectivity probe rendering nothing while it had no verdict, and the
+    // jump was the column painting before it knew its own shape.
+    //
+    // Hidden elements are skipped deliberately: React keeps the outgoing
+    // Suspense boundary mounted as `display: none` during a transition, so a
+    // naive query matches a loader nobody can see, at y=0.
+    const context = await browser.newContext({ storageState: undefined });
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      const states: string[] = [];
+      (window as unknown as { __states: string[] }).__states = states;
+      const isVisible = (element: Element) =>
+        element.getClientRects().length > 0;
+      let previous = "";
+      const sample = () => {
+        const form = [...document.querySelectorAll("form")].find(isVisible);
+        const indicator = [...document.querySelectorAll("output")].find(
+          (element) =>
+            isVisible(element) && element.querySelector(".animate-spin"),
+        );
+        const state = form
+          ? `form@${Math.round(form.getBoundingClientRect().y)}`
+          : indicator
+            ? "indicator"
+            : "nothing";
+        if (state !== previous) {
+          previous = state;
+          states.push(state);
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+
+    await page.goto(`${UI_BASE_URL}/auth/sign-in`);
+    await expect(
+      page.getByRole("button", { name: "Sign In", exact: true }),
+    ).toBeVisible();
+    // Give a late-arriving banner the chance to shift the form, so that a
+    // regression fails here rather than passing on timing.
+    await page.waitForTimeout(1000);
+
+    const states = await page.evaluate(
+      () => (window as unknown as { __states: string[] }).__states,
+    );
+
+    // Everything before the first paint is legitimately empty; the contract
+    // starts once the surface has shown something.
+    const painted = states.slice(states.findIndex((s) => s !== "nothing"));
+    expect(painted).not.toContain("nothing");
+
+    // The form is allowed to appear once. Appearing at two different offsets
+    // means something arrived above it after it had already painted.
+    const formOffsets = painted
+      .filter((s) => s.startsWith("form@"))
+      .map((s) => Number(s.slice("form@".length)));
+    const formSpread =
+      formOffsets.length > 1
+        ? Math.max(...formOffsets) - Math.min(...formOffsets)
+        : 0;
+    expect(formSpread).toBeLessThanOrEqual(2);
+
+    await context.close();
+  });
+
+  test("the chat page's gates draw a loader, never a stringified value", async ({
+    page,
+    goToPage,
+  }) => {
+    // The chat page holds the screen until it knows whether a provider key
+    // exists, and that gate once returned the *text* `null` where its loader
+    // used to be — an early return for the whole page, so the version footer
+    // went with it. Both queries behind the gate are pending on a cold load,
+    // so it renders for at least a frame every time; sampling each frame is
+    // what makes this deterministic rather than a race.
+    await page.addInitScript(() => {
+      const seen = new Set<string>();
+      (window as unknown as { __placeholders: Set<string> }).__placeholders =
+        seen;
+      const sample = () => {
+        for (const element of document.body?.querySelectorAll("*") ?? []) {
+          if (element.children.length > 0) continue;
+          const text = element.textContent?.trim();
+          if (text === "null" || text === "undefined") seen.add(text);
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+
+    await goToPage(page, "/chat");
+    await expect(
+      page.getByPlaceholder(/What would you like to get done\?/i),
+    ).toBeVisible();
+
+    const placeholders = await page.evaluate(() => [
+      ...(window as unknown as { __placeholders: Set<string> }).__placeholders,
+    ]);
+    expect(placeholders).toEqual([]);
+  });
+
   test("an empty result is only reported once the list has actually loaded", async ({
     page,
     goToPage,

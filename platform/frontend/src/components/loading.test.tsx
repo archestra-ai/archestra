@@ -1,8 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LoadingState } from "./loading";
 
 describe("LoadingState", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("exposes the label to assistive tech and respects reduced motion", () => {
     const { container } = render(<LoadingState label="Loading connectors…" />);
 
@@ -40,10 +44,44 @@ describe("LoadingState", () => {
     const fill = filled.querySelector("output");
     expect(fill?.className).toContain("h-full");
     expect(fill?.className).not.toContain("visual-viewport-height");
+  });
 
-    // It also takes over from an indicator already on screen, so it must not
-    // delay its own entrance and blank the area at the handover.
-    expect(fill?.className).not.toContain("animation-delay");
+  it("holds a fresh indicator back so a short wait draws nothing", () => {
+    // A wait shorter than the delay never draws: the indicator is transparent
+    // for the whole delay (`backwards` fill-mode) and unmounts before it would
+    // have appeared. That is what keeps a gate resolving in 50ms from flashing
+    // a spinner nobody could read — the sign-out route did exactly that.
+    //
+    // Fresh means nothing was on screen recently, and the previous test's
+    // teardown was milliseconds ago, so move past the handover window first.
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 10_000);
+
+    const { container } = render(<LoadingState variant="fill" />);
+    expect(container.querySelector("output")?.className).toContain(
+      "animation-delay",
+    );
+  });
+
+  it("does not delay an indicator that replaces one already on screen", () => {
+    // The same call site is a fresh wait or a handover depending only on what
+    // was on screen a moment earlier, so the component decides per mount
+    // rather than trusting a prop. Delaying at a handover would blank the area
+    // between the two indicators instead of covering a new wait.
+    const first = render(<LoadingState variant="fill" />);
+    const takingOver = render(<LoadingState variant="fill" />);
+
+    expect(
+      takingOver.container.querySelector("output")?.className,
+    ).not.toContain("animation-delay");
+
+    // Still a handover when the outgoing one leaves first, which is the order
+    // a plain conditional swap unmounts in.
+    first.unmount();
+    takingOver.unmount();
+    const afterSwap = render(<LoadingState variant="fill" />);
+    expect(
+      afterSwap.container.querySelector("output")?.className,
+    ).not.toContain("animation-delay");
   });
 
   it("keeps inline loading labels accessible-only", () => {

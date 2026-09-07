@@ -312,13 +312,18 @@ export function AuthViewWithErrorHandling({
   // invitation, redirected to /auth/sign-up-with-invitation with one).
   const isSignInPage = path === "sign-in";
 
-  if (isLoadingPublicConfig && isSignInPage) {
-    return <LoadingState label="Loading sign-in…" variant="compact" />;
-  }
-
-  // When basic auth is disabled and SSO providers are still loading, wait (only for sign-in)
-  if (isBasicAuthDisabled && isLoadingIdentityProviders && isSignInPage) {
-    return <LoadingState label="Loading sign-in…" variant="compact" />;
+  // Both of these wait on a query that decides what goes *inside* the card —
+  // the password form, or the identity-provider list. Returning a bare
+  // indicator threw the card away to do it, collapsing a ~314px card to a
+  // ~96px box and, in a vertically centred column, moving the logo and
+  // everything else with it. The card is the one part that is known before
+  // either query answers, so it stays: only its contents wait.
+  if (
+    isSignInPage &&
+    (isLoadingPublicConfig ||
+      (isBasicAuthDisabled && isLoadingIdentityProviders))
+  ) {
+    return <SignInCardShell />;
   }
 
   // When basic auth is disabled and no SSO providers are configured, show a message
@@ -648,6 +653,35 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
         </CardContent>
       </Card>
     </>
+  );
+}
+
+/**
+ * The sign-in card with its contents still on the way.
+ *
+ * It carries the real card's header, because the title and description are
+ * true before any query answers — what is unknown is only whether the body is
+ * a password form or a list of identity providers. The body reserves roughly
+ * the height of the email/password/submit stack it is standing in for, so the
+ * card does not resize under the person reading it when the answer lands.
+ */
+function SignInCardShell() {
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="text-xl">Sign In</CardTitle>
+        <CardDescription>
+          Enter your email below to login to your account
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <LoadingState
+          label="Loading sign-in…"
+          variant="fill"
+          className="min-h-[188px]"
+        />
+      </CardContent>
+    </Card>
   );
 }
 

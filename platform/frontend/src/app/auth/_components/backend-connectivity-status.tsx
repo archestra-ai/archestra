@@ -5,6 +5,7 @@ import { ExternalLink, LoaderCircle, RefreshCcw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppLogo } from "@/components/app-logo";
+import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -61,8 +62,14 @@ export function BackendConnectivityStatus({
     return () => clearTimeout(timer);
   }, [status, redirectTo]);
 
+  // This wraps the whole auth column, so returning nothing here blanks the
+  // screen rather than showing less of it — and it lands mid-boot, between the
+  // session gate's indicator and the column it is about to hand over to. Hold
+  // that indicator in the box both of them centre in instead: the first probe
+  // is a single request, and a spinner that keeps spinning reads as one wait
+  // where a blank frame reads as the page having thrown its content away.
   if (status === "initializing" || status === "checking") {
-    return null;
+    return <LoadingState variant="fill" />;
   }
 
   if (status === "connected" && showConnectedMessage) {

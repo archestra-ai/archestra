@@ -175,26 +175,24 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     queryClient,
   ]);
 
-  // Auth surfaces are their own layout with no shell behind them, so a single
-  // centred indicator is still the right call while the session resolves. It
-  // draws inside the same frame the shell's auth branch will render, so the
-  // route's own loading indicator takes over at exactly this position.
-  if (inProgress && (isAuthPage || isSpecialAuth)) {
-    return (
-      <AuthSurfaceFrame>
-        <LoadingState label="Loading…" variant="fill" />
-      </AuthSurfaceFrame>
-    );
-  }
-
-  // Everywhere else, an unresolved session means we do not yet know whether
-  // this person gets the app or the sign-in page. Rendering either one's
-  // chrome now would flash the wrong layout, and a full-screen spinner is the
-  // jumpy boot loader this screen is meant to be rid of — so hold the
-  // background steady and say nothing visually. A refresh normally skips this
-  // branch entirely: the session comes back with the restored cache, already
-  // resolved.
-  if (inProgress) {
+  // An unresolved session means we do not yet know whether this person gets
+  // the app or the sign-in page. Rendering either one's chrome now would flash
+  // the wrong layout, and a full-screen spinner is the jumpy boot loader this
+  // screen is meant to be rid of — so hold the background steady and say
+  // nothing visually. A refresh normally skips this branch entirely: the
+  // session comes back with the restored cache, already resolved.
+  //
+  // Auth surfaces are deliberately exempt. They do not have a second layout to
+  // guess at: the sign-in form is static markup that is correct for every
+  // visitor who is not signed in, which on a sign-in page is very nearly all
+  // of them — and always the one arriving from sign-out, whose session was
+  // just destroyed. Holding it back bought only the certainty that a visitor
+  // who *is* signed in never glimpses a form before being redirected, and
+  // charged every real sign-in ~550ms for it. That visitor is being sent
+  // somewhere else either way; the branch below still catches them the moment
+  // the session resolves, and now they are interrupted from a form rather than
+  // from a spinner.
+  if (inProgress && !isAuthPage && !isSpecialAuth) {
     return <LoadingState label="Loading…" variant="quiet" />;
   }
 

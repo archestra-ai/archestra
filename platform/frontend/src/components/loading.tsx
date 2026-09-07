@@ -1,6 +1,11 @@
 "use client";
 
-import type { ComponentProps, ReactNode } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
 
@@ -73,17 +78,25 @@ export function LoadingState({
   /** Compact controls can hide the visible label while retaining its accessible name. */
   showLabel?: boolean;
 }) {
+  const delayEntrance = useDelayedEntrance();
+
   return (
     <output
       aria-label={label}
       className={cn(
         "flex flex-col items-center justify-center text-center",
+        // A spinner that comes and goes inside a couple of hundred
+        // milliseconds reports nothing — the eye reads it as the page
+        // glitching, and a screen that flashes one on every gate reads as
+        // broken even when every gate is fast. Holding the entrance back means
+        // anything that resolves quickly resolves invisibly, and only a wait
+        // long enough to notice ever draws. `backwards` fill-mode keeps it
+        // transparent during the delay rather than showing then fading.
+        delayEntrance &&
+          "animate-in fade-in-0 duration-200 [animation-delay:200ms] [animation-fill-mode:backwards] motion-reduce:animate-none",
         variant === "viewport" && "min-h-app-viewport",
         variant === "page" &&
-          "min-h-[calc(var(--visual-viewport-height,100dvh)-12rem)] animate-in fade-in-0 duration-200 [animation-delay:150ms] [animation-fill-mode:backwards] motion-reduce:animate-none",
-        // No enter-delay: `fill` takes over from an indicator that is already
-        // on screen (the session gate's), so fading in late would blank the
-        // area at the handover instead of covering a fresh wait.
+          "min-h-[calc(var(--visual-viewport-height,100dvh)-12rem)]",
         variant === "fill" && "h-full min-h-0 flex-1",
         variant === "content" && "min-h-48 py-10",
         variant === "compact" && "min-h-24 py-4",
@@ -130,3 +143,57 @@ export function LoadingWrapper({
   if (error) return <>{errorFallback}</>;
   return <>{children}</>;
 }
+
+/**
+ * Whether this indicator should hold its entrance back.
+ *
+ * Two rules that pull in opposite directions, and neither is a property of the
+ * call site — which is why this is decided per mount rather than per prop:
+ *
+ * - A wait too short to read should draw nothing. Delaying the entrance means
+ *   a gate that resolves quickly resolves invisibly instead of strobing.
+ * - An indicator replacing one that was just on screen has no wait to
+ *   introduce; delaying it blanks the area across the handover, which reads as
+ *   the page dropping its content rather than as one continuous wait.
+ *
+ * The same component is both, depending on what happened immediately before
+ * it: the auth route's Suspense fallback takes over from the session gate on a
+ * first load, and opens a fresh wait on a client-side navigation. So ask the
+ * screen instead of the caller — if an indicator is up, or was up moments ago,
+ * this is a handover.
+ *
+ * SSR renders the delayed form, and so does the client at hydration (nothing
+ * can have unmounted yet), so the two agree.
+ */
+function useDelayedEntrance() {
+  const [delayEntrance] = useState(() => !isHandover());
+
+  useEffect(() => {
+    visibleIndicators += 1;
+    return () => {
+      visibleIndicators -= 1;
+      lastIndicatorHiddenAt = Date.now();
+    };
+  }, []);
+
+  return delayEntrance;
+}
+
+function isHandover() {
+  if (typeof window === "undefined") return false;
+  return (
+    visibleIndicators > 0 ||
+    Date.now() - lastIndicatorHiddenAt < HANDOVER_WINDOW_MS
+  );
+}
+
+/**
+ * How recently another indicator must have left for this one to count as
+ * taking over from it. A swap unmounts the outgoing indicator and mounts the
+ * incoming one in the same commit, so in practice this compares against a few
+ * milliseconds ago; the window only needs to be wider than a frame.
+ */
+const HANDOVER_WINDOW_MS = 150;
+
+let visibleIndicators = 0;
+let lastIndicatorHiddenAt = 0;

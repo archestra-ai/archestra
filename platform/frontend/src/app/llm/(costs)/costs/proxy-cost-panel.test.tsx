@@ -84,7 +84,9 @@ test("filters the real API query when a credential is selected, clears it, and p
     expect(urls.at(-1)?.searchParams.get("credentialId")).toBe("key-1"),
   );
   expect(urls.at(-1)?.searchParams.get("authMethod")).toBe("virtual_key");
-  fireEvent.click(await screen.findByRole("button", { name: "Clear filter" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Back to all credentials" }),
+  );
   await screen.findByRole("button", { name: "Next" });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await waitFor(() =>

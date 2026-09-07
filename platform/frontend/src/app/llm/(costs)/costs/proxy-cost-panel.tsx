@@ -58,6 +58,12 @@ export function ProxyCostPanel({
     setCredential(undefined);
     setOffset(0);
   };
+  const backButton = credential ? (
+    <Button variant="outline" size="sm" onClick={reset}>
+      <ArrowLeft />
+      <span>Back to all credentials</span>
+    </Button>
+  ) : null;
   const totals = data?.totals;
   return (
     <Card>
@@ -71,24 +77,30 @@ export function ProxyCostPanel({
             <span>
               {credential?.name ?? METHOD_NAMES[authMethod ?? "unknown"]}
             </span>
-            <Button variant="ghost" size="sm" onClick={reset}>
-              Clear filter
-            </Button>
           </div>
         )}
       </CardHeader>
       <CardContent className="space-y-6">
         {query.isError ? (
-          <QueryLoadError
-            title="Could not load proxy costs"
-            onRetry={() => query.refetch()}
-          />
+          <>
+            {backButton}
+            <QueryLoadError
+              title="Could not load proxy costs"
+              onRetry={() => query.refetch()}
+            />
+          </>
         ) : query.isPending ? (
-          <Skeleton className="h-96 w-full" />
+          <>
+            {backButton}
+            <Skeleton className="h-96 w-full" />
+          </>
         ) : !data || !totals?.requests ? (
-          <p className="py-16 text-center text-muted-foreground">
-            No proxy requests for this timeframe and filter.
-          </p>
+          <>
+            {backButton}
+            <p className="py-16 text-center text-muted-foreground">
+              No proxy requests for this timeframe and filter.
+            </p>
+          </>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
@@ -155,10 +167,7 @@ export function ProxyCostPanel({
               </LineChart>
             </ChartContainer>
             {credential ? (
-              <Button variant="outline" size="sm" onClick={reset}>
-                <ArrowLeft />
-                <span>Back to all credentials</span>
-              </Button>
+              backButton
             ) : (
               <p className="text-xs text-muted-foreground">
                 Select a credential to focus the trend.

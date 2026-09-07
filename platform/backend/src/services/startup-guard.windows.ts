@@ -1,4 +1,7 @@
-import { isDefaultBrandedAppName } from "@archestra/shared";
+import {
+  isDefaultBrandedAppName,
+  STARTUP_GUARD_FORMAT_VERSION,
+} from "@archestra/shared";
 import {
   ARCHESTRA_MARK,
   ARCHESTRA_MARK_GAP,
@@ -85,6 +88,11 @@ $AppName = ${psq(ctx.appName)}
 # A response without a down marker (an older backend 404ing the route, a 429)
 # reads as ok — version skew and rate limiting can never look like an outage.
 $HealthUrl = ${psq(ctx.healthUrl ?? "")}
+# The monotonic format version this guard was stamped with. The health response
+# reports the running instance's current value; the guard nudges a re-connect
+# only when the instance reports a STRICTLY GREATER number, so an older instance
+# or a rollback stays silent.
+$GuardFormatVersion = ${STARTUP_GUARD_FORMAT_VERSION}
 $Remotes = @(
 ${remoteEntries}
 )${
@@ -221,6 +229,16 @@ function Test-ArchResourceDown($r) {
   return $Script:HealthBody.Contains($r.DownMarker)
 }
 
+# $true when the instance reports a strictly greater guard format version than
+# this guard was stamped with (a newer setup is available). Reads the bare
+# integer out of the same health body. A body with no guardVersion (an older
+# backend) or an equal-or-lower number reads as "not stale", so rollbacks and
+# older instances stay silent — matching how a missing down marker reads as ok.
+function Test-ArchVersionStale {
+  if ($Script:HealthBody -notmatch '"guardVersion":([0-9]+)') { return $false }
+  return ([int]$Matches[1] -gt $GuardFormatVersion)
+}
+
 if (-not $Interactive) {
   if ($HealthUrl) {
     if (-not (Invoke-ArchHealthFetch)) { $Script:HealthState = 'down' }
@@ -229,6 +247,9 @@ if (-not $Interactive) {
     if (Test-ArchResourceDown $r) {
       [Console]::Error.WriteLine('archestra: failed to connect to ' + $r.FailName + ' — ${client.binary} is configured to use it and may fail. Disconnect it from the ' + $AppName + ' /connection page, or run ${client.binary} interactively to be offered a disconnect.')
     }
+  }
+  if (Test-ArchVersionStale) {
+    [Console]::Error.WriteLine('archestra: a newer ' + $AppName + ' setup for ${client.binary} is available — re-run the setup from the ' + $AppName + ' /connection page to update this startup check.')
   }
   return
 }
@@ -560,6 +581,41 @@ function Show-ArchReconfigureOffer {
   if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
 }
 
+# When the instance reports a newer guard format than this one, show a one-line
+# advisory with a timed, non-blocking [U] offer. It never blocks the launch: the
+# key poll has a short deadline and any other key — or the timeout — lets
+# ${client.binary} start. Pressing [U] prints the concrete /connection re-run
+# steps and holds a beat longer so they can be read. Re-connecting needs a fresh
+# one-time link only the user can fetch, so [U] shows the steps.
+function Show-ArchVersionUpdate {
+  if (-not (Test-ArchVersionStale)) { return }
+  $Script:Dwell = $true
+  Clear-ArchLine
+  Write-Arch 'update:' Yellow -NoNewline
+  Write-Arch (' a newer ' + $AppName + ' setup is available. ') DarkGray -NoNewline
+  Write-Arch '[U]' Cyan -NoNewline
+  Write-Arch ' for the steps to update this startup check' DarkGray
+  $key = ''
+  $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    $key = Read-ArchKey
+    if ($key) { break }
+    Start-Sleep -Milliseconds 40
+  }
+  if ($key -eq 'u' -or $key -eq 'U') {
+    Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan
+    Write-Host ('  1. Open the ' + $AppName + ' /connection page and pick ' + ${psq(client.label)} + '.')
+    Write-Host '  2. Copy the setup command it shows and run it in your terminal.'
+    Write-Host '     It reinstalls this startup check at the current version.'
+    # a longer, still non-blocking beat so the steps can be read
+    $deadline = [DateTime]::UtcNow.AddMilliseconds(6000)
+    while ([DateTime]::UtcNow -lt $deadline) {
+      if (Read-ArchKey) { break }
+      Start-Sleep -Milliseconds 40
+    }
+  }
+}
+
 # Every down remote already got its failure line during the turn; this single
 # prompt then covers them all — disconnect everything that failed in one
 # keypress, or skip them all and go straight to claude. When every remote is
@@ -810,6 +866,7 @@ if ($DownRemotes.Count -gt 0) {
 } else {
   Show-ArchReconfigureOffer
 }
+Show-ArchVersionUpdate
 Exit-ArchGuard
 return
 `;

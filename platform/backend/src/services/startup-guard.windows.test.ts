@@ -1,5 +1,6 @@
 import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
+  STARTUP_GUARD_FORMAT_VERSION,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -84,6 +85,26 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain(
       "$_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response",
     );
+  });
+
+  test("stamps the monotonic guard format version and offers the update only when the instance reports a strictly newer one", () => {
+    const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    expect(script).toContain(
+      `$GuardFormatVersion = ${STARTUP_GUARD_FORMAT_VERSION}`,
+    );
+    // reads the live integer off the same health body and only flags -gt
+    expect(script).toContain(`'"guardVersion":([0-9]+)'`);
+    expect(script).toContain("[int]$Matches[1] -gt $GuardFormatVersion");
+    expect(script).toContain("Test-ArchVersionStale");
+    // both the interactive notice and the non-interactive stderr advisory
+    expect(script).toContain("Show-ArchVersionUpdate");
+    expect(script).toContain("a newer ' + $AppName + ' setup");
+    // non-interactive stays advisory-only
+    expect(script).toContain("re-run the setup from the ");
+    // interactive offers a timed, non-blocking [U] that prints the steps
+    expect(script).toContain("'[U]'");
+    expect(script).toContain("/connection page and pick");
+    expect(script).toContain("$key -eq 'u' -or $key -eq 'U'");
   });
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {

@@ -36864,6 +36864,7 @@ export type GetConnectionHealthResponses = {
     200: {
         mcp?: 'ok' | 'down';
         llm?: 'ok' | 'down';
+        guardVersion: number;
     };
 };
 

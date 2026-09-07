@@ -298,7 +298,9 @@ function CatalogItemDetails({
     : allInstalls;
 
   const diagnosticPanels = DIAGNOSTIC_PANELS.filter(
-    (panel) => variant === "local" || !panel.localOnly,
+    (panel) =>
+      (variant === "local" || !panel.localOnly) &&
+      !(isPlaywright && panel.id === "yaml"),
   );
   // Diagnostics need at least one install to read from.
   const diagnosticTabs = allInstalls.length > 0 ? diagnosticPanels : [];

@@ -442,7 +442,8 @@ async function seedPlaywrightCatalog(): Promise<void> {
     .values({
       id: PLAYWRIGHT_MCP_CATALOG_ID,
       name: PLAYWRIGHT_MCP_SERVER_NAME,
-      description: "Browser automation for chat with isolated browser sessions",
+      description:
+        "Browser automation for chat with isolated browser sessions. Built-in, with one instance per Environment.",
       serverType: "local",
       requiresAuth: false,
       icon: PLAYWRIGHT_MCP_ICON,
@@ -454,7 +455,8 @@ async function seedPlaywrightCatalog(): Promise<void> {
     .update(schema.internalMcpCatalogTable)
     .set({
       name: PLAYWRIGHT_MCP_SERVER_NAME,
-      description: "Browser automation for chat with isolated browser sessions",
+      description:
+        "Browser automation for chat with isolated browser sessions. Built-in, with one instance per Environment.",
       serverType: "local",
       requiresAuth: false,
       icon: PLAYWRIGHT_MCP_ICON,

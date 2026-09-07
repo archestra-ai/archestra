@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@archestra/shared";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -59,6 +63,15 @@ describe("useCanModifyCatalogItem", () => {
 
   it("denies when there is no catalog item", () => {
     expect(setup({ admin: false, catalog: null })).toBe(false);
+  });
+
+  it("denies editing managed Playwright even for an installation admin", () => {
+    expect(
+      setup({
+        admin: true,
+        catalog: catalogItem({ id: PLAYWRIGHT_MCP_CATALOG_ID, scope: "org" }),
+      }),
+    ).toBe(false);
   });
 
   it("permits an mcpServerInstallation admin at any scope", () => {

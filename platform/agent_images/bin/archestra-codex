@@ -42,17 +42,124 @@ esac
 printf '{}\n'
 HOOK
 chmod 0700 "${attention_hook}"
-jq -n --arg cmd "${attention_hook}" '{hooks:{
-  SessionStart:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
-  UserPromptSubmit:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
-  PermissionRequest:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
+transcript_hook="${runtime_dir}/codex-transcript-hook.sh"
+cat > "${transcript_hook}" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+payload="$(cat)"
+event="$(jq -r '.hook_event_name // empty' <<<"${payload}")"
+session_id="$(jq -r '.session_id // empty' <<<"${payload}")"
+transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
+session_file="${runtime_dir}/codex-main-session"
+
+if [[ "${event}" == "SessionStart" ]]; then
+  if [[ -n "${session_id}" && ! -e "${session_file}" ]]; then
+    printf '%s\n' "${session_id}" > "${session_file}"
+  fi
+  printf '{}\n'
+  exit 0
+fi
+
+if [[ "${event}" != "Stop" && "${event}" != "SessionEnd" ]]; then
+  printf '{}\n'
+  exit 0
+fi
+if [[ -s "${session_file}" && -n "${session_id}" ]] \
+  && [[ "${session_id}" != "$(cat "${session_file}")" ]]; then
+  printf '{}\n'
+  exit 0
+fi
+
+if [[ -n "${transcript}" && -r "${transcript}" ]]; then
+  readable_tmp="${runtime_dir}/readable-transcript.tmp.json"
+  if jq -s '
+    def timestamp($entry):
+      if ($entry.timestamp | type) == "string"
+      then {timestamp:$entry.timestamp}
+      else {}
+      end;
+    def text_content:
+      if . == null then ""
+      elif type == "string" then .
+      elif type == "array" then
+        [ .[]
+          | if type == "string" then .
+            elif type == "object" and ((.text // .input_text // .output_text) | type) == "string"
+            then (.text // .input_text // .output_text)
+            else empty
+            end
+        ] | join("\n")
+      else tostring
+      end;
+    def optional_id($payload):
+      ($payload.call_id // $payload.id // empty) as $id
+      | if ($id | type) == "string" then {toolCallId:$id} else {} end;
+    {
+      version:1,
+      provider:"codex",
+      entries:[
+        .[] as $entry
+        | select($entry.type == "response_item")
+        | $entry.payload as $payload
+        | if $payload.type == "message"
+            and ($payload.role == "user" or $payload.role == "assistant") then
+            ($payload.content | text_content) as $text
+            | select($text != "")
+            | ({type:"message", role:$payload.role, text:$text} + timestamp($entry))
+          elif $payload.type == "function_call" or $payload.type == "custom_tool_call" then
+            ({type:"tool_call", name:($payload.name // "tool")}
+              + optional_id($payload)
+              + timestamp($entry)
+              + (if $payload.arguments != null then
+                  {input:(if ($payload.arguments | type) == "string"
+                    then $payload.arguments else ($payload.arguments | tojson) end)}
+                elif $payload.input != null then
+                  {input:(if ($payload.input | type) == "string"
+                    then $payload.input else ($payload.input | tojson) end)}
+                else {} end))
+          elif $payload.type == "local_shell_call" then
+            ({type:"tool_call", name:"shell", input:($payload.action | tojson)}
+              + optional_id($payload) + timestamp($entry))
+          elif $payload.type == "function_call_output" or $payload.type == "custom_tool_call_output" then
+            ($payload.output | text_content) as $text
+            | ({type:"tool_result", text:(if $text == "" then "[Non-text result omitted]" else $text end)}
+              + optional_id($payload) + timestamp($entry))
+          else empty
+          end
+      ]
+    }
+  ' "${transcript}" > "${readable_tmp}" 2>/dev/null; then
+    mv "${readable_tmp}" "${runtime_dir}/readable-transcript.json"
+  else
+    rm -f "${readable_tmp}"
+  fi
+fi
+
+# Codex accepts an empty object as a successful, non-mutating hook result.
+printf '{}\n'
+HOOK
+chmod 0700 "${transcript_hook}"
+jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript_hook}" '{hooks:{
+  SessionStart:[{hooks:[
+    {type:"command",command:$transcript_cmd,timeout:10},
+    {type:"command",command:$attention_cmd,timeout:3}
+  ]}],
+  UserPromptSubmit:[{hooks:[{type:"command",command:$attention_cmd,timeout:3}]}],
+  PermissionRequest:[{hooks:[{type:"command",command:$attention_cmd,timeout:3}]}],
   PreToolUse:[{
     matcher:"^request_user_input$",
-    hooks:[{type:"command",command:$cmd,timeout:3}]
+    hooks:[{type:"command",command:$attention_cmd,timeout:3}]
   }],
-  PostToolUse:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
-  Stop:[{hooks:[{type:"command",command:$cmd,timeout:3}]}],
-  SessionEnd:[{hooks:[{type:"command",command:$cmd,timeout:3}]}]
+  PostToolUse:[{hooks:[{type:"command",command:$attention_cmd,timeout:3}]}],
+  Stop:[{hooks:[
+    {type:"command",command:$transcript_cmd,timeout:10},
+    {type:"command",command:$attention_cmd,timeout:3}
+  ]}],
+  SessionEnd:[{hooks:[
+    {type:"command",command:$transcript_cmd,timeout:10},
+    {type:"command",command:$attention_cmd,timeout:3}
+  ]}]
 }}' > "${CODEX_HOME}/hooks.json"
 chmod 0600 "${CODEX_HOME}/hooks.json"
 notify_config=""

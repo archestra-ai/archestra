@@ -9,6 +9,8 @@ export type RuntimeAgentConfig = {
   agentName: string;
   /** Durable task id used to correlate proxy interactions for this run. */
   taskId: string;
+  /** Runtime-owned directory used for control files and exported artifacts. */
+  runtimeDir: string;
   /** Archestra LLM proxy base, already scoped to the agent. */
   proxyBaseUrl: string;
   /** Virtual key authenticating this session to the proxy. */
@@ -44,6 +46,8 @@ export function readConfig(env: NodeJS.ProcessEnv): RuntimeAgentConfig {
     agentId: requireAgentRuntimeValue(env, "AGENT_ID"),
     agentName: readAgentRuntimeValue(env, "AGENT_NAME")?.trim() || "agent",
     taskId: requireAgentRuntimeValue(env, "TASK_ID"),
+    runtimeDir:
+      readAgentRuntimeValue(env, "DIR")?.trim() || "/var/run/archestra",
     proxyBaseUrl: stripTrailingSlash(
       requireValue(env, "ARCHESTRA_LLM_PROXY_URL"),
     ),

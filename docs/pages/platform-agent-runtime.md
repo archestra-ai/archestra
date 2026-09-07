@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated runtime
-lastUpdated: 2026-09-04
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -190,6 +190,64 @@ input loop and remain available for follow-ups, while `one_shot` means finish
 the supplied task and exit. Images that support only unattended work can ignore
 interactive mode, but they will not provide a useful Chat terminal.
 
+### Readable transcript
+
+The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, and
+OpenClaw images export their native message and tool history as a readable
+transcript. A custom image can provide the same completed-run experience by
+writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally
+`/var/run/archestra/readable-transcript.json`) before its process exits.
+
+The file must be a JSON object using version 1 of this contract:
+
+```json
+{
+  "version": 1,
+  "provider": "custom-agent",
+  "entries": [
+    {
+      "type": "message",
+      "role": "user",
+      "text": "Inspect the application configuration.",
+      "timestamp": "2026-09-07T10:00:00Z"
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "text": "I will read the configuration file."
+    },
+    {
+      "type": "tool_call",
+      "name": "read_file",
+      "input": "{\"path\":\"config.json\"}",
+      "toolCallId": "call-1"
+    },
+    {
+      "type": "tool_result",
+      "text": "{\"enabled\":true}",
+      "toolCallId": "call-1",
+      "isError": false
+    }
+  ]
+}
+```
+
+`provider` is a non-empty identifier for the client that produced the file.
+`entries` preserves chronological order and accepts these entry types:
+
+- `message` requires `role` (`user` or `assistant`) and `text`.
+- `tool_call` requires `name`. `input` is an optional string; serialize
+  structured arguments as JSON. `toolCallId` is optional but recommended.
+- `tool_result` requires `text`. Use the matching `toolCallId` when available
+  and set `isError` to `true` for failed calls.
+- Every entry may include an ISO 8601 `timestamp`.
+
+Write to a temporary file in the runtime directory and rename it into place so
+Archestra never reads a partial document. Invalid files and files larger than
+16 MiB are ignored; the retained terminal replay remains available. The
+normalized artifact should contain only user-visible messages and tool
+activity, not credentials, private reasoning, or raw provider events.
+
 ### Input files
 
 Files attached to the run's first Chat message are staged before the
@@ -219,6 +277,7 @@ accept useful follow-up instructions.
 | --- | --- |
 | `ARCHESTRA_AGENT_RUNTIME_AGENT_ID`, `ARCHESTRA_AGENT_RUNTIME_AGENT_NAME` | Durable Agent identity. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Durable run identifier. |
+| `ARCHESTRA_AGENT_RUNTIME_DIR` | Runtime-owned control and artifact directory. Defaults to `/var/run/archestra`. |
 | `ARCHESTRA_AGENT_RUNTIME_MODE` | `interactive` for a Chat-owned live terminal; `one_shot` for unattended delegation that must exit when complete. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK`, `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` | Initial task and Agent instructions. |
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Directory containing files attached to the initial run message. |
@@ -383,9 +442,11 @@ the run.
 ## View Runs from an Agent
 
 An Agent with Agent Runtime configured has a **Runs** tab. A running run opens
-its live terminal. A completed Claude Code run opens a readable transcript.
-Use the selector to switch to its terminal replay. Other runtime images open
-their retained terminal output. Use this tab to:
+its live terminal. A completed run from any maintained catalog image opens a
+readable transcript. Use the selector to switch to its terminal replay. A
+custom image opens the same readable view when it implements the
+[readable transcript contract](#readable-transcript); otherwise, it opens its
+retained terminal output. Use this tab to:
 
 - review run outcomes and timestamps
 - read live or retained container logs
@@ -397,15 +458,12 @@ the Agent session automatically. Press `Ctrl-b`, then `d`, to detach without
 stopping the run. For a raw diagnostic shell, set
 `ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH=0` on the exec command.
 
-After the pod is removed, Archestra retains two forms of Claude Code history.
-The readable transcript lists messages and tool activity in chronological
-order. The terminal replay preserves the complete PTY recording. Archestra
-stores only normalized fields from Claude Code's native transcript.
-
-Other runtime images retain the complete terminal recording. Native TUI
-recordings preserve their original terminal geometry. They scale as one canvas
-to fit narrower viewers. The history follows the run's task retention period,
-which is 90 days by default. Set
+After the pod is removed, Archestra retains the normalized readable transcript
+and the complete PTY recording. The readable view lists messages and tool
+activity in chronological order without storing raw provider events. Native
+TUI recordings preserve their original terminal geometry and scale as one
+canvas to fit narrower viewers. The history follows the run's task retention
+period, which is 90 days by default. Set
 `ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES` to cap the
 uncompressed transcript size accepted from one run. A run beyond that ceiling
 keeps its final 1 MiB instead, and the terminal labels the recording

@@ -12,6 +12,7 @@ import {
 } from "./config.js";
 import { loadGatewayTools } from "./gateway-tools.js";
 import { loadLocalWorkspaceTools } from "./local-tools.js";
+import { writeReadableTranscript } from "./readable-transcript.js";
 import { SteerQueue } from "./steer-queue.js";
 
 /**
@@ -77,9 +78,13 @@ async function main(): Promise<number> {
   write("");
 
   let messages: ModelMessage[] = [];
+  const transcriptMessages: ModelMessage[] = [];
   if (config.task) {
     renderTurn("You", config.task);
-    messages.push({ role: "user", content: config.task });
+    const taskMessage = { role: "user", content: config.task } as const;
+    messages.push(taskMessage);
+    transcriptMessages.push(taskMessage);
+    await persistReadableTranscript({ config, messages: transcriptMessages });
   }
 
   let exitCode = 0;
@@ -97,8 +102,14 @@ async function main(): Promise<number> {
           break;
         }
         for (const message of incoming) {
-          messages.push({ role: "user", content: message });
+          const userMessage = { role: "user", content: message } as const;
+          messages.push(userMessage);
+          transcriptMessages.push(userMessage);
         }
+        await persistReadableTranscript({
+          config,
+          messages: transcriptMessages,
+        });
       }
 
       process.stdout.write(
@@ -130,7 +141,10 @@ async function main(): Promise<number> {
         throw new Error("Model stream failed");
       }
       write("");
-      messages.push(...(await result.response).messages);
+      const responseMessages = (await result.response).messages;
+      messages.push(...responseMessages);
+      transcriptMessages.push(...responseMessages);
+      await persistReadableTranscript({ config, messages: transcriptMessages });
       messages = trimHistory(messages);
 
       if (config.runMode === "one_shot") break;
@@ -138,8 +152,11 @@ async function main(): Promise<number> {
       // Steers that arrived mid-turn are consumed here, at the boundary, so
       // they join the conversation in order instead of interrupting a call.
       for (const message of steerQueue.drain()) {
-        messages.push({ role: "user", content: message });
+        const userMessage = { role: "user", content: message } as const;
+        messages.push(userMessage);
+        transcriptMessages.push(userMessage);
       }
+      await persistReadableTranscript({ config, messages: transcriptMessages });
     }
   } catch {
     if (!shutdown.signal.aborted) {
@@ -266,6 +283,16 @@ function trimHistory(messages: ModelMessage[]): ModelMessage[] {
   return nextUserTurn === -1
     ? messages.slice(-MAX_HISTORY_MESSAGES)
     : messages.slice(nextUserTurn);
+}
+
+async function persistReadableTranscript(params: {
+  config: RuntimeAgentConfig;
+  messages: ModelMessage[];
+}): Promise<void> {
+  await writeReadableTranscript({
+    messages: params.messages,
+    runtimeDir: params.config.runtimeDir,
+  }).catch(() => undefined);
 }
 
 const MAX_HISTORY_MESSAGES = 200;

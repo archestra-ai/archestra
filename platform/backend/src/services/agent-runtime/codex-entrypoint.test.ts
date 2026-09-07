@@ -37,6 +37,19 @@ describe("Codex image entrypoint", () => {
         `#!/bin/sh
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
 if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
+  transcript="$ARCHESTRA_AGENT_RUNTIME_DIR/codex-transcript.jsonl"
+  printf '%s\n' \
+    '{"timestamp":"2026-09-04T10:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Inspect the file."}]}}' \
+    '{"timestamp":"2026-09-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I will inspect it."}]}}' \
+    '{"timestamp":"2026-09-04T10:00:02Z","type":"response_item","payload":{"type":"function_call","name":"read_file","arguments":"{\\"path\\":\\"src/app.ts\\"}","call_id":"call-1"}}' \
+    '{"timestamp":"2026-09-04T10:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"export const ready = true;"}}' \
+    '{"timestamp":"2026-09-04T10:00:04Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Codex finished the task."}]}}' \
+    > "$transcript"
+  transcript_script="$(jq -r '.hooks.SessionStart[0].hooks[0].command' "$CODEX_HOME/hooks.json")"
+  printf '{"hook_event_name":"SessionStart","session_id":"main-session","transcript_path":"%s"}' "$transcript" | "$transcript_script"
+  printf '{"hook_event_name":"Stop","session_id":"subagent-session","transcript_path":"%s"}' "$transcript" | "$transcript_script"
+  test ! -e "$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json"
+  printf '{"hook_event_name":"Stop","session_id":"main-session","transcript_path":"%s"}' "$transcript" | "$transcript_script"
   notify_script="$(awk -F'"' '/^notify =/ { print $2 }' "$CODEX_HOME/config.toml")"
   "$notify_script" '{"type":"agent-turn-complete","input-messages":["A subagent task."],"last-assistant-message":"Ignore this subagent answer."}'
   test ! -e "$ARCHESTRA_AGENT_RUNTIME_DIR/turn-complete"
@@ -102,6 +115,50 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       if (mode === "one_shot") {
         expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
         expect(result.stdout).toContain("Codex finished the task.");
+        expect(
+          JSON.parse(
+            await readFile(
+              path.join(runtime, "readable-transcript.json"),
+              "utf8",
+            ),
+          ),
+        ).toEqual({
+          version: 1,
+          provider: "codex",
+          entries: [
+            {
+              type: "message",
+              role: "user",
+              text: "Inspect the file.",
+              timestamp: "2026-09-04T10:00:00Z",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              text: "I will inspect it.",
+              timestamp: "2026-09-04T10:00:01Z",
+            },
+            {
+              type: "tool_call",
+              name: "read_file",
+              input: '{"path":"src/app.ts"}',
+              toolCallId: "call-1",
+              timestamp: "2026-09-04T10:00:02Z",
+            },
+            {
+              type: "tool_result",
+              text: "export const ready = true;",
+              toolCallId: "call-1",
+              timestamp: "2026-09-04T10:00:03Z",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              text: "Codex finished the task.",
+              timestamp: "2026-09-04T10:00:04Z",
+            },
+          ],
+        });
       } else {
         const command = hooks.hooks.PreToolUse[0].hooks[0].command;
         await runHook({

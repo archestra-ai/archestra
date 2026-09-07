@@ -12,6 +12,7 @@ config_file="${runtime_dir}/opencode.json"
 instructions_file="${runtime_dir}/opencode-instructions.md"
 task_file="${runtime_dir}/task.md"
 attention_plugin="${runtime_dir}/opencode-attention.js"
+transcript_plugin="${runtime_dir}/opencode-transcript.js"
 model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
 context_length="${ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH:-32768}"
 output_length="${ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH:-8192}"
@@ -83,23 +84,75 @@ export const ArchestraAttention = async () => {
 PLUGIN
 chmod 0600 "${attention_plugin}"
 
-printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" > "${instructions_file}"
-printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
+cat > "${transcript_plugin}" <<'PLUGIN'
+import { rename, writeFile } from "node:fs/promises";
 
-completion_plugin=""
-if [[ "${runtime_mode}" == "one_shot" ]] \
-  && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
-  completion_plugin="${runtime_dir}/opencode-completion.js"
-  cat > "${completion_plugin}" <<'PLUGIN'
-import { writeFile } from "node:fs/promises";
+function timestamp(info) {
+  const value = info?.time?.created ?? info?.time?.completed;
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return new Date(value).toISOString();
+  return undefined;
+}
 
-export const ArchestraCompletion = async ({ client, directory }) => ({
+function serialize(value) {
+  if (typeof value === "string") return value;
+  if (value === undefined) return undefined;
+  return JSON.stringify(value);
+}
+
+function entriesForMessage(message) {
+  const entries = [];
+  const role = message.info?.role;
+  const entryTimestamp = timestamp(message.info);
+  for (const part of message.parts ?? []) {
+    if (
+      (role === "user" || role === "assistant") &&
+      part.type === "text" &&
+      !part.ignored &&
+      typeof part.text === "string" &&
+      part.text.length > 0
+    ) {
+      entries.push({
+        type: "message",
+        role,
+        text: part.text,
+        ...(entryTimestamp ? { timestamp: entryTimestamp } : {}),
+      });
+      continue;
+    }
+    if (part.type !== "tool" || typeof part.tool !== "string") continue;
+
+    const toolCallId = part.callID ?? part.callId;
+    const input = serialize(part.state?.input);
+    entries.push({
+      type: "tool_call",
+      name: part.tool,
+      ...(input === undefined ? {} : { input }),
+      ...(typeof toolCallId === "string" ? { toolCallId } : {}),
+      ...(entryTimestamp ? { timestamp: entryTimestamp } : {}),
+    });
+
+    const isError = part.state?.status === "error" || part.state?.error != null;
+    const result = isError ? part.state?.error : part.state?.output;
+    if (result !== undefined) {
+      entries.push({
+        type: "tool_result",
+        text: serialize(result) ?? "[Non-text result omitted]",
+        ...(typeof toolCallId === "string" ? { toolCallId } : {}),
+        ...(isError ? { isError: true } : {}),
+        ...(entryTimestamp ? { timestamp: entryTimestamp } : {}),
+      });
+    }
+  }
+  return entries;
+}
+
+export const ArchestraTranscript = async ({ client, directory }) => ({
   event: async ({ event }) => {
     if (event.type !== "session.idle") return;
 
     const sessionID = event.properties?.sessionID;
     if (!sessionID) return;
-
     const sessionResponse = await client.session.get({
       path: { id: sessionID },
       query: { directory },
@@ -111,6 +164,21 @@ export const ArchestraCompletion = async ({ client, directory }) => ({
       query: { directory },
     });
     const messages = response.data ?? [];
+    const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
+    const transcript = {
+      version: 1,
+      provider: "opencode",
+      entries: messages.flatMap(entriesForMessage),
+    };
+    const temporaryPath = `${runtimeDir}/readable-transcript.tmp.json`;
+    await writeFile(temporaryPath, `${JSON.stringify(transcript)}\n`, "utf8");
+    await rename(temporaryPath, `${runtimeDir}/readable-transcript.json`);
+
+    if (
+      process.env.ARCHESTRA_AGENT_RUNTIME_MODE !== "one_shot" ||
+      process.env.ARCHESTRA_AGENT_RUNTIME_PLAIN === "1"
+    ) return;
+
     const assistant = [...messages]
       .reverse()
       .find((message) => message.info?.role === "assistant");
@@ -121,13 +189,15 @@ export const ArchestraCompletion = async ({ client, directory }) => ({
       .trim();
     if (!answer) return;
 
-    const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
     await writeFile(`${runtimeDir}/final-answer.txt`, `${answer}\n`, "utf8");
     await writeFile(`${runtimeDir}/turn-complete`, "", "utf8");
   },
 });
 PLUGIN
-fi
+chmod 0600 "${transcript_plugin}"
+
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" > "${instructions_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 
 jq -n \
   --arg model "${model}" \
@@ -138,13 +208,13 @@ jq -n \
   --arg mcp_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg instructions_file "${instructions_file}" \
   --arg attention_plugin "${attention_plugin}" \
-  --arg completion_plugin "${completion_plugin}" \
+  --arg transcript_plugin "${transcript_plugin}" \
   --argjson context_length "${context_length}" \
   --argjson output_length "${output_length}" \
   '{
     "$schema":"https://opencode.ai/config.json",
     autoupdate:false,
-    plugin:([$attention_plugin] + if $completion_plugin == "" then [] else [("file://" + $completion_plugin)] end),
+    plugin:[$attention_plugin, ("file://" + $transcript_plugin)],
     model:("archestra/" + $model),
     permission:"allow",
     instructions:[$instructions_file],

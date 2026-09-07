@@ -1,5 +1,11 @@
 import type { ServerWebSocketMessage } from "@archestra/shared";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun } from "@/lib/agent-runtime.query";
@@ -174,6 +180,55 @@ describe("AgentRunLogs", () => {
       "terminal frame",
     );
     expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
+  });
+
+  it("offers to return to the transcript tail after the reader scrolls up", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<AgentRunLogs run={completedRun} />);
+
+    emit({
+      type: "agent_run_logs",
+      payload: {
+        runId: "task-1",
+        channel: "readable",
+        logs: JSON.stringify({
+          version: 1,
+          provider: "codex",
+          entries: [
+            { type: "message", role: "user", text: "Start" },
+            { type: "message", role: "assistant", text: "End" },
+          ],
+        }),
+      },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: "task-1",
+        source: "full",
+        truncated: false,
+        readable: { provider: "codex", version: 1, totalBytes: 100 },
+      },
+    });
+
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    expect(viewport).not.toBeNull();
+    Object.defineProperties(viewport, {
+      scrollHeight: { configurable: true, value: 1_000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, value: 100, writable: true },
+    });
+    fireEvent.scroll(viewport as HTMLElement);
+
+    const returnToTail = await screen.findByRole("button", {
+      name: "Scroll to Bottom",
+    });
+    await user.click(returnToTail);
+
+    expect(viewport?.scrollTop).toBe(1_000);
+    expect(returnToTail).not.toBeInTheDocument();
   });
 });
 

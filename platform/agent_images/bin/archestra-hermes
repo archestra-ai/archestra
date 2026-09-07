@@ -87,11 +87,122 @@ def _attention(action: str, label: str = "") -> None:
     except (OSError, subprocess.SubprocessError):
         pass
 PLUGIN
-completion_hook=""
-if [[ "${runtime_mode}" == "one_shot" ]] \
-  && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
-  completion_hook="${runtime_dir}/hermes-completion-hook.sh"
-  cat > "${completion_hook}" <<'HOOK'
+transcript_writer="${runtime_dir}/hermes-transcript.py"
+cat > "${transcript_writer}" <<'PYTHON'
+import datetime
+import json
+import os
+import sqlite3
+import sys
+from pathlib import Path
+
+
+database_path = Path(sys.argv[1])
+session_id = sys.argv[2]
+output_path = Path(sys.argv[3])
+
+
+def select_column(columns: set[str], name: str) -> str:
+    return name if name in columns else f"NULL AS {name}"
+
+
+def timestamp(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return datetime.datetime.fromtimestamp(
+            value, tz=datetime.timezone.utc
+        ).isoformat().replace("+00:00", "Z")
+    return None
+
+
+def serialized(value: object) -> str:
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, (dict, list)):
+                return json.dumps(parsed, separators=(",", ":"))
+        except json.JSONDecodeError:
+            pass
+        return value
+    return json.dumps(value, separators=(",", ":"))
+
+
+if not database_path.exists():
+    sys.exit(0)
+
+with sqlite3.connect(database_path, timeout=0.5) as database:
+    columns = {
+        row[1] for row in database.execute("PRAGMA table_info(messages)").fetchall()
+    }
+    if not {"session_id", "role", "content"}.issubset(columns):
+        sys.exit(0)
+    fields = [
+        "role",
+        "content",
+        select_column(columns, "tool_call_id"),
+        select_column(columns, "tool_calls"),
+        select_column(columns, "tool_name"),
+        select_column(columns, "timestamp"),
+    ]
+    active_filter = " AND active = 1" if "active" in columns else ""
+    order = "id" if "id" in columns else "rowid"
+    rows = database.execute(
+        f"SELECT {', '.join(fields)} FROM messages "
+        f"WHERE session_id = ?{active_filter} ORDER BY {order}",
+        (session_id,),
+    ).fetchall()
+
+entries: list[dict[str, object]] = []
+for role, content, tool_call_id, tool_calls, tool_name, created_at in rows:
+    entry_timestamp = timestamp(created_at)
+    timed = {"timestamp": entry_timestamp} if entry_timestamp else {}
+    if role in ("user", "assistant") and isinstance(content, str) and content:
+        entries.append({"type": "message", "role": role, "text": content, **timed})
+
+    if role == "assistant" and tool_calls:
+        try:
+            calls = json.loads(tool_calls) if isinstance(tool_calls, str) else tool_calls
+        except (TypeError, json.JSONDecodeError):
+            calls = []
+        for call in calls if isinstance(calls, list) else []:
+            if not isinstance(call, dict):
+                continue
+            function = call.get("function")
+            function = function if isinstance(function, dict) else {}
+            name = function.get("name") or call.get("name")
+            if not isinstance(name, str):
+                continue
+            arguments = function.get("arguments", call.get("arguments"))
+            entry: dict[str, object] = {"type": "tool_call", "name": name, **timed}
+            call_id = call.get("id") or call.get("tool_call_id")
+            if isinstance(call_id, str):
+                entry["toolCallId"] = call_id
+            if arguments is not None:
+                entry["input"] = serialized(arguments)
+            entries.append(entry)
+
+    if role == "tool":
+        entry = {
+            "type": "tool_result",
+            "text": content if isinstance(content, str) and content else "[Non-text result omitted]",
+            **timed,
+        }
+        if isinstance(tool_call_id, str):
+            entry["toolCallId"] = tool_call_id
+        entries.append(entry)
+
+temporary_path = output_path.with_name(f"{output_path.name}.{os.getpid()}.tmp")
+temporary_path.write_text(
+    json.dumps({"version": 1, "provider": "hermes", "entries": entries}) + "\n",
+    encoding="utf-8",
+)
+os.replace(temporary_path, output_path)
+PYTHON
+chmod 0600 "${transcript_writer}"
+
+completion_hook="${runtime_dir}/hermes-runtime-hook.sh"
+cat > "${completion_hook}" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
@@ -105,9 +216,19 @@ if [[ "${event}" == "on_session_start" ]]; then
   fi
   exit 0
 fi
-if [[ "${event}" != "post_llm_call" ]] \
+if [[ "${event}" != "post_llm_call" && "${event}" != "on_session_end" ]] \
   || [[ ! -s "${session_file}" ]] \
   || [[ "${session_id}" != "$(cat "${session_file}")" ]]; then
+  exit 0
+fi
+python3 "${runtime_dir}/hermes-transcript.py" \
+  "${runtime_dir}/hermes/state.db" \
+  "${session_id}" \
+  "${runtime_dir}/readable-transcript.json" || true
+
+if [[ "${event}" != "post_llm_call" ]] \
+  || [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "one_shot" ]] \
+  || [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
   exit 0
 fi
 answer="$(jq -r '.extra.assistant_response // empty' <<<"${payload}")"
@@ -116,8 +237,7 @@ if [[ -n "${answer}" ]]; then
   touch "${runtime_dir}/turn-complete"
 fi
 HOOK
-  chmod 0700 "${completion_hook}"
-fi
+chmod 0700 "${completion_hook}"
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" \
@@ -152,13 +272,14 @@ jq -n \
         "X-Archestra-Session-Id":$task_id
       }
     }}
-  } + if $completion_hook == "" then {} else {
+  } + {
     hooks_auto_accept:true,
     hooks:{
       on_session_start:[{command:$completion_hook}],
-      post_llm_call:[{command:$completion_hook}]
+      post_llm_call:[{command:$completion_hook}],
+      on_session_end:[{command:$completion_hook}]
     }
-  } end)' > "${HERMES_HOME}/config.yaml"
+  })' > "${HERMES_HOME}/config.yaml"
 chmod 0600 "${HERMES_HOME}/config.yaml"
 
 # Hermes reads its ordinary config from ~/.hermes.
@@ -170,6 +291,7 @@ printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 completion_watcher="${runtime_dir}/hermes-completion-watch.py"
 cat > "${completion_watcher}" <<'PYTHON'
 import sqlite3
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -212,6 +334,16 @@ while not done_path.exists():
                         (session[0],),
                     ).fetchone()
                     if assistant and assistant[0].strip():
+                        subprocess.run(
+                            [
+                                sys.executable,
+                                str(answer_path.parent / "hermes-transcript.py"),
+                                str(database_path),
+                                str(session[0]),
+                                str(answer_path.parent / "readable-transcript.json"),
+                            ],
+                            check=False,
+                        )
                         answer_path.write_text(f"{assistant[0].strip()}\n", encoding="utf-8")
                         done_path.touch()
                         break

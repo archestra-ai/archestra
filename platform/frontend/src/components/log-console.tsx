@@ -95,7 +95,7 @@ export function LogConsole({
           // Radix sizes the viewport's inner wrapper as a `display: table`, which
           // makes it grow to the widest line instead of wrapping inside the
           // panel. Logs are read wrapped, so force it back to a block.
-          className="min-h-0 flex-1 overflow-auto [&_[data-radix-scroll-area-viewport]>div]:!block"
+          className="min-h-0 flex-1 overflow-auto [&_[data-slot=scroll-area-viewport]>div]:!block"
         >
           <div className="p-4">
             {error ? (

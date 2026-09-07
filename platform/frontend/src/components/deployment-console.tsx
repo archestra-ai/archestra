@@ -34,11 +34,16 @@ type DeploymentConsoleTabsVariant = "segmented" | "underline" | "compact";
 /** Shared follow-tail behavior for deployment log consoles. */
 export function useDeploymentLogAutoScroll() {
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const isAtBottomRef = useRef(true);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const scrollAreaRef = useCallback((node: HTMLDivElement | null) => {
+    scrollRootRef.current = node;
+    setScrollRoot(node);
+  }, []);
 
   useEffect(() => {
-    const scrollContainer = getScrollViewport(scrollAreaRef.current);
+    const scrollContainer = getScrollViewport(scrollRoot);
     if (!scrollContainer) return;
 
     const handleScroll = () => {
@@ -50,10 +55,10 @@ export function useDeploymentLogAutoScroll() {
 
     scrollContainer.addEventListener("scroll", handleScroll);
     return () => scrollContainer.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [scrollRoot]);
 
   const scrollToBottom = useCallback(() => {
-    const scrollContainer = getScrollViewport(scrollAreaRef.current);
+    const scrollContainer = getScrollViewport(scrollRootRef.current);
     if (!scrollContainer) return;
     scrollContainer.scrollTop = scrollContainer.scrollHeight;
     isAtBottomRef.current = true;
@@ -259,5 +264,5 @@ export function DeploymentLogPanel({
 }
 
 function getScrollViewport(root: HTMLDivElement | null): HTMLElement | null {
-  return root?.querySelector("[data-radix-scroll-area-viewport]") ?? null;
+  return root?.querySelector('[data-slot="scroll-area-viewport"]') ?? null;
 }

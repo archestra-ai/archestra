@@ -1,0 +1,136 @@
+import { rename, writeFile } from "node:fs/promises";
+import type { ModelMessage, ToolResultPart } from "ai";
+
+export async function writeReadableTranscript(params: {
+  messages: ModelMessage[];
+  runtimeDir: string;
+}): Promise<void> {
+  const transcript = {
+    version: 1,
+    provider: "archestra-agent",
+    entries: params.messages.flatMap(entriesForMessage),
+  } as const;
+  const temporaryPath = `${params.runtimeDir}/readable-transcript.tmp.json`;
+  await writeFile(temporaryPath, `${JSON.stringify(transcript)}\n`, "utf8");
+  await rename(temporaryPath, `${params.runtimeDir}/readable-transcript.json`);
+}
+
+function entriesForMessage(message: ModelMessage): ReadableTranscriptEntry[] {
+  if (message.role === "system") return [];
+  if (message.role === "tool") {
+    return message.content.flatMap((part) =>
+      part.type === "tool-result" ? [toolResultEntry(part)] : [],
+    );
+  }
+  if (typeof message.content === "string") {
+    return message.content
+      ? [
+          {
+            type: "message" as const,
+            role: message.role,
+            text: message.content,
+          },
+        ]
+      : [];
+  }
+
+  const parts = message.content as Array<{
+    type: string;
+    text?: string;
+    toolName?: string;
+    input?: unknown;
+    toolCallId?: string;
+    output?: ToolResultPart["output"];
+  }>;
+  return parts.flatMap((part) => {
+    if (part.type === "text" && part.text) {
+      return [
+        {
+          type: "message" as const,
+          role: message.role,
+          text: part.text,
+        },
+      ];
+    }
+    if (
+      message.role === "assistant" &&
+      part.type === "tool-call" &&
+      part.toolName &&
+      part.toolCallId
+    ) {
+      return [
+        {
+          type: "tool_call" as const,
+          name: part.toolName,
+          input: serialize(part.input),
+          toolCallId: part.toolCallId,
+        },
+      ];
+    }
+    if (
+      message.role === "assistant" &&
+      part.type === "tool-result" &&
+      part.toolName &&
+      part.toolCallId &&
+      part.output
+    ) {
+      return [toolResultEntry(part as ToolResultPart)];
+    }
+    return [];
+  });
+}
+
+function toolResultEntry(part: ToolResultPart): ReadableTranscriptEntry {
+  return {
+    type: "tool_result" as const,
+    text: toolResultText(part.output),
+    toolCallId: part.toolCallId,
+    ...(isErrorOutput(part.output) ? { isError: true } : {}),
+  };
+}
+
+function toolResultText(output: ToolResultPart["output"]): string {
+  if (output.type === "text" || output.type === "error-text") {
+    return output.value;
+  }
+  if (output.type === "json" || output.type === "error-json") {
+    return serialize(output.value);
+  }
+  if (output.type === "execution-denied") {
+    return output.reason ?? "Tool execution denied";
+  }
+  return (
+    output.value
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n") || "[Non-text result omitted]"
+  );
+}
+
+function isErrorOutput(output: ToolResultPart["output"]): boolean {
+  return (
+    output.type === "error-text" ||
+    output.type === "error-json" ||
+    output.type === "execution-denied"
+  );
+}
+
+function serialize(value: unknown): string {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value) ?? String(value);
+}
+
+type ReadableTranscriptEntry =
+  | { type: "message"; role: "user" | "assistant"; text: string }
+  | {
+      type: "tool_call";
+      name: string;
+      input: string;
+      toolCallId: string;
+    }
+  | {
+      type: "tool_result";
+      text: string;
+      toolCallId: string;
+      isError?: boolean;
+    };

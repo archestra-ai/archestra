@@ -112,12 +112,9 @@ const internalMcpCatalogTable = softDeletablePgTable(
     }),
     scope: mcpCatalogScopeEnum("scope").notNull().default("org"),
     /**
-     * Legacy preset column — the "preset" (child catalog item) feature was
-     * removed; retained inert (non-destructive, no migration). Self-FK:
-     * NULL = root catalog item, non-NULL = a legacy child row ("preset").
-     * Application code no longer creates children; the only live uses are an
-     * `IS NULL` filter that hides any pre-existing legacy child rows and the
-     * parent-delete cascade that tears down their servers/secrets.
+     * NULL for visible root catalog items. Non-NULL rows are hidden runtime
+     * variants owned by a root item. Legacy preset rows may also remain here;
+     * both kinds are intentionally excluded from catalog discovery.
      */
     parentCatalogItemId: uuid("parent_catalog_item_id").references(
       (): AnyPgColumn => internalMcpCatalogTable.id,

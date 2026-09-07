@@ -1060,8 +1060,7 @@ export function InternalMCPCatalog({
   // buttons: route to the same flows the cards use.
   const handleTableInstall = (item: CatalogItem) => {
     if (item.serverType === "remote") return install.installRemote(item);
-    if (isPlaywrightCatalogItem(item.id))
-      return install.installPlaywright(item);
+    if (isPlaywrightCatalogItem(item.id)) return;
     return install.installLocal(item);
   };
 
@@ -1487,6 +1486,7 @@ function McpServerCatalogSection({
   isBuiltInPlaywright: (catalogId: string) => boolean;
 }) {
   const canSelect = (item: CatalogItem) => {
+    if (isBuiltInPlaywright(item.id)) return false;
     const serverInfo = getServerInfo(item);
     return (
       !!serverInfo.installedServer &&
@@ -1513,6 +1513,7 @@ function McpServerCatalogSection({
     matchDescription: "match the current filters",
   });
   const selectedToUninstall = selected
+    .filter((item) => !isBuiltInPlaywright(item.id))
     .map((item) => ({ item, server: getServerInfo(item).installedServer }))
     .filter((entry) => entry.server)
     .map(({ item, server }) => ({

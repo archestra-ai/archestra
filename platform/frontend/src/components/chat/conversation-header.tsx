@@ -50,7 +50,6 @@ interface PanelControls {
   /** Whether this chat has a submission under review (Replay tab is available). */
   hasReview: boolean;
   showBrowserButton: boolean;
-  isPlaywrightSetupVisible: boolean;
   onClose: () => void;
   onOpenTab: (tab: RightPanelTab) => void;
 }
@@ -113,8 +112,7 @@ export function ConversationHeader({
   // Which tab the panel would show — mirror the panel's fallbacks so the strip
   // never highlights a tab the panel can't actually show. Only highlighted
   // while the panel is open; collapsing clears the highlight.
-  const canShowBrowser =
-    panel.showBrowserButton && !panel.isPlaywrightSetupVisible;
+  const canShowBrowser = panel.showBrowserButton;
   let resolvedTab: RightPanelTab = panel.activeTab;
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
   if (resolvedTab === "runs" && !panel.scheduledRun) resolvedTab = "files";
@@ -286,7 +284,6 @@ export function ConversationHeader({
                 <TabsTrigger
                   value="browser"
                   className="text-xs px-3"
-                  disabled={panel.isPlaywrightSetupVisible}
                   onMouseDown={handleTabMouseDown("browser")}
                 >
                   <Globe className="h-3 w-3" />
@@ -355,7 +352,6 @@ export function ConversationHeader({
                       panel.onOpenTab("browser");
                     }
                   }}
-                  disabled={panel.isPlaywrightSetupVisible}
                 >
                   <Globe className="h-4 w-4" />
                   {panel.isBrowserVisible ? "Hide Browser" : "Show Browser"}

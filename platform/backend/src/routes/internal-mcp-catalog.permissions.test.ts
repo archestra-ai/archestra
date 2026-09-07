@@ -1,4 +1,7 @@
-import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -64,6 +67,19 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
     const response = await app.inject({
       method: "PUT",
       url: `/api/internal_mcp_catalog/${ARCHESTRA_MCP_CATALOG_ID}`,
+      payload: { description: "should not be editable" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toBe(
+      "Built-in catalog items cannot be modified",
+    );
+  });
+
+  test("PUT rejects the managed Playwright catalog item with 403", async () => {
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${PLAYWRIGHT_MCP_CATALOG_ID}`,
       payload: { description: "should not be editable" },
     });
 

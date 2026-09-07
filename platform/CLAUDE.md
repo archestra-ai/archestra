@@ -121,6 +121,8 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
+**Single-Tenant Organization Model**: Archestra currently provisions exactly one organization per deployment. Better Auth's organization plugin supplies the organization-scoped data model and RBAC primitives, but the product does not support creating or operating multiple organizations in one deployment today. Preserve organization scoping in code for consistency and possible future multi-organization support; do not design current runtime topology or user flows around multiple organizations unless that support is explicitly introduced.
+
 **Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control, TOON format conversion for efficient token usage
 
 **Workspaces**:

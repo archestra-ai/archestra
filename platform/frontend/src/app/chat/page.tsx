@@ -64,10 +64,6 @@ import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
-  PlaywrightInstallDialog,
-  usePlaywrightSetupRequired,
-} from "@/components/chat/playwright-install-dialog";
-import {
   AppsPanelContent,
   ReviewPanel,
   type RightPanelTab,
@@ -1843,9 +1839,6 @@ export function ChatPageContent({
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
-  const conversationToolsStateId = isReadOnlyConversation
-    ? undefined
-    : conversationId;
   const browserToolsAgentId = isReadOnlyConversation
     ? undefined
     : conversationId
@@ -1860,14 +1853,8 @@ export function ChatPageContent({
     !!browserToolsAgentId &&
     (Boolean(conversationId) || (!isLoadingAgents && !isModelsLoading));
 
-  const playwrightSetupAgentId = isReadOnlyConversation
-    ? undefined
-    : conversationId
-      ? (conversationAgentId ?? undefined)
-      : (initialAgentId ?? undefined);
-
   const { hasPlaywrightMcpTools, isLoading: isLoadingBrowserTools } =
-    useHasPlaywrightMcpTools(browserToolsAgentId, conversationToolsStateId, {
+    useHasPlaywrightMcpTools(browserToolsAgentId, {
       enabled: shouldCheckBrowserTools,
     });
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
@@ -1878,39 +1865,6 @@ export function ChatPageContent({
       hasPlaywrightMcpTools ||
       (!!conversationId && isLoadingConversation) ||
       (!!browserToolsAgentId && isLoadingBrowserTools));
-
-  const {
-    isLoading: isPlaywrightCheckLoading,
-    isRequired: isPlaywrightSetupRequired,
-  } = usePlaywrightSetupRequired(
-    playwrightSetupAgentId,
-    conversationToolsStateId,
-    {
-      enabled:
-        shouldCheckBrowserTools &&
-        !isReadOnlyConversation &&
-        hasChatAccess &&
-        canUpdateAgent !== false,
-    },
-  );
-  // Two different answers, and they must not be spelled the same way.
-  //
-  // `isPlaywrightSetupNeeded` is the resolved one: this user has no browser and
-  // this agent's enabled tools want one. It is what may take the composer's
-  // place, because it is the only state the install card is true about.
-  //
-  // `isPlaywrightCheckPending` is "we do not know yet" — the agent's tools,
-  // its delegations and each enabled sub-agent's tools are still in flight.
-  // Sending waits for it (a message could reach for a browser that is not
-  // there), but the draft does not: the input stays typeable and untouched.
-  //
-  // `isPlaywrightSetupVisible` is the union, and stays the guard for the things
-  // that must hold for both — submitting, and opening the browser panel.
-  // Only applies to users who can actually perform the installation.
-  const isPlaywrightSetupNeeded = !!canUpdateAgent && isPlaywrightSetupRequired;
-  const isPlaywrightCheckPending = !!canUpdateAgent && isPlaywrightCheckLoading;
-  const isPlaywrightSetupVisible =
-    isPlaywrightSetupNeeded || isPlaywrightCheckPending;
 
   // Stream usage and compaction results both update this live context estimate.
   const tokensUsed = contextTokensUsed ?? tokenUsage?.totalTokens;
@@ -2221,7 +2175,6 @@ export function ChatPageContent({
     options,
   ) => {
     e.preventDefault();
-    if (isPlaywrightSetupVisible) return;
 
     // Enqueue this submission instead of sending it now (throws on inputs that
     // can't be queued, keeping the composer intact per the onSubmit contract).
@@ -2405,7 +2358,7 @@ export function ChatPageContent({
     }
   };
 
-  const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
+  const isBrowserPanelVisible = isBrowserPanelOpen;
   const isReviewPanelVisible = isReviewTabOpen && !!reviewContext;
   const isRightPanelOpen =
     isArtifactOpen ||
@@ -2586,17 +2539,12 @@ export function ChatPageContent({
       ...browserToolCallIds,
     ]);
 
-    if (
-      hasNewBrowserToolCall &&
-      showBrowserButton &&
-      !isPlaywrightSetupVisible
-    ) {
+    if (hasNewBrowserToolCall && showBrowserButton) {
       openRightPanelTab("browser");
     }
   }, [
     browserToolCallIds,
     conversationId,
-    isPlaywrightSetupVisible,
     openRightPanelTab,
     showBrowserButton,
   ]);
@@ -2734,7 +2682,6 @@ export function ChatPageContent({
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
     (message: Partial<PromptInputMessage>, options?: ChatSubmitOptions) => {
-      if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
 
@@ -2845,7 +2792,6 @@ export function ChatPageContent({
       }, placeholderTitle);
     },
     [
-      isPlaywrightSetupVisible,
       initialAgentId,
       createInitialConversation,
       updateEnabledToolsMutation,
@@ -3112,11 +3058,6 @@ export function ChatPageContent({
   //   the one gate a reload could not skip. Until it lands the agent chip reads
   //   "Select agent" and submit is disabled — a toolbar that fills in, rather
   //   than a spinner where the page should be.
-  // - The browser-tooling check, which cannot even start until the roster has
-  //   resolved an agent and then costs a round trip for that agent's tools and
-  //   delegations plus one per enabled sub-agent. Only its resolved answer
-  //   (`isPlaywrightSetupNeeded`) reaches the composer, so the setup card
-  //   appears when the check lands rather than while it runs.
   if (isLoadingApiKeyCheck) {
     return <LoadingState variant="fill" />;
   }
@@ -3299,7 +3240,6 @@ export function ChatPageContent({
             isReviewVisible: isReviewPanelVisible,
             hasReview: !!reviewContext,
             showBrowserButton,
-            isPlaywrightSetupVisible,
             onClose: closeRightPanel,
             onOpenTab: openRightPanelTab,
           }}
@@ -3570,14 +3510,9 @@ export function ChatPageContent({
                                 conversation?.agent?.llmApiKeyId ?? null
                               }
                               submitDisabled={
-                                isPlaywrightSetupNeeded ||
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending
                               }
-                              // Still working out whether this agent needs a
-                              // browser. That is no reason to take the input
-                              // away — only to hold the send.
-                              sendDisabled={isPlaywrightCheckPending}
                               subscriptionConnectRequired={
                                 conversationPerUserConnect.needsConnect
                               }
@@ -3592,9 +3527,6 @@ export function ChatPageContent({
                                 )
                                   ? handleCompactConversation
                                   : undefined
-                              }
-                              isPlaywrightSetupRequired={
-                                isPlaywrightSetupNeeded
                               }
                               selectorAgentId={activeAgentId}
                               onAgentChange={handleConversationAgentChange}
@@ -3697,12 +3629,6 @@ export function ChatPageContent({
                         )}
                       </div>
                     )}
-                    {isPlaywrightSetupNeeded && (
-                      <PlaywrightInstallDialog
-                        agentId={playwrightSetupAgentId}
-                        conversationId={conversationId}
-                      />
-                    )}
                     <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
                       <div className="scale-150">
                         <AppLogo />
@@ -3798,16 +3724,6 @@ export function ChatPageContent({
                                       ) as Record<string, unknown> | undefined
                                     )?.llmApiKeyId as string | null
                                   }
-                                  // Locks the whole composer, so it carries
-                                  // only the state that truly means "do not
-                                  // use this": the install dialog is up. The
-                                  // browser-tooling *check* must not lock it —
-                                  // its loading state holds for exactly as
-                                  // long as the tools and delegations fetches
-                                  // the first paint no longer waits on, which
-                                  // on a reload would hand the spinner's wait
-                                  // to a disabled textarea.
-                                  submitDisabled={isPlaywrightSetupNeeded}
                                   // Still resolving which agent this chat
                                   // starts on, or what tooling and credentials
                                   // it brings. The draft is welcome — start
@@ -3818,7 +3734,6 @@ export function ChatPageContent({
                                   // nothing.
                                   sendDisabled={
                                     !initialAgentId ||
-                                    isPlaywrightSetupVisible ||
                                     (!isInitialRuntimeMode &&
                                       isAgentSubscriptionMetadataPending) ||
                                     (isInitialRuntimeMode &&
@@ -3830,9 +3745,6 @@ export function ChatPageContent({
                                   }
                                   subscriptionProvider={
                                     initialPerUserConnect.provider
-                                  }
-                                  isPlaywrightSetupRequired={
-                                    isPlaywrightSetupNeeded
                                   }
                                   selectorAgentId={initialAgentId}
                                   onAgentChange={handleInitialAgentChange}
@@ -3921,7 +3833,7 @@ export function ChatPageContent({
                 isOpen={isRightPanelOpen}
                 activeTab={activeRightTab}
                 onClose={closeRightPanel}
-                canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
+                canShowBrowser={showBrowserButton}
                 scheduledRun={scheduledRun}
                 reviewContext={reviewContext}
                 artifact={conversation?.artifact}

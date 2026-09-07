@@ -37,7 +37,6 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
-import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -203,13 +202,6 @@ export interface ArchestraPromptInputProps
   /** Manually compact the active conversation */
   onCompactConversation?: () => Promise<void> | void;
   /**
-   * The current user is known to need a browser instance before this agent's
-   * tools can run. It replaces the message input with the install card, so it
-   * must mean *known*, never "still checking" — a check that is merely in
-   * flight has to leave the input alone (see `sendDisabled` for that state).
-   */
-  isPlaywrightSetupRequired: boolean;
-  /**
    * One-shot composer prefill (e.g. a skill slash command from a deep link).
    * Applied to the controller-owned input, then acknowledged via
    * onPrefillApplied so the owner can clear it and it is never re-applied.
@@ -268,7 +260,6 @@ const PromptInputContent = ({
   subscriptionConnectRequired = false,
   isContextCompacting = false,
   onCompactConversation,
-  isPlaywrightSetupRequired = false,
   selectorAgentId,
   onAgentChange,
   modelSource,
@@ -1050,33 +1041,26 @@ const PromptInputContent = ({
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          {isPlaywrightSetupRequired && conversationId ? (
-            <PlaywrightInstallInline
-              agentId={agentId ?? undefined}
-              conversationId={conversationId}
-            />
-          ) : (
-            <PromptInputTextarea
-              placeholder={
-                runtimeMode
-                  ? "Describe the task to run..."
-                  : conversationId
-                    ? "Ask a follow-up..."
-                    : (chatPlaceholder ?? "What would you like to get done?")
-              }
-              ref={textareaRef}
-              className="px-4"
-              autoFocus
-              disabled={composerLocked}
-              // In a live conversation, Enter during a stream submits and the
-              // submit handler queues the message. On the new-chat composer
-              // (no conversation to queue into yet) Enter stays blocked while
-              // the conversation is being created.
-              disableEnterSubmit={isResponseInFlight && !conversationId}
-              onKeyDown={handleTextareaKeyDown}
-              data-testid={E2eTestId.ChatPromptTextarea}
-            />
-          )}
+          <PromptInputTextarea
+            placeholder={
+              runtimeMode
+                ? "Describe the task to run..."
+                : conversationId
+                  ? "Ask a follow-up..."
+                  : (chatPlaceholder ?? "What would you like to get done?")
+            }
+            ref={textareaRef}
+            className="px-4"
+            autoFocus
+            disabled={composerLocked}
+            // In a live conversation, Enter during a stream submits and the
+            // submit handler queues the message. On the new-chat composer
+            // (no conversation to queue into yet) Enter stays blocked while
+            // the conversation is being created.
+            disableEnterSubmit={isResponseInFlight && !conversationId}
+            onKeyDown={handleTextareaKeyDown}
+            data-testid={E2eTestId.ChatPromptTextarea}
+          />
         </PromptInputBody>
         <PromptInputFooter ref={footerRef}>
           <ChatPromptInputTools
@@ -1210,7 +1194,6 @@ const ArchestraPromptInput = ({
   subscriptionConnectRequired,
   isContextCompacting,
   onCompactConversation,
-  isPlaywrightSetupRequired,
   selectorAgentId,
   onAgentChange,
   modelSource,
@@ -1327,7 +1310,6 @@ const ArchestraPromptInput = ({
           subscriptionProvider={subscriptionProvider}
           isContextCompacting={isContextCompacting}
           onCompactConversation={onCompactConversation}
-          isPlaywrightSetupRequired={isPlaywrightSetupRequired}
           selectorAgentId={selectorAgentId}
           onAgentChange={onAgentChange}
           modelSource={modelSource}

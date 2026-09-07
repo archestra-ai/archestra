@@ -370,7 +370,6 @@ describe("ArchestraPromptInput", () => {
     selectedModel: "gpt-4",
     onModelChange: vi.fn(),
     agentId: "test-agent-id",
-    isPlaywrightSetupRequired: false,
   };
 
   beforeEach(() => {

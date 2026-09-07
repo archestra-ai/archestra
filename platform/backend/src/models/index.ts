@@ -115,6 +115,7 @@ export { default as OAuthClientModel } from "./oauth-client";
 export { default as OAuthRefreshTokenModel } from "./oauth-refresh-token";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
+export { default as PlaywrightRuntimeModel } from "./playwright-runtime";
 export { default as PluginModel } from "./plugin";
 export { default as PluginSkillUsageEventModel } from "./plugin-skill-usage-event";
 export { default as PluginTeamModel } from "./plugin-team";

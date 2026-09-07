@@ -45,7 +45,7 @@ import {
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, McpServerModel, ModelModel } from "@/models";
+import { AgentModel, ModelModel } from "@/models";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -1183,18 +1183,12 @@ async function cleanupBrowserTab(params: {
   // the browser context. This is needed for both direct and delegated calls
   // since each (agentId, conversationId) gets its own session.
   try {
-    const userServer = await McpServerModel.getUserPersonalServerForCatalog(
+    await mcpClient.closeAgentSession({
+      catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+      agentId,
+      conversationId: isolationKey,
       userId,
-      PLAYWRIGHT_MCP_CATALOG_ID,
-    );
-    if (userServer) {
-      mcpClient.closeSession(
-        PLAYWRIGHT_MCP_CATALOG_ID,
-        userServer.id,
-        agentId,
-        isolationKey,
-      );
-    }
+    });
   } catch (error) {
     logger.warn(
       { agentId, userId, isolationKey, error },

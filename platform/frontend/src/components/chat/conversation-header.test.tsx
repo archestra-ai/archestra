@@ -30,7 +30,6 @@ function makePanel(overrides: Partial<Panel> = {}): Panel {
     isReviewVisible: false,
     hasReview: false,
     showBrowserButton: true,
-    isPlaywrightSetupVisible: false,
     onClose: vi.fn(),
     onOpenTab: vi.fn(),
     ...overrides,
@@ -129,11 +128,6 @@ describe("ConversationHeader — top-bar tab strip", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Apps" })).toBeInTheDocument();
-  });
-
-  it("disables Browser while Playwright setup is pending", () => {
-    renderHeader({ isPlaywrightSetupVisible: true });
-    expect(screen.getByRole("tab", { name: "Browser" })).toBeDisabled();
   });
 
   it("shows the Runs tab only for scheduled-run chats", () => {

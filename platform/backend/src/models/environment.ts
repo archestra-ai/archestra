@@ -73,6 +73,7 @@ class EnvironmentModel {
             schema.environmentsTable.id,
           ),
           notDeleted(schema.internalMcpCatalogTable),
+          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
         ),
       )
       .where(
@@ -226,6 +227,7 @@ class EnvironmentModel {
         and(
           eq(schema.internalMcpCatalogTable.environmentId, environmentId),
           notDeleted(schema.internalMcpCatalogTable),
+          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
         ),
       );
     return row?.count ?? 0;

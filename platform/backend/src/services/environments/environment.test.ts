@@ -1,11 +1,17 @@
-import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
+  PLAYWRIGHT_MCP_CATALOG_ID,
+} from "@archestra/shared";
 import { describe, expect, vi } from "vitest";
 import { syncBuiltInAgents } from "@/database/seed";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
   AgentModel,
+  EnvironmentModel,
   InternalMcpCatalogModel,
   OrganizationModel,
+  PlaywrightRuntimeModel,
 } from "@/models";
 import {
   assertCanAssignEnvironment,
@@ -157,6 +163,39 @@ describe("EnvironmentService", () => {
     ).resolves.toBeUndefined();
     const listed = await listEnvironments(org.id);
     expect(listed.environments.some((e) => e.id === env.id)).toBe(false);
+  });
+
+  test("deleteEnvironment removes its managed Playwright runtime without treating it as an assignment", async ({
+    makeInternalMcpCatalog,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "Browser environment",
+    });
+    await makeInternalMcpCatalog({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      organizationId: null,
+      name: "microsoft__playwright-mcp",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        transportType: "streamable-http",
+        httpPort: 8080,
+      },
+    });
+    await PlaywrightRuntimeModel.reconcileAll();
+    expect(
+      await PlaywrightRuntimeModel.findForEnvironment(env.id),
+    ).not.toBeNull();
+
+    await expect(
+      deleteEnvironment({ id: env.id, organizationId: org.id }),
+    ).resolves.toBeUndefined();
+
+    expect(await PlaywrightRuntimeModel.findForEnvironment(env.id)).toBeNull();
+    expect(await EnvironmentModel.findById(env.id)).toBeNull();
   });
 
   test("deleteEnvironment tears down the environment's engine on success, not on a rejected delete", async ({

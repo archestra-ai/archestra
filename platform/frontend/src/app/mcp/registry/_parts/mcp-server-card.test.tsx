@@ -152,7 +152,6 @@ vi.mock("./use-catalog-install", () => ({
     installFromSearchParams: vi.fn(),
     installRemote: vi.fn(),
     installLocal: vi.fn(),
-    installPlaywright: vi.fn(),
     addPersonalConnection: vi.fn(),
     addSharedConnection: vi.fn(),
     addOrgConnection: vi.fn(),
@@ -161,7 +160,7 @@ vi.mock("./use-catalog-install", () => ({
   }),
 }));
 
-import type { Permissions } from "@archestra/shared";
+import { type Permissions, PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
@@ -304,6 +303,49 @@ describe("McpServerCard uninstall permission", () => {
     await user.click(screen.getByRole("button", { name: "Uninstall" }));
 
     expect(await screen.findByText("Uninstall MCP Server")).toBeInTheDocument();
+  });
+
+  it("shows managed Playwright without installation actions", () => {
+    const playwrightItem = {
+      ...item,
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      name: "microsoft__playwright-mcp",
+      serverType: "local",
+      toolCount: 1,
+    } as CatalogItem;
+    const managedRuntime = {
+      ...personalInstall,
+      id: "managed-playwright-runtime",
+      catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+      ownerId: null,
+      scope: "org",
+      serverType: "local",
+      users: [],
+    } as InstalledServer;
+    useMcpServersMock.mockReturnValue({ data: [managedRuntime] });
+
+    renderCard(
+      <McpServerCard
+        variant="local"
+        item={playwrightItem}
+        installedServer={managedRuntime}
+        installingItemId={null}
+        deploymentStatuses={{}}
+        deploymentFeedState="ready"
+        onInstallRemoteServer={vi.fn()}
+        onInstallLocalServer={vi.fn()}
+        onReinstall={vi.fn()}
+        isBuiltInPlaywright
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Chat using microsoft__playwright-mcp",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /install/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /reinstall/i })).toBeNull();
   });
 
   it("refuses the uninstall for a user without the delete permission", async () => {

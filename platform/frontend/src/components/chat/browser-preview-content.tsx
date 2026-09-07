@@ -88,20 +88,8 @@ export function BrowserPreviewContent({
 
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
-  const {
-    hasPlaywrightMcpTools,
-    isPlaywrightInstalledByCurrentUser,
-    reinstallRequired,
-    installationFailed,
-    playwrightServerId,
-    isInstalling: isInstallingBrowser,
-    isAssigningTools,
-    installBrowser,
-    reinstallBrowser,
-    assignToolsToAgent,
-  } = useHasPlaywrightMcpTools(resolvedAgentId, conversationId, {
-    autoAssignAfterInstall: !!canUpdateAgent,
-  });
+  const { hasPlaywrightMcpTools, isAssigningTools, assignToolsToAgent } =
+    useHasPlaywrightMcpTools(resolvedAgentId);
   const [typeText, setTypeText] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -444,8 +432,7 @@ export function BrowserPreviewContent({
         </form>
       </div>
 
-      {/* Error display - hidden when reinstall is required since the reinstall UI handles it */}
-      {error && !reinstallRequired && (
+      {error && (
         <div className="text-xs text-destructive bg-destructive/10 border-b border-destructive/20 px-2 py-1">
           {error}
         </div>
@@ -491,47 +478,17 @@ export function BrowserPreviewContent({
         {!isConnecting && !screenshot && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-4">
-              {(isInstallingBrowser || isAssigningTools) &&
-              !hasPlaywrightMcpTools ? (
-                // Installing or assigning in progress - show unified loading
+              {isAssigningTools && !hasPlaywrightMcpTools ? (
                 <>
                   <Button disabled className="mt-10">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {isAssigningTools ? "Assigning tools" : "Installing"}
+                    Assigning tools
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    {isAssigningTools
-                      ? "Assigning Playwright tools to the agent"
-                      : "Required only before first usage of the Browser Preview"}
+                    Assigning Playwright tools to the agent
                   </p>
                 </>
-              ) : !isPlaywrightInstalledByCurrentUser && !installationFailed ? (
-                // Not installed at all - show install button
-                <>
-                  <Button
-                    onClick={() =>
-                      resolvedAgentId && installBrowser(resolvedAgentId)
-                    }
-                    disabled={!resolvedAgentId || isInstallingBrowser}
-                    className="mt-10"
-                  >
-                    {isInstallingBrowser ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Installing</span>
-                      </>
-                    ) : (
-                      <span>Install Browser</span>
-                    )}
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Required only before first usage of the Browser Preview
-                  </p>
-                </>
-              ) : !hasPlaywrightMcpTools &&
-                !reinstallRequired &&
-                !installationFailed ? (
-                // Installed but tools not assigned to current agent
+              ) : !hasPlaywrightMcpTools ? (
                 <>
                   <Button
                     onClick={() => {
@@ -553,37 +510,10 @@ export function BrowserPreviewContent({
                     Assign tools to agent
                   </Button>
                   <p className="text-xs text-muted-foreground max-w-[280px]">
-                    In order to use Browser Preview, Playwright tools need to be
-                    assigned to the agent
-                  </p>
-                </>
-              ) : reinstallRequired || installationFailed ? (
-                // Installed but needs reinstall due to config change
-                <>
-                  <Button
-                    onClick={() =>
-                      playwrightServerId && reinstallBrowser(playwrightServerId)
-                    }
-                    disabled={isInstallingBrowser || !playwrightServerId}
-                    className="mt-10"
-                  >
-                    {isInstallingBrowser ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Reinstalling</span>
-                      </>
-                    ) : (
-                      <span>Reinstall Browser</span>
-                    )}
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    {installationFailed
-                      ? "Browser installation failed. Click to retry."
-                      : "Browser configuration has been updated and requires reinstallation"}
+                    Assign the built-in Playwright tools to use Browser Preview
                   </p>
                 </>
               ) : (
-                // Installed - show normal empty state
                 <>
                   <Globe className="h-10 w-10 xs text-muted-foreground mx-auto mt-14" />
                   <p className="text-sm text-muted-foreground">

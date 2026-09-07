@@ -92,6 +92,7 @@ import {
   renderBrowserApiDocument,
   shouldRenderBrowserApiDocument,
 } from "@/middleware/browser-api-document";
+import { PlaywrightRuntimeModel } from "@/models";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
@@ -119,6 +120,7 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
+import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -1259,6 +1261,12 @@ const startMcpServerRuntime = async (
       // Set up callbacks for runtime initialization
       McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
         fastify.log.info("MCP Server Runtime initialized successfully");
+        void initializeManagedPlaywrightRuntime().catch((error) =>
+          fastify.log.error(
+            { err: error },
+            "Failed to finalize managed Playwright runtime initialization",
+          ),
+        );
       };
 
       McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
@@ -1284,6 +1292,12 @@ const startMcpServerRuntime = async (
   } else {
     fastify.log.info(
       "MCP Server Runtime is disabled as there is no K8s config available. Local MCP servers will not be available.",
+    );
+    void PlaywrightRuntimeModel.retireLegacyInstallations().catch((error) =>
+      fastify.log.error(
+        { err: error },
+        "Failed to retire legacy Playwright installations",
+      ),
     );
   }
 };

@@ -3,7 +3,6 @@ import {
   createMcpServerAlertFingerprint,
   isBuiltInCatalogId,
   isMetadataOnlyEdit,
-  isPlaywrightCatalogItem,
   mcpRuntimeAlertSource,
   RouteId,
   SERVER_NAME_PLACEHOLDER,
@@ -779,13 +778,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
       const { body } = request;
-      if (isBuiltInCatalogId(id) && !isPlaywrightCatalogItem(id)) {
+      if (isBuiltInCatalogId(id)) {
         throw new ApiError(403, "Built-in catalog items cannot be modified");
-      }
-
-      // Prevent renaming the Playwright catalog item
-      if (isPlaywrightCatalogItem(id) && body.name !== undefined) {
-        delete body.name;
       }
 
       const {

@@ -304,7 +304,7 @@ function CatalogItemDetails({
   const diagnosticTabs = allInstalls.length > 0 ? diagnosticPanels : [];
   // Remote servers manage credentials; local servers manage hosted
   // installations. Built-ins need neither.
-  const showConnectionsTab = variant !== "builtin";
+  const showConnectionsTab = variant !== "builtin" && !isPlaywright;
 
   // Overview and Credentials/Installations share the unified main page. Only
   // secondary operational views remain in the tab strip.

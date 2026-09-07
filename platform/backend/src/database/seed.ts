@@ -44,6 +44,7 @@ import {
   McpHttpSessionModel,
   MemberModel,
   OrganizationModel,
+  PlaywrightRuntimeModel,
   SkillFileModel,
   SkillModel,
   TeamModel,
@@ -355,8 +356,10 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
 
 /**
  * Seeds Playwright browser preview MCP catalog.
- * This is a globally available catalog - tools are auto-included for all agents in chat.
- * Each user gets their own personal Playwright server instance when they click the Browser button.
+ * This is a globally available catalog whose runtime is managed by Archestra.
+ * One deployment is reconciled for the Default environment and every explicit
+ * Environment. The MCP server's isolated mode creates a separate browser
+ * context for each Archestra MCP session.
  */
 async function seedPlaywrightCatalog(): Promise<void> {
   const LEGACY_PLAYWRIGHT_MCP_SERVER_NAME = "playwright-browser";
@@ -400,8 +403,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
     httpPort: 8080,
   };
 
-  // Read current catalog config before upsert to detect changes
-  let existingCatalog = await InternalMcpCatalogModel.findById(
+  const existingCatalog = await InternalMcpCatalogModel.findById(
     PLAYWRIGHT_MCP_CATALOG_ID,
   );
   const legacyCatalogByName = await InternalMcpCatalogModel.findByName(
@@ -431,25 +433,39 @@ async function seedPlaywrightCatalog(): Promise<void> {
         );
       }
     }
-
-    existingCatalog = null;
   }
 
-  // Only insert on first creation; never overwrite user edits on restart.
-  // Future config changes (e.g., docker image pin updates) should use database migrations.
+  // The Playwright catalog is system-managed. Re-assert its runtime config so
+  // upgrades migrate existing deployments without an operator reinstall.
   await db
     .insert(schema.internalMcpCatalogTable)
     .values({
       id: PLAYWRIGHT_MCP_CATALOG_ID,
       name: PLAYWRIGHT_MCP_SERVER_NAME,
-      description:
-        "Browser automation for chat - each user gets their own isolated browser session",
+      description: "Browser automation for chat with isolated browser sessions",
       serverType: "local",
       requiresAuth: false,
       icon: PLAYWRIGHT_MCP_ICON,
       localConfig: playwrightLocalConfig,
     })
     .onConflictDoNothing();
+
+  await db
+    .update(schema.internalMcpCatalogTable)
+    .set({
+      name: PLAYWRIGHT_MCP_SERVER_NAME,
+      description: "Browser automation for chat with isolated browser sessions",
+      serverType: "local",
+      requiresAuth: false,
+      icon: PLAYWRIGHT_MCP_ICON,
+      localConfig: playwrightLocalConfig,
+      multitenant: false,
+      scope: "org",
+      parentCatalogItemId: null,
+      environmentId: null,
+      deletedAt: null,
+    })
+    .where(eq(schema.internalMcpCatalogTable.id, PLAYWRIGHT_MCP_CATALOG_ID));
 
   logger.info("Seeded Playwright browser preview catalog");
 }
@@ -723,10 +739,8 @@ function getProviderDisplayName(provider: SupportedProvider): string {
 }
 
 /**
- * Migrates existing Playwright tool assignments to use dynamic credentials.
- * Static credentials break user isolation since multiple users would share
- * the same browser session. This ensures all Playwright assignments use
- * credentialResolutionMode="dynamic".
+ * Clears legacy install pins from Playwright tool assignments. Runtime
+ * selection is now automatic from the tool owner's Environment.
  */
 async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
   // Find all tool IDs belonging to the Playwright catalog
@@ -1001,6 +1015,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
+  await PlaywrightRuntimeModel.reconcileAll();
   await seedTestMcpServer();
   await seedTeamTokens();
   await seedChatApiKeysFromEnv();

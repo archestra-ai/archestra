@@ -80,7 +80,7 @@ vi.mock("@/features/browser-stream/services/browser-stream.feature", () => ({
 }));
 
 vi.mock("@/clients/mcp-client", () => ({
-  default: { closeSession: vi.fn() },
+  default: { closeAgentSession: vi.fn() },
 }));
 
 vi.mock("@/templating", async () => {

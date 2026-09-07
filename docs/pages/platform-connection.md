@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-08-24
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -71,6 +71,8 @@ A remote the platform reports down gets a "Failed to connect to …" line. After
 After an interactive client session exits, its Bash or PowerShell wrapper refreshes the Archestra marketplace and installed plugins if the last successful refresh was more than 24 hours ago. Refresh happens after the session, never in the startup path, and one-shot invocations such as `claude -p` and `codex exec` skip it.
 
 Under the checks the guard always shows its two keys: "To skip press [Space] · to reconfigure your Archestra connection press [C]". Press `Space` at any point to skip the rest of the checks and start the CLI at once — nothing is disconnected or remembered. When everything is healthy the guard waits about a second and a half for a key, then starts the CLI. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start the CLI.
+
+The same health request also tells the guard whether a newer version of the setup is available. The guard remembers the version it was installed at and compares it to the version the platform reports. When the platform is ahead, the guard shows an "update" line with one more key — press `U` to see the steps to re-run the setup from the Connection page. The line is advisory only: it never blocks the launch, and a non-interactive run — `codex exec` or `claude -p`, for example — just prints a one-line note on stderr instead. An older or rolled-back instance stays silent, so you are nudged only when there is genuinely a newer setup to pick up.
 
 The guard lives under `~/.archestra/`, hooked in by a marked wrapper block in your shell profile — on Windows, in each PowerShell edition's `profile.ps1`. Each client has its own file and its own disable variable:
 

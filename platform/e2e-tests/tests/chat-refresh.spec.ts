@@ -43,6 +43,10 @@ test.describe("New chat refresh", () => {
     await goToChat(page);
     await expectChatReady(page);
 
+    // Exercise a genuinely missing roster, not one restored from the refresh
+    // snapshot. A cached roster can already resolve the selected agent.
+    await page.evaluate(() => sessionStorage.clear());
+
     // Held open for the rest of the test. A handler that never settles the
     // route is the point: if any of these is back in front of the first paint,
     // the reload below never gets past its loading state.

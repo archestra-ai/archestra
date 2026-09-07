@@ -2690,6 +2690,7 @@ export function ChatPageContent({
           !hasFiles &&
           !options?.skill &&
           !options?.externalMcpSkill) ||
+        isLoadingAgents ||
         !initialAgentId ||
         createConversationMutation.isPending
       ) {
@@ -2794,6 +2795,7 @@ export function ChatPageContent({
     [
       initialAgentId,
       createInitialConversation,
+      isLoadingAgents,
       updateEnabledToolsMutation,
       selectConversation,
       queryClient,
@@ -3733,6 +3735,7 @@ export function ChatPageContent({
                                   // that rather than letting a click land on
                                   // nothing.
                                   sendDisabled={
+                                    isLoadingAgents ||
                                     !initialAgentId ||
                                     (!isInitialRuntimeMode &&
                                       isAgentSubscriptionMetadataPending) ||

@@ -49,6 +49,23 @@ export interface ClaudeDesktopConfigProfile {
 }
 
 /**
+ * Generated profiles use HTTPS endpoints without embedded credentials because
+ * their managed MCP and marketplace sections require secure URLs.
+ */
+export function isClaudeDesktopProfileUrlSupported(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    return (
+      url.protocol === "https:" &&
+      url.username.length === 0 &&
+      url.password.length === 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build the importable profile. `baseUrl` already includes the `/v1` segment;
  * the inference endpoint is the id-less Anthropic proxy route and the MCP
  * server uses the gateway **slug** — matching how the rest of the connect page
@@ -62,6 +79,20 @@ export function buildClaudeDesktopConfigProfile(input: {
   /** Shared-skills marketplace to register; omitted when skills aren't included. */
   skillMarketplace?: { cloneUrl: string; marketplaceName: string } | null;
 }): ClaudeDesktopConfigProfile {
+  if (!isClaudeDesktopProfileUrlSupported(input.baseUrl)) {
+    throw new Error(
+      "Claude Desktop configuration profiles require an HTTPS endpoint",
+    );
+  }
+  if (
+    input.skillMarketplace &&
+    !isClaudeDesktopProfileUrlSupported(input.skillMarketplace.cloneUrl)
+  ) {
+    throw new Error(
+      "Claude Desktop configuration profiles require an HTTPS marketplace URL",
+    );
+  }
+
   const profile: ClaudeDesktopConfigProfile = {
     $schemaVersion: 2,
   };

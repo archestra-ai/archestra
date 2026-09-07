@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -12,6 +12,15 @@ import { useCreateSkillShareLink } from "@/lib/skills/skill-share.query";
 import { downloadClaudeDesktopConfig } from "./claude-desktop-config";
 import { ConnectConfigPanel } from "./connect-config-panel";
 import { useAllSkills } from "./skills-marketplace-step";
+
+const defaultSkillShareLinkMutation = vi.hoisted(() => ({
+  mutateAsync: vi.fn().mockResolvedValue({
+    cloneUrl: "https://localhost/skills/m/tok_default/repo.git",
+    marketplaceName: "archestra-test-skills",
+  }),
+  isPending: false,
+}));
+const defaultAllSkillsQuery = vi.hoisted(() => ({ data: [] }));
 
 vi.mock("@/lib/auth/auth.query");
 
@@ -33,14 +42,11 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 vi.mock("@/lib/skills/skill-share.query", () => ({
-  useCreateSkillShareLink: vi.fn(() => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  })),
+  useCreateSkillShareLink: vi.fn(() => defaultSkillShareLinkMutation),
 }));
 
 vi.mock("./skills-marketplace-step", () => ({
-  useAllSkills: vi.fn(() => ({ data: [] })),
+  useAllSkills: vi.fn(() => defaultAllSkillsQuery),
 }));
 
 // Keep the real profile builder; only stub the blob-download side effect, which
@@ -74,15 +80,22 @@ const gateway = {
 
 const IMPORT_STEP_TITLE = "Import the profile into Claude Desktop";
 const OAUTH_STEP_TITLE = "Finish the OAuth flow";
+const SKILLS_STEP_TITLE = "Install shared skills";
 
 function renderPanel({
   withGateway = false,
   skillsEnabled = true,
   llmProxyEnabled = true,
+  llmProxyId = proxy.id,
+  baseUrl = "https://localhost:9000/v1",
+  candidateBaseUrls = [baseUrl],
 }: {
   withGateway?: boolean;
   skillsEnabled?: boolean;
   llmProxyEnabled?: boolean;
+  llmProxyId?: string | null;
+  baseUrl?: string;
+  candidateBaseUrls?: string[];
 } = {}) {
   return render(
     <ConnectConfigPanel
@@ -90,9 +103,9 @@ function renderPanel({
       mcpGatewayId={withGateway ? gateway.id : null}
       onMcpGatewaySelect={() => {}}
       gatewaySlug={withGateway ? gateway.id : null}
-      llmProxyId={proxy.id}
-      baseUrl="http://localhost:9000/v1"
-      candidateBaseUrls={["http://localhost:9000/v1"]}
+      llmProxyId={llmProxyId}
+      baseUrl={baseUrl}
+      candidateBaseUrls={candidateBaseUrls}
       baseUrlMetadata={null}
       onBaseUrlChange={() => {}}
       skillsEnabled={skillsEnabled}
@@ -110,14 +123,48 @@ function grantAllPermissions() {
 
 /** Provisioning of both connection keys resolves so the download step renders. */
 function stubKeyProvisioning() {
+  const provisionPassthrough = vi
+    .fn()
+    .mockResolvedValue({ value: "arch_passthrough" });
+  const provisionVirtual = vi.fn().mockResolvedValue({ value: "arch_virtual" });
   vi.mocked(useCreateConnectionPassthroughKey).mockReturnValue({
-    mutateAsync: vi.fn().mockResolvedValue({ value: "arch_passthrough" }),
+    mutateAsync: provisionPassthrough,
     isPending: false,
   } as unknown as ReturnType<typeof useCreateConnectionPassthroughKey>);
   vi.mocked(useCreateConnectionVirtualKey).mockReturnValue({
-    mutateAsync: vi.fn().mockResolvedValue({ value: "arch_virtual" }),
+    mutateAsync: provisionVirtual,
     isPending: false,
   } as unknown as ReturnType<typeof useCreateConnectionVirtualKey>);
+  return { provisionPassthrough, provisionVirtual };
+}
+
+function getWizardStep(title: string) {
+  const step = screen.getByRole("heading", { name: title }).closest("div.grid");
+  if (!step) throw new Error(`Could not find wizard step: ${title}`);
+  return step;
+}
+
+function expectStepNumber(title: string, number: number) {
+  expect(getWizardStep(title).firstElementChild).toHaveTextContent(
+    String(number),
+  );
+}
+
+function expectStepToBeLast(title: string) {
+  expect(getWizardStep(title).firstElementChild?.children).toHaveLength(1);
+}
+
+function expectStepToHaveConnector(title: string) {
+  expect(getWizardStep(title).firstElementChild?.children).toHaveLength(2);
+}
+
+function createDeferred<T>() {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  if (!resolve) throw new Error("Deferred promise did not initialize");
+  return { promise, resolve };
 }
 
 vi.mock("@/lib/organization.query");
@@ -154,11 +201,39 @@ describe("ConnectConfigPanel — Claude Desktop subscription note", () => {
   });
 });
 
+describe("ConnectConfigPanel — HTTPS endpoint requirement", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    grantAllPermissions();
+    stubKeyProvisioning();
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [{ provider: "anthropic" }],
+    } as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+  });
+
+  it("does not offer a profile for an HTTP endpoint", () => {
+    const { provisionPassthrough, provisionVirtual } = stubKeyProvisioning();
+    renderPanel({ baseUrl: "http://stack.localhost:9003/v1" });
+
+    expect(
+      screen.getByText(/configuration profiles require an HTTPS endpoint/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("connect-download-config")).toBeNull();
+    expect(provisionPassthrough).not.toHaveBeenCalled();
+    expect(provisionVirtual).not.toHaveBeenCalled();
+  });
+});
+
 describe("ConnectConfigPanel — shared skills marketplace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     grantAllPermissions();
     stubKeyProvisioning();
+    vi.mocked(useCreateSkillShareLink).mockReturnValue(
+      defaultSkillShareLinkMutation as unknown as ReturnType<
+        typeof useCreateSkillShareLink
+      >,
+    );
     // A configured Anthropic key so the standard virtual key can be minted and
     // the download step reaches its ready state.
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -191,7 +266,6 @@ describe("ConnectConfigPanel — shared skills marketplace", () => {
 
     renderPanel();
 
-    expect(screen.getByText(/Install/)).toBeInTheDocument();
     expect(
       screen.getByText(
         (_, el) => el?.tagName === "A" && el.textContent === "2 shared skills",
@@ -200,7 +274,18 @@ describe("ConnectConfigPanel — shared skills marketplace", () => {
     expect(screen.getByText(/Blog editor, Release notes/)).toBeInTheDocument();
   });
 
-  it("mints a never-expiring share link on download and embeds it in the profile", async () => {
+  it("does not prepare a marketplace when no configuration profile can be generated", () => {
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: [{ id: "s1", name: "Blog editor" }],
+    } as ReturnType<typeof useAllSkills>);
+
+    renderPanel({ llmProxyId: null });
+
+    expect(screen.getByRole("link", { name: "LLM Proxy" })).toBeInTheDocument();
+    expect(defaultSkillShareLinkMutation.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("prepares one marketplace before previewing and reuses it for every download", async () => {
     const mintShareLink = vi.fn().mockResolvedValue({
       cloneUrl: "https://localhost/skills/m/tok_abc/repo.git",
       marketplaceName: "archestra-acme-skills",
@@ -218,17 +303,28 @@ describe("ConnectConfigPanel — shared skills marketplace", () => {
 
     renderPanel();
 
-    // Wait out the async key provisioning so the download button renders.
-    const downloadBtn = await screen.findByTestId("connect-download-config");
-    await userEvent.click(downloadBtn);
-
     await waitFor(() =>
       expect(mintShareLink).toHaveBeenCalledWith({
         skillIds: ["s1", "s2"],
         expiresAt: null,
       }),
     );
-    // The freshly minted clone URL rode into the built profile.
+
+    // The profile stays unavailable until both key and marketplace preparation
+    // finish, so the preview has the actual marketplace name from the start.
+    const downloadBtn = await screen.findByTestId("connect-download-config");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Preview configuration" }),
+    );
+    const preview = document.querySelector("pre");
+    expect(preview).toHaveTextContent('"marketplaces"');
+    expect(preview).toHaveTextContent("archestra-acme-skills");
+    expect(preview).not.toHaveTextContent("arch_passthrough");
+    expect(preview).not.toHaveTextContent("arch_virtual");
+    expect(preview).not.toHaveTextContent("tok_abc");
+    await userEvent.click(downloadBtn);
+
+    // The already-prepared clone URL rides into every generated profile.
     const [profile] = vi.mocked(downloadClaudeDesktopConfig).mock.calls[0];
     expect(profile.plugins?.marketplaces).toEqual([
       {
@@ -237,6 +333,252 @@ describe("ConnectConfigPanel — shared skills marketplace", () => {
         expectedName: "archestra-acme-skills",
       },
     ]);
+    await userEvent.click(downloadBtn);
+    expect(mintShareLink).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(downloadClaudeDesktopConfig).mock.calls[1][0]).toEqual(
+      profile,
+    );
+  });
+
+  it("blocks an HTTP marketplace URL before downloading the profile", async () => {
+    vi.mocked(useCreateSkillShareLink).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({
+        cloneUrl: "http://stack.localhost:9003/skills/m/tok_http/repo.git",
+        marketplaceName: "archestra-http-skills",
+      }),
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateSkillShareLink>);
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: [{ id: "s1", name: "Blog editor" }],
+    } as ReturnType<typeof useAllSkills>);
+
+    renderPanel();
+
+    expect(
+      await screen.findByText(/shared skills marketplace needs an HTTPS URL/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("connect-download-config")).toBeNull();
+  });
+
+  it("blocks the download while the deferred skills catalogue is loading", async () => {
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: undefined,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useAllSkills>);
+
+    renderPanel();
+
+    expect(
+      await screen.findByText("Preparing your shared skills marketplace…"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("connect-download-config")).toBeNull();
+    expect(defaultSkillShareLinkMutation.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps the selected skills out of downloads until failed preparation is retried", async () => {
+    const mintShareLink = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        cloneUrl: "https://localhost/skills/m/tok_retry/repo.git",
+        marketplaceName: "archestra-retry-skills",
+      });
+    vi.mocked(useCreateSkillShareLink).mockReturnValue({
+      mutateAsync: mintShareLink,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateSkillShareLink>);
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: [{ id: "s1", name: "Blog editor" }],
+    } as ReturnType<typeof useAllSkills>);
+
+    renderPanel();
+
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    expect(retry.parentElement).toHaveTextContent(
+      "Couldn't prepare your shared skills marketplace.",
+    );
+    expect(screen.queryByTestId("connect-download-config")).toBeNull();
+    await userEvent.click(retry);
+    await screen.findByTestId("connect-download-config");
+    expect(mintShareLink).toHaveBeenCalledTimes(2);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Preview configuration" }),
+    );
+    expect(document.querySelector("pre")).toHaveTextContent(
+      "archestra-retry-skills",
+    );
+  });
+
+  it("ignores a stale marketplace response after shared skills are disabled", async () => {
+    const firstMarketplace = createDeferred<{
+      cloneUrl: string;
+      marketplaceName: string;
+    }>();
+    const mintShareLink = vi
+      .fn()
+      .mockReturnValueOnce(firstMarketplace.promise)
+      .mockResolvedValueOnce({
+        cloneUrl: "https://localhost/skills/m/tok_new/repo.git",
+        marketplaceName: "archestra-new-skills",
+      });
+    vi.mocked(useCreateSkillShareLink).mockReturnValue({
+      mutateAsync: mintShareLink,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateSkillShareLink>);
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: [{ id: "s1", name: "Blog editor" }],
+    } as ReturnType<typeof useAllSkills>);
+
+    renderPanel();
+
+    await waitFor(() => expect(mintShareLink).toHaveBeenCalledTimes(1));
+    const skillsRow = screen
+      .getByText(
+        (_, el) => el?.tagName === "A" && el.textContent === "1 shared skill",
+      )
+      .closest("li");
+    if (!skillsRow) throw new Error("Could not find shared skills review row");
+    await userEvent.click(
+      within(skillsRow).getByRole("button", { name: "Change" }),
+    );
+    await userEvent.click(
+      within(skillsRow).getByRole("checkbox", {
+        name: "Install shared skills",
+      }),
+    );
+
+    firstMarketplace.resolve({
+      cloneUrl: "https://localhost/skills/m/tok_old/repo.git",
+      marketplaceName: "archestra-old-skills",
+    });
+    await screen.findByTestId("connect-download-config");
+    expect(
+      screen.queryByRole("heading", { name: SKILLS_STEP_TITLE }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(skillsRow).getByRole("checkbox", {
+        name: "Install shared skills",
+      }),
+    );
+    await waitFor(() => expect(mintShareLink).toHaveBeenCalledTimes(2));
+    await screen.findByTestId("connect-download-config");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Preview configuration" }),
+    );
+    expect(document.querySelector("pre")).toHaveTextContent(
+      "archestra-new-skills",
+    );
+    await userEvent.click(screen.getByTestId("connect-download-config"));
+    expect(
+      vi.mocked(downloadClaudeDesktopConfig).mock.calls[0][0].plugins,
+    ).toEqual({
+      marketplaces: [
+        {
+          source: "git",
+          url: "https://localhost/skills/m/tok_new/repo.git",
+          expectedName: "archestra-new-skills",
+        },
+      ],
+    });
+  });
+
+  it("shows post-import installation guidance only while shared skills are included", async () => {
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: [
+        { id: "s1", name: "Blog editor" },
+        { id: "s2", name: "Release notes" },
+      ],
+    } as ReturnType<typeof useAllSkills>);
+
+    renderPanel();
+
+    await screen.findByTestId("connect-download-config");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Preview configuration" }),
+    );
+    expect(document.querySelector("pre")).toHaveTextContent('"marketplaces"');
+    expect(
+      screen.getByRole("heading", { name: SKILLS_STEP_TITLE }),
+    ).toBeInTheDocument();
+    expect(getWizardStep(SKILLS_STEP_TITLE)).toHaveTextContent(
+      "Settings → Plugins → Browse plugins.",
+    );
+    expect(getWizardStep(SKILLS_STEP_TITLE)).toHaveTextContent(
+      "Install the archestra-test-skills marketplace.",
+    );
+    expectStepNumber(IMPORT_STEP_TITLE, 4);
+    expectStepNumber(SKILLS_STEP_TITLE, 5);
+    expectStepToHaveConnector(IMPORT_STEP_TITLE);
+    expectStepToBeLast(SKILLS_STEP_TITLE);
+
+    const skillsRow = screen
+      .getByText(
+        (_, el) => el?.tagName === "A" && el.textContent === "2 shared skills",
+      )
+      .closest("li");
+    if (!skillsRow) throw new Error("Could not find shared skills review row");
+    await userEvent.click(
+      within(skillsRow).getByRole("button", { name: "Change" }),
+    );
+    await userEvent.click(
+      within(skillsRow).getByRole("checkbox", {
+        name: "Install shared skills",
+      }),
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: SKILLS_STEP_TITLE }),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector("pre")).not.toHaveTextContent(
+      '"marketplaces"',
+    );
+    expectStepToBeLast(IMPORT_STEP_TITLE);
+  });
+
+  it("uses the newly resolved marketplace name after a page remount", async () => {
+    const mintShareLink = vi
+      .fn()
+      .mockResolvedValueOnce({
+        cloneUrl: "https://localhost/skills/m/tok_first/repo.git",
+        marketplaceName: "archestra-first-skills",
+      })
+      .mockResolvedValueOnce({
+        cloneUrl: "https://localhost/skills/m/tok_second/repo.git",
+        marketplaceName: "archestra-second-skills",
+      });
+    vi.mocked(useCreateSkillShareLink).mockReturnValue({
+      mutateAsync: mintShareLink,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateSkillShareLink>);
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: [{ id: "s1", name: "Blog editor" }],
+    } as ReturnType<typeof useAllSkills>);
+
+    const firstPage = renderPanel();
+    await screen.findByTestId("connect-download-config");
+    expect(getWizardStep(SKILLS_STEP_TITLE)).toHaveTextContent(
+      "Install the archestra-first-skills marketplace.",
+    );
+    await userEvent.click(screen.getByTestId("connect-download-config"));
+    expect(
+      vi.mocked(downloadClaudeDesktopConfig).mock.calls[0][0].plugins
+        ?.marketplaces[0].expectedName,
+    ).toBe("archestra-first-skills");
+
+    firstPage.unmount();
+    renderPanel();
+
+    await screen.findByTestId("connect-download-config");
+    expect(getWizardStep(SKILLS_STEP_TITLE)).toHaveTextContent(
+      "Install the archestra-second-skills marketplace.",
+    );
+    await userEvent.click(screen.getByTestId("connect-download-config"));
+    expect(
+      vi.mocked(downloadClaudeDesktopConfig).mock.calls[1][0].plugins
+        ?.marketplaces[0].expectedName,
+    ).toBe("archestra-second-skills");
   });
 });
 
@@ -244,6 +586,11 @@ describe("ConnectConfigPanel — import & OAuth step visibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stubKeyProvisioning();
+    vi.mocked(useCreateSkillShareLink).mockReturnValue(
+      defaultSkillShareLinkMutation as unknown as ReturnType<
+        typeof useCreateSkillShareLink
+      >,
+    );
   });
 
   it("shows the import and OAuth steps once a profile can be downloaded", async () => {
@@ -251,14 +598,22 @@ describe("ConnectConfigPanel — import & OAuth step visibility", () => {
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
       data: [{ provider: "anthropic" }],
     } as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: [{ id: "s1", name: "Blog editor" }],
+    } as ReturnType<typeof useAllSkills>);
 
     renderPanel({ withGateway: true });
 
     // The download button only renders once key provisioning resolves; both
-    // follow-up steps are present alongside it.
+    // follow-up steps are present alongside the desktop-only skills step.
     await screen.findByTestId("connect-download-config");
     expect(screen.getByText(IMPORT_STEP_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(SKILLS_STEP_TITLE)).toBeInTheDocument();
     expect(screen.getByText(OAUTH_STEP_TITLE)).toBeInTheDocument();
+    expectStepNumber(SKILLS_STEP_TITLE, 5);
+    expectStepNumber(OAUTH_STEP_TITLE, 6);
+    expectStepToHaveConnector(SKILLS_STEP_TITLE);
+    expectStepToBeLast(OAUTH_STEP_TITLE);
   });
 
   it("hides the import and OAuth steps when no Anthropic key is configured", () => {

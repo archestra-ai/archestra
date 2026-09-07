@@ -4,6 +4,13 @@ import { z } from "zod";
 import { schema } from "@/database";
 
 /**
+ * Upper bound on skills bundled into one connection-setup command. Matches the
+ * share-link POST cap and the static marketplace serve cap so including every
+ * org skill at /connection is not rejected by a tighter create-setup schema.
+ */
+export const CONNECTION_SETUP_MAX_SKILLS = 500;
+
+/**
  * Clients whose setup can be fully scripted. n8n and "Any Client" stay on the
  * manual instructions flow and are deliberately absent.
  */

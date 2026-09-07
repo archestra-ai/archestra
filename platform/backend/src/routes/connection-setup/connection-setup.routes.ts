@@ -49,6 +49,7 @@ import {
 import { deriveMarketplaceName } from "@/skills/marketplace/marketplace-name";
 import {
   ApiError,
+  CONNECTION_SETUP_MAX_SKILLS,
   type ConnectionSetup,
   type ConnectionSetupClientId,
   ConnectionSetupClientIdSchema,
@@ -122,7 +123,10 @@ const CreateConnectionSetupBodySchema = z.object({
     .optional(),
   skills: z
     .object({
-      skillIds: z.array(z.string().uuid()).min(1).max(200),
+      skillIds: z
+        .array(z.string().uuid())
+        .min(1)
+        .max(CONNECTION_SETUP_MAX_SKILLS),
       ttlDays: z.number().int().positive().max(3650).nullable(),
     })
     .optional(),

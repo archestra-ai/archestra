@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildClaudeDesktopConfigProfile,
   generateConfigFilename,
+  isClaudeDesktopProfileUrlSupported,
   maskConfigSecrets,
 } from "./claude-desktop-config";
 
@@ -40,6 +41,30 @@ describe("buildClaudeDesktopConfigProfile", () => {
 
     expect(profile.inference).toBeUndefined();
     expect(profile.mcp).toBeDefined();
+  });
+
+  it("rejects an endpoint that Claude Desktop cannot import", () => {
+    expect(
+      isClaudeDesktopProfileUrlSupported("http://stack.localhost:9003/v1"),
+    ).toBe(false);
+    expect(() =>
+      buildClaudeDesktopConfigProfile({
+        ...base,
+        baseUrl: "http://stack.localhost:9003/v1",
+      }),
+    ).toThrow("require an HTTPS endpoint");
+  });
+
+  it("rejects an insecure shared-skills marketplace URL", () => {
+    expect(() =>
+      buildClaudeDesktopConfigProfile({
+        ...base,
+        skillMarketplace: {
+          cloneUrl: "http://stack.localhost:9003/skills/m/token/repo.git",
+          marketplaceName: "archestra-acme-corp-skills",
+        },
+      }),
+    ).toThrow("require an HTTPS marketplace URL");
   });
 
   it("omits the mcp block when no gateway is given", () => {

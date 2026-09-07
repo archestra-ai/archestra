@@ -5,6 +5,7 @@ import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDisableImpersonation } from "@/lib/config/config.query";
+import { clearPersistedQueryCache } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils";
 
 // The org-level RBAC permission member:impersonate is the source of truth
@@ -53,8 +54,9 @@ export function useImpersonateUser() {
     onSuccess: () => {
       // Hard reload to "/" — the impersonated session likely cannot access the
       // page the admin started from (e.g. /settings/roles requires ac:read).
-      // A full-document navigation also drops every cached admin query, so we
-      // never render with a mix of admin permissions and member data.
+      // Drop the refresh snapshot too, or navigation restores the admin's
+      // session and permissions over the newly impersonated session.
+      clearPersistedQueryCache();
       toast.success("Switched to impersonated session");
       window.location.assign("/");
     },
@@ -80,6 +82,7 @@ export function useStopImpersonating() {
     onSuccess: () => {
       // Same reasoning as impersonate — full reload restores every query
       // under the admin session and avoids the inverse permission mismatch.
+      clearPersistedQueryCache();
       toast.success("Returned to admin session");
       window.location.assign("/");
     },

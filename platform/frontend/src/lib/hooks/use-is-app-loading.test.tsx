@@ -5,7 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useIsAppLoading, useReportSearchInFlight } from "./use-is-app-loading";
 
 /**
@@ -48,6 +48,66 @@ describe("useIsAppLoading", () => {
     );
 
     await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it("does not reschedule the shell when the pending count changes but loading does not", async () => {
+    vi.useFakeTimers();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    let finishFirst!: (value: string) => void;
+    let finishSecond!: (value: string) => void;
+    const first = client.fetchQuery({
+      queryKey: ["first"],
+      queryFn: () =>
+        new Promise<string>((resolve) => {
+          finishFirst = resolve;
+        }),
+    });
+    const second = client.fetchQuery({
+      queryKey: ["second"],
+      queryFn: () =>
+        new Promise<string>((resolve) => {
+          finishSecond = resolve;
+        }),
+    });
+    let renders = 0;
+    const { result, unmount } = renderHook(
+      () => {
+        renders += 1;
+        return useIsAppLoading();
+      },
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+
+    try {
+      expect(result.current).toBe(true);
+      const loadingRenders = renders;
+      await act(async () => {
+        finishFirst("loaded");
+        await first;
+        await vi.runOnlyPendingTimersAsync();
+      });
+      expect(result.current).toBe(true);
+      // Count-only updates caused a render/observer-notification feedback loop
+      // during the cold permission load after impersonation.
+      expect(renders).toBe(loadingRenders);
+
+      await act(async () => {
+        finishSecond("loaded");
+        await second;
+        await vi.runOnlyPendingTimersAsync();
+      });
+      expect(result.current).toBe(false);
+    } finally {
+      unmount();
+      client.clear();
+      vi.useRealTimers();
+    }
   });
 
   it("stays quiet while a search is waiting, then covers the app again", async () => {

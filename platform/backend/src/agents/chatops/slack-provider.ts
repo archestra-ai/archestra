@@ -362,7 +362,9 @@ class SlackProvider implements ChatOpsProvider {
     // text) is kept when a file survived download OR was recorded as skipped —
     // a dropped file (too large, expired, failed) carries a model-visible note
     // so the bot can explain it rather than answering a blank turn. Only a
-    // genuinely empty, attachment-less message is dropped here.
+    // genuinely empty, attachment-less message is dropped here. A bare mention
+    // is kept in either event form: ingress dedup keeps whichever of message
+    // and app_mention arrives first.
     const outcomes = await this.downloadSlackFiles(event.files);
     const attachments = outcomes.flatMap((o) =>
       o.status === "delivered" ? [o.attachment] : [],
@@ -372,7 +374,7 @@ class SlackProvider implements ChatOpsProvider {
     );
     if (
       !cleanedText &&
-      event.type !== "app_mention" &&
+      !hasBotMention &&
       attachments.length === 0 &&
       skipped.length === 0
     ) {

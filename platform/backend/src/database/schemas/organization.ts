@@ -385,6 +385,15 @@ const organizationsTable = pgTable("organization", {
     .default(true),
 
   /**
+   * When false, /connection and plugin details do not offer plugin delivery,
+   * and connection-setup APIs refuse explicit plugin selections. Existing
+   * plugin management and installed plugins are unchanged.
+   */
+  connectionPluginsEnabled: boolean("connection_plugins_enabled")
+    .notNull()
+    .default(true),
+
+  /**
    * Admin overrides of the built-in model-provider catalog, keyed by provider
    * id. A `hidden` entry is switched off everywhere: the provider disappears
    * from the pickers and the API refuses to create a key for it. The other

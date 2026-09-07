@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.51](https://github.com/archestra-ai/archestra/compare/platform-v1.3.50...platform-v1.3.51) (2026-09-07)
+
+
+### Bug Fixes
+
+* **agents:** enforce concise task completions ([#7705](https://github.com/archestra-ai/archestra/issues/7705)) ([8717cb9](https://github.com/archestra-ai/archestra/commit/8717cb90ddb8a5d86dde4acfefc4f54d80149156))
+* **agents:** keep task completion notifications concise ([#7702](https://github.com/archestra-ai/archestra/issues/7702)) ([0445431](https://github.com/archestra-ai/archestra/commit/04454310920e9075ce95c7e3ae34aa2965348b28))
+* **frontend:** make the missing-connections control self-explanatory ([#7706](https://github.com/archestra-ai/archestra/issues/7706)) ([88b48bf](https://github.com/archestra-ai/archestra/commit/88b48bf84a412df46fd8af9bebb864f448b57763))
+* **frontend:** simplify missing-connections description ([#7707](https://github.com/archestra-ai/archestra/issues/7707)) ([9f5aab1](https://github.com/archestra-ai/archestra/commit/9f5aab198364ceacd54588c0afb26c1327cc7c2e))
+
 ## [1.3.50](https://github.com/archestra-ai/archestra/compare/platform-v1.3.49...platform-v1.3.50) (2026-09-06)
 
 

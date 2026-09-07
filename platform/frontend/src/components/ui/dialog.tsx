@@ -235,8 +235,13 @@ function DialogStickyFooter({
         "after:absolute after:inset-0 after:rounded-b-lg after:content-['']",
         "[&>*]:relative [&>*]:z-10",
         // Soft lift separating the bar from whatever scrolls under it. The
-        // hairline above it is `border-t`, not a shadow layer.
-        "shadow-[0_-12px_24px_-24px] shadow-foreground/30",
+        // hairline above it is `border-t`, not a shadow layer. The colour must
+        // be a fixed dark shadow, not `foreground`: `foreground` inverts to
+        // near-white in dark themes, turning the lift into a glowing halo above
+        // the footer. A real drop shadow is dark in both themes — matching the
+        // black-based `--shadow-*` tokens — and just fades to near-invisible
+        // over dark backgrounds, where the `border-t` carries the separation.
+        "shadow-[0_-12px_24px_-24px] shadow-black/20",
         className,
       )}
       {...props}

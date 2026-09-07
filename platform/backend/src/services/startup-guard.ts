@@ -1,5 +1,6 @@
 import {
   isDefaultBrandedAppName,
+  STARTUP_GUARD_FORMAT_VERSION,
   type StartupGuardClientId,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -322,6 +323,11 @@ SKIP_FILE="$HOME/${client.skipRelpath}"
 # (an older backend 404ing the route, a 429) reads as ok — version skew and
 # rate limiting can never look like an outage.
 HEALTH_URL=${sh(ctx.healthUrl ?? "")}
+# The monotonic format version this guard was stamped with. The health response
+# above reports the running instance's current value; the guard nudges a
+# re-connect only when the instance reports a STRICTLY GREATER number, so an
+# older instance or a rollback stays silent.
+GUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}
 GUARD_LABELS=(${resources.map((r) => sh(r.label)).join(" ")})
 GUARD_URLS=(${resources.map((r) => sh(r.url)).join(" ")})
 GUARD_KINDS=(${resources.map((r) => r.kind).join(" ")})
@@ -364,7 +370,12 @@ remember_disconnected() { printf '%s\\n' "$1" >> "$SKIP_FILE" 2>/dev/null || tru
 # — script, skip file, and the profile wrapper blocks. A leftover no-op hook
 # is a dependency that can only ever break a future claude launch (deleted
 # files, reconfigured shells); connect re-installs everything.
+# Set once the guard has removed itself, so later steps (e.g. the version-update
+# notice) don't advertise re-connecting to refresh a startup check that no
+# longer exists.
+GUARD_UNINSTALLED=0
 uninstall_guard() {
+  GUARD_UNINSTALLED=1
   rm -f "$GUARD_PATH" "$SKIP_FILE" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc"; do
     [ -f "$profile" ] || continue
@@ -430,6 +441,26 @@ resource_down() { # $1 index; 0 = down
   return 1
 }
 
+# 0 = the instance reports a strictly greater guard format version than this
+# guard was stamped with (a newer setup is available). Reads the number out of
+# the same health body — no JSON parser: the body is already whitespace-stripped
+# and the value is a bare integer, so plain parameter expansion is safe. A body
+# with no guardVersion (an older backend), a non-numeric value, or an
+# equal-or-lower number reads as "not stale", so rollbacks and older instances
+# stay silent — matching how a missing down marker reads as ok.
+version_is_stale() {
+  case "$HEALTH_BODY" in
+    *'"guardVersion":'*) : ;;
+    *) return 1 ;;
+  esac
+  arch_ver_rest=\${HEALTH_BODY#*'"guardVersion":'}
+  arch_ver_num=\${arch_ver_rest%%[!0-9]*}
+  case "$arch_ver_num" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "$arch_ver_num" -gt "$GUARD_FORMAT_VERSION" ]
+}
+
 if [ "$INTERACTIVE" = "0" ]; then
   if [ -n "$HEALTH_URL" ]; then
     fetch_health || HEALTH_STATE='down'
@@ -441,6 +472,9 @@ if [ "$INTERACTIVE" = "0" ]; then
     fi
     i=$((i+1))
   done
+  if version_is_stale; then
+    printf '%s\\n' "archestra: a newer $APP_NAME setup for ${client.binary} is available — re-run the setup from the $APP_NAME /connection page to update this startup check." >&2
+  fi
   exit 0
 fi
 
@@ -802,17 +836,61 @@ clear_reconfigure_hint() { printf '\\033[s\\n\\r\\033[2K\\033[u'; }
 # read here.
 offer_reconfigure_tail() {
   if [ "$PENDING_KEY_SET" = "1" ]; then
-    # a key typed ahead during the probes counts as the pressed key
-    key="$PENDING_KEY"; PENDING_KEY_SET=0
+    # a key typed ahead during the probes counts as the pressed key — but only
+    # for [C]; anything else (e.g. a [U] meant for the update offer below) is
+    # left in place so that beat can read it.
+    case "$PENDING_KEY" in
+      c|C) key="$PENDING_KEY"; PENDING_KEY_SET=0 ;;
+      *) key='' ;;
+    esac
   else
     key=''
     IFS= read -rs -n 1 -t "$RECONFIG_WAIT" key </dev/tty 2>/dev/null || key=''
+    # a non-[C] key pressed here belongs to the update offer below: stash it so
+    # this closing beat doesn't swallow it.
+    case "$key" in
+      c|C|'') ;;
+      *) PENDING_KEY="$key"; PENDING_KEY_SET=1; key='' ;;
+    esac
   fi
   clear_reconfigure_hint
   case "$key" in
     c|C) reconfigure_menu ;;
   esac
   return 0
+}
+
+# When the instance reports a newer guard format than this one, show a one-line
+# advisory with a timed, non-blocking [U] offer. It never blocks the launch:
+# the read has a short deadline (the same closing-beat budget as [C]), and any
+# other key — or the timeout — just lets ${client.binary} start. Pressing [U]
+# prints the concrete /connection re-run steps and dwells a beat longer so they
+# can be read. Re-connecting needs a fresh one-time link only the user can fetch
+# from the page, so [U] shows the steps rather than doing it for them.
+notify_version_update() {
+  # Nothing to update if the guard just removed itself (every remote was
+  # disconnected this run), and the timed reads below already hold the advisory
+  # on screen — so no extra dwell is needed.
+  [ "$GUARD_UNINSTALLED" = "1" ] && return 0
+  version_is_stale || return 0
+  printf '%supdate:%s %sa newer %s setup is available.%s %s[U]%s%s for the steps to update this startup check%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$APP_NAME" "$C_RESET" "$C_TITLE" "$C_RESET" "$C_DIM" "$C_RESET"
+  if [ "$PENDING_KEY_SET" = "1" ]; then
+    # a [U] typed ahead during the probes (stashed by the closing beat) answers here
+    key="$PENDING_KEY"; PENDING_KEY_SET=0
+  else
+    key=''
+    IFS= read -rs -n 1 -t "$RECONFIG_WAIT" key </dev/tty 2>/dev/null || key=''
+  fi
+  case "$key" in
+    u|U)
+      printf '%sTo update, re-run the %s connection setup:%s\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"
+      printf '  1. Open the %s /connection page and pick %s.\\n' "$APP_NAME" ${sh(client.label)}
+      printf '  2. Copy the setup command it shows and run it in your terminal.\\n'
+      printf '     It reinstalls this startup check at the current version.\\n'
+      # a longer, still non-blocking beat so the steps can be read
+      IFS= read -rs -n 1 -t 6 key </dev/tty 2>/dev/null || true
+      ;;
+  esac
 }
 
 # When something is down: the quick (Y/n) reverses everything that failed in
@@ -1045,6 +1123,7 @@ elif [ "$OPEN_MENU" = "1" ]; then
 else
   offer_reconfigure_tail
 fi
+notify_version_update
 finish_guard
 `;
 }
@@ -1069,9 +1148,24 @@ export function buildStartupGuardInstallSection(
 
   return `say ${sh(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 mkdir -p "$(dirname "${guardPath}")"
+# A guard installed BEFORE the version-check feature has no GUARD_FORMAT_VERSION
+# stamp and no [U] update check, so at launch it can never nudge the user to
+# re-connect on its own — the [U] launch prompt only exists in version-aware
+# guards. Running connect is therefore the one moment we can lift such a user
+# onto the current guard, so we upgrade it in place, automatically, with no
+# prompt. (A guard that already carries the stamp is just refreshed silently; if
+# it was merely a version behind, its own [U] launch nudge is what sent the user
+# here.)
+archestra_guard_pre_feature=0
+if [ -f "${guardPath}" ] && ! grep -q 'GUARD_FORMAT_VERSION=' "${guardPath}" 2>/dev/null; then
+  archestra_guard_pre_feature=1
+fi
 cat > "${guardPath}" <<'${GUARD_FILE_EOF}'
 ${renderStartupGuardScript(ctx, client)}${GUARD_FILE_EOF}
 chmod +x "${guardPath}"
+if [ "$archestra_guard_pre_feature" = "1" ]; then
+  ok ${sh(`Upgraded your existing ${client.label} startup guard to the version-aware format automatically — no re-connect prompt was needed.`)}
+fi
 # A fresh connect re-arms every check: forget remotes a previous guard
 # disconnected.
 rm -f "$HOME/${client.skipRelpath}"

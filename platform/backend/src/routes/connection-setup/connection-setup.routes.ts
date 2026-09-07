@@ -3,6 +3,7 @@ import {
   DEFAULT_APP_NAME,
   providerDisplayNames,
   RouteId,
+  STARTUP_GUARD_FORMAT_VERSION,
   type SupportedProvider,
   SupportedProvidersSchema,
   toMcpClientServerName,
@@ -209,6 +210,15 @@ const ConnectionHealthResponseSchema = z.object({
    */
   mcp: ConnectionHealthStatusSchema.optional(),
   llm: ConnectionHealthStatusSchema.optional(),
+  /**
+   * The running instance's monotonic startup-guard format version. The guard is
+   * stamped with this at connect time and, on every launch, nudges a re-connect
+   * only when this value is STRICTLY GREATER than its own — so a rollback or an
+   * older instance (equal-or-lower number) stays silent. Non-secret. Older
+   * guards ignore the field; a newer guard talking to an older backend that
+   * omits it simply skips the check.
+   */
+  guardVersion: z.number().int().nonnegative(),
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -267,7 +277,11 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : exists
             ? ("ok" as const)
             : ("down" as const);
-      return { mcp: statusOf(mcpExists), llm: statusOf(llmExists) };
+      return {
+        mcp: statusOf(mcpExists),
+        llm: statusOf(llmExists),
+        guardVersion: STARTUP_GUARD_FORMAT_VERSION,
+      };
     },
   );
 

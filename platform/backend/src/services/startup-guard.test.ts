@@ -15,6 +15,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
+  STARTUP_GUARD_FORMAT_VERSION,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -256,6 +257,47 @@ async function readClaudeLog(guardHome: GuardHome): Promise<string> {
     : "";
 }
 
+/**
+ * Runs the real install section (the connect step that writes the guard) in a
+ * sandboxed $HOME, with a minimal preamble supplying the setup script's say/ok
+ * helpers. `preExistingGuard`, when given, is written to the guard path first so
+ * the section's pre-feature detection has a prior guard to inspect. Returns the
+ * install's stdout and the path of the guard it wrote.
+ */
+async function runInstallSection(params: {
+  preExistingGuard?: string;
+}): Promise<{ stdout: string; guardFile: string }> {
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-install-"));
+  const home = path.join(dir, "home");
+  const guardFile = path.join(home, CLAUDE_CODE_GUARD_SCRIPT_RELPATH);
+  await mkdir(path.dirname(guardFile), { recursive: true });
+  if (params.preExistingGuard !== undefined) {
+    await writeFile(guardFile, params.preExistingGuard, "utf8");
+  }
+  const preamble = [
+    "ARCH_C_RESET=''; ARCH_C_HEAD=''; ARCH_C_OK=''",
+    `say()  { printf '\\n==> %s\\n' "$1"; }`,
+    `ok()   { printf '==> %s\\n' "$1"; }`,
+    "",
+  ].join("\n");
+  const scriptFile = path.join(dir, "install.sh");
+  await writeFile(
+    scriptFile,
+    preamble + buildStartupGuardInstallSection(CTX, CLAUDE_CODE_GUARD_CLIENT),
+    "utf8",
+  );
+  const { stdout } = await execFileAsync("bash", [scriptFile], {
+    env: {
+      ...process.env,
+      HOME: home,
+      SHELL: "/bin/bash",
+    } as Record<string, string>,
+  });
+  // the sandbox $HOME (and the guard it wrote) is left on disk for the caller to
+  // read back, then reaped by the OS temp sweeper.
+  return { stdout, guardFile };
+}
+
 describe("buildStartupGuardContext", () => {
   test("derives refs and the single health URL from the connect-wired URLs", () => {
     const setupCtx: SetupScriptContext = {
@@ -313,6 +355,22 @@ describe("renderStartupGuardScript", () => {
     expect(proxyAt).toBeGreaterThan(-1);
     expect(mcpAt).toBeGreaterThan(proxyAt);
     expect(skillsAt).toBeGreaterThan(mcpAt);
+  });
+
+  test("stamps the monotonic guard format version for the strict-newer update check", () => {
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    expect(script).toContain(
+      `GUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}`,
+    );
+    // reads the live integer out of the same health body and only flags when
+    // it is strictly greater
+    expect(script).toContain("version_is_stale");
+    expect(script).toContain(`'"guardVersion":'`);
+    expect(script).toContain('-gt "$GUARD_FORMAT_VERSION"');
+    // interactive offers a timed, non-blocking [U] that prints the re-run steps
+    expect(script).toContain("[U]");
+    expect(script).toContain("/connection page and pick");
+    expect(script).toContain('read -rs -n 1 -t "$RECONFIG_WAIT" key');
   });
 
   test("makes ONE health request for the launch; skills has no per-resource marker", () => {
@@ -611,6 +669,48 @@ describe("renderStartupGuardScript", () => {
     expect(stderr).toBe("");
   });
 
+  test("non-interactive run nudges an update only when the instance reports a strictly newer guard version", async () => {
+    // Remotes healthy; the instance reports a guard format one past the one
+    // this guard was stamped with.
+    const { stdout, stderr } = await runGuardNonInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toContain("a newer Archestra setup for claude is available");
+    expect(stderr).toContain("/connection");
+  });
+
+  test("non-interactive run stays silent when the instance reports the same guard version", async () => {
+    const { stdout, stderr } = await runGuardNonInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION}}`,
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toBe("");
+  });
+
+  test("an older instance or a rollback (lower guard version) stays silent — no downgrade nag", async () => {
+    const { stdout, stderr } = await runGuardNonInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION - 1}}`,
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toBe("");
+  });
+
+  test("the guard version is read from the same whitespace-normalized body the down markers are", async () => {
+    const { stderr } = await runGuardNonInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"mcp": "ok", "llm": "ok", "guardVersion": ${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
+    });
+    expect(stderr).toContain("a newer Archestra setup for claude is available");
+  });
+
   test("ARCHESTRA_CLAUDE_GUARD=0 disables the guard entirely", async () => {
     const { stdout, stderr } = await runGuardNonInteractive({
       script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
@@ -768,6 +868,73 @@ describe("renderStartupGuardScript", () => {
     expect(existsSync(guardHome.guardFile)).toBe(true);
   });
 
+  test("interactive, all healthy but the instance reports a newer guard version: shows the advisory and the [U] offer", async () => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
+      keys: "",
+    });
+    expect(output).toContain("a newer Archestra setup is available");
+    expect(output).toContain("[U]");
+    // the steps are only shown once [U] is pressed
+    expect(output).not.toContain("/connection page and pick");
+    // purely advisory: nothing disconnected, guard stays installed
+    expect(output).not.toContain("Disconnected");
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+  });
+
+  test("interactive, stale: pressing [U] prints the /connection re-run steps and still launches", async () => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
+      keys: "U",
+    });
+    expect(output).toContain(
+      "To update, re-run the Archestra connection setup",
+    );
+    expect(output).toContain("/connection page and pick Claude Code");
+    // advisory only — the guard never disconnects or removes anything, and it
+    // still exits cleanly so the wrapper can launch the client
+    expect(output).not.toContain("Disconnected");
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+  });
+
+  test("interactive, disconnecting the last remote uninstalls the guard: no update nag for a guard that's gone", async () => {
+    // A single-remote guard whose only remote the platform reports down, plus a
+    // strictly-newer guard version in the same body. Answering the down prompt
+    // disconnects it and uninstalls the guard — so the update notice, which
+    // would tell you to re-run connect to refresh a startup check that no longer
+    // exists, must not fire.
+    const proxyOnly: StartupGuardContext = {
+      appName: "Archestra",
+      healthUrl: "https://archestra.example.com/v1/health?llm=profile-123",
+      proxy: {
+        provider: "anthropic",
+        providerLabel: "Anthropic",
+        url: "https://archestra.example.com/v1/anthropic/profile-123",
+        ref: "profile-123",
+        proxyName: "default_proxy",
+      },
+      mcp: null,
+      skills: null,
+    };
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderStartupGuardScript(proxyOnly, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"llm":"down","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
+      keys: "y",
+    });
+    // the down remote is disconnected and the guard removes itself…
+    expect(output).toContain("Disconnected");
+    expect(existsSync(guardHome.guardFile)).toBe(false);
+    // …and it never advertises an update for the guard it just uninstalled
+    expect(output).not.toContain("a newer Archestra setup is available");
+  });
+
   test("interactive, Bash 3.2 fallback hears Space between animation frames", async () => {
     const script = renderStartupGuardScript(
       CTX,
@@ -893,5 +1060,64 @@ describe("buildStartupGuardInstallSection", () => {
     expect(section).toContain('command claude "$@"');
     // strip-then-append keeps re-runs from duplicating the block
     expect(section).toContain("awk -v start=");
+  });
+
+  test("detects a pre-feature guard (no version stamp) and upgrades it without prompting", () => {
+    const section = buildStartupGuardInstallSection(
+      CTX,
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
+    // a guard installed before the version check has no GUARD_FORMAT_VERSION
+    // line; the install reads the existing file before overwriting it
+    expect(section).toContain("grep -q 'GUARD_FORMAT_VERSION='");
+    expect(section).toContain("archestra_guard_pre_feature=1");
+    // and announces the automatic, prompt-free upgrade
+    expect(section).toContain(
+      "Upgraded your existing Claude Code startup guard",
+    );
+  });
+
+  test("auto-upgrades a pre-feature guard in place; a stamped or absent guard is refreshed silently", async () => {
+    // A guard from before the version-check feature: no GUARD_FORMAT_VERSION.
+    const preFeature = await runInstallSection({
+      preExistingGuard:
+        "#!/usr/bin/env bash\n# archestra guard (pre version-check)\nexit 0\n",
+    });
+    expect(preFeature.stdout).toContain(
+      "Upgraded your existing Claude Code startup guard",
+    );
+    // the replacement now carries the current version stamp
+    expect(await readFile(preFeature.guardFile, "utf8")).toContain(
+      `GUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}`,
+    );
+
+    // a guard that already carries the stamp is refreshed, but NOT announced as
+    // an upgrade — a version-behind feature guard reaches connect via its own
+    // [U] launch nudge, not this pre-feature path
+    const stamped = await runInstallSection({
+      preExistingGuard: `#!/usr/bin/env bash\nGUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}\nexit 0\n`,
+    });
+    expect(stamped.stdout).not.toContain("Upgraded your existing");
+
+    // first-ever connect (no guard yet) is a plain install, not an upgrade
+    const fresh = await runInstallSection({});
+    expect(fresh.stdout).not.toContain("Upgraded your existing");
+  });
+
+  test("the auto-upgraded guard is stamped current, so it does not then immediately nag to update", async () => {
+    // Reconciles with the stale-version [U] behavior: right after connect lifts
+    // a pre-feature user onto the current guard, that guard sees the instance at
+    // an EQUAL version and stays silent — no [U] nag on the very next launch.
+    const { guardFile } = await runInstallSection({
+      preExistingGuard:
+        "#!/usr/bin/env bash\n# archestra guard (pre version-check)\nexit 0\n",
+    });
+    const { stdout, stderr } = await runGuardNonInteractive({
+      script: await readFile(guardFile, "utf8"),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION}}`,
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toBe("");
   });
 });

@@ -1,4 +1,7 @@
-import { isDefaultBrandedAppName } from "@archestra/shared";
+import {
+  isDefaultBrandedAppName,
+  STARTUP_GUARD_FORMAT_VERSION,
+} from "@archestra/shared";
 import {
   ARCHESTRA_MARK,
   ARCHESTRA_MARK_GAP,
@@ -85,6 +88,11 @@ $AppName = ${psq(ctx.appName)}
 # A response without a down marker (an older backend 404ing the route, a 429)
 # reads as ok — version skew and rate limiting can never look like an outage.
 $HealthUrl = ${psq(ctx.healthUrl ?? "")}
+# The monotonic format version this guard was stamped with. The health response
+# reports the running instance's current value; the guard nudges a re-connect
+# only when the instance reports a STRICTLY GREATER number, so an older instance
+# or a rollback stays silent.
+$GuardFormatVersion = ${STARTUP_GUARD_FORMAT_VERSION}
 $Remotes = @(
 ${remoteEntries}
 )${
@@ -110,11 +118,17 @@ $ActiveRemotes = @($Remotes | Where-Object { $DisconnectedKinds -notcontains $_.
 
 function Add-ArchDisconnected([string]$Kind) { try { Add-Content -Path $SkipFile -Value $Kind } catch { } }
 
+# Set once the guard has removed itself, so later steps (e.g. the version-update
+# notice) don't advertise re-connecting to refresh a startup check that no
+# longer exists.
+$Script:GuardUninstalled = $false
+
 # Once nothing connected is left to check, the guard removes itself entirely
 # — script, skip file, and the profile wrapper blocks. A leftover no-op hook
 # is a dependency that can only ever break a future claude launch (deleted
 # files, reconfigured shells); connect re-installs everything.
 function Remove-ArchGuard {
+  $Script:GuardUninstalled = $true
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
   $profilePaths = @()
   $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -221,6 +235,16 @@ function Test-ArchResourceDown($r) {
   return $Script:HealthBody.Contains($r.DownMarker)
 }
 
+# $true when the instance reports a strictly greater guard format version than
+# this guard was stamped with (a newer setup is available). Reads the bare
+# integer out of the same health body. A body with no guardVersion (an older
+# backend) or an equal-or-lower number reads as "not stale", so rollbacks and
+# older instances stay silent — matching how a missing down marker reads as ok.
+function Test-ArchVersionStale {
+  if ($Script:HealthBody -notmatch '"guardVersion":([0-9]+)') { return $false }
+  return ([int]$Matches[1] -gt $GuardFormatVersion)
+}
+
 if (-not $Interactive) {
   if ($HealthUrl) {
     if (-not (Invoke-ArchHealthFetch)) { $Script:HealthState = 'down' }
@@ -229,6 +253,9 @@ if (-not $Interactive) {
     if (Test-ArchResourceDown $r) {
       [Console]::Error.WriteLine('archestra: failed to connect to ' + $r.FailName + ' — ${client.binary} is configured to use it and may fail. Disconnect it from the ' + $AppName + ' /connection page, or run ${client.binary} interactively to be offered a disconnect.')
     }
+  }
+  if (Test-ArchVersionStale) {
+    [Console]::Error.WriteLine('archestra: a newer ' + $AppName + ' setup for ${client.binary} is available — re-run the setup from the ' + $AppName + ' /connection page to update this startup check.')
   }
   return
 }
@@ -546,7 +573,46 @@ function Show-ArchReconfigureOffer {
   if (-not $UseVt) { Show-ArchReconfigureHint }
   $key = ''
   if ($null -ne $Script:PendingKey) {
-    # a key typed ahead during the probes counts as the pressed key
+    # only [C] is answered here; any other queued key (e.g. a [U] meant for the
+    # update offer below) is left in PendingKey so that beat can read it
+    if ($Script:PendingKey -eq 'c' -or $Script:PendingKey -eq 'C') {
+      $key = $Script:PendingKey; $Script:PendingKey = $null
+    }
+  } else {
+    $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
+    while ([DateTime]::UtcNow -lt $deadline) {
+      $key = Read-ArchKey
+      if ($key) { break }
+      Start-Sleep -Milliseconds 40
+    }
+    # a non-[C] key pressed here belongs to the update offer below: stash it so
+    # this closing beat doesn't swallow it
+    if ($key -and $key -ne 'c' -and $key -ne 'C') { $Script:PendingKey = $key; $key = '' }
+  }
+  Clear-ArchReconfigureHint
+  if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
+}
+
+# When the instance reports a newer guard format than this one, show a one-line
+# advisory with a timed, non-blocking [U] offer. It never blocks the launch: the
+# key poll has a short deadline and any other key — or the timeout — lets
+# ${client.binary} start. Pressing [U] prints the concrete /connection re-run
+# steps and holds a beat longer so they can be read. Re-connecting needs a fresh
+# one-time link only the user can fetch, so [U] shows the steps.
+function Show-ArchVersionUpdate {
+  # Nothing to update if the guard just removed itself (every remote was
+  # disconnected this run); the timed reads below already hold the advisory on
+  # screen, so no extra dwell is needed.
+  if ($Script:GuardUninstalled) { return }
+  if (-not (Test-ArchVersionStale)) { return }
+  Clear-ArchLine
+  Write-Arch 'update:' Yellow -NoNewline
+  Write-Arch (' a newer ' + $AppName + ' setup is available. ') DarkGray -NoNewline
+  Write-Arch '[U]' Cyan -NoNewline
+  Write-Arch ' for the steps to update this startup check' DarkGray
+  $key = ''
+  if ($null -ne $Script:PendingKey) {
+    # a [U] typed ahead during the probes (left in place by the closing beat) answers here
     $key = $Script:PendingKey; $Script:PendingKey = $null
   } else {
     $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
@@ -556,8 +622,18 @@ function Show-ArchReconfigureOffer {
       Start-Sleep -Milliseconds 40
     }
   }
-  Clear-ArchReconfigureHint
-  if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
+  if ($key -eq 'u' -or $key -eq 'U') {
+    Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan
+    Write-Host ('  1. Open the ' + $AppName + ' /connection page and pick ' + ${psq(client.label)} + '.')
+    Write-Host '  2. Copy the setup command it shows and run it in your terminal.'
+    Write-Host '     It reinstalls this startup check at the current version.'
+    # a longer, still non-blocking beat so the steps can be read
+    $deadline = [DateTime]::UtcNow.AddMilliseconds(6000)
+    while ([DateTime]::UtcNow -lt $deadline) {
+      if (Read-ArchKey) { break }
+      Start-Sleep -Milliseconds 40
+    }
+  }
 }
 
 # Every down remote already got its failure line during the turn; this single
@@ -810,6 +886,7 @@ if ($DownRemotes.Count -gt 0) {
 } else {
   Show-ArchReconfigureOffer
 }
+Show-ArchVersionUpdate
 Exit-ArchGuard
 return
 `;
@@ -835,10 +912,22 @@ export function buildWindowsStartupGuardInstallSection(
   return `Say ${psq(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 $archGuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuardPath)
+# A guard installed BEFORE the version-check feature has no $GuardFormatVersion
+# stamp and no [U] update check, so at launch it can never nudge the user to
+# re-connect on its own. Running connect is the one moment we can lift such a
+# user onto the current guard, so we upgrade it in place, automatically, with no
+# prompt. (A guard already carrying the stamp is just refreshed silently.)
+$archGuardPreFeature = $false
+if ((Test-Path $archGuardPath) -and -not (Select-String -Path $archGuardPath -Pattern 'GuardFormatVersion' -Quiet -ErrorAction SilentlyContinue)) {
+  $archGuardPreFeature = $true
+}
 $archGuardBody = @'
 ${renderStartupGuardPowerShell(ctx, client)}'@
 [IO.File]::WriteAllText($archGuardPath, $archGuardBody, (New-Object System.Text.UTF8Encoding $true))
 Write-Host ('Updated ' + $archGuardPath)
+if ($archGuardPreFeature) {
+  Ok ${psq(`Upgraded your existing ${client.label} startup guard to the version-aware format automatically — no re-connect prompt was needed.`)}
+}
 # A fresh connect re-arms every check: forget remotes a previous guard
 # disconnected.
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(client.skipRelpath)})
@@ -871,9 +960,11 @@ ${client.markerEnd}
 '@
 $archDocs = [Environment]::GetFolderPath('MyDocuments')
 $archProfiles = @()
-foreach ($archEdition in @('WindowsPowerShell', 'PowerShell')) {
-  $archDir = Join-Path $archDocs $archEdition
-  if (Test-Path $archDir) { $archProfiles += (Join-Path $archDir 'profile.ps1') }
+if (-not [string]::IsNullOrWhiteSpace($archDocs)) {
+  foreach ($archEdition in @('WindowsPowerShell', 'PowerShell')) {
+    $archDir = Join-Path $archDocs $archEdition
+    if (Test-Path $archDir) { $archProfiles += (Join-Path $archDir 'profile.ps1') }
+  }
 }
 if ($archProfiles.Count -eq 0) { $archProfiles = @($PROFILE.CurrentUserAllHosts) }
 foreach ($archProfilePath in $archProfiles) {

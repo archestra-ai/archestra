@@ -284,6 +284,23 @@ export const STARTUP_GUARD_INSTALL = {
 export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
 
 /**
+ * Monotonic format version of the installed startup guard. It is NOT the
+ * platform release version — it is a plain counter that increments by one
+ * whenever the generated guard's behavior or install layout changes in a way
+ * that warrants asking users to re-run connect.
+ *
+ * The connect setup stamps this number into the guard it installs; the public
+ * `/v1/health` endpoint reports the running instance's current value. On every
+ * launch the guard flags an update ONLY when the instance reports a STRICTLY
+ * GREATER number than the one it was stamped with. Comparing a monotonic
+ * counter — rather than release strings — is what keeps a rollback or an older
+ * instance silent: a guard from a newer deploy simply sees an equal-or-lower
+ * number and says nothing. Bump this by exactly one when, and only when, a
+ * guard change should prompt a re-connect.
+ */
+export const STARTUP_GUARD_FORMAT_VERSION = 1;
+
+/**
  * Header name for external agent ID.
  * Clients can pass this header to associate interactions with their own agent identifiers.
  */

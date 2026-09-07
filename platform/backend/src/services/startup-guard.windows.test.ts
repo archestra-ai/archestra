@@ -1,5 +1,6 @@
 import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
+  STARTUP_GUARD_FORMAT_VERSION,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -84,6 +85,34 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain(
       "$_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response",
     );
+  });
+
+  test("stamps the monotonic guard format version and offers the update only when the instance reports a strictly newer one", () => {
+    const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    expect(script).toContain(
+      `$GuardFormatVersion = ${STARTUP_GUARD_FORMAT_VERSION}`,
+    );
+    // reads the live integer off the same health body and only flags -gt
+    expect(script).toContain(`'"guardVersion":([0-9]+)'`);
+    expect(script).toContain("[int]$Matches[1] -gt $GuardFormatVersion");
+    expect(script).toContain("Test-ArchVersionStale");
+    // both the interactive notice and the non-interactive stderr advisory
+    expect(script).toContain("Show-ArchVersionUpdate");
+    expect(script).toContain("a newer ' + $AppName + ' setup");
+    // non-interactive stays advisory-only
+    expect(script).toContain("re-run the setup from the ");
+    // interactive offers a timed, non-blocking [U] that prints the steps
+    expect(script).toContain("'[U]'");
+    expect(script).toContain("/connection page and pick");
+    expect(script).toContain("$key -eq 'u' -or $key -eq 'U'");
+    // the [C] closing beat must leave a non-[C] queued key (an early [U]) in
+    // PendingKey so the update offer can consume it, mirroring the bash guard
+    expect(script).toContain(
+      "if ($key -and $key -ne 'c' -and $key -ne 'C') { $Script:PendingKey = $key; $key = '' }",
+    );
+    // a guard that removed itself this run must not advertise an update for a
+    // startup check that no longer exists
+    expect(script).toContain("if ($Script:GuardUninstalled) { return }");
   });
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {
@@ -329,11 +358,34 @@ describe("buildWindowsStartupGuardInstallSection (Claude Code)", () => {
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_START);
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_END);
     expect(section).toContain("'WindowsPowerShell', 'PowerShell'");
+    // PowerShell on non-Windows hosts reports no MyDocuments directory. The
+    // generated installer must reach its $PROFILE fallback without passing an
+    // empty path to Join-Path first.
+    expect(section).toContain(
+      "if (-not [string]::IsNullOrWhiteSpace($archDocs)) {",
+    );
     expect(section).toContain("function claude {");
     expect(section).toContain("& $archReal.Source @args");
     // a fresh connect re-arms checks a previous guard disconnected
     expect(section).toContain(
       `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE '${CLAUDE_CODE_GUARD_SKIP_RELPATH}')`,
+    );
+  });
+
+  test("detects a pre-feature guard (no version stamp) and upgrades it without prompting", () => {
+    const section = buildWindowsStartupGuardInstallSection(
+      CTX,
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
+    // a guard installed before the version check has no $GuardFormatVersion
+    // line; the install inspects the existing file before overwriting it
+    expect(section).toContain(
+      "Select-String -Path $archGuardPath -Pattern 'GuardFormatVersion'",
+    );
+    expect(section).toContain("$archGuardPreFeature = $true");
+    // and announces the automatic, prompt-free upgrade
+    expect(section).toContain(
+      "Upgraded your existing Claude Code startup guard",
     );
   });
 

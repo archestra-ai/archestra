@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.51](https://github.com/archestra-ai/archestra/compare/platform-v1.3.50...platform-v1.3.51) (2026-09-07)
+
+
+### Features
+
+* **agent-runtime:** retain readable transcripts across runtime images ([#7691](https://github.com/archestra-ai/archestra/issues/7691)) ([d4c5b91](https://github.com/archestra-ai/archestra/commit/d4c5b9172a91d98cbbf9e5314000757b902ee9aa))
+* **connection:** make CLI startup guards version aware ([#7711](https://github.com/archestra-ai/archestra/issues/7711)) ([3c44e77](https://github.com/archestra-ai/archestra/commit/3c44e77b6d14ed449e38dd518c44b8c75c4561d9))
+* **mcp:** manage Playwright runtimes per environment ([#7713](https://github.com/archestra-ai/archestra/issues/7713)) ([30c9cb2](https://github.com/archestra-ai/archestra/commit/30c9cb2f504cd3d2ccb8cb9f569f8958e8ce144e))
+
+
+### Bug Fixes
+
+* **agents:** enforce concise task completions ([#7705](https://github.com/archestra-ai/archestra/issues/7705)) ([8717cb9](https://github.com/archestra-ai/archestra/commit/8717cb90ddb8a5d86dde4acfefc4f54d80149156))
+* **agents:** keep task completion notifications concise ([#7702](https://github.com/archestra-ai/archestra/issues/7702)) ([0445431](https://github.com/archestra-ai/archestra/commit/04454310920e9075ce95c7e3ae34aa2965348b28))
+* **auth:** restore impersonation for owners and same-org admins ([#7714](https://github.com/archestra-ai/archestra/issues/7714)) ([8657c86](https://github.com/archestra-ai/archestra/commit/8657c868521efde36de144a38188aa96cbb4b7d5))
+* **frontend:** make the missing-connections control self-explanatory ([#7706](https://github.com/archestra-ai/archestra/issues/7706)) ([88b48bf](https://github.com/archestra-ai/archestra/commit/88b48bf84a412df46fd8af9bebb864f448b57763))
+* **frontend:** one loading indicator through the auth surface ([#7710](https://github.com/archestra-ai/archestra/issues/7710)) ([e0097d5](https://github.com/archestra-ai/archestra/commit/e0097d5d9318678d5b199a19a96c4ff5a93b738c))
+* **frontend:** simplify missing-connections description ([#7707](https://github.com/archestra-ai/archestra/issues/7707)) ([9f5aab1](https://github.com/archestra-ai/archestra/commit/9f5aab198364ceacd54588c0afb26c1327cc7c2e))
+
+
+### Documentation
+
+* **skills:** fix migration recipes and stale development guidance ([#7708](https://github.com/archestra-ai/archestra/issues/7708)) ([3eb7d06](https://github.com/archestra-ai/archestra/commit/3eb7d0674434daffb671bd4768a38a59e63b5ea0))
+
 ## [1.3.50](https://github.com/archestra-ai/archestra/compare/platform-v1.3.49...platform-v1.3.50) (2026-09-06)
 
 

@@ -17,13 +17,6 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -77,40 +70,10 @@ export function ProxyCostPanel({
   return (
     <Card>
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1.5">
-            <CardTitle>LLM Proxy</CardTitle>
-            <CardDescription>
-              Explore spend across virtual keys, OAuth, and other access
-              methods.
-            </CardDescription>
-          </div>
-          <Select
-            value={authMethod ?? "all"}
-            onValueChange={(value) => {
-              setAuthMethod(
-                value === "all" ? undefined : (value as AuthMethod),
-              );
-              setCredential(undefined);
-              setOffset(0);
-            }}
-          >
-            <SelectTrigger
-              className="w-[230px]"
-              aria-label="Proxy authentication method"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All access methods</SelectItem>
-              {Object.entries(METHOD_NAMES).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <CardTitle>LLM Proxy</CardTitle>
+        <CardDescription>
+          Explore spend across virtual keys, OAuth, and other access methods.
+        </CardDescription>
         {(authMethod || credential) && (
           <div className="flex items-center gap-3 text-sm">
             <span>

@@ -42,8 +42,6 @@ Each request counts once, using its recorded authentication method. Standard vir
 
 External dashboards and reports can consume the same breakdown through the [API Reference](platform-api-reference).
 
-See [Proxy Cost Queries](platform-observability#proxy-cost-queries) for equivalent telemetry breakdowns.
-
 ## My Usage
 
 The **My Usage** page at `/llm/usage` shows your own activity: billed spend, requests, tokens, active days, and how spend moved over the selected timeframe. It then provides separate model and client tables with each entry's token share, requests, tokens, and cost.

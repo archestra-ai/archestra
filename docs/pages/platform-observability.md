@@ -26,7 +26,7 @@ Combined, these endpoints expose metrics including:
 - `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, source, and status code
 - `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, source, and type (input/output)
 - `llm_cache_tokens_total` - Prompt-cache tokens by provider, model, agent_id, agent_name, agent_type, source, and cache_type (read/write). Read is a reused prefix, write is a newly cached prefix; both are separate from `llm_tokens_total` so existing input/output aggregates are unaffected.
-- `llm_cost_total` - Estimated list-price cost in USD by provider, model, agent_id, agent_name, agent_type, source, auth_method, and billing_mode. `auth_method` records the bounded authentication-method enum. `billing_mode` is `metered` (billed per token) or `subscription` (flat-rate, not billed per token), so real billed spend is `sum(llm_cost_total{billing_mode="metered"})`. Requires token pricing to be configured in Archestra.
+- `llm_cost_total` - Estimated list-price cost in USD by provider, model, agent_id, agent_name, agent_type, source, auth_method, and billing_mode. `auth_method` records the authentication method. Credential IDs stay on traces to avoid unbounded metric cardinality. `billing_mode` is `metered` (billed per token) or `subscription` (flat-rate, not billed per token), so real billed spend is `sum(llm_cost_total{billing_mode="metered"})`. Requires token pricing to be configured in Archestra.
 - `llm_cache_cost_total` - Estimated cost in USD attributable to prompt-cache tokens (reads plus writes, including the higher 1-hour-TTL write surcharge), by provider, model, agent_id, agent_name, agent_type, and source. Lets you chart caching spend separately from total cost.
 - `llm_cache_savings_total` - Gross estimated USD saved by cache reads being billed at a discount versus the full input price, by provider, model, agent_id, agent_name, agent_type, and source. Read-side only (always non-negative); the signed net-of-write-surcharge savings is persisted per interaction rather than as a counter.
 - `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and source
@@ -184,38 +184,6 @@ Archestra automatically traces:
 - **HTTP requests** (verbose mode only) - All API requests with method, route, and status code
 
 Trace attributes follow the [OTEL GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/) where applicable.
-
-### Proxy Cost Queries
-
-Authentication methods use a bounded `auth_method` label on `llm_cost_total`. Credential IDs, names, and OAuth application IDs remain on traces. Adding credentials does not create new metric-label values.
-
-This PromQL query shows billed proxy spend by access method:
-
-```promql
-sum by (auth_method) (
-  increase(llm_cost_total{agent_type=~"llm_proxy|profile", billing_mode="metered"}[$__range])
-)
-```
-
-Use `billing_mode="subscription"` for subscription-covered list-price estimates. Add an `organization_id` selector when your collector combines several deployments.
-
-For individual keys, query stored spans with [TraceQL metrics](https://grafana.com/docs/tempo/latest/metrics-from-traces/metrics-queries/). This query reconstructs standard virtual-key billed spend:
-
-```traceql
-{ span.archestra.agent.type =~ "llm_proxy|profile"
-  && span.archestra.auth.method = "virtual_key"
-  && span.archestra.billing.mode = "metered" }
-| sum_over_time(span.archestra.cost) by (span.archestra.virtual_key.id)
-```
-
-For passthrough keys, select `passthrough_virtual_key` and group by `span.archestra.passthrough_virtual_key.id`.
-For client credentials, select `oauth_client_credentials` and group by `span.archestra.app.id`.
-Other methods group by `span.archestra.auth.method`.
-Selecting the method prevents secondary credentials from counting the same request twice.
-
-These fields apply to newly recorded telemetry. Trace retention, sampling, and export failures affect reconstructed totals. Prometheus increases also depend on scrape coverage and extrapolate at range boundaries. The [statistics API](platform-costs-and-limits#proxy-cost-attribution) provides totals from persisted interactions.
-
-Keep credential attributes out of span-metrics dimensions and recording rules. Querying stored traces avoids creating permanent series for every credential.
 
 ### LLM Request Spans
 

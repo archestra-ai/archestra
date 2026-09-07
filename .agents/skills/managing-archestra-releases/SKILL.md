@@ -31,7 +31,9 @@ Starting a new stable branch adds configuration steps. It uses the same stable p
 2. Configure `.github/release-please/release-please-config.json` with temporary `release-as: X.Y.0` and `draft: true`.
 3. Test and qualify the actual release build artifacts. Do not simply retag beta images.
 4. After publication, remove `release-as` from `release/X.Y`.
-5. Update `main` to the next beta series (for example, `release-as: 1.5.0-beta.1`). Remove the override after the first beta builds.
+5. After `1.4.0` ships, start `1.5.0-beta.1` on `main` with a temporary `release-as`. Remove the override after the first beta builds.
+
+For initial setup from stable `1.3.x`, start `1.4.0-beta.1`, not `1.5.0-beta.1`.
 
 ## Safety And Recovery Rules
 

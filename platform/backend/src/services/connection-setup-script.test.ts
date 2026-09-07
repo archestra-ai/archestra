@@ -2,6 +2,7 @@
 
 import { execFile } from "node:child_process";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -107,6 +108,11 @@ const SKILLS = {
   marketplaceName: "acme-skills",
 };
 
+const AUTHENTICATED_SKILLS = {
+  ...SKILLS,
+  cloneUrl: "http://token@stack2.localhost9002/skills/marketplace.git",
+};
+
 function fullContext(
   clientId: SetupScriptContext["clientId"],
   platform: SetupScriptContext["platform"] = "macos",
@@ -177,6 +183,161 @@ async function runClaudeSettingsMerge(params: {
     return JSON.parse(await readFile(settingsPath, "utf8"));
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Runs the rendered Claude Code skills-only script against a fake Claude CLI
+ * with a structured source declaration that represents HTTP URL credentials as
+ * an Authorization header. This catches a setup script that always attempts
+ * `marketplace add` on a matching fetch identity and exercises both supported
+ * credential representations without claiming that every CLI version persists
+ * the header form.
+ */
+async function runClaudeMarketplaceRegistration(params?: {
+  addFailure?: boolean;
+  initialSource?: "matching" | "changed" | "missing";
+  runs?: number;
+}): Promise<{
+  commands: string[];
+  settings: Record<string, unknown>;
+  guardExists: boolean;
+}> {
+  const root = await mkdtemp(path.join(tmpdir(), "archestra-marketplace-"));
+  const home = path.join(root, "home");
+  const claudeConfig = path.join(root, "claude-config");
+  const bin = path.join(root, "bin");
+  const settingsPath = path.join(claudeConfig, "settings.json");
+  const commandLog = path.join(root, "claude-commands.log");
+  const scriptPath = path.join(root, "setup.sh");
+  const fakeClaudePath = path.join(bin, "claude");
+  try {
+    await mkdir(claudeConfig, { recursive: true });
+    await mkdir(bin, { recursive: true });
+    const initialSource = params?.initialSource ?? "matching";
+    const declaration =
+      initialSource === "missing"
+        ? {}
+        : {
+            [AUTHENTICATED_SKILLS.marketplaceName]: {
+              source: {
+                source: "git",
+                url: "http://stack2.localhost9002/skills/marketplace.git",
+                headers: {
+                  Authorization: `Basic ${Buffer.from(
+                    `${initialSource === "changed" ? "old-token" : "token"}:`,
+                  ).toString("base64")}`,
+                },
+              },
+            },
+          };
+    await writeFile(
+      settingsPath,
+      JSON.stringify({
+        unrelatedSetting: { keep: true },
+        extraKnownMarketplaces: {
+          "other-marketplace": {
+            source: { source: "git", url: "https://example.com/other.git" },
+          },
+          ...declaration,
+        },
+      }),
+      "utf8",
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+const settingsPath = process.env.CLAUDE_CONFIG_DIR + "/settings.json";
+const logPath = process.env.ARCHESTRA_TEST_COMMAND_LOG;
+fs.appendFileSync(logPath, args.join(" ") + "\\n");
+const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+const marketplaces = settings.extraKnownMarketplaces || (settings.extraKnownMarketplaces = {});
+function normalizeSource(value) {
+  const url = new URL(value);
+  const credentials = url.username
+    ? decodeURIComponent(url.username) + ":" + decodeURIComponent(url.password)
+    : null;
+  url.username = "";
+  url.password = "";
+  return {
+    source: "git",
+    url: url.toString(),
+    ...(credentials
+      ? { headers: { Authorization: "Basic " + Buffer.from(credentials).toString("base64") } }
+      : {}),
+  };
+}
+if (args[0] === "plugin" && args[1] === "marketplace" && args[2] === "add") {
+  if (process.env.ARCHESTRA_TEST_ADD_FAILURE === "1") {
+    console.error("Marketplace host is unavailable");
+    process.exit(1);
+  }
+  const source = args[args.length - 1];
+  const marketplace = ${JSON.stringify(AUTHENTICATED_SKILLS.marketplaceName)};
+  const declared = marketplaces[marketplace]?.source;
+  const normalized = normalizeSource(source);
+  if (declared && JSON.stringify(declared) !== JSON.stringify(normalized)) {
+    console.error("Cannot add marketplace because its network source differs from the one declared for it in settings");
+    process.exit(1);
+  }
+  marketplaces[marketplace] = { source: normalized };
+  fs.writeFileSync(settingsPath, JSON.stringify(settings));
+  process.exit(0);
+}
+if (args[0] === "plugin" && args[1] === "marketplace" && args[2] === "remove") {
+  delete marketplaces[args[args.length - 1]];
+  fs.writeFileSync(settingsPath, JSON.stringify(settings));
+  process.exit(0);
+}
+if (args[0] === "plugin" && args[1] === "install") {
+  console.log("INSTALL_RAN");
+}
+process.exit(0);
+`,
+      "utf8",
+    );
+    await chmod(fakeClaudePath, 0o755);
+    await writeFile(
+      scriptPath,
+      renderSetupScript({
+        ...fullContext("claude-code"),
+        mcp: null,
+        proxy: null,
+        skills: AUTHENTICATED_SKILLS,
+      }),
+      "utf8",
+    );
+    for (let run = 0; run < (params?.runs ?? 1); run++) {
+      await execFileAsync("bash", [scriptPath], {
+        env: {
+          ...process.env,
+          HOME: home,
+          CLAUDE_CONFIG_DIR: claudeConfig,
+          NO_COLOR: "1",
+          PATH: `${bin}:${process.env.PATH}`,
+          ARCHESTRA_TEST_COMMAND_LOG: commandLog,
+          ARCHESTRA_TEST_ADD_FAILURE: params?.addFailure ? "1" : "0",
+        },
+      });
+    }
+    const guard = await stat(
+      path.join(home, ".archestra", "claude-startup-guard.sh"),
+    ).then(
+      () => true,
+      () => false,
+    );
+    return {
+      commands: (await readFile(commandLog, "utf8"))
+        .trim()
+        .split("\n")
+        .filter(Boolean),
+      settings: JSON.parse(await readFile(settingsPath, "utf8")),
+      guardExists: guard,
+    };
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 }
 
@@ -539,7 +700,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain(
-      `cli claude plugin marketplace add '${SKILLS.cloneUrl}'`,
+      `cli claude plugin marketplace add --scope user '${SKILLS.cloneUrl}'`,
     );
     // The skill plugin is installed by the script, not via a manual browse step.
     expect(script).toContain(
@@ -551,6 +712,79 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     // Next steps name the exact command and server for the OAuth handshake.
     expect(script).toContain("claude /mcp");
     expect(script).toContain(`select "${MCP.serverName}"`);
+  });
+
+  test("claude-code: skips re-registration on matching normalized marketplace sources", async () => {
+    const result = await runClaudeMarketplaceRegistration({ runs: 2 });
+
+    expect(result.commands).toEqual([
+      `plugin install ${AUTHENTICATED_SKILLS.marketplaceName}@${AUTHENTICATED_SKILLS.marketplaceName}`,
+      `plugin install ${AUTHENTICATED_SKILLS.marketplaceName}@${AUTHENTICATED_SKILLS.marketplaceName}`,
+    ]);
+    expect(result.settings).toMatchObject({
+      unrelatedSetting: { keep: true },
+      extraKnownMarketplaces: {
+        "other-marketplace": {
+          source: { source: "git", url: "https://example.com/other.git" },
+        },
+        [AUTHENTICATED_SKILLS.marketplaceName]: {
+          source: {
+            source: "git",
+            url: "http://stack2.localhost9002/skills/marketplace.git",
+            headers: {
+              Authorization: "Basic dG9rZW46",
+            },
+          },
+        },
+      },
+    });
+    expect(result.guardExists).toBe(true);
+  });
+
+  test("claude-code: replaces only a changed user marketplace source before installing skills", async () => {
+    const result = await runClaudeMarketplaceRegistration({
+      initialSource: "changed",
+    });
+
+    expect(result.commands).toEqual([
+      `plugin marketplace remove --scope user ${AUTHENTICATED_SKILLS.marketplaceName}`,
+      `plugin marketplace add --scope user ${AUTHENTICATED_SKILLS.cloneUrl}`,
+      `plugin install ${AUTHENTICATED_SKILLS.marketplaceName}@${AUTHENTICATED_SKILLS.marketplaceName}`,
+    ]);
+    expect(result.settings).toMatchObject({
+      unrelatedSetting: { keep: true },
+      extraKnownMarketplaces: {
+        "other-marketplace": {
+          source: { source: "git", url: "https://example.com/other.git" },
+        },
+        [AUTHENTICATED_SKILLS.marketplaceName]: {
+          source: {
+            headers: { Authorization: "Basic dG9rZW46" },
+          },
+        },
+      },
+    });
+  });
+
+  test("claude-code: stops before installing skills when marketplace registration fails", async () => {
+    try {
+      await runClaudeMarketplaceRegistration({
+        addFailure: true,
+        initialSource: "missing",
+      });
+      throw new Error("expected marketplace registration to fail");
+    } catch (error) {
+      const result = error as {
+        code?: number;
+        stderr?: string;
+        stdout?: string;
+      };
+      expect(result.code).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain(
+        "Shared skills were not installed.",
+      );
+      expect(`${result.stdout}${result.stderr}`).not.toContain("INSTALL_RAN");
+    }
   });
 
   test("claude-code: installs the startup guard and wraps claude in the shell profiles", () => {
@@ -1162,6 +1396,40 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain("ConvertTo-Json -Depth 32");
     expect(script).toContain(".claude\\settings.json");
+    expect(script).toContain(
+      `claude plugin marketplace add --scope user '${SKILLS.cloneUrl}'`,
+    );
+    expect(script).toContain(
+      `claude plugin marketplace remove --scope user '${SKILLS.marketplaceName}'`,
+    );
+    expect(script).toContain(
+      "network source differs from the one declared for it in settings",
+    );
+  });
+
+  test("claude-code: marketplace source matching is fail-closed and case-sensitive", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code", "windows"),
+      mcp: null,
+      proxy: null,
+      skills: AUTHENTICATED_SKILLS,
+    });
+
+    // `$Host` is PowerShell's built-in read-only host object. The generated
+    // matcher must not assign to it, and invalid source URLs must replace rather
+    // than accidentally comparing two null targets as equal.
+    expect(script).toContain("$uriHost = $uri.Host.ToLowerInvariant()");
+    expect(script).not.toContain("$host = $uri.Host");
+    expect(script).toContain(
+      "$null -eq $declaredTarget -or $null -eq $desiredTarget",
+    );
+    // Only the URI scheme/host normalize case. Paths, query, credentials, and
+    // Authorization values are fetch-shaping data and compare case-sensitively.
+    expect(script).toContain("$declaredTarget -cne $desiredTarget");
+    expect(script).toContain("$declaredCredentials -ceq $desiredCredentials");
+    expect(script).toContain(
+      "$headers['authorization'] -ceq ('Basic ' + $basic)",
+    );
   });
 
   test("claude-code anthropic passthrough: appends the attribution header (PowerShell)", () => {

@@ -22,7 +22,7 @@ import {
  */
 export interface ClaudeDesktopConfigProfile {
   $schemaVersion: 2;
-  inference: {
+  inference?: {
     provider: "gateway";
     baseUrl: string;
     customHeaders: Record<string, string>;
@@ -56,15 +56,18 @@ export interface ClaudeDesktopConfigProfile {
  */
 export function buildClaudeDesktopConfigProfile(input: {
   baseUrl: string;
-  passthroughKey: string;
-  virtualKey: string;
+  passthroughKey?: string | null;
+  virtualKey?: string | null;
   gateway?: { slug: string; name: string } | null;
   /** Shared-skills marketplace to register; omitted when skills aren't included. */
   skillMarketplace?: { cloneUrl: string; marketplaceName: string } | null;
 }): ClaudeDesktopConfigProfile {
   const profile: ClaudeDesktopConfigProfile = {
     $schemaVersion: 2,
-    inference: {
+  };
+
+  if (input.passthroughKey && input.virtualKey) {
+    profile.inference = {
       provider: "gateway",
       baseUrl: `${input.baseUrl}/anthropic`,
       customHeaders: {
@@ -72,8 +75,8 @@ export function buildClaudeDesktopConfigProfile(input: {
         [VIRTUAL_KEY_HEADER]: input.passthroughKey,
       },
       credential: { kind: "static", apiKey: input.virtualKey },
-    },
-  };
+    };
+  }
 
   if (input.gateway) {
     profile.mcp = {
@@ -121,20 +124,22 @@ export function maskConfigSecrets(
 ): ClaudeDesktopConfigProfile {
   const masked: ClaudeDesktopConfigProfile = {
     ...profile,
-    inference: {
-      ...profile.inference,
-      // Mask only the secret header(s); the agent-id attribution header is not
-      // a secret, so it stays visible in the on-screen preview.
-      customHeaders: Object.fromEntries(
-        Object.entries(profile.inference.customHeaders).map(
-          ([header, value]) => [
-            header,
-            header === EXTERNAL_AGENT_ID_HEADER ? value : SECRET_MASK,
-          ],
-        ),
-      ),
-      credential: { ...profile.inference.credential, apiKey: SECRET_MASK },
-    },
+    inference: profile.inference
+      ? {
+          ...profile.inference,
+          // Mask only the secret header(s); the agent-id attribution header is not
+          // a secret, so it stays visible in the on-screen preview.
+          customHeaders: Object.fromEntries(
+            Object.entries(profile.inference.customHeaders).map(
+              ([header, value]) => [
+                header,
+                header === EXTERNAL_AGENT_ID_HEADER ? value : SECRET_MASK,
+              ],
+            ),
+          ),
+          credential: { ...profile.inference.credential, apiKey: SECRET_MASK },
+        }
+      : undefined,
   };
 
   if (profile.plugins) {

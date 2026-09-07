@@ -582,6 +582,8 @@ export const UpdateConnectionSettingsSchema = z.object({
         "connectionShownProviders was retired. Set provider availability under Settings → LLM → Available model providers.",
     })
     .optional(),
+  connectionSkillsEnabled: z.boolean().optional(),
+  connectionLlmProxyEnabled: z.boolean().optional(),
   connectionBaseUrls: z
     .array(ConnectionBaseUrlSchema)
     .max(50)

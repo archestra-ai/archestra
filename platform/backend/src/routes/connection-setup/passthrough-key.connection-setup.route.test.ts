@@ -91,4 +91,20 @@ describe("POST /api/connection-setups/passthrough-key", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json().error.message).toContain("llmProxy:read");
   });
+
+  test("403s when the org has disabled connecting the LLM Proxy", async () => {
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionLlmProxyEnabled: false,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups/passthrough-key",
+      payload: { llmProxyId: "00000000-0000-0000-0000-000000000000" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("LLM Proxy");
+  });
 });

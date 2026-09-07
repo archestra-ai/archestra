@@ -461,8 +461,7 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install plugin — run 'claude 
       .join("\n");
     const pluginRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
     sections.push(`Say ${psq(`Installing the "${ctx.skills.marketplaceName}" marketplace`)}
-claude plugin marketplace add ${psq(ctx.skills.cloneUrl)}
-if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — continuing.' }
+${windowsClaudeMarketplaceRegistration(ctx.skills.marketplaceName, ctx.skills.cloneUrl)}
 ${
   hasSkills
     ? `claude plugin install ${psq(pluginRef)}
@@ -475,6 +474,124 @@ ${pluginInstalls}`);
   windowsStartupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 
   return sections;
+}
+
+/**
+ * Claude Code declares user marketplaces in settings.json as structured
+ * sources. Compare that declaration before calling `marketplace add`: matching
+ * credential-bearing URLs and equivalent Authorization headers describe the
+ * same fetch identity, while changed source or credentials need replacement.
+ */
+function windowsClaudeMarketplaceRegistration(
+  marketplaceName: string,
+  cloneUrl: string,
+): string {
+  const add = `claude plugin marketplace add --scope user ${psq(cloneUrl)}`;
+  return `function Get-ArchMarketplaceTarget($value) {
+  try {
+    $uri = [uri]$value
+    if (-not $uri.Scheme -or -not $uri.Host) { return $null }
+    $uriHost = $uri.Host.ToLowerInvariant()
+    if ($uriHost.Contains(':') -and -not $uriHost.StartsWith('[')) { $uriHost = '[' + $uriHost + ']' }
+    $authority = $uriHost
+    if (-not $uri.IsDefaultPort) { $authority += ':' + $uri.Port }
+    return @($uri.Scheme.ToLowerInvariant(), $authority, $(if ($uri.AbsolutePath) { $uri.AbsolutePath } else { '/' }), $uri.Query) -join '|'
+  } catch { return $null }
+}
+function Get-ArchMarketplaceCredentials($value) {
+  try {
+    $uri = [uri]$value
+    if ([string]::IsNullOrEmpty($uri.UserInfo)) { return $null }
+    $parts = $uri.UserInfo.Split(':', 2)
+    return [uri]::UnescapeDataString($parts[0]) + ':' + $(if ($parts.Length -gt 1) { [uri]::UnescapeDataString($parts[1]) } else { '' })
+  } catch { return $null }
+}
+function Get-ArchMarketplaceState {
+  $configDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+  $settingsPath = Join-Path $configDir 'settings.json'
+  if (-not (Test-Path $settingsPath)) { return 'add' }
+  try { $settings = Get-Content -Raw -Path $settingsPath | ConvertFrom-Json } catch { return 'unknown' }
+  $marketplaces = $settings.extraKnownMarketplaces
+  if (-not $marketplaces -or -not $marketplaces.PSObject.Properties[${psq(marketplaceName)}]) { return 'add' }
+  $source = $marketplaces.PSObject.Properties[${psq(marketplaceName)}].Value.source
+  if (-not $source -or $source.source -cne 'git' -or -not $source.url) { return 'replace' }
+  $desiredUrl = ${psq(cloneUrl)}
+  $declaredTarget = Get-ArchMarketplaceTarget $source.url
+  $desiredTarget = Get-ArchMarketplaceTarget $desiredUrl
+  if ($null -eq $declaredTarget -or $null -eq $desiredTarget -or $declaredTarget -cne $desiredTarget) { return 'replace' }
+  foreach ($field in @('ref', 'path', 'sparsePaths')) {
+    if ($source.PSObject.Properties[$field] -and $source.$field) { return 'replace' }
+  }
+  $declaredCredentials = Get-ArchMarketplaceCredentials $source.url
+  $desiredCredentials = Get-ArchMarketplaceCredentials $desiredUrl
+  $headers = @{}
+  if ($source.PSObject.Properties['headers'] -and $source.headers) {
+    if ($source.headers -is [array]) {
+      foreach ($header in $source.headers) {
+        if ($header.name) { $headers[[string]$header.name.ToLowerInvariant()] = [string]$header.value }
+      }
+    } else {
+      foreach ($header in $source.headers.PSObject.Properties) { $headers[$header.Name.ToLowerInvariant()] = [string]$header.Value }
+    }
+  }
+  if ($declaredCredentials -ceq $desiredCredentials -and $headers.Count -eq 0) { return 'matching' }
+  if (-not $declaredCredentials -and $desiredCredentials) {
+    $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($desiredCredentials))
+    if ($headers.Count -eq 1 -and $headers['authorization'] -ceq ('Basic ' + $basic)) { return 'matching' }
+  }
+  return 'replace'
+}
+function Remove-ArchMarketplace {
+  $marketplaceRemoved = $false
+  try {
+    claude plugin marketplace remove --scope user ${psq(marketplaceName)} 2>$null | Out-Null
+    $marketplaceRemoved = $LASTEXITCODE -eq 0
+  } catch { }
+  return $marketplaceRemoved
+}
+
+$marketplaceState = Get-ArchMarketplaceState
+if ($marketplaceState -eq 'matching') {
+  Ok ${psq(`Marketplace "${marketplaceName}" is already registered with the requested source.`)}
+} elseif ($marketplaceState -eq 'replace') {
+  Say ${psq(`Updating the "${marketplaceName}" marketplace source`)}
+  if (-not (Remove-ArchMarketplace)) {
+    Err ${psq(`Could not replace the "${marketplaceName}" marketplace source. Shared skills were not installed.`)}
+    exit 1
+  }
+  ${add}
+  if ($LASTEXITCODE -ne 0) {
+    Err ${psq(`Could not register the "${marketplaceName}" marketplace. Shared skills were not installed.`)}
+    exit 1
+  }
+} else {
+$marketplaceAddOutput = ''
+$marketplaceAdded = $false
+try {
+  $marketplaceAddOutput = & ${add} 2>&1 | Out-String
+  $marketplaceAdded = $LASTEXITCODE -eq 0
+} catch {
+  $marketplaceAddOutput += $_.Exception.Message
+}
+if (-not $marketplaceAdded) {
+  Write-Host $marketplaceAddOutput
+  if ($marketplaceAddOutput -like '*network source differs from the one declared for it in settings*') {
+    Say ${psq(`Updating the "${marketplaceName}" marketplace source`)}
+    if (-not (Remove-ArchMarketplace)) {
+      Err ${psq(`Could not replace the "${marketplaceName}" marketplace source. Shared skills were not installed.`)}
+      exit 1
+    }
+    claude plugin marketplace add --scope user ${psq(cloneUrl)}
+    if ($LASTEXITCODE -ne 0) {
+      Err ${psq(`Could not register the "${marketplaceName}" marketplace. Shared skills were not installed.`)}
+      exit 1
+    }
+  } else {
+    Err ${psq(`Could not register the "${marketplaceName}" marketplace. Shared skills were not installed.`)}
+    exit 1
+  }
+}
+}`;
 }
 
 const CLAUDE_SETTINGS_PATH =

@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WizardStep } from "@/components/wizard-step";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
@@ -113,7 +113,10 @@ export function isScriptClient(
  */
 const CONNECT_SKILLS_DEFER_MS = 750;
 
-function useConnectSkills(llmProxyId: string | null): {
+function useConnectSkills(
+  llmProxyId: string | null,
+  enabled: boolean,
+): {
   eligible: boolean;
   skills: ConnectSkill[];
 } {
@@ -121,14 +124,14 @@ function useConnectSkills(llmProxyId: string | null): {
   // Skills are environment-scoped: with a proxy selected, only skills in that
   // proxy's environment are connectable.
   const { data: skills } = useAllSkills({
-    enabled: canReadSkills === true,
+    enabled: enabled && canReadSkills === true,
     forAgentId: llmProxyId,
     // Step 2's content, not step 1's: let the part of the page the user acts
     // on first render before walking the catalogue.
     deferMs: CONNECT_SKILLS_DEFER_MS,
   });
   return {
-    eligible: canReadSkills === true && (skills ?? []).length > 0,
+    eligible: enabled && canReadSkills === true && (skills ?? []).length > 0,
     skills: skills ?? [],
   };
 }
@@ -150,6 +153,8 @@ interface ConnectCommandPanelProps {
   candidateBaseUrls: readonly string[];
   baseUrlMetadata: readonly ConnectionBaseUrl[] | null | undefined;
   onBaseUrlChange: (url: string) => void;
+  /** When false, shared skills are not offered in the setup. */
+  skillsEnabled?: boolean;
 }
 
 /**
@@ -172,14 +177,15 @@ export function ConnectCommandPanel({
   candidateBaseUrls,
   baseUrlMetadata,
   onBaseUrlChange,
+  skillsEnabled = true,
 }: ConnectCommandPanelProps) {
-  const { eligible: skillsEligible, skills: allSkills } =
-    useConnectSkills(llmProxyId);
+  const { eligible: skillsEligible, skills: allSkills } = useConnectSkills(
+    llmProxyId,
+    skillsEnabled,
+  );
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
-  // The skill picker labels each row's owner, so it needs the viewer's id.
-  const { data: session } = useSession();
   // Skill selection: `null` means "all skills" (the default, and it keeps
   // including skills created later). Once the user touches any checkbox it
   // becomes an explicit snapshot of chosen ids — so an opt-out (empty set)
@@ -289,7 +295,7 @@ export function ConnectCommandPanel({
   const providerIsPerUser =
     !!provider && providerRequiresPerUserCredential(provider);
   const needsPerUserConnect =
-    providerIsPerUser && !configuredProviders.has(provider);
+    !!llmProxyId && providerIsPerUser && !configuredProviders.has(provider);
 
   // The Copilot CLI refuses to launch a BYOK provider without an explicit
   // COPILOT_MODEL, so the review step surfaces the model as a reviewable
@@ -378,7 +384,8 @@ export function ConnectCommandPanel({
   // wizard never grows an extra step here. The marketplace step appears only
   // when there is no script to carry them: nothing to connect at all (below),
   // or a client without a generated command.
-  const skillsStepAvailable = useSkillsMarketplaceVisible(client);
+  const marketplaceVisible = useSkillsMarketplaceVisible(client);
+  const skillsStepAvailable = skillsEnabled && marketplaceVisible;
   const appName = useAppName();
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.

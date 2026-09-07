@@ -21,22 +21,25 @@ describe("buildClaudeDesktopConfigProfile", () => {
     const profile = buildClaudeDesktopConfigProfile(base);
 
     expect(profile.$schemaVersion).toBe(2);
-    expect(profile.inference.provider).toBe("gateway");
-    // id-less Anthropic proxy route in the inference base URL
-    expect(profile.inference.baseUrl).toBe("https://example.com/v1/anthropic");
-    // passthrough key → custom header
-    expect(profile.inference.customHeaders[VIRTUAL_KEY_HEADER]).toBe(
-      "arch_passthrough",
-    );
-    // client attribution → custom header
-    expect(profile.inference.customHeaders[EXTERNAL_AGENT_ID_HEADER]).toBe(
-      CLAUDE_DESKTOP_CLIENT_ID,
-    );
-    // standard virtual key → static API credential
-    expect(profile.inference.credential).toEqual({
-      kind: "static",
-      apiKey: "arch_virtual",
+    expect(profile.inference).toEqual({
+      provider: "gateway",
+      baseUrl: "https://example.com/v1/anthropic",
+      customHeaders: {
+        [VIRTUAL_KEY_HEADER]: "arch_passthrough",
+        [EXTERNAL_AGENT_ID_HEADER]: CLAUDE_DESKTOP_CLIENT_ID,
+      },
+      credential: { kind: "static", apiKey: "arch_virtual" },
     });
+  });
+
+  it("omits the inference block when no keys are given", () => {
+    const profile = buildClaudeDesktopConfigProfile({
+      baseUrl: "https://example.com/v1",
+      gateway: { slug: "gw", name: "Gateway" },
+    });
+
+    expect(profile.inference).toBeUndefined();
+    expect(profile.mcp).toBeDefined();
   });
 
   it("omits the mcp block when no gateway is given", () => {
@@ -95,19 +98,24 @@ describe("maskConfigSecrets", () => {
     });
 
     const masked = maskConfigSecrets(profile);
+    const inference = masked.inference;
+    const original = profile.inference;
+    expect(inference).toBeDefined();
+    expect(original).toBeDefined();
+    if (!inference || !original) return;
 
-    expect(masked.inference.customHeaders[VIRTUAL_KEY_HEADER]).not.toContain(
+    expect(inference.customHeaders[VIRTUAL_KEY_HEADER]).not.toContain(
       "arch_passthrough",
     );
-    expect(masked.inference.credential.apiKey).not.toContain("arch_virtual");
+    expect(inference.credential.apiKey).not.toContain("arch_virtual");
     // the client-attribution header is not a secret → stays visible
-    expect(masked.inference.customHeaders[EXTERNAL_AGENT_ID_HEADER]).toBe(
+    expect(inference.customHeaders[EXTERNAL_AGENT_ID_HEADER]).toBe(
       CLAUDE_DESKTOP_CLIENT_ID,
     );
     // non-secret fields and the original object are untouched
-    expect(masked.inference.baseUrl).toBe(profile.inference.baseUrl);
+    expect(inference.baseUrl).toBe(original.baseUrl);
     expect(masked.mcp).toEqual(profile.mcp);
-    expect(profile.inference.credential.apiKey).toBe("arch_virtual");
+    expect(original.credential.apiKey).toBe("arch_virtual");
   });
 
   it("masks the token-bearing marketplace URL but keeps its name", () => {

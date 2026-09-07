@@ -177,6 +177,33 @@ describe("PATCH /api/organization/connection-settings", () => {
     expect(clearResponse.json().connectionDefaultClientId).toBeNull();
   });
 
+  test("persists skills and LLM proxy availability on the connect page", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: {
+        connectionSkillsEnabled: false,
+        connectionLlmProxyEnabled: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().connectionSkillsEnabled).toBe(false);
+    expect(response.json().connectionLlmProxyEnabled).toBe(false);
+
+    const restored = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: {
+        connectionSkillsEnabled: true,
+        connectionLlmProxyEnabled: true,
+      },
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().connectionSkillsEnabled).toBe(true);
+    expect(restored.json().connectionLlmProxyEnabled).toBe(true);
+  });
+
   test("allows clearing defaults with null", async ({ makeAgent }) => {
     const gateway = await makeAgent({
       organizationId,

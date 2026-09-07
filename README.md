@@ -92,6 +92,9 @@ docker run \
 Open <http://localhost:3000>. Full Docker / Helm / Kubernetes instructions
 live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 
+`latest` tracks qualified stable releases; explicit `-beta.N` versions preview `main`.
+Fixes land on `main` for the next beta and are selectively backported to the supported stable line.
+
 ## Ready for production
 
 - ✅ $13.5M total funding

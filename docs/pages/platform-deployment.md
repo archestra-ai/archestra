@@ -14,17 +14,18 @@ The Archestra Platform can be deployed using Docker for development and testing,
 Pin an exact chart version or image digest in production.
 Choose a published stable version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases).
 Docker `latest` follows the qualified stable release, not ongoing development.
-Versions ending in `-beta.N` are opt-in preview builds from the rolling beta line.
-Beta version names and experimental feature flags are separate controls.
-Installing a beta version does not enable `ARCHESTRA_BETA`.
-Only qualified stable publication can update `latest`.
+Versions ending in `-beta.N` preview `main` without moving `latest`.
+`ARCHESTRA_BETA` enables experimental features, not a beta release; keep it disabled unless needed.
 
-Patch releases contain fixes. Monthly feature releases introduce new functionality after qualification.
-Only the current stable feature line receives fixes.
-The preceding line remains supported if the next feature release is delayed.
-You can keep an older version installed, but receiving fixes requires upgrading to the supported line.
+Fixes land on `main` for the next beta.
+Maintainers selectively backport them into the supported `release/X.Y` branch using `git cherry-pick -x`.
+An already-cut candidate branch receives needed fixes through separate backports, not merges of `main`.
 
-Keep `ARCHESTRA_BETA` disabled unless you explicitly want experimental features.
+Stable patches and first releases of new feature lines share one build, qualification, and approval pipeline.
+Only approved stable publication updates `latest`; "monthly" is a target cadence, not an automatic schedule.
+One published stable line receives fixes until the next qualified line replaces it.
+Older versions remain installable, but fixes require upgrading to the supported line.
+
 Back up your database before upgrading and review the release's migration notes.
 Rolling back the application does not undo database migrations.
 

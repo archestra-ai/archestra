@@ -74,10 +74,17 @@ Production users should still pin exact versions or digests.
 ## If Something Fails
 
 - **Build failure:** inspect it and rerun failed jobs in the same run when safe.
-- **Failed testing:** reject/cancel the waiting run, clear any consumed `release-as`,
-  backport the fix, and test a new version. Never reuse a version or overwrite its tag.
+- **Failed testing before approval:** reject/cancel the waiting run and delete its GitHub draft, keeping the tag.
+  Otherwise later pushes automatically recover the rejected draft.
+  Clear any consumed `release-as`, backport the fix, and test a new version.
+  Never reuse a version or overwrite its tag.
 - **Partial publication:** inspect GitHub and registries before retrying.
+  Keep the draft and rerun failed jobs in the original run using its saved artifacts.
   Never move `latest` backward or rebuild a published version.
+
+A higher stable draft blocks lower stable publication, including while qualification is pending.
+Cancel and discard an unapproved candidate before shipping an older-line fix.
+Never discard a draft after publication has started; recover that release first.
 
 <details>
 <summary>One-time setup — before enabling this process</summary>
@@ -87,8 +94,8 @@ Production users should still pin exact versions or digests.
 - [ ] Create `stable-release` with required reviewers, prevent self-review, and allow
   deployments only from `release/*`, not `main`. Auto-created environments are unprotected.
 - [ ] Protect `release/*` with PR review and required test checks.
-- [ ] Create `release/1.3` from `platform-v1.3.50`. Apply only release-tooling changes;
-  keep its manifest at `1.3.50`. Set `versioning: always-bump-patch`,
+- [ ] Create `release/1.3` from the latest published `1.3.x` tag, currently `platform-v1.3.51`.
+  Apply only release-tooling changes; keep the manifest at that tag's version. Set `versioning: always-bump-patch`,
   `prerelease: false`, and `draft: true`; remove `release-as` and `prerelease-type`.
 - [ ] On `main`, use the beta settings above, but seed `release-as: 1.4.0-beta.1`.
   Remove that override after the first beta builds.

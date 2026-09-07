@@ -268,7 +268,7 @@ export function ConnectionFlow({
         />
       )}
 
-      {/* Steps 2-4 (Claude Desktop) — review, download a config profile, import */}
+      {/* Steps 2-6 (Claude Desktop) — review, download, import, install skills, sign in */}
       {client && isConfigClient(client.id) && (
         <ConnectConfigPanel
           mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}

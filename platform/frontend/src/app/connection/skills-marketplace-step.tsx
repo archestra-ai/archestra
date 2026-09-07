@@ -12,10 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
-import {
-  SECRET_PLACEHOLDER_TOKEN,
-  SecretCopyButton,
-} from "@/components/secret-copy-button";
+import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -40,7 +37,7 @@ import {
   useSkillMarketplace,
 } from "@/lib/skills/skill-share.query";
 import { useFetchUserTokenValue } from "@/lib/user-token.query";
-import { cn, handleApiError } from "@/lib/utils";
+import { cn, handleApiError, throwOnApiError } from "@/lib/utils";
 import type { ConnectClient } from "./clients";
 import {
   computeSkillMarketplaceExpiresAt,
@@ -776,9 +773,9 @@ export type ConnectSkill = Pick<
 
 /**
  * Query over the org's full skill set, for the connect-command step's
- * per-skill picker. Soft-fails to an empty list (with the API-error
- * toast) so a skills outage degrades to "no skills ride along" instead of
- * blocking command generation.
+ * per-skill picker. Callers that prepare an artifact containing an explicit
+ * skill snapshot can opt into a loud error, rather than silently producing an
+ * artifact without the selected skills.
  *
  * `forAgentId` narrows the set to skills visible from that agent's
  * environment — the connect command passes the selected LLM proxy so only
@@ -787,6 +784,8 @@ export type ConnectSkill = Pick<
 export function useAllSkills(params?: {
   enabled?: boolean;
   forAgentId?: string | null;
+  /** Surface a catalog failure to the caller instead of returning an empty list. */
+  throwOnError?: boolean;
   /**
    * Hold the fetch back until the page has settled.
    *
@@ -805,15 +804,21 @@ export function useAllSkills(params?: {
   );
 
   return useQuery({
-    queryKey: ["skills", "connect-all", forAgentId],
-    queryFn: () => fetchAllSkills(forAgentId),
+    queryKey: [
+      "skills",
+      "connect-all",
+      forAgentId,
+      { throwOnError: params?.throwOnError ?? false },
+    ],
+    queryFn: () => fetchAllSkills(forAgentId, params?.throwOnError ?? false),
     enabled,
   });
 }
 
-/** Fetch every skill page by page; on error, toast and return what we have. */
+/** Fetch every skill page by page. */
 async function fetchAllSkills(
   forAgentId: string | null = null,
+  throwOnError = false,
 ): Promise<ConnectSkill[]> {
   const skills: ConnectSkill[] = [];
   const limit = 100;
@@ -823,6 +828,9 @@ async function fetchAllSkills(
       query: { limit, offset, forAgentId: forAgentId ?? undefined },
     });
     if (error) {
+      if (throwOnError) {
+        throwOnApiError(error, { toastOnError: false });
+      }
       handleApiError(error);
       return [];
     }

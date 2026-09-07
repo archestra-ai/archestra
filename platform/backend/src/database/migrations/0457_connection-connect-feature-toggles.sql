@@ -1,0 +1,2 @@
+ALTER TABLE "organization" ADD COLUMN "connection_skills_enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "connection_llm_proxy_enabled" boolean DEFAULT true NOT NULL;

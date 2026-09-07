@@ -159,7 +159,7 @@ export function InlineChatError({
       <Button
         variant="outline"
         size="sm"
-        className="h-7 gap-1.5"
+        className="h-7 gap-1.5 self-start"
         disabled={isRetrying}
         onClick={() => {
           setIsRetrying(true);
@@ -184,12 +184,14 @@ export function InlineChatError({
   if (slimChatErrorUi) {
     return (
       <Message from="assistant">
-        <MessageContent className={containerClassName}>
+        <MessageContent
+          className={`${containerClassName} group-[.is-assistant]:[&_p]:my-0`}
+        >
           <div className="flex items-start gap-2">
             <StatusIcon
               className={`h-4 w-4 mt-0.5 flex-shrink-0 ${iconClassName}`}
             />
-            <div className="flex-1 space-y-2">
+            <div className="flex flex-1 flex-col gap-2">
               <p className="text-sm text-foreground">{simplifiedMessage}</p>
               {trimmedSupportMessage && (
                 <p className="text-xs text-muted-foreground">
@@ -228,12 +230,14 @@ export function InlineChatError({
 
   return (
     <Message from="assistant">
-      <MessageContent className={containerClassName}>
+      <MessageContent
+        className={`${containerClassName} group-[.is-assistant]:[&_p]:my-0`}
+      >
         <div className="flex items-start gap-2">
           <StatusIcon
             className={`h-4 w-4 mt-0.5 flex-shrink-0 ${iconClassName}`}
           />
-          <div className="flex-1 space-y-2">
+          <div className="flex flex-1 flex-col gap-2">
             {supportMessage ? (
               <p className="text-sm text-foreground">{supportMessage}</p>
             ) : (

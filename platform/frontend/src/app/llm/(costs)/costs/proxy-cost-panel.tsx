@@ -43,7 +43,6 @@ export function ProxyCostPanel({
   const [authMethod, setAuthMethod] = useState<AuthMethod>();
   const [credential, setCredential] = useState<{ id: string; name: string }>();
   const [offset, setOffset] = useState(0);
-  const [groupBy, setGroupBy] = useState("credentials");
   const query = useProxyCostStatistics({
     timeframe,
     enabled,
@@ -53,14 +52,6 @@ export function ProxyCostPanel({
     limit: PAGE_SIZE,
   });
   const { data } = query;
-  const rows =
-    groupBy === "methods"
-      ? data?.methods.map((row) => ({
-          ...row,
-          credentialId: null,
-          credentialName: null,
-        }))
-      : data?.credentials;
   const reset = () => {
     setAuthMethod(undefined);
     setCredential(undefined);
@@ -72,7 +63,7 @@ export function ProxyCostPanel({
       <CardHeader>
         <CardTitle>LLM Proxy</CardTitle>
         <CardDescription>
-          Explore spend across virtual keys, OAuth, and other access methods.
+          See which keys and applications drive proxy spend.
         </CardDescription>
         {(authMethod || credential) && (
           <div className="flex items-center gap-3 text-sm">
@@ -162,41 +153,15 @@ export function ProxyCostPanel({
                 />
               </LineChart>
             </ChartContainer>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <fieldset
-                className="flex gap-1"
-                aria-label="Proxy cost breakdown"
-              >
-                <Button
-                  size="sm"
-                  variant={groupBy === "credentials" ? "secondary" : "ghost"}
-                  onClick={() => setGroupBy("credentials")}
-                >
-                  Credentials
-                </Button>
-                <Button
-                  size="sm"
-                  variant={groupBy === "methods" ? "secondary" : "ghost"}
-                  onClick={() => setGroupBy("methods")}
-                >
-                  Access methods
-                </Button>
-              </fieldset>
-              <p className="text-xs text-muted-foreground">
-                Select a {groupBy === "methods" ? "method" : "credential"} to
-                focus the trend.
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Select a credential to focus the trend.
+            </p>
             <div className="overflow-x-auto rounded-md border">
               <Table className="min-w-[680px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
-                      {groupBy === "methods" ? "Access method" : "Credential"}
-                    </TableHead>
-                    {groupBy === "credentials" && (
-                      <TableHead>Access method</TableHead>
-                    )}
+                    <TableHead>Credential</TableHead>
+                    <TableHead>Access method</TableHead>
                     <TableHead className="text-right">Requests</TableHead>
                     <TableHead className="text-right">Tokens</TableHead>
                     <TableHead className="text-right">Billed spend</TableHead>
@@ -206,22 +171,10 @@ export function ProxyCostPanel({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows?.map((row) => (
+                  {data.credentials.map((row) => (
                     <TableRow key={`${row.authMethod}:${row.credentialId}`}>
                       <TableCell className="max-w-[280px]">
-                        {groupBy === "methods" ? (
-                          <Button
-                            variant="link"
-                            className="h-auto p-0"
-                            onClick={() => {
-                              setAuthMethod(row.authMethod);
-                              setCredential(undefined);
-                              setOffset(0);
-                            }}
-                          >
-                            {METHOD_NAMES[row.authMethod]}
-                          </Button>
-                        ) : row.credentialId ? (
+                        {row.credentialId ? (
                           <Button
                             variant="link"
                             className="h-auto max-w-full p-0"
@@ -252,9 +205,7 @@ export function ProxyCostPanel({
                           </span>
                         )}
                       </TableCell>
-                      {groupBy === "credentials" && (
-                        <TableCell>{METHOD_NAMES[row.authMethod]}</TableCell>
-                      )}
+                      <TableCell>{METHOD_NAMES[row.authMethod]}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         {row.requests.toLocaleString()}
                       </TableCell>
@@ -272,7 +223,7 @@ export function ProxyCostPanel({
                 </TableBody>
               </Table>
             </div>
-            {groupBy === "credentials" && data.pagination.total > PAGE_SIZE && (
+            {data.pagination.total > PAGE_SIZE && (
               <div className="flex items-center justify-end gap-3">
                 <span className="text-sm text-muted-foreground">
                   {offset + 1}–

@@ -34,7 +34,7 @@ Reading organization-wide costs requires `llmCost:read`. See [LLM API Permission
 
 ## Proxy Cost Attribution
 
-![Proxy spend grouped by access method, with billed spend and subscription estimates](/docs/automated_screenshots/platform-costs-and-limits_proxy-attribution.webp)
+![Proxy spend by credential, with billed spend and subscription estimates](/docs/automated_screenshots/platform-costs-and-limits_proxy-attribution.webp)
 
 Virtual keys and OAuth client credentials identify individual proxy callers. Other methods group requests without naming individual credentials. OAuth sign-ins do not necessarily imply subscription billing.
 

@@ -93,13 +93,50 @@ test("filters the real API query when a credential is selected, clears it, and p
   expect(urls.at(-1)?.searchParams.has("credentialId")).toBe(false);
   expect(screen.getAllByText("$3.50").length).toBeGreaterThan(0);
   expect(screen.getByText("Subscription-covered estimate")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Access methods" }));
-  fireEvent.click(screen.getByRole("button", { name: "Virtual key" }));
-  await waitFor(() =>
-    expect(urls.at(-1)?.searchParams.get("authMethod")).toBe("virtual_key"),
+});
+
+test("shows an OAuth application's own totals when its credential is selected", async () => {
+  const appTotals = {
+    ...totals,
+    requests: 3,
+    billedCost: 1.25,
+    subscriptionCost: 0,
+  };
+  const app = {
+    ...appTotals,
+    authMethod: "oauth_client_credentials",
+    credentialId: "workflow-service",
+    credentialName: "Workflow service",
+  };
+  server.use(
+    http.get(endpoint, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      const filtered =
+        query.get("credentialId") === app.credentialId &&
+        query.get("authMethod") === app.authMethod;
+      return HttpResponse.json({
+        ...data,
+        totals: filtered ? appTotals : totals,
+        credentials: filtered ? [app] : [...data.credentials, app],
+        pagination: { total: filtered ? 1 : 2, limit: 10, offset: 0 },
+      });
+    }),
   );
-  expect(urls.at(-1)?.searchParams.has("credentialId")).toBe(false);
-  expect(urls.at(-1)?.searchParams.get("offset")).toBe("0");
+  renderPanel();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Workflow service" }),
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "Build pipeline" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(screen.queryByText("$3.50")).not.toBeInTheDocument();
+  expect(await screen.findAllByText("$1.25")).toHaveLength(2);
+  fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+  expect(
+    await screen.findByRole("button", { name: "Build pipeline" }),
+  ).toBeInTheDocument();
 });
 
 test("renders a retryable error rather than an empty usage report and recovers", async () => {

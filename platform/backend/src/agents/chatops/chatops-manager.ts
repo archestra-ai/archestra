@@ -679,13 +679,14 @@ export class ChatOpsManager {
       binding = { ...binding, agentId };
     }
 
-    // Always reply to empty Slack app mentions so users get a response even
-    // when they only tag the bot without additional text.
-    const isEmptySlackAppMention =
+    // A bare mention can arrive as either app_mention or message; ingress
+    // dedup keeps the first, so both forms must produce the same reply.
+    const isEmptySlackMention =
       provider.providerId === "slack" &&
-      message.metadata?.eventType === "app_mention" &&
+      (message.metadata?.eventType === "app_mention" ||
+        message.metadata?.botMentioned === true) &&
       !message.text.trim();
-    if (isEmptySlackAppMention) {
+    if (isEmptySlackMention) {
       // Deduplicate this early-return path so Slack retries don't produce duplicate replies.
       const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
         message.messageId,

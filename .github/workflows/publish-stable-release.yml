@@ -1,0 +1,126 @@
+name: Publish Stable Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Qualified stable version, without platform-v (for example, 1.4.0)"
+        required: true
+        type: string
+      build_run_id:
+        description: "Successful Release Please run that built this exact version"
+        required: true
+        type: string
+      manifest_sha256:
+        description: "SHA-256 of release-artifacts.json used during qualification"
+        required: true
+        type: string
+      qualification_issue:
+        description: "Public GitHub issue number containing the sanitized qualification checklist"
+        required: true
+        type: string
+      qualified:
+        description: "Final artifacts passed beta-off fresh install, populated upgrade, and core workflow checks"
+        required: true
+        default: false
+        type: boolean
+
+permissions: {}
+
+# One publisher across ALL branches: an older release must never race a newer one.
+concurrency:
+  group: publish-stable-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish qualified artifacts
+    if: ${{ github.ref == 'refs/heads/main' && inputs.qualified }}
+    environment: stable-release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # Verify the build run and its completed artifact-recording job.
+      contents: write # Publish the qualified GitHub release.
+      issues: read # Read the public qualification record.
+      id-token: write # Authenticate the existing registry publisher.
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+      QUALIFICATION_ISSUE: ${{ inputs.qualification_issue }}
+      AUX_IMAGE_REGISTRY: ${{ vars.RELEASE_AUX_IMAGE_REGISTRY }}
+      RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
+    steps:
+      - name: Checkout trusted publication tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify qualification and exact build
+        run: |
+          test "$RELEASE_FREEZE" != "true" || { echo "::error::Releases are frozen"; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$QUALIFICATION_ISSUE" =~ ^[0-9]+$ ]]
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          TAG="platform-v${VERSION}"
+          BRANCH="release/${VERSION%.*}"
+          gh api "repos/${GH_REPO}/actions/runs/${BUILD_RUN_ID}" > build-run.json
+          gh api "repos/${GH_REPO}/releases/tags/${TAG}" > release.json
+          gh api "repos/${GH_REPO}/issues/${QUALIFICATION_ISSUE}" > qualification.json
+          LATEST=$(gh api "repos/${GH_REPO}/releases/latest" --jq '.tag_name')
+          TAG_SHA=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" --jq '.object.sha')
+          BRANCH_SHA=$(gh api "repos/${GH_REPO}/git/ref/heads/${BRANCH}" --jq '.object.sha')
+          test "$TAG_SHA" = "$BRANCH_SHA" || { echo "::error::Release branch changed; qualify a new build"; exit 1; }
+          python3 .github/scripts/release-policy.py check-publication \
+            --version "$VERSION" --latest "${LATEST#platform-v}" --branch "$BRANCH" \
+            --tag-sha "$TAG_SHA" --run build-run.json --release release.json \
+            --qualification qualification.json --manifest-sha256 "$MANIFEST_SHA256"
+          # A successful no-op release-please run is NOT a successful artifact build.
+          gh api --paginate "repos/${GH_REPO}/actions/runs/${BUILD_RUN_ID}/jobs?filter=latest&per_page=100" \
+            --jq '.jobs[] | select(.name == "Record release artifacts") | .conclusion' > record-result.txt
+          test "$(cat record-result.txt)" = "success"
+          echo "RELEASE_COMMIT=$TAG_SHA" >> "$GITHUB_ENV"
+          gh release download "$TAG" --pattern release-artifacts.json --pattern "archestra-platform-${VERSION}.tgz"
+
+      - name: Authenticate to artifact registry
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Log in to Docker Hub
+        uses: ./.github/actions/docker-login
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Publish qualified chart and image aliases without rebuilding
+        run: |
+          python3 .github/scripts/release-artifacts.py publish --version "$VERSION" \
+            --manifest-sha256 "$MANIFEST_SHA256" --commit "$RELEASE_COMMIT" --run-id "$BUILD_RUN_ID"
+
+      - name: Publish stable GitHub release
+        run: |
+          if [ "$(jq -r '.draft' release.json)" = "true" ]; then
+            gh release edit "platform-v${VERSION}" --draft=false --prerelease=false --latest
+          fi
+          echo "Published platform-v${VERSION}; qualification: #${QUALIFICATION_ISSUE}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate website deployment token
+        id: website-token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}
+          owner: archestra-ai
+          repositories: website
+          permission-actions: write
+
+      - name: Refresh release website
+        env:
+          GH_TOKEN: ${{ steps.website-token.outputs.token }}
+        run: gh workflow run deploy-to-vercel.yml --repo archestra-ai/website --ref main

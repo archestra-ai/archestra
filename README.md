@@ -83,7 +83,6 @@ docker pull archestra/platform:latest
 docker run \
   -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
   -e ARCHESTRA_QUICKSTART=true \
-  -e ARCHESTRA_BETA=true \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v archestra-postgres-data:/var/lib/postgresql/data \
   -v archestra-app-data:/app/data \
@@ -112,6 +111,8 @@ live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 - 🛡️ [**Security & bug bounty**](https://archestra.ai/docs/security)
 - 🤝 [**Contributing**](https://archestra.ai/docs/contributing) —
   set up the dev env, run e2e tests, open a PR.
+- [**Developer release guide**](.github/RELEASING.md) —
+  stable branches, backports, release candidates, and qualification.
 
 Thank you for continuously making **Archestra** better — you're awesome 🫶
 

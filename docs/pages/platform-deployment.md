@@ -2,12 +2,28 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-06
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 The Archestra Platform can be deployed using Docker for development and testing, or Helm for production environments. Both deployment methods provide access to the Admin UI on port 3000 and the API on port 9000.
+
+## Stable Versions And Upgrades
+
+Pin an exact chart version or image digest in production.
+Choose a published stable version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases).
+Docker `latest` follows the qualified stable release, not ongoing development.
+Versions ending in `-rc.N` are opt-in release candidates.
+
+Patch releases contain fixes. Monthly feature releases introduce new functionality after qualification.
+Only the current stable feature line receives fixes.
+The preceding line remains supported if the next feature release is delayed.
+You can keep an older version installed, but receiving fixes requires upgrading to the supported line.
+
+Keep `ARCHESTRA_BETA` disabled unless you explicitly want experimental features.
+Back up your database before upgrading and review the release's migration notes.
+Rolling back the application does not undo database migrations.
 
 ## Docker Deployment
 
@@ -99,8 +115,11 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
+# Set this to the exact stable version you reviewed in GitHub Releases.
+export ARCHESTRA_VERSION="<stable-version>"
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --version "$ARCHESTRA_VERSION" \
   --install \
   --namespace archestra \
   --create-namespace \
@@ -122,7 +141,7 @@ The Helm chart provides extensive configuration options through values. For the 
 **Archestra Platform Settings**:
 
 - `archestra.image` - Docker image repository for the Archestra Platform (default: `archestra/platform`). See [available tags](https://hub.docker.com/r/archestra/platform/tags)
-- `archestra.imageTag` - Image tag for the Archestra Platform. New Helm releases update this value to latest available image tag.
+- `archestra.imageTag` - Platform image tag pinned by the selected chart version. Keep the default to match the chart's release.
 - `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
 - `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
 - `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options). Supports Kubernetes `$(VAR_NAME)` expansion syntax.

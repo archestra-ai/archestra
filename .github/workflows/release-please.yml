@@ -3,53 +3,8 @@ name: Release Please
 on:
   push:
     branches:
-      - main
       - "release/*"
   workflow_dispatch:
-    inputs:
-      publish_existing_release:
-        description: "Publish artifacts for an existing release instead of creating a new release-please release"
-        required: false
-        default: false
-        type: boolean
-      version:
-        description: "Existing platform version to publish, without the v prefix (for example, 1.2.59)"
-        required: false
-        type: string
-      tag_name:
-        description: "Existing release tag to publish (for example, platform-v1.2.59)"
-        required: false
-        type: string
-      publish_mcp_server_image:
-        description: "Publish the MCP server base image"
-        required: false
-        default: true
-        type: boolean
-      publish_agent_catalog_images:
-        description: "Publish the curated Agent catalog images"
-        required: false
-        default: true
-        type: boolean
-      publish_p4_shim_image:
-        description: "Publish the p4 shim image"
-        required: false
-        default: true
-        type: boolean
-      publish_platform_image:
-        description: "Publish the platform image to Docker Hub"
-        required: false
-        default: true
-        type: boolean
-      publish_helm_chart:
-        description: "Publish the platform Helm chart"
-        required: false
-        default: true
-        type: boolean
-      finalize_github_release:
-        description: "Un-draft the GitHub release after selected artifacts publish"
-        required: false
-        default: true
-        type: boolean
 
 permissions: {}
 
@@ -62,6 +17,7 @@ concurrency:
 jobs:
   release-please:
     name: Release Please
+    if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to update manifests and release metadata in the repository.
@@ -87,6 +43,22 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
+      - name: Validate explicit release request
+        id: policy
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
+        run: |
+          if [ "$RELEASE_FREEZE" = "true" ]; then
+            echo "::error::Releases are frozen."
+            exit 1
+          fi
+          LATEST=$(gh api "repos/${GH_REPO}/releases/latest" --jq '.tag_name')
+          python3 .github/scripts/release-policy.py check \
+            --branch "$BRANCH" --latest "${LATEST#platform-v}" >> "$GITHUB_OUTPUT"
+
       # release-please runs in TWO invocations (releases first, then PRs) instead of one.
       # A single invocation creates the GitHub release for a just-merged release PR as a
       # DRAFT (no git tag yet) and then immediately builds the next release PR in the same
@@ -98,7 +70,6 @@ jobs:
       # the version calculation is always anchored to the real latest release.
       - name: Create releases for merged release PRs
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        if: ${{ !inputs.publish_existing_release }}
         id: release-please
         with:
           token: ${{ steps.generate-token.outputs.token }}
@@ -107,10 +78,8 @@ jobs:
           target-branch: ${{ github.ref_name }}
           skip-github-pull-request: true
 
-      # release-please creates the GitHub release as a DRAFT ("draft": true in
-      # release-please-config.json) so it stays hidden until every artifact is built and
-      # pushed. It is published (draft -> published) by the publish-github-release job
-      # once all artifacts are ready.
+      # All releases start as drafts. RCs publish after artifacts are ready;
+      # stable releases additionally require the Publish Stable Release workflow.
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
       # feature rejects that ("state cannot be changed when release is immutable", HTTP
@@ -123,15 +92,17 @@ jobs:
       # versions). So we create the tag ourselves, pinned to the release commit, before
       # the next release PR is built below.
       - name: Create git tag for draft release
-        if: ${{ steps.release-please.outputs['platform--release_created'] == 'true' && !inputs.publish_existing_release }}
+        if: ${{ steps.release-please.outputs['platform--release_created'] == 'true' }}
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
-          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_SHA: ${{ steps.release-please.outputs['platform--sha'] }}
         run: |
+          test "$RELEASE_SHA" = "$GITHUB_SHA" || { echo "::error::Release commit differs from this run; dispatch from the release commit"; exit 1; }
           if gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" >/dev/null 2>&1; then
-            echo "Tag ${TAG_NAME} already exists; nothing to do."
+            EXISTING_SHA=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" --jq '.object.sha')
+            test "$EXISTING_SHA" = "$RELEASE_SHA"
           else
             gh api "repos/${GH_REPO}/git/refs" \
               -f ref="refs/tags/${TAG_NAME}" \
@@ -141,7 +112,8 @@ jobs:
 
       - name: Create or update the next release PR
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        if: ${{ !inputs.publish_existing_release }}
+        # A consumed release-as request must never generate another PR for the same version.
+        if: ${{ steps.policy.outputs.create_pr == 'true' }}
         id: release-please-pr
         with:
           token: ${{ steps.generate-token.outputs.token }}
@@ -168,26 +140,11 @@ jobs:
           ACTION_TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          INPUT_PUBLISH_EXISTING_RELEASE: ${{ inputs.publish_existing_release }}
-          INPUT_TAG_NAME: ${{ inputs.tag_name }}
-          INPUT_VERSION: ${{ inputs.version }}
+          REQUESTED_VERSION: ${{ steps.policy.outputs.requested }}
         run: |
-          if [ "${INPUT_PUBLISH_EXISTING_RELEASE}" = "true" ]; then
-            if [ -z "${INPUT_VERSION}" ]; then
-              echo "::error::version is required when publish_existing_release is true"
-              exit 1
-            fi
-
-            TAG_NAME="${INPUT_TAG_NAME:-platform-v${INPUT_VERSION}}"
-            gh release view "${TAG_NAME}" --json tagName,isDraft,targetCommitish
-
-            {
-              echo "should_publish=true"
-              echo "version=${INPUT_VERSION}"
-              echo "tag_name=${TAG_NAME}"
-              echo "checkout_ref=${TAG_NAME}"
-            } >> "${GITHUB_OUTPUT}"
-            exit 0
+          if [ "$ACTION_RELEASE_CREATED" = "true" ] && [ "$ACTION_VERSION" != "$REQUESTED_VERSION" ]; then
+            echo "::error::Release-please produced a version other than the reviewed request."
+            exit 1
           fi
 
           {
@@ -199,7 +156,7 @@ jobs:
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_mcp_server_image) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
     needs:
       - release-please
@@ -216,7 +173,7 @@ jobs:
 
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_agent_catalog_images) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/build-agent-catalog-images.yml
     needs:
       - release-please
@@ -235,7 +192,7 @@ jobs:
     name: Build and push p4 Shim Docker image
     # The backend defaults the Perforce permission-sync shim pod to
     # p4-shim:<appVersion>, so the image ships with every platform release.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_p4_shim_image) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/build-p4-shim-docker-image.yml
     needs:
       - release-please
@@ -276,7 +233,7 @@ jobs:
     # The tag is baked as a default value at build time, so the MCP server image doesn't need to
     # exist yet. Both images are built in parallel and the publish-github-release job gates on
     # all artifacts being ready before un-drafting the release.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_platform_image) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/build-dockerhub-image.yml
     needs:
       - release-please
@@ -301,7 +258,7 @@ jobs:
     # The Helm chart only references the version tag (not image content), so it can run
     # in parallel with Docker image builds. The publish-github-release job ensures all
     # artifacts are ready before the release is made visible.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_helm_chart) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
@@ -310,17 +267,17 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       version: ${{ needs.release-please.outputs.platform_version }}
-      push_chart: true
+      # Stable charts remain workflow artifacts until explicit qualification/publication.
+      push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-rc.') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-github-release:
-    name: Publish GitHub Release
-    # Un-drafts the GitHub release and triggers the website deploy only after ALL artifacts
-    # (MCP server image, Agent images, p4 shim image, sandbox base image, platform Docker image, Helm chart) are published.
-    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.finalize_github_release) && (needs.build-and-push-mcp-server-docker-image.result == 'success' || needs.build-and-push-mcp-server-docker-image.result == 'skipped') && (needs.build-and-push-agent-catalog-images.result == 'success' || needs.build-and-push-agent-catalog-images.result == 'skipped') && (needs.build-and-push-p4-shim-docker-image.result == 'success' || needs.build-and-push-p4-shim-docker-image.result == 'skipped') && (needs.build-and-push-sandbox-base-docker-image.result == 'success' || needs.build-and-push-sandbox-base-docker-image.result == 'skipped') && (needs.build-and-push-platform-docker-image-to-dockerhub.result == 'success' || needs.build-and-push-platform-docker-image-to-dockerhub.result == 'skipped') && (needs.publish-platform-helm-chart.result == 'success' || needs.publish-platform-helm-chart.result == 'skipped') }}
+    name: Record release artifacts
+    # No skipped build is acceptable. Stable releases stay draft for qualification.
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
     needs:
       - release-please
@@ -331,7 +288,8 @@ jobs:
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
     permissions:
-      contents: write # Required to publish the GitHub release draft.
+      actions: read # Download the packaged chart from this run.
+      contents: write # Required to attach the artifact manifest and publish RCs.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -346,44 +304,21 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
-      # Publish the draft (draft -> published) now that all artifacts are ready. This is
-      # the one release-state transition GitHub's immutable-releases feature allows, and
-      # it is what locks the release as immutable. Guarded so re-runs / the
-      # publish_existing_release path don't 422 on an already-published release.
-      - name: Publish release
+      - name: Record artifacts and publish RC only
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
+          VERSION: ${{ needs.release-please.outputs.platform_version }}
+          AUX_IMAGE_REGISTRY: ${{ vars.RELEASE_AUX_IMAGE_REGISTRY }}
+          ACTIONS_TOKEN: ${{ github.token }}
         run: |
-          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq '.isDraft')
-          if [ "$IS_DRAFT" = "true" ]; then
-            gh release edit "$TAG_NAME" --draft=false
-            echo "Published release $TAG_NAME."
-          else
-            echo "Release $TAG_NAME is already published; skipping."
+          GH_TOKEN="$ACTIONS_TOKEN" gh run download "$GITHUB_RUN_ID" --name release-helm-chart
+          python3 .github/scripts/release-artifacts.py record --version "$VERSION" --output release-artifacts.json
+          gh release upload "$TAG_NAME" release-artifacts.json "archestra-platform-${VERSION}.tgz" --clobber
+          if [[ "$VERSION" == *-rc.* ]]; then
+            gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
           fi
-
-      # Dispatches the website repo's CLI deploy workflow. A Vercel deploy hook
-      # cannot be used: hooks create Git-integration deployments, which Vercel
-      # blocks when the website's head commit author is not a Vercel team member.
-      - name: Generate website deployment token
-        id: generate-website-token
-        uses: ./.github/actions/github-app-token
-        with:
-          app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}
-          owner: archestra-ai
-          repositories: website
-          permission-actions: write
-
-      - name: Trigger website deploy
-        env:
-          GH_TOKEN: ${{ steps.generate-website-token.outputs.token }}
-        run: |
-          gh workflow run deploy-to-vercel.yml \
-            --repo archestra-ai/website \
-            --ref main
 
   notify-release-failure:
     name: Notify release failure
@@ -391,7 +326,7 @@ jobs:
     # release (e.g. an image or chart that never published) is surfaced immediately
     # instead of failing silently.
     #
-    # The release-please job runs in two contexts: on every push to main it just rebuilds
+    # The release-please job runs in two contexts: on release branch pushes it rebuilds
     # the release PR (should_publish=false), and only when a release PR is merged does it
     # actually cut a release (should_publish=true). We gate on platform_should_publish so
     # transient flakes in the former context (e.g. release-please's "other side closed"
@@ -401,6 +336,7 @@ jobs:
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
+      - build-and-push-agent-catalog-images
       - build-and-push-p4-shim-docker-image
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image-to-dockerhub

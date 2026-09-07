@@ -364,16 +364,16 @@ jobs:
         run: |
           test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
           if [[ "$VERSION" != *-beta.* ]]; then
-            if LATEST=$(gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name' 2>/dev/null); then
-              test "$(printf '%s\n' "$VERSION" "${LATEST#platform-v}" | sort -V | tail -1)" = "$VERSION" \
-                || { echo "::error::A newer stable release already exists"; exit 1; }
-            fi
-            while IFS= read -r DRAFT_TAG; do
-              [[ "$DRAFT_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-              DRAFT_VERSION=${DRAFT_TAG#platform-v}
-              test "$(printf '%s\n' "$VERSION" "$DRAFT_VERSION" | sort -V | tail -1)" = "$VERSION" \
-                || { echo "::error::Incomplete stable release ${DRAFT_TAG} must be recovered before publishing ${TAG_NAME}"; exit 1; }
-            done < <(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.draft and (.prerelease | not)) | .tag_name')
+            # Fetch every page before comparing: process substitution hides API failures.
+            # An empty successful list permits the first stable release without a 404 exception.
+            STABLE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.prerelease | not) | .tag_name') \
+              || { echo "::error::Cannot verify stable release ordering; retry when the release list is available"; exit 1; }
+            while IFS= read -r RELEASE_TAG; do
+              [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+              RELEASE_VERSION=${RELEASE_TAG#platform-v}
+              test "$(printf '%s\n' "$VERSION" "$RELEASE_VERSION" | sort -V | tail -1)" = "$VERSION" \
+                || { echo "::error::Newer stable release ${RELEASE_TAG} exists (published or draft); cannot publish ${TAG_NAME}"; exit 1; }
+            done <<< "$STABLE_TAGS"
           fi
 
       - name: Download saved chart

@@ -18,7 +18,6 @@ Select a published release from [GitHub Releases](https://github.com/archestra-a
 
 - **Stable:** Docker tag `latest` and default Helm charts track the current stable release.
 - **Beta:** Version tags ending in `-beta.N` preview upcoming features from the main branch.
-- **Experimental features:** The `ARCHESTRA_BETA` environment variable turns on experimental features in the application. It does not change the release version.
 
 Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next beta release.
 
@@ -120,8 +119,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-# Set this to the exact stable version you reviewed in GitHub Releases.
-export ARCHESTRA_VERSION="<stable-version>"
+export ARCHESTRA_VERSION="1.3.51" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -923,7 +921,7 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:<platform-version>`, including beta versions.
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.3.51` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`

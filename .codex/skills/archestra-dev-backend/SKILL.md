@@ -34,8 +34,8 @@ Use this skill before changing files under `platform/backend/` (except unit test
 - Plugins are typed as `FastifyPluginAsyncZod` (fastify-type-provider-zod); schemas are Zod.
 - Wrap response schemas with `constructResponseSchema` from `@/types` for consistent 400/401/403/404/500 responses.
 - Errors: `throw new ApiError(status, message)` (from `@/types`) only — never `reply.status().send(...)`; the central error handler formats `{ error: { message, type } }`.
-- Routes under `/api/` are behind the auth middleware: `request.user` and `request.organizationId` are guaranteed — no redundant null checks.
-- Pagination: `PaginationQuerySchema` + `createPaginatedResponseSchema` from `@archestra/shared`.
+- Routes that pass ordinary API authentication have `request.user` and `request.organizationId` — no redundant null checks. Public, webhook, and callback routes exempted in `backend/src/auth/fastify-plugin/middleware.ts` follow their own authentication contracts; the `/api/` prefix alone is not a guarantee.
+- Pagination: use `PaginationQuerySchema` + `createPaginatedResponseSchema` from `@archestra/shared` for bounded tables needing page counts. For write-hot or unbounded logs, use `CursorQuerySchema` + `createCursorPaginatedResponseSchema`; fetch `limit + 1` rows and do not calculate totals.
 - Sorting: `SortingQuerySchema` or `createSortingQuerySchema` from `@/types`.
 
 ## Data access

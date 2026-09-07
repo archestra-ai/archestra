@@ -11,7 +11,7 @@ Run commands from `platform/` unless specifically instructed otherwise. Run a si
 
 `backend/vitest.config.ts` splits test files into two projects at config-load time by grepping file content:
 
-- **`clean`** — files with NO `vi.mock`/`vi.doMock`/`vi.hoisted` run with `isolate: false`: worker threads share the module cache, so the backend module graph is imported once per worker instead of once per file. This is the fast path.
+- **`clean`** — files with NO `vi.mock`/`vi.doMock`/`vi.hoisted` run with `isolate: false`: files in the same worker process share the module cache, so the backend module graph is imported once per worker instead of once per file. This is the fast path.
 - **`mocked`** — files using module mocking keep full isolation, because Vitest never resets the module-mock registry between files in a shared worker (vitest-dev/vitest#4894).
 
 Consequences:
@@ -39,7 +39,7 @@ test("...", async () => {
 
 Unhandled requests fail the test loudly. The helper's lifecycle is per test (it must be — the shared setup restores `globalThis.fetch` after every test); don't hand-roll `setupServer` with `beforeAll` listen.
 
-Wire-level gotchas learned in past conversions: clients retry — gitbeaker retries 429/502 up to 10× with backoff and openai retries 429/5xx (serve a non-retried status like 500, or account for the retries); MSW 2.x route paths use path-to-regexp 8, which rejects RegExp paths and bare `*` — use `:param` segments (URL-encoded slashes like `%2F` stay one segment and decode in the param).
+Wire-level gotchas learned in past conversions: clients retry — gitbeaker retries 429/502 up to 10× with backoff and openai retries 429/5xx (choose a status that the specific client does not retry, or configure/account for its retries; OpenAI retries 500); MSW 2.x route paths use path-to-regexp 8, which rejects RegExp paths and bare `*` — use `:param` segments (URL-encoded slashes like `%2F` stay one segment and decode in the param).
 
 ## Module mocking rules
 

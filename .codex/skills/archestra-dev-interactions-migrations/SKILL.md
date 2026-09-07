@@ -16,18 +16,23 @@ apply to any other very large, write-hot table.
 
 ## Safe vs risky operations
 
-Safe (fast, metadata-only, no table rewrite in PostgreSQL 11+):
+Fast once the required lock is acquired (metadata-only, no table rewrite in PostgreSQL 11+):
 
 - `ADD COLUMN ... DEFAULT <constant> NOT NULL` — the default is stored as
-  metadata; existing rows are not rewritten. This is instant regardless of table
-  size. (The billing_mode column was added this way.)
+  metadata; existing rows are not rewritten. This avoids a table-size-dependent
+  rewrite. (The billing_mode column was added this way.)
 - `ADD COLUMN` nullable, with no default.
+- Nonvolatile defaults such as `now()` also avoid the rewrite; `now()` is stable, not volatile.
 - `DROP DEFAULT`, `SET DEFAULT <constant>`, renaming a column.
 
-Risky (rewrites the whole table or takes a write-blocking lock — scales with
-table size):
+These operations still acquire table locks: ordinary `ADD COLUMN` requires
+`ACCESS EXCLUSIVE`, even without a rewrite. Check long-running transactions and
+use a bounded `lock_timeout` rather than assuming metadata-only means lock-free.
+See the [PostgreSQL ALTER TABLE reference](https://www.postgresql.org/docs/17/sql-altertable.html).
 
-- `ADD COLUMN ... DEFAULT <volatile expr>` (e.g. `now()`, `gen_random_uuid()`) —
+Operations with potentially table-size-dependent work:
+
+- `ADD COLUMN ... DEFAULT <volatile expr>` (e.g. `clock_timestamp()`, `gen_random_uuid()`) —
   rewrites every row.
 - `ALTER COLUMN ... TYPE ...` — usually rewrites the table.
 - `SET NOT NULL` on an existing column — full scan to validate.
@@ -125,8 +130,8 @@ below grant nothing on their own.
    ```
 
 5. Read the numbers:
-   - Metadata-only changes (safe `ADD COLUMN`) are effectively instant no matter
-     how big the table is — ship them normally.
+   - Metadata-only changes avoid a table rewrite, but can still wait for a
+     conflicting transaction. Assess lock waits as well as table size.
    - A table rewrite or a non-concurrent index build scales with heap/index size.
      As a rough order of magnitude, an index build reads the whole table, sorts,
      and writes the index — expect it to be at least as slow as a full scan of

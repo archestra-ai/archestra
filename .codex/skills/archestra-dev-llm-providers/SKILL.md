@@ -9,7 +9,7 @@ Use this skill before adding an LLM provider or changing provider translation, s
 
 ## Provider surface map
 
-One provider touches all of these (use `github-copilot` as the worked example — it is OpenAI-compatible, so it follows the default path; `microsoft-365-copilot` is the most recent full addition and shows the harder shape, with its own graph translator):
+For a chat-capable provider, check all of these (use `github-copilot` as the worked example — it is OpenAI-compatible, so it follows the default path; `microsoft-365-copilot` shows the harder shape, with its own graph translator):
 
 - `backend/src/types/llm-providers/<provider>/` — `api.ts`, `messages.ts`, `tools.ts`, `index.ts` (some also have `models.ts`). `index.ts` default-exports a namespace (e.g. `GithubCopilot`) with `API`/`Messages`/`Tools` plus a `Types` sub-namespace; register it in `types/llm-providers/index.ts`. OpenAI-compatible providers re-export OpenAI schemas with `.passthrough()`.
 - `backend/src/routes/proxy/adapters/<provider>.ts` — exports `<provider>AdapterFactory`; re-export it from `adapters/index.ts`.
@@ -20,6 +20,8 @@ One provider touches all of these (use `github-copilot` as the worked example �
 - Frontend: provider key management at `frontend/src/app/llm/model-providers/page.tsx` + `frontend/src/components/create-llm-provider-api-key-dialog.tsx`; provider icon at `frontend/public/icons/<provider>.png`; model pickers (`components/llm-model-select.tsx`, `components/chat/model-selector.tsx`) use `providerDisplayNames`.
 - Also: `backend/src/config.ts` + `.env.example` for base-URL/key env vars, `../docs/pages/platform-supported-llm-providers.md`.
 
+For embeddings-only providers, follow `voyage`: register the provider and model fetcher, wire the embedding client, and add it to `EMBEDDING_ONLY_PROVIDER_LIST` in `shared/model-constants.ts`. Chat surfaces use `providerSupportsChat` and `ChatProvider`; do not invent chat routes, adapters, or chat-matrix entries for a provider with no chat API.
+
 ## Default path: OpenAI-compatible
 
 - Most new providers are OpenAI-compatible. Do not hand-roll a translator: call `createOpenAiCompatibleAdapterFactory` from `adapters/openai-compatible-adapter.ts` with `provider`, `interactionType`, `getBaseUrl`, and `createClient` — it reuses `OpenAIRequestAdapter`/`OpenAIResponseAdapter`/`OpenAIStreamAdapter` wholesale. See `adapters/deepseek.ts` (minimal) and `adapters/github-copilot.ts` (custom auth via a fetch wrapper, since `createClient` is synchronous).
@@ -27,7 +29,7 @@ One provider touches all of these (use `github-copilot` as the worked example �
 
 ## Guard rails
 
-- `backend/src/routes/proxy/routes/provider-matrix.test.ts` — `providerConfigsByProvider` is `satisfies Record<SupportedProvider, ProviderTestConfig>`, so adding a provider to the enum without a matrix entry (route plugin + adapter factory + endpoints) fails typecheck. The suite then exercises every provider's real route with a mocked client: declared-tool persistence, execution IDs, streaming tool calls, cost-optimized model substitution, TOON compression, and limit blocking.
+- `backend/src/routes/proxy/routes/provider-matrix.test.ts` — `providerConfigsByProvider` is `satisfies Record<ChatProvider, ProviderTestConfig>`, so adding a chat-capable provider without a matrix entry (route plugin + adapter factory + endpoints) fails typecheck. The suite then exercises every chat provider's real route with a mocked client: declared-tool persistence, execution IDs, streaming tool calls, TOON compression, and limit blocking.
 - The `modelFetchers` record (above) enforces the same exhaustiveness for model listing.
 
 ## Translation gotchas (real handling, check before "fixing")

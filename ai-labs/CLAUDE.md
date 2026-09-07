@@ -1,7 +1,7 @@
 # Authoring bench tasks
 
 Conventions for writing/editing a `tasks/<id>/` task. Mechanics (env-var contract, `[state].rest`,
-file layout, lifecycle) live in `../README.md` -- this file is the discipline, not the plumbing.
+file layout, lifecycle) live in `README.md` -- this file is the discipline, not the plumbing.
 
 ## The prompt is a real user's ask
 
@@ -51,14 +51,18 @@ behavior when unset:
   other container env vars — feature flags — do flow through).
 
 Gotchas: the bench resolves its Postgres from `ARCHESTRA_BENCH_DATABASE_URL` and creates its own
-per-run DB on it. The sandbox (`run_command`) is gated only by a valid Dagger host
-(`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`); the `basic` env needs no other env to expose Agent
-Skills and Environments. The prod image runs `NODE_ENV=production`, where better-auth
+per-run DB on it. The bench supplies an explicit Dagger host
+(`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`) for sandbox execution, but
+`ARCHESTRA_CODE_RUNTIME_ENABLED=false` disables it even when that host is set.
+Outside this explicit-host mode, `ARCHESTRA_CODE_RUNTIME_ENABLED=true` plus a configured
+orchestrator enables code-managed engines; see `platform/backend/src/config.ts` from the repo root.
+
+The prod image runs `NODE_ENV=production`, where better-auth
 hard-exits on its default secret — set `ARCHESTRA_AUTH_SECRET` (the entrypoint generates a throwaway
 one per run; the DB is fresh and dropped each run, so the value never matters).
 
 ## Skills are pinned, not live
 
-Benchmark-owned skills are imported by pinned GitHub commit SHA in `../envs/basic.toml`, not from the
-working tree. After editing a skill under `../skills/`, commit + push, then repin its `ref`. Edits do
+Benchmark-owned skills are imported by pinned GitHub commit SHA in `envs/basic.toml`, not from the
+working tree. After editing a skill under `skills/`, commit + push, then repin its `ref`. Edits do
 not take effect until repinned.

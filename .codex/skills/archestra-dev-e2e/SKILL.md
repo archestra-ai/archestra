@@ -11,14 +11,26 @@ Run commands from `platform/` unless specifically instructed otherwise.
 
 ## Commands
 
+For the Docker-lite environment used by most CI specs:
+
 ```bash
-pnpm test:e2e
+pnpm test:e2e:lite:up
+pnpm test:e2e:lite -- --project=chromium tests/agents.spec.ts
+pnpm test:e2e:lite:down
+```
+
+The harness refuses to start if another stack holds its ports. Stop that stack before starting lite.
+
+For an existing Tilt development stack:
+
+```bash
 tilt trigger e2e-test-dependencies
+pnpm test:e2e
 ```
 
 `tilt trigger e2e-test-dependencies` starts the e2e dependency stack via the `helm/e2e-tests` chart: WireMock, Keycloak (with pre-configured test users), Vault, and mock MCP servers. It does not seed the database.
 
-In development, e2e tests use the development database. Local data can make e2e tests fail locally.
+Against the Tilt stack, e2e tests use the development database. Local data can make e2e tests fail locally.
 
 Check WireMock health at `http://localhost:9092/__admin/health`.
 
@@ -37,18 +49,29 @@ ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092/gemini
 ## Local and CI setup
 
 - Local e2e dependencies deploy through `dev/Tiltfile.test`, which installs the `helm/e2e-tests` chart (`helm upgrade --install e2e-tests`) and port-forwards WireMock to `9092`.
-- CI uses a kind cluster and Helm deployment.
+- CI splits into lite (a quickstart-mode container with sidecars), host-Kubernetes (Kind + Helm for host kubectl, NetworkPolicy, and Helm fixtures), and pristine quickstart (keyless onboarding). See `.github/workflows/platform-e2e-tests.yml` from the repo root.
+- Merge-queue/label runs cover Chromium; nightly/manual runs additionally cover the Firefox/WebKit-tagged specs.
 - CI kind config is `.github/kind.yaml`.
 - CI Helm values are `.github/values-ci.yaml`.
 - CI NodePort services use frontend `3000`, backend `9000`, and metrics `9050`.
 - `drizzle-kit check`, codegen, and db-migration validation run in the `platform-lint-and-unit-tests` job of `.github/workflows/on-pull-requests.yml`, not in the e2e workflow — a red check there is not an e2e failure.
+
+## Registering a spec
+
+`e2e-tests/playwright.config.ts` uses explicit `testMatch` lists. Add a new spec to the matching list (`uiTestMatch`, `apiTestMatch`, `apiK8sTestMatch`, or its dedicated project); naming it `*.spec.ts` alone does not register it. Confirm discovery without starting the stack:
+
+```bash
+pnpm --dir e2e-tests exec playwright test --list --project=chromium tests/your-spec.spec.ts
+```
+
+Choose the project that should run the spec and confirm it appears in the output.
 
 ## Fixtures
 
 - Use the Playwright fixtures pattern.
 - API fixtures live in `e2e-tests/tests/api-fixtures.ts` — import relative to the spec's location (`./api-fixtures` from `tests/`, `../api-fixtures` from a subdirectory like `tests/llm-proxy/`). They include `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, and `deleteTrustedDataPolicy`.
 - UI fixtures live in `e2e-tests/fixtures.ts` — import relative to the spec's location (`../fixtures` from `tests/`). They include `goToPage` and `makeRandomString`.
-- Pure API tests (no browser needed) belong in the backend vitest suite as route tests, not in Playwright (#6155). Keep Playwright specs for flows that exercise the UI.
+- API behavior that `app.inject` + PGlite can cover belongs in backend Vitest route tests (#6155). Keep Playwright for browser flows and behavior requiring the real stack, such as host kubectl, NetworkPolicy enforcement, or Helm fixtures.
 
 Example:
 

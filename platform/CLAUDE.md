@@ -21,7 +21,7 @@
 
 ## Docs
 
-Docs are stored at ./docs
+Docs are stored at `../docs/`.
 Use the `archestra-docs-writer` skill before changing any docs files.
 
 ## Project Skills
@@ -76,7 +76,8 @@ pnpm dev                                # Start all workspaces
 pnpm run prepare                        # Install the husky pre-commit hook. `tilt up` does this for you;
                                         # run it by hand if you skip Tilt. `pnpm install` will NOT do it,
                                         # because ignoreScripts blocks lifecycle scripts (see below).
-pnpm lint                               # Lint and auto-fix
+pnpm lint                               # Check lint
+pnpm lint:fix                           # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests
 pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
@@ -284,7 +285,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing. For module mocking and global stubs, load the `archestra-dev-backend-tests` skill: mock-free files run in a shared-worker fast path, `@/auth`/`@/logging` mocks go through their `__mocks__` dirs (bare `vi.mock("@/auth")`), `@/config` through `configModuleMock(overrides)`, and `vi.stubGlobal` must be (re-)applied in `beforeEach` because stubs auto-revert after every test
 - **API Response Standardization**: Use `constructResponseSchema` helper for all routes to ensure consistent error responses (400, 401, 403, 404, 500)
 - **Error Handling**: Always use `throw new ApiError(statusCode, message)` for error responses - never use manual `reply.status().send({ error: ... })`. The centralized Fastify error handler formats all errors consistently as `{ error: { message, type } }` and logs appropriately.
-- **Protected Routes & Authentication**: Routes under `/api/` are protected by the auth middleware which guarantees `request.user` and `request.organizationId` exist. Never add redundant null checks like `if (!request.organizationId) throw new ApiError(401, "Unauthorized")` - just use `request.organizationId` directly. The middleware handles authentication; routes handle authorization and business logic.
+- **Protected Routes & Authentication**: Routes that pass ordinary API authentication have `request.user` and `request.organizationId`. Public, webhook, and callback routes exempted in `backend/src/auth/fastify-plugin/middleware.ts` follow their own authentication contracts; the `/api/` prefix alone is not a guarantee. On ordinarily authenticated routes, do not add redundant null checks like `if (!request.organizationId) throw new ApiError(401, "Unauthorized")` - just use `request.organizationId` directly. The middleware handles authentication; routes handle authorization and business logic.
 - **Type Organization**: Keep database schemas in `database/schemas/`, extract business types to dedicated `types/` files
 - **Pagination**: Use `PaginationQuerySchema` and `createPaginatedResponseSchema` for ordinary bounded tables that need page counts. Use `CursorQuerySchema` and `createCursorPaginatedResponseSchema` for write-hot or unbounded logs; keyset queries must fetch `limit + 1` rows and must not calculate totals.
 - **Sorting**: Use `SortingQuerySchema` or `createSortingQuerySchema` for standardized sorting parameters
@@ -345,7 +346,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **MCP Server Runtime**:
 
 - Local MCP servers run in K8s pods (one pod per server) when K8s is configured
-- Feature flag `orchestratorK8sRuntime` returned by `/api/features` endpoint
+- Feature flag `orchestratorK8sRuntime` returned by `/api/config` endpoint
 - Feature enabled when EITHER ARCHESTRA_ORCHESTRATOR_KUBECONFIG or ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is configured
 - Frontend disables local MCP server functionality when feature is off (shows tooltip explaining orchestratorK8sRuntime requirement)
 - Automatic pod lifecycle management (start/restart/stop)
@@ -358,7 +359,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 - Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
 - When using Docker image, command is optional (uses image's default CMD if not specified)
-- Runtime manager at `backend/src/mcp-server-runtime/`
+- Runtime manager at `backend/src/k8s/mcp-server-runtime/`
 
 **Configuring Transport Type**:
 

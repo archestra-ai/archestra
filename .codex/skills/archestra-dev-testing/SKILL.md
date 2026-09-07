@@ -85,12 +85,14 @@ none.
 ### E2E tests, sparingly
 
 E2E is the most expensive level: slow, flaky-prone, and delicate to maintain.
-Add one only for a **happy path** through a flow that no cheaper level can
-cover — a real browser against a real stack, or real Kubernetes behaviour.
+Use E2E for a **happy path** that no cheaper level can cover — a real browser
+against a real stack, or real Kubernetes behaviour. Include failure/denial cases
+when only real infrastructure can establish the contract, such as NetworkPolicy
+enforcement.
 
-Do not use e2e for error branches, permission matrices, validation messages, or
-field-level behaviour. Those belong in route-level or MSW-backed integration
-tests, where they run in milliseconds and fail legibly.
+Use route-level or MSW-backed integration tests for error branches, permission
+matrices, validation messages, and field-level behaviour when those levels
+preserve the boundary under test.
 
 When a bug fix needs pinning, ask whether an integration test would catch the
 same regression. It usually would.
@@ -239,5 +241,5 @@ own way to fail".
    away the thing under test to get there.
 4. Assert observable behaviour: responses, rendered output, persisted rows,
    emitted events. Not internal shape, not styling, not that a prop arrived.
-5. E2E only for a happy path nothing cheaper can reach.
+5. E2E for happy paths or infrastructure contracts nothing cheaper can reach.
 6. If it can't be made to pass, don't commit it skipped.

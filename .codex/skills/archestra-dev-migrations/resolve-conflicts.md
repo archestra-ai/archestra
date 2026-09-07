@@ -6,9 +6,9 @@ after taking main's migration metadata. Never edit main's migrations, and do
 not hand-renumber a migration unless regeneration is impossible.
 
 `pnpm db:generate` emits ONLY schema DDL diffed against the latest snapshot.
-Any data-migration tail (UPDATE, INSERT, DO $$ blocks, mutating CTEs) is NOT
-regenerated. The procedure below regenerates fresh DDL against main's
-snapshot, then re-appends your saved data-migration tail.
+Data changes (including DELETE) and custom DDL not represented in the Drizzle
+schema are NOT regenerated. Back up the original SQL and preserve those
+operations when regenerating against main's snapshot.
 
 All paths below are relative to the **repo root**, not `platform/`. Run the
 shell commands from the repo root unless a step explicitly `cd`s elsewhere
@@ -24,26 +24,20 @@ shell commands from the repo root unless a step explicitly `cd`s elsewhere
 
 ## Procedure
 
-### 1. Extract your data-migration tail
+### 1. Preserve your manually authored SQL
 
 Read `platform/backend/src/database/migrations/<COLLIDING>_<your_name>.sql`.
 Copy the whole file to `/tmp/<COLLIDING>_<your_name>.original.sql` as a
-backup. Then save just the data-migration statements to
-`/tmp/<your_name>.data.sql`, each separated by `--> statement-breakpoint`.
+backup. Save operations that schema generation cannot reproduce to
+`/tmp/<your_name>.custom.sql`, separated by `--> statement-breakpoint`.
 
-Statements to save (Drizzle does NOT regenerate these):
-- `UPDATE …`
-- `INSERT INTO …` (when used for data, not as part of `CREATE TABLE`)
-- `DO $$ … END $$;` blocks
-- `WITH … (INSERT|UPDATE|DELETE) …` CTEs
+These include UPDATE, INSERT, standalone DELETE, DO blocks, mutating CTEs,
+and custom DDL such as extension creation. Do not discard an operation just
+because it starts with ALTER or CREATE: verify that the Drizzle schema and
+regenerated SQL preserve its meaning, including renames. Note ordering
+requirements, such as a backfill before a constraint or a cleanup before a drop.
 
-Statements to DISCARD (Drizzle WILL regenerate these):
-- `ALTER TABLE …`, `ALTER COLUMN …`
-- `CREATE TABLE/INDEX/TYPE/EXTENSION …`
-- `DROP TABLE/COLUMN/INDEX …`
-
-If the file has no data-migration tail, `/tmp/<your_name>.data.sql` is empty
-and step 5 is a no-op.
+If no custom operations remain, the saved file is empty.
 
 ### 2. Take main's side for the conflicted journal + snapshot
 
@@ -90,23 +84,23 @@ resolving with `git checkout --ours` or `--theirs` just-enough-to-parse is
 fine; for hand-written code, resolve properly. Run `git status` and check
 for any `UU` entries; resolve each before continuing.
 
-### 3. Delete your old generated migration artifacts
+### 3. Delete only your obsolete migration SQL
 
 ```
 git rm -f \
-  platform/backend/src/database/migrations/<COLLIDING>_<your_name>.sql \
-  platform/backend/src/database/migrations/meta/<COLLIDING>_snapshot.json
+  platform/backend/src/database/migrations/<COLLIDING>_<your_name>.sql
 ```
 
-The files are often staged from the in-progress rebase/merge; plain `git rm`
-can refuse to remove staged files, so `-f` is needed. If your branch's
+The SQL file may already be staged, so `-f` is needed. **Keep the colliding
+snapshot restored from main in step 2.** Verify main's latest snapshot still
+exists before generation; deleting it loses the schema baseline. If your branch's
 journal entry still exists in `_journal.json`, remove that entry before
 regenerating. The journal should end at main's latest migration at this point.
 
 ### 4. Regenerate the migration with your descriptive name
 
 ```
-cd platform/backend && pnpm exec drizzle-kit generate --name=<your_name>
+pnpm --dir platform/backend exec drizzle-kit generate --name=<your_name>
 ```
 
 Drizzle picks the next free `<NEW>`, emits `<NEW>_<your_name>.sql` with
@@ -116,30 +110,29 @@ schema-only DDL diffed against main's snapshot, writes
 right the first time — no journal-tag rename needed. Let Drizzle create the
 journal timestamp; do not copy the old timestamp from your collided migration.
 
-If Drizzle reports "No schema changes, nothing to migrate", your branch was
-pure-data; generate a custom empty migration instead:
+If Drizzle reports "No schema changes, nothing to migrate" but saved custom
+operations still need to run, generate a custom empty migration instead:
 
 ```
-cd platform/backend && pnpm exec drizzle-kit generate --custom --name=<your_name>
+pnpm --dir platform/backend exec drizzle-kit generate --custom --name=<your_name>
 ```
 
-### 5. Append the saved data-migration tail
+### 5. Restore custom operations in dependency order
 
-Skip this step if `/tmp/<your_name>.data.sql` is empty.
+Compare the backed-up original SQL with the regenerated migration. Restore each
+operation from `/tmp/<your_name>.custom.sql` that is not already represented,
+with `--> statement-breakpoint` separators. Put operations that reference new
+columns after their creation, backfills before constraints that depend on them,
+and cleanup before dropping the objects it reads. Append only when all saved
+operations genuinely belong after the generated DDL.
 
-```
-printf '\n--> statement-breakpoint\n' \
-  >> platform/backend/src/database/migrations/<NEW>_<your_name>.sql
-cat /tmp/<your_name>.data.sql \
-  >> platform/backend/src/database/migrations/<NEW>_<your_name>.sql
-```
-
-Schema DDL must run before the data migration so column references resolve.
+Account for every operation in the original SQL, even when the generated
+migration passes validation; schema checks cannot detect a missing data cleanup.
 
 ### 6. Verify journal/snapshot/SQL consistency
 
 ```
-cd platform/backend && pnpm exec drizzle-kit check
+pnpm --dir platform/backend exec drizzle-kit check
 ```
 
 Must print **"Everything's fine"**. Then run the same checks CI runs — journal
@@ -147,26 +140,26 @@ ordering plus the Drizzle migration linter over migrations changed relative to
 `origin/main`:
 
 ```
-cd platform/backend && pnpm check:migrations
+pnpm --dir platform/backend check:migrations
 ```
 
 The journal check must print **"Drizzle migration journal ordering is valid."**
 If it fails, your regenerated migration was not appended after main's latest
 migration, or its journal timestamp was copied/edited incorrectly. The linter
 fails separately, with `ERROR <code>` lines pointing at the migration file —
-that is a lint problem in the regenerated/edited SQL (often the re-appended
-data-migration tail), not a journal problem.
+that is a lint problem in the regenerated/edited SQL (often the restored
+custom SQL), not a journal problem.
 
 If `drizzle-kit check` reports drift, compare
 `/tmp/<COLLIDING>_<your_name>.original.sql` against the regenerated SQL and
-either (a) restore a missed data-migration statement to the tail, or
+either (a) restore a missed custom operation in dependency order, or
 (b) update your schema files so the regenerated DDL matches what your
 original SQL did.
 
 ### 7. (Optional) Apply locally to confirm it runs
 
 ```
-cd platform/backend && pnpm db:migrate
+pnpm --dir platform/backend db:migrate
 ```
 
 ### 8. Regenerate conflicted generated clients (only if hey-api files conflicted)
@@ -176,7 +169,7 @@ Skip this step unless step 2 surfaced conflicts under `platform/shared/hey-api/`
 step 9).
 
 ```
-cd platform/shared && CODEGEN=true pnpm codegen:api-client
+CODEGEN=true pnpm --dir platform/shared codegen:api-client
 ```
 
 ### 9. Stage and continue

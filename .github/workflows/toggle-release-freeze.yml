@@ -56,7 +56,7 @@ jobs:
             echo "Release-please PRs can now be merged normally"
           fi
 
-      - name: Block open release-please PR
+      - name: Block open release-please PRs
         if: inputs.release_freeze == 'true'
         uses: ./.github/actions/release-freeze-review
         with:
@@ -64,7 +64,7 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Unblock open release-please PR
+      - name: Unblock open release-please PRs
         if: inputs.release_freeze == 'false'
         uses: ./.github/actions/release-freeze-review
         with:

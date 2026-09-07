@@ -396,7 +396,7 @@ export default function AppearanceSettingsPage() {
           <AppearanceControlRow
             id="slimChatErrorUi"
             label="Simplified Chat Error Cards"
-            description="Hide provider, model, stack trace, and raw error details in chat. Users will only see the support message or default error text plus correlation IDs."
+            description="Hide provider, model, stack trace, and raw error details in chat. Show a brief error explanation, your support message, and correlation IDs."
           >
             <Switch
               id="slimChatErrorUi"

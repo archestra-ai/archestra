@@ -36,6 +36,13 @@ Type `/` in the prompt input to open available chat commands.
 
 When the agent has the [code sandbox](./platform-code-sandbox) available, a message starting with `!` (for example `! ls attachments/`) runs the rest of the message as a shell command in the conversation's sandbox instead of asking the model. The command and its output appear in the conversation as a regular `run_command` tool call, so the agent sees the result in later turns. Output appears when the command finishes. Requires the `sandbox: execute` permission; without a sandbox, the message is sent as normal text. User-typed commands do not trigger PreToolUse/PostToolUse hooks — the user, not the model, initiated the call.
 
+### Chat Errors
+
+Simplified chat errors explain the problem without exposing provider details or raw error output.
+Your organization's support message appears beneath the explanation.
+Copied error details include the explanation, support message, and available correlation IDs.
+These IDs help administrators find the failed request in logs.
+
 ### Message Queueing
 
 Press Enter while a response is streaming to queue your message. Queued messages appear above the prompt input and send in order as each turn finishes — you can keep typing without waiting. Remove a queued message with its X, or press ArrowUp on an empty prompt to pull the newest one back for editing.

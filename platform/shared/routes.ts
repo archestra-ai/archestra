@@ -636,6 +636,7 @@ export const RouteId = {
   UpdateMemberDefaultModel: "updateMemberDefaultModel",
 
   // User Routes
+  GetUserPermissionSources: "getUserPermissionSources",
   GetUserPermissions: "getUserPermissions",
   GetImpersonableUsers: "getImpersonableUsers",
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * A role identifier as a human label: `custom_read-only` becomes
  * `Custom Read Only`.
@@ -8,6 +9,11 @@
  * stray capitalised gap.
  */
 export function formatRoleName(role: string): string {
+  if (role.includes(","))
+    return role
+      .split(",")
+      .map((part) => formatRoleName(part.trim()))
+      .join(", ");
   return role
     .split(/[-_\s]+/)
     .filter(Boolean)

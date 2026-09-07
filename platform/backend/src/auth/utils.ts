@@ -10,7 +10,8 @@ import {
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { auth as betterAuth } from "@/auth/better-auth";
 import logger from "@/logging";
-import { MemberModel, ServiceAccountModel, UserModel } from "@/models";
+import { ServiceAccountModel, UserModel } from "@/models";
+import RoleCompositionModel from "@/models/role-composition";
 import type { SelectServiceAccount } from "@/types";
 
 /**
@@ -168,10 +169,14 @@ export const isGlobalAdmin = async (
   userId: string,
   organizationId: string,
 ): Promise<boolean> => {
-  const member = await MemberModel.getByUserId(userId, organizationId);
-  return (
-    member?.role === ADMIN_ROLE_NAME ||
-    member?.role === PLATFORM_ADMIN_ROLE_NAME
+  const sources = await RoleCompositionModel.getUserSources({
+    userId,
+    organizationId,
+  });
+  return sources.some(
+    (source) =>
+      source.role === ADMIN_ROLE_NAME ||
+      source.role === PLATFORM_ADMIN_ROLE_NAME,
   );
 };
 

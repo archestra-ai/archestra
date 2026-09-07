@@ -2,6 +2,7 @@ import { PermissionsSchema, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import RoleCompositionModel from "@/models/role-composition";
 import { getUserPermissions, listImpersonableUsers } from "@/services/user";
 import { ApiError, constructResponseSchema } from "@/types";
 
@@ -13,6 +14,29 @@ const ImpersonableUserSchema = z.object({
 });
 
 const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/user/permission-sources",
+    {
+      schema: {
+        operationId: RouteId.GetUserPermissionSources,
+        description:
+          "Get the direct roles and teams granting the current user's permissions",
+        tags: ["User"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              role: z.string(),
+              team: z.object({ id: z.string(), name: z.string() }).nullable(),
+              permissions: PermissionsSchema,
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ user, organizationId }) =>
+      RoleCompositionModel.getUserSources({ userId: user.id, organizationId }),
+  );
+
   fastify.get(
     "/api/user/permissions",
     {

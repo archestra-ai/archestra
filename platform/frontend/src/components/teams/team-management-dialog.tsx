@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RoleSelect } from "@/components/ui/role-select";
 import {
   Select,
   SelectContent,
@@ -146,6 +147,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
   const [name, setName] = useState(team?.name ?? "");
+  const [roles, setRoles] = useState((team?.roles ?? []).join(","));
   const [description, setDescription] = useState(team?.description ?? "");
   const [parentId, setParentId] = useState<string | null>(
     team?.parentId ?? null,
@@ -219,6 +221,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       setCreatedTeam(null);
       setName("");
       setDescription("");
+      setRoles("");
       setParentId(null);
       setLabels([]);
       return;
@@ -226,6 +229,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 
     setName(editTeam?.name ?? "");
     setDescription(editTeam?.description ?? "");
+    setRoles((editTeam?.roles ?? []).join(","));
     setParentId(editTeam?.parentId ?? null);
     setLabels(editTeam?.labels ?? []);
   }, [editTeam, initialSection, mode, open, readOnly]);
@@ -258,6 +262,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         const body = {
           name: name.trim(),
           description: description.trim() || undefined,
+          roles: roles.split(",").filter(Boolean),
           parentId,
           labels: finalLabels.map(({ key, value }) => ({ key, value })),
         };
@@ -316,6 +321,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       memberErrors,
       hadMemberChanges,
     }) => {
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
       if (hadMemberChanges && savedTeam) {
@@ -413,6 +419,8 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           team={team}
           name={name}
           description={description}
+          roles={roles}
+          onRolesChange={setRoles}
           parentId={parentId}
           organizationTeams={organizationTeams}
           canManageAllTeams={canUpdateTeams}
@@ -455,6 +463,8 @@ function TeamSection(props: {
   team: Team | null;
   name: string;
   description: string;
+  roles: string;
+  onRolesChange: (roles: string) => void;
   parentId: string | null;
   organizationTeams: Team[];
   canManageAllTeams: boolean;
@@ -501,7 +511,22 @@ function TeamSection(props: {
           />
         </div>
         <div className="space-y-2">
-          <Label>Parent Team</Label>
+          <Label htmlFor="team-roles">Organization Roles</Label>
+          <RoleSelect
+            multiple
+            allowEmpty
+            id="team-roles"
+            value={props.roles}
+            onValueChange={props.onRolesChange}
+            disabled={props.readOnlyDetails}
+          />
+          <FieldDescription>
+            Members of this team and its descendant teams inherit these
+            permissions.
+          </FieldDescription>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="team-parent">Parent Team</Label>
           <Select
             value={props.parentId ?? "root"}
             onValueChange={(value) =>
@@ -509,7 +534,7 @@ function TeamSection(props: {
             }
             disabled={props.readOnlyDetails}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="team-parent" className="w-full">
               <SelectValue placeholder="No parent team" />
             </SelectTrigger>
             <SelectContent>

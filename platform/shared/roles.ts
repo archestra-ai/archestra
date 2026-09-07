@@ -49,6 +49,15 @@ export const roleDescriptions: Record<PredefinedRoleName, string> = {
  * this is the fallback for places that only have the identifier).
  */
 export function getRoleDisplayName(role: string): string {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (role.includes(","))
+    return role
+      .split(",")
+      .map((part) => getRoleDisplayName(part.trim()))
+      .join(", ");
+  // SPDX-SnippetEnd
   if (role in roleDisplayNames) {
     return roleDisplayNames[role as PredefinedRoleName];
   }

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PermissionsCard } from "@/components/settings/permissions-card";
@@ -29,9 +30,12 @@ describe("PermissionsCard", () => {
   });
 
   it("tells the reader which role the grants come from", () => {
-    render(<PermissionsCard />);
+    renderCard();
 
-    expect(screen.getByText("admin")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(
+      screen.getAllByText("Admin · Direct assignment").length,
+    ).toBeGreaterThan(0);
     // Two granted resources, in the Agents and MCP categories.
     expect(screen.getByText(/2 resources across 2 categories/)).toBeVisible();
   });
@@ -39,16 +43,16 @@ describe("PermissionsCard", () => {
   it("says so when the role grants nothing", () => {
     mockPermissions({});
 
-    render(<PermissionsCard />);
+    renderCard();
 
     expect(
-      screen.getByText("Your role grants no resource permissions."),
+      screen.getByText("Your roles and teams grant no resource permissions."),
     ).toBeVisible();
     expect(screen.queryByLabelText("Filter permissions")).toBeNull();
   });
 
   it("expands and collapses every category at once", () => {
-    render(<PermissionsCard />);
+    renderCard();
 
     // Collapsed: the category headers are there, the resources are not.
     expect(screen.queryByText("Agents")).toBeVisible();
@@ -62,7 +66,7 @@ describe("PermissionsCard", () => {
   });
 
   it("filters to matching resources and opens the categories that survive", () => {
-    render(<PermissionsCard />);
+    renderCard();
 
     fireEvent.change(screen.getByLabelText("Filter permissions"), {
       target: { value: "gateway" },
@@ -76,7 +80,7 @@ describe("PermissionsCard", () => {
   });
 
   it("filters on action names too", () => {
-    render(<PermissionsCard />);
+    renderCard();
 
     fireEvent.change(screen.getByLabelText("Filter permissions"), {
       target: { value: "create" },
@@ -90,7 +94,7 @@ describe("PermissionsCard", () => {
   });
 
   it("says when nothing matches the filter", () => {
-    render(<PermissionsCard />);
+    renderCard();
 
     fireEvent.change(screen.getByLabelText("Filter permissions"), {
       target: { value: "zzzz" },
@@ -99,3 +103,24 @@ describe("PermissionsCard", () => {
     expect(screen.getByText("No permissions match that filter.")).toBeVisible();
   });
 });
+
+function renderCard() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity } },
+  });
+  client.setQueryData(
+    ["auth", "permissionSources"],
+    [
+      {
+        role: "admin",
+        team: null,
+        permissions: { agent: ["create", "read"], mcpGateway: ["read"] },
+      },
+    ],
+  );
+  return render(
+    <QueryClientProvider client={client}>
+      <PermissionsCard />
+    </QueryClientProvider>,
+  );
+}

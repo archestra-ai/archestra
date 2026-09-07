@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import {
   type Action,
+  type archestraApiTypes,
+  isPermissionActionGranted,
   type Permissions,
   type Resource,
   resourceCategories,
@@ -21,11 +24,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAllPermissions } from "@/lib/auth/auth.query";
-import { useActiveMemberRole } from "@/lib/organization.query";
+import { usePermissionSources } from "@/lib/auth/permission-sources.query";
+import { formatRoleName } from "@/lib/utils/role";
 
 export function PermissionsCard() {
   const { data: permissions, isLoading } = useAllPermissions();
-  const { data: role } = useActiveMemberRole();
+  const { data: sources = [] } = usePermissionSources();
   const [filter, setFilter] = useState("");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(),
@@ -72,25 +76,7 @@ export function PermissionsCard() {
   return (
     <SettingsBlock
       title="Your Permissions"
-      description={
-        totalResources > 0 ? (
-          <>
-            What your{" "}
-            {role ? (
-              <span className="font-medium capitalize text-foreground">
-                {role}
-              </span>
-            ) : (
-              "current"
-            )}{" "}
-            role grants you — {totalResources} resource
-            {totalResources === 1 ? "" : "s"} across {granted.length} categor
-            {granted.length === 1 ? "y" : "ies"}.
-          </>
-        ) : (
-          "What your role grants you across the platform."
-        )
-      }
+      description={`Permissions from your direct roles and team memberships — ${totalResources} resources across ${granted.length} categories.`}
       control={
         granted.length > 0 ? (
           <Button
@@ -113,7 +99,7 @@ export function PermissionsCard() {
       <div className="space-y-4">
         {totalResources === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Your role grants no resource permissions.
+            Your roles and teams grant no resource permissions.
           </p>
         ) : (
           <>
@@ -139,6 +125,7 @@ export function PermissionsCard() {
                     category={category}
                     resources={resources}
                     permissions={permissions as Permissions}
+                    sources={sources}
                     // A filter narrows things down to what the reader asked
                     // for, so keep those open instead of making them expand
                     // each hit by hand.
@@ -159,12 +146,14 @@ function CategorySection({
   category,
   resources,
   permissions,
+  sources,
   isExpanded,
   onToggle,
 }: {
   category: string;
   resources: Resource[];
   permissions: Permissions;
+  sources: archestraApiTypes.GetUserPermissionSourcesResponses["200"];
   isExpanded: boolean;
   onToggle: (category: string) => void;
 }) {
@@ -189,7 +178,7 @@ function CategorySection({
             return (
               <div
                 key={resource}
-                className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4"
+                className="grid gap-2 py-3 sm:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)] sm:items-center sm:gap-4"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium leading-tight">
@@ -201,11 +190,32 @@ function CategorySection({
                     </p>
                   )}
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-1 sm:justify-end">
+                <div className="flex flex-wrap gap-3 sm:justify-end">
                   {actions.map((action) => (
-                    <Badge key={action} variant="outline" className="text-xs">
-                      {actionLabels[action] || action}
-                    </Badge>
+                    <div key={action} className="space-y-1 text-xs">
+                      <Badge variant="outline" className="text-xs">
+                        {actionLabels[action] || action}
+                      </Badge>
+                      {sources
+                        .filter((source) =>
+                          isPermissionActionGranted({
+                            resource,
+                            grantedActions: source.permissions[resource] ?? [],
+                            requiredAction: action,
+                          }),
+                        )
+                        .map((source) => (
+                          <p
+                            key={`${source.team?.id ?? "direct"}:${source.role}`}
+                            className="text-muted-foreground"
+                          >
+                            {formatRoleName(source.role)} ·{" "}
+                            {source.team
+                              ? `Team: ${source.team.name}`
+                              : "Direct assignment"}
+                          </p>
+                        ))}
+                    </div>
                   ))}
                 </div>
               </div>

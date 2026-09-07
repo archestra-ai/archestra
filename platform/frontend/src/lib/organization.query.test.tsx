@@ -242,6 +242,17 @@ describe("useOrganization", () => {
 describe("useIsGlobalAdmin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    server.use(
+      http.get(`${API_ORIGIN}/api/user/permission-sources`, () =>
+        HttpResponse.json([
+          {
+            role: "admin",
+            team: { id: "team-1", name: "Admins" },
+            permissions: {},
+          },
+        ]),
+      ),
+    );
     vi.mocked(authClient.organization.getActiveMemberRole).mockResolvedValue({
       data: { role: "admin" },
       error: null,
@@ -286,6 +297,13 @@ describe("useIsGlobalAdmin", () => {
   });
 
   it("is not an admin for a custom role, however broad", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/user/permission-sources`, () =>
+        HttpResponse.json([
+          { role: "project-auditor", team: null, permissions: {} },
+        ]),
+      ),
+    );
     vi.mocked(authClient.getSession).mockResolvedValue(sessionWith("org-1"));
     vi.mocked(authClient.organization.getActiveMemberRole).mockResolvedValue({
       data: { role: "project-auditor" },

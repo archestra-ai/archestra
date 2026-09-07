@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import OrganizationRoleModel from "@/models/organization-role";
+import RoleCompositionModel from "@/models/role-composition";
 
 /**
  * better-auth's admin plugin gates impersonation on the system-level
@@ -36,7 +37,7 @@ export async function syncSystemRoleWithOrgPermissions(
     .limit(1);
 
   const permissions = member
-    ? await OrganizationRoleModel.getPermissions(member.role, organizationId)
+    ? await RoleCompositionModel.getUserPermissions({ userId, organizationId })
     : {};
   const shouldHoldSystemAdmin =
     permissions.member?.includes("impersonate") ?? false;
@@ -74,15 +75,10 @@ export async function syncSystemRoleForRoleHolders(
   roleIdentifier: string,
   organizationId: string,
 ): Promise<void> {
-  const holders = await db
-    .select({ userId: schema.membersTable.userId })
-    .from(schema.membersTable)
-    .where(
-      and(
-        eq(schema.membersTable.organizationId, organizationId),
-        eq(schema.membersTable.role, roleIdentifier),
-      ),
-    );
+  const holders = await RoleCompositionModel.getRoleHolders({
+    roleIdentifier,
+    organizationId,
+  });
   for (const holder of holders) {
     await syncSystemRoleWithOrgPermissions(holder.userId, organizationId);
   }

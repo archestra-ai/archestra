@@ -1,6 +1,7 @@
 import type { Permissions } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 global.ResizeObserver = class ResizeObserver {
@@ -99,4 +100,41 @@ describe("RolePermissionBuilder", () => {
       ).length,
     ).toBeGreaterThan(0);
   });
+});
+
+it("filters resources without losing selections and supports reviewing selected permissions", async () => {
+  function Editor() {
+    const [permission, setPermission] = useState<Permissions>({
+      knowledgeSource: ["query"],
+    });
+    return (
+      <RolePermissionBuilder
+        permission={permission}
+        onChange={setPermission}
+        userPermissions={{
+          knowledgeSource: ["read", "query"],
+          knowledgeSettings: ["read"],
+        }}
+      />
+    );
+  }
+  const user = userEvent.setup();
+  render(<Editor />);
+  await user.type(
+    screen.getByRole("textbox", { name: "Search permissions" }),
+    "knowledge sources",
+  );
+  expect(screen.getByLabelText("Query")).toBeChecked();
+  expect(
+    screen.queryByRole("checkbox", { name: "Knowledge Settings permissions" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByLabelText("Read"));
+  await user.clear(screen.getByRole("textbox", { name: "Search permissions" }));
+  await user.click(screen.getByRole("button", { name: "Selected only" }));
+  expect(screen.getByLabelText("Read")).toBeChecked();
+  expect(screen.getByLabelText("Query")).toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Clear All" }));
+  expect(
+    screen.getByText("No selected permissions match your search."),
+  ).toBeVisible();
 });

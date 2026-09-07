@@ -540,31 +540,35 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         title="Create Custom Role"
-        description="Create a new custom role with specific permissions. Users with this role will only have access to the selected resources and actions."
+        description="Choose the permissions this role adds to users, teams, and service accounts."
         size="large"
+        className="h-auto max-h-[90vh]"
       >
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleCreateRole}
         >
-          <DialogBody className="space-y-4 pb-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Role Name *</Label>
-              <Input
-                id="name"
-                placeholder="e.g., Developer, Viewer, Editor"
-                value={roleName}
-                onChange={(e) => setRoleName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="What this role is used for"
-                value={roleDescription}
-                onChange={(e) => setRoleDescription(e.target.value)}
-              />
+          <DialogBody className="space-y-6 p-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Role Name *</Label>
+                <Input
+                  id="name"
+                  placeholder="e.g., Developer, Viewer, Editor"
+                  value={roleName}
+                  onChange={(e) => setRoleName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  rows={2}
+                  placeholder="What this role is used for"
+                  value={roleDescription}
+                  onChange={(e) => setRoleDescription(e.target.value)}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Permissions *</Label>
@@ -604,31 +608,35 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           }
         }}
         title="Edit Role"
-        description="Modify the role name and permissions. Changes will affect all users with this role."
+        description="Changes apply to everyone assigned this role, including through a team."
         size="large"
+        className="h-auto max-h-[90vh]"
       >
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={handleEditRole}
         >
-          <DialogBody className="space-y-4 pb-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">Role Name *</Label>
-              <Input
-                id="edit-name"
-                placeholder="e.g., Developer, Viewer, Editor"
-                value={roleName}
-                onChange={(e) => setRoleName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Textarea
-                id="edit-description"
-                placeholder="What this role is used for"
-                value={roleDescription}
-                onChange={(e) => setRoleDescription(e.target.value)}
-              />
+          <DialogBody className="space-y-6 p-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Role Name *</Label>
+                <Input
+                  id="edit-name"
+                  placeholder="e.g., Developer, Viewer, Editor"
+                  value={roleName}
+                  onChange={(e) => setRoleName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Textarea
+                  id="edit-description"
+                  rows={2}
+                  placeholder="What this role is used for"
+                  value={roleDescription}
+                  onChange={(e) => setRoleDescription(e.target.value)}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Permissions *</Label>

@@ -3,10 +3,11 @@ import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAllPermissions, useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useMemberSearch } from "@/lib/member.query";
 import { useActiveOrganization } from "@/lib/organization.query";
+import { useRoles } from "@/lib/role.query";
 import { TeamManagementDialog } from "./team-management-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
@@ -17,6 +18,7 @@ const { useTeamsMock, useTokensMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/role.query", () => ({ useRoles: vi.fn() }));
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/member.query");
 vi.mock("@/lib/organization.query");
@@ -80,6 +82,13 @@ function renderDialog() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useAllPermissions).mockReturnValue({ data: {} } as ReturnType<
+    typeof useAllPermissions
+  >);
+  vi.mocked(useRoles).mockReturnValue({
+    data: [],
+    isPending: false,
+  } as unknown as ReturnType<typeof useRoles>);
   vi.mocked(useFeature).mockReturnValue(false as ReturnType<typeof useFeature>);
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
@@ -131,7 +140,7 @@ describe("TeamManagementDialog member roles", () => {
     const user = await setupUserEvent();
     renderDialog();
 
-    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("combobox", { name: "Parent Team" }));
 
     const listbox = await screen.findByRole("listbox");
     expect(

@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
+import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { environmentKeys } from "./environment.query";
@@ -143,11 +144,16 @@ export function useActiveMemberRole() {
  * never disabled, so `isPending` is the right signal there.
  */
 export function useIsGlobalAdmin() {
-  const { isPending: isSessionPending } = useSession();
-  const { data: role, isLoading } = useActiveMemberRole();
+  const { data: session, isPending: isSessionPending } = useSession();
+  const { data: sources = [], isLoading } = usePermissionSources({
+    enabled: !!session?.session.activeOrganizationId,
+  });
   return {
-    isGlobalAdmin:
-      role === ADMIN_ROLE_NAME || role === PLATFORM_ADMIN_ROLE_NAME,
+    isGlobalAdmin: sources.some(
+      (source) =>
+        source.role === ADMIN_ROLE_NAME ||
+        source.role === PLATFORM_ADMIN_ROLE_NAME,
+    ),
     isLoading: isSessionPending || isLoading,
   };
 }

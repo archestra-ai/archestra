@@ -64,7 +64,10 @@ else
   rm "$ARCHESTRA_AGENT_RUNTIME_DIR/hermes-main-session"
   python3 - "$HERMES_HOME/plugins/archestra-attention/__init__.py" <<'PYTHON'
 import importlib.util
+import os
+import sqlite3
 import sys
+import threading
 spec = importlib.util.spec_from_file_location("plugin", sys.argv[1])
 plugin = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(plugin)
@@ -74,7 +77,16 @@ class Context:
         callbacks[name] = callback
 plugin.register(Context())
 callbacks["on_session_start"](session_id="main-session")
-callbacks["on_session_end"](session_id="main-session", completed=True)
+# The final export must survive a short exclusive writer transaction.
+writer = sqlite3.connect(os.path.join(os.environ["HERMES_HOME"], "state.db"), check_same_thread=False)
+writer.execute("BEGIN EXCLUSIVE")
+release = threading.Timer(1, writer.commit)
+release.start()
+try:
+    callbacks["on_session_end"](session_id="main-session", completed=True)
+finally:
+    release.join()
+    writer.close()
 PYTHON
 fi
 `,

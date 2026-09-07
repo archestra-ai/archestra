@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -131,5 +132,3 @@ describe("SteerQueue", () => {
     });
   });
 });
-
-import { execFile } from "node:child_process";

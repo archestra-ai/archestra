@@ -158,7 +158,7 @@ def serialized(value: object) -> str:
 if not database_path.exists():
     sys.exit(0)
 
-with sqlite3.connect(database_path, timeout=0.5) as database:
+with sqlite3.connect(database_path, timeout=3) as database:
     columns = {
         row[1] for row in database.execute("PRAGMA table_info(messages)").fetchall()
     }

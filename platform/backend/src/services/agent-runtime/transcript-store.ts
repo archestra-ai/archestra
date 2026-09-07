@@ -14,21 +14,9 @@ export const agentRunTranscriptStore = {
       params.transcript === null
         ? null
         : Buffer.from(params.transcript, "utf8");
-    const chunks = [];
-
-    if (data) {
-      for (let offset = 0; offset < data.length; offset += RAW_CHUNK_BYTES) {
-        const raw = data.subarray(offset, offset + RAW_CHUNK_BYTES);
-        const compressed = await gzipAsync(raw);
-        chunks.push({
-          runId: params.runId,
-          sequence: chunks.length,
-          uncompressedBytes: raw.length,
-          compressedBytes: compressed.length,
-          data: compressed,
-        });
-      }
-    }
+    const chunks = data
+      ? await compressChunks({ runId: params.runId, data })
+      : [];
 
     await AgentRunTranscriptModel.replace({
       runId: params.runId,
@@ -37,6 +25,8 @@ export const agentRunTranscriptStore = {
       chunks,
     });
 
+    // Terminal-only updates must not erase an existing readable transcript.
+    if (params.readableTranscript === undefined) return;
     const readable = parseReadableTranscript(params.readableTranscript);
     if (!readable) {
       await AgentRunTranscriptModel.deleteReadable(params.runId);

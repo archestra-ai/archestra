@@ -1,5 +1,5 @@
 import { rename, writeFile } from "node:fs/promises";
-import type { ModelMessage, ToolResultPart } from "ai";
+import type { ModelMessage } from "ai";
 
 export async function writeReadableTranscript(params: {
   messages: ModelMessage[];
@@ -40,7 +40,7 @@ function entriesForMessage(message: ModelMessage): ReadableTranscriptEntry[] {
     toolName?: string;
     input?: unknown;
     toolCallId?: string;
-    output?: ToolResultPart["output"];
+    output?: unknown;
   }>;
   return parts.flatMap((part) => {
     if (part.type === "text" && part.text) {
@@ -71,16 +71,20 @@ function entriesForMessage(message: ModelMessage): ReadableTranscriptEntry[] {
       message.role === "assistant" &&
       part.type === "tool-result" &&
       part.toolName &&
-      part.toolCallId &&
-      part.output
+      part.toolCallId
     ) {
-      return [toolResultEntry(part as ToolResultPart)];
+      return [
+        toolResultEntry({ toolCallId: part.toolCallId, output: part.output }),
+      ];
     }
     return [];
   });
 }
 
-function toolResultEntry(part: ToolResultPart): ReadableTranscriptEntry {
+function toolResultEntry(part: {
+  toolCallId: string;
+  output?: unknown;
+}): ReadableTranscriptEntry {
   return {
     type: "tool_result" as const,
     text: toolResultText(part.output),
@@ -89,25 +93,45 @@ function toolResultEntry(part: ToolResultPart): ReadableTranscriptEntry {
   };
 }
 
-function toolResultText(output: ToolResultPart["output"]): string {
+function toolResultText(output: unknown): string {
+  if (!output || typeof output !== "object" || !("type" in output)) {
+    return "[Unrecognized tool result omitted]";
+  }
   if (output.type === "text" || output.type === "error-text") {
-    return output.value;
+    return "value" in output && typeof output.value === "string"
+      ? output.value
+      : "[Unrecognized tool result omitted]";
   }
   if (output.type === "json" || output.type === "error-json") {
-    return serialize(output.value);
+    return "value" in output
+      ? serialize(output.value)
+      : "[Unrecognized tool result omitted]";
   }
   if (output.type === "execution-denied") {
-    return output.reason ?? "Tool execution denied";
+    return "reason" in output && typeof output.reason === "string"
+      ? output.reason
+      : "Tool execution denied";
+  }
+  if (
+    output.type !== "content" ||
+    !("value" in output) ||
+    !Array.isArray(output.value)
+  ) {
+    return "[Unrecognized tool result omitted]";
   }
   return (
     output.value
-      .filter((part) => part.type === "text")
+      .filter(
+        (part) => part && part.type === "text" && typeof part.text === "string",
+      )
       .map((part) => part.text)
       .join("\n") || "[Non-text result omitted]"
   );
 }
 
-function isErrorOutput(output: ToolResultPart["output"]): boolean {
+function isErrorOutput(output: unknown): boolean {
+  if (!output || typeof output !== "object" || !("type" in output))
+    return false;
   return (
     output.type === "error-text" ||
     output.type === "error-json" ||

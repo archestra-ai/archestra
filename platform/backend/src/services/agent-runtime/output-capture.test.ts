@@ -135,6 +135,18 @@ describe("AgentRuntimeOutputCapture", () => {
     expect(capture.readableTranscript).toBeNull();
     expect(capture.completeTranscript).toBe("before\nafter\n");
   });
+
+  test("discards an unfinished readable frame without leaking it into terminal output", async () => {
+    const capture = new AgentRuntimeOutputCapture({
+      backend: outputBackend({
+        live: `before\n${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START}${Buffer.from('{"version":1}').toString("base64")}`,
+      }),
+      session,
+    });
+    await capture.follow();
+    expect(capture.readableTranscript).toBeNull();
+    expect(capture.completeTranscript).toBe("before\n");
+  });
 });
 
 const session = {

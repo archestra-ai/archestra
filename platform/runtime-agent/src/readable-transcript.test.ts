@@ -16,6 +16,47 @@ afterEach(async () => {
 });
 
 describe("writeReadableTranscript", () => {
+  test.each([
+    undefined,
+    null,
+    {},
+    { type: "text", value: null },
+    { type: "content", value: null },
+    { type: "future-output", value: {} },
+  ])("preserves history around malformed tool output %j", async (output) => {
+    const runtimeDir = await mkdtemp(
+      path.join(tmpdir(), "archestra-transcript-"),
+    );
+    temporaryDirectories.push(runtimeDir);
+    const messages = [
+      { role: "user", content: "Before" },
+      ...["tool", "assistant"].map((role) => ({
+        role,
+        content: [
+          {
+            type: "tool-result",
+            toolName: "test",
+            toolCallId: "call-1",
+            output,
+          },
+        ],
+      })),
+      { role: "assistant", content: "After" },
+    ] as unknown as ModelMessage[];
+    await writeReadableTranscript({ runtimeDir, messages });
+    const transcript = JSON.parse(
+      await readFile(path.join(runtimeDir, "readable-transcript.json"), "utf8"),
+    );
+    expect(
+      transcript.entries.map((entry: { text: string }) => entry.text),
+    ).toEqual([
+      "Before",
+      "[Unrecognized tool result omitted]",
+      "[Unrecognized tool result omitted]",
+      "After",
+    ]);
+  });
+
   test("preserves user, assistant, tool call, and tool result history", async () => {
     const runtimeDir = await mkdtemp(
       path.join(tmpdir(), "archestra-transcript-"),

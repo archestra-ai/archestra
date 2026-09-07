@@ -240,6 +240,8 @@ class AgentRuntimeOutputProtocolParser {
   finish(): string {
     const terminal = this.mode === "terminal" ? this.pending : "";
     this.pending = "";
+    this.encodedChunks = null;
+    this.encodedLength = 0;
     return terminal;
   }
 

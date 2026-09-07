@@ -960,9 +960,11 @@ ${client.markerEnd}
 '@
 $archDocs = [Environment]::GetFolderPath('MyDocuments')
 $archProfiles = @()
-foreach ($archEdition in @('WindowsPowerShell', 'PowerShell')) {
-  $archDir = Join-Path $archDocs $archEdition
-  if (Test-Path $archDir) { $archProfiles += (Join-Path $archDir 'profile.ps1') }
+if (-not [string]::IsNullOrWhiteSpace($archDocs)) {
+  foreach ($archEdition in @('WindowsPowerShell', 'PowerShell')) {
+    $archDir = Join-Path $archDocs $archEdition
+    if (Test-Path $archDir) { $archProfiles += (Join-Path $archDir 'profile.ps1') }
+  }
 }
 if ($archProfiles.Count -eq 0) { $archProfiles = @($PROFILE.CurrentUserAllHosts) }
 foreach ($archProfilePath in $archProfiles) {

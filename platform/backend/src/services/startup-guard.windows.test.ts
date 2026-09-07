@@ -358,6 +358,12 @@ describe("buildWindowsStartupGuardInstallSection (Claude Code)", () => {
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_START);
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_END);
     expect(section).toContain("'WindowsPowerShell', 'PowerShell'");
+    // PowerShell on non-Windows hosts reports no MyDocuments directory. The
+    // generated installer must reach its $PROFILE fallback without passing an
+    // empty path to Join-Path first.
+    expect(section).toContain(
+      "if (-not [string]::IsNullOrWhiteSpace($archDocs)) {",
+    );
     expect(section).toContain("function claude {");
     expect(section).toContain("& $archReal.Source @args");
     // a fresh connect re-arms checks a previous guard disconnected

@@ -25,6 +25,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   formatOriginalError,
+  getSimplifiedChatErrorMessage,
   mapClientError,
   parseErrorResponse,
 } from "./chat-error.utils";
@@ -65,6 +66,9 @@ export function InlineChatError({
   });
   const appName = useAppName();
   const chatError = parseErrorResponse(error) ?? mapClientError(error, appName);
+
+  const simplifiedMessage = getSimplifiedChatErrorMessage(chatError, appName);
+  const trimmedSupportMessage = supportMessage?.trim();
 
   // A per-user provider the user hasn't linked yet → an inline "connect your
   // account" card instead of a generic error.
@@ -115,7 +119,12 @@ export function InlineChatError({
   const copyDebugInfo = async () => {
     const lines: string[] = [];
 
-    lines.push(supportMessage?.trim() || chatError.message);
+    if (slimChatErrorUi) {
+      lines.push(simplifiedMessage);
+      if (trimmedSupportMessage) lines.push(trimmedSupportMessage);
+    } else {
+      lines.push(trimmedSupportMessage || chatError.message);
+    }
     if (!slimChatErrorUi) {
       if (agentName) lines.push(`Agent: ${agentName}`);
       if (selectedModel) lines.push(`Model: ${selectedModel}`);
@@ -181,9 +190,12 @@ export function InlineChatError({
               className={`h-4 w-4 mt-0.5 flex-shrink-0 ${iconClassName}`}
             />
             <div className="flex-1 space-y-2">
-              <p className="text-sm text-foreground">
-                {supportMessage ? supportMessage : chatError.message}
-              </p>
+              <p className="text-sm text-foreground">{simplifiedMessage}</p>
+              {trimmedSupportMessage && (
+                <p className="text-xs text-muted-foreground">
+                  {trimmedSupportMessage}
+                </p>
+              )}
 
               <div className="flex items-center gap-1.5 flex-wrap">
                 {refEntries.map((entry) => (
@@ -206,11 +218,6 @@ export function InlineChatError({
                   <Copy className="h-3 w-3" />
                 </Button>
               </div>
-              {usageLimitMessage && (
-                <p className="text-xs text-muted-foreground">
-                  {usageLimitMessage}
-                </p>
-              )}
               {retryButton}
             </div>
           </div>

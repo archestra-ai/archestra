@@ -97,7 +97,7 @@ export const MCP_DEMAND_HEARTBEAT_INTERVAL_MS =
 
 /**
  * Data-access layer for `mcp_server` — an installation of an
- * `internal_mcp_catalog` row (root template or child **preset**) by a
+ * `internal_mcp_catalog` row (root template or hidden runtime variant) by a
  * specific principal. A single catalog item can back many installs across
  * different scopes (personal/team/org); each install carries its own
  * per-install env values, secret bundle, and lifecycle state.

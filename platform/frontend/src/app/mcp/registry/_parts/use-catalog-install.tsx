@@ -81,8 +81,6 @@ export interface UseCatalogInstallResult {
   installRemote: (item: CatalogItem) => void;
   /** Open the local install flow for an item. */
   installLocal: (item: CatalogItem) => void;
-  /** Install the built-in Playwright server directly (no dialog). */
-  installPlaywright: (item: CatalogItem) => void;
   /** Consume the ?install=/&scope=/&team= deep-link params, if present. */
   installFromSearchParams: () => void;
   /** Catalog id of the item whose install is currently being submitted. */
@@ -944,30 +942,6 @@ export function useCatalogInstall(opts?: {
     });
   };
 
-  const handleInstallPlaywright = async (catalogItem: CatalogItem) => {
-    setInstallingItemId(catalogItem.id);
-    const result = await installMutation.mutateAsync({
-      name: catalogItem.name,
-      catalogId: catalogItem.id,
-      dontShowToast: true,
-    });
-
-    const installedServerId = result?.installedServer?.id;
-    if (installedServerId) {
-      setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
-      const isFirstInstallation = !installedServers?.some(
-        (s) => s.catalogId === catalogItem.id,
-      );
-      if (isFirstInstallation) {
-        setFirstInstallationServerIds((prev) =>
-          new Set(prev).add(installedServerId),
-        );
-      }
-    }
-    setInstallingItemId(null);
-    onInstalled?.();
-  };
-
   const dialogs = (
     <>
       <RemoteServerInstallDialog
@@ -1062,7 +1036,6 @@ export function useCatalogInstall(opts?: {
     addOrgConnection,
     installRemote: (item) => void installRemote(item),
     installLocal: (item) => void installLocal(item),
-    installPlaywright: (item) => void handleInstallPlaywright(item),
     installFromSearchParams,
     installingItemId,
     installingServerIds,

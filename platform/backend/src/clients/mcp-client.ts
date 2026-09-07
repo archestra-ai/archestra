@@ -4,6 +4,7 @@ import {
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
   getArchestraAppResourceUri,
+  isPlaywrightCatalogItem,
   LINKED_IDP_SSO_MODE,
   LOCKED_CHAT_REDACTED_MARKER,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -66,6 +67,7 @@ import {
   McpServerAlertMuteModel,
   McpServerModel,
   McpToolCallModel,
+  PlaywrightRuntimeModel,
   TeamModel,
   ToolModel,
   UserModel,
@@ -308,6 +310,9 @@ type ResolvedInstallIdentity = Pick<
   "id" | "ownerId" | "teamId" | "scope"
 >;
 
+type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
+  Partial<Pick<TokenAuthContext, "teamId">>;
+
 /**
  * Identity fields attached to every persisted tool call and returned result:
  * who called (inbound), how they authenticated, and — once a credential has
@@ -546,17 +551,26 @@ class McpClient {
     Promise<Record<string, unknown>>
   >();
 
-  /**
-   * Close a cached session for a specific (catalogId, targetMcpServerId, agentId, conversationId).
-   * Should be called when a subagent finishes to free the browser context.
-   */
-  closeSession(
-    catalogId: string,
-    targetMcpServerId: string,
-    agentId: string,
-    conversationId: string,
-  ): void {
-    const connectionKey = `${catalogId}:${targetMcpServerId}:${agentId}:${conversationId}`;
+  /** Close an agent's Environment-bound Playwright session. */
+  async closeAgentSession(params: {
+    catalogId: string;
+    agentId: string;
+    conversationId: string;
+    userId: string;
+  }): Promise<void> {
+    const server = await PlaywrightRuntimeModel.findForAgent(params.agentId);
+    if (!server) return;
+
+    const connectionKey = this.getAgentConnectionKey({
+      catalogId: params.catalogId,
+      targetMcpServerId: server.id,
+      agentId: params.agentId,
+      conversationId: params.conversationId,
+      tokenAuth: {
+        tokenId: `session:${params.userId}`,
+        userId: params.userId,
+      },
+    });
     const client = this.activeConnections.get(connectionKey);
     if (client) {
       try {
@@ -568,10 +582,7 @@ class McpClient {
         );
       }
       this.clearConnectionState(connectionKey);
-      logger.info({ connectionKey }, "Closed cached MCP session");
     }
-
-    // Clean up the stored session ID so other pods don't try to reuse it
     McpHttpSessionModel.deleteByConnectionKey(connectionKey).catch((err) =>
       logger.warn(
         { connectionKey, err },
@@ -625,6 +636,21 @@ class McpClient {
     const { tool, catalogItem, resolvedToolCall } = validationResult;
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
+
+    if (
+      isPlaywrightCatalogItem(catalogItem.id) &&
+      !tokenAuth?.userId &&
+      (owner.type === "app" || !tokenAuth?.tokenId)
+    ) {
+      return this.createErrorResult({
+        toolCall,
+        owner,
+        error: "Playwright requires an authenticated caller identity",
+        mcpServerName: catalogItem.name,
+        authInfo,
+        lockedChatContent,
+      });
+    }
 
     // SEP-2243 x-mcp-header: mirror annotated argument values into
     // Mcp-Param-* headers on the upstream call. Widening the passthrough set
@@ -845,7 +871,9 @@ class McpClient {
 
       // Build connection cache key using the resolved target server ID.
       // Agents: when conversationId is provided, each (agent, conversation) gets
-      // its own connection for per-session browser context isolation.
+      // its own connection for per-session browser context isolation. Playwright
+      // calls without a conversation are additionally scoped to the authenticated
+      // caller because a shared installation still carries browser state.
       // Apps: keyed by (app, viewing user, session) so one app's upstream session
       // never leaks across users or browser sessions.
       // When authenticated via external IdP, each user additionally gets its own
@@ -855,9 +883,13 @@ class McpClient {
         : undefined;
       let connectionKey: string;
       if (owner.type === "agent") {
-        connectionKey = options?.conversationId
-          ? `${catalogItem.id}:${targetMcpServerId}:${owner.id}:${options.conversationId}`
-          : `${catalogItem.id}:${targetMcpServerId}`;
+        connectionKey = this.getAgentConnectionKey({
+          catalogId: catalogItem.id,
+          targetMcpServerId,
+          agentId: owner.id,
+          conversationId: options?.conversationId,
+          tokenAuth,
+        });
       } else {
         // An app call must carry the viewing user (session auth). Without one we
         // must never collapse distinct callers onto a shared literal — that would
@@ -2020,6 +2052,28 @@ class McpClient {
       },
       "Determining target MCP server ID for catalog item",
     );
+
+    if (isPlaywrightCatalogItem(catalogItem.id)) {
+      const server = await PlaywrightRuntimeModel.findForOwner(owner);
+      if (server) {
+        return {
+          targetMcpServerId: server.id,
+          mcpServerName: server.name,
+          resolvedServer: server,
+        };
+      }
+      return {
+        error: await this.createErrorResult({
+          toolCall,
+          owner,
+          error: "The browser runtime is not available for this Environment.",
+          mcpServerName: fallbackName,
+          authInfo,
+          lockedChatContent,
+        }),
+      };
+    }
+
     // Static credential case: tool has a bound MCP server credential to use.
     if (tool.credentialResolutionMode === "static") {
       if (!tool.mcpServerId) {
@@ -2290,7 +2344,7 @@ class McpClient {
   // whose pinned install was uninstalled (its mcpServerId is null).
   private async pickInstallForCaller(
     allServers: McpServer[],
-    tokenAuth: TokenAuthContext | undefined,
+    tokenAuth: InstallCallerContext | undefined,
   ): Promise<McpServer | undefined> {
     if (tokenAuth?.userId) {
       const userServer = allServers.find(
@@ -2318,6 +2372,36 @@ class McpClient {
     }
 
     return undefined;
+  }
+
+  private getAgentConnectionKey(params: {
+    catalogId: string;
+    targetMcpServerId: string;
+    agentId: string;
+    conversationId: string | undefined;
+    tokenAuth: Pick<TokenAuthContext, "userId" | "tokenId"> | undefined;
+  }): string {
+    const { catalogId, targetMcpServerId, agentId, conversationId, tokenAuth } =
+      params;
+    if (!isPlaywrightCatalogItem(catalogId)) {
+      return conversationId
+        ? `${catalogId}:${targetMcpServerId}:${agentId}:${conversationId}`
+        : `${catalogId}:${targetMcpServerId}`;
+    }
+
+    const agentConnectionKey = `${catalogId}:${targetMcpServerId}:${agentId}`;
+    let callerSegment: string;
+    if (tokenAuth?.userId) {
+      callerSegment = `caller:user:${tokenAuth.userId}`;
+    } else if (tokenAuth?.tokenId) {
+      callerSegment = `caller:token:${tokenAuth.tokenId}`;
+    } else {
+      throw new Error("Playwright requires an authenticated caller identity");
+    }
+
+    return conversationId
+      ? `${agentConnectionKey}:${callerSegment}:conversation:${conversationId}`
+      : `${agentConnectionKey}:${callerSegment}`;
   }
 
   /**

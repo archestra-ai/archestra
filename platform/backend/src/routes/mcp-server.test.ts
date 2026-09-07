@@ -1,4 +1,4 @@
-import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
+import { OAUTH_TOKEN_TYPE, PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { hasPermission, userHasPermission } from "@/auth/utils";
@@ -8,7 +8,7 @@ import db, { schema } from "@/database";
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { enterpriseTier } from "@/enterprise-tier";
 // SPDX-SnippetEnd
-import { McpServerModel } from "@/models";
+import { McpServerModel, PlaywrightRuntimeModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -4666,6 +4666,38 @@ describe("mcp server core route coverage", () => {
       await expect(McpServerModel.findById(builtin.id)).resolves.not.toBeNull();
     });
 
+    test("refuses to delete the managed Playwright runtime", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      await makeInternalMcpCatalog({
+        id: PLAYWRIGHT_MCP_CATALOG_ID,
+        organizationId: null,
+        name: "Playwright",
+        serverType: "local",
+        localConfig: {
+          command: "node",
+          arguments: ["cli.js", "--isolated"],
+          transportType: "streamable-http",
+          httpPort: 8080,
+        },
+      });
+      await PlaywrightRuntimeModel.reconcileAll();
+      const runtime = mustExist(
+        await PlaywrightRuntimeModel.findForEnvironment(null),
+      );
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${runtime.id}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "The Playwright browser runtime is managed automatically.",
+      );
+      await expect(McpServerModel.findById(runtime.id)).resolves.not.toBeNull();
+    });
+
     test("uninstalling the last connection retains tools, policies, and assignments (binding retained)", async ({
       makeInternalMcpCatalog,
     }) => {
@@ -4987,6 +5019,37 @@ describe("mcp server core route coverage", () => {
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toBe(
         "App servers are managed via the Apps API and cannot be installed here.",
+      );
+    });
+
+    test("rejects manual Playwright browser installations", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        id: PLAYWRIGHT_MCP_CATALOG_ID,
+        organizationId: null,
+        name: "Playwright",
+        serverType: "local",
+        localConfig: {
+          command: "node",
+          arguments: ["cli.js", "--isolated"],
+          transportType: "streamable-http",
+          httpPort: 8080,
+        },
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        payload: {
+          name: catalog.name,
+          catalogId: catalog.id,
+          scope: "personal",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toBe(
+        "The Playwright browser runtime is managed automatically.",
       );
     });
 

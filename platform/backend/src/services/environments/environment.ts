@@ -1,11 +1,14 @@
 import type { EnvironmentDefaultableResource } from "@archestra/shared";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
+import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
   EnvironmentLabelModel,
   EnvironmentModel,
   EnvironmentResourceDefaultModel,
+  InternalMcpCatalogModel,
   OrganizationModel,
+  PlaywrightRuntimeModel,
 } from "@/models";
 import {
   ApiError,
@@ -35,6 +38,26 @@ function reconcileEnvironmentEngine(environment: Environment): void {
         "[DaggerEnvRuntime] background reconcile failed",
       ),
     );
+}
+
+/** Persist the Environment-bound browser runtime, then provision its pod in the background. */
+async function reconcilePlaywrightRuntime(
+  environment: Environment,
+): Promise<void> {
+  const server = await PlaywrightRuntimeModel.ensureForEnvironment({
+    environmentId: environment.id,
+    organizationId: environment.organizationId,
+  });
+  if (server && mcpServerRuntimeManager.isEnabled) {
+    void mcpServerRuntimeManager
+      .startServer(server)
+      .catch((err) =>
+        logger.error(
+          { err, environmentId: environment.id },
+          "[PlaywrightRuntime] background reconcile failed",
+        ),
+      );
+  }
 }
 
 /**
@@ -164,6 +187,7 @@ export async function createEnvironment(params: {
   }
 
   reconcileEnvironmentEngine(created);
+  await reconcilePlaywrightRuntime(created);
   return created;
 }
 
@@ -357,6 +381,12 @@ export async function deleteEnvironment(params: {
         assignedCount === 1 ? "" : "s"
       } assigned. Reassign or remove them before deleting it.`,
     );
+  }
+
+  const playwrightCatalog =
+    await PlaywrightRuntimeModel.findCatalogForEnvironment(id);
+  if (playwrightCatalog) {
+    await InternalMcpCatalogModel.delete(playwrightCatalog.id);
   }
 
   const deleted = await EnvironmentModel.delete(id, organizationId);

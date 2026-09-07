@@ -157,7 +157,6 @@ export function NewChatComposer({
                 | undefined
             )?.llmApiKeyId as string | null
           }
-          isPlaywrightSetupRequired={false}
           selectorAgentId={agentId}
           onAgentChange={onAgentChange}
           modelSource={modelSource}

@@ -1,6 +1,9 @@
 "use client";
 
-import type { McpDeploymentStatusEntry } from "@archestra/shared";
+import {
+  isPlaywrightCatalogItem,
+  type McpDeploymentStatusEntry,
+} from "@archestra/shared";
 import type {
   ColumnDef,
   OnChangeFn,
@@ -136,6 +139,7 @@ export function McpServerTable({
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const canSelect = (item: CatalogItem) =>
+    !isPlaywrightCatalogItem(item.id) &&
     (!!attention || !!getServerInfo(item).installedServer) &&
     installingItemId !== item.id &&
     !getServerInfo(item).isInstallInProgress;
@@ -451,7 +455,8 @@ const McpServerRowActions = memo(function McpServerRowActions({
   });
   const restoreMutation = useRestoreMcpServerAlerts();
   const [dismissOpen, setDismissOpen] = useState(false);
-  const isBuiltin = item.serverType === "builtin";
+  const isBuiltin =
+    item.serverType === "builtin" || isPlaywrightCatalogItem(item.id);
   const isLocal = item.serverType === "local";
   const { canModify: canEditCatalog } = useCanModifyCatalogItem(
     !isBuiltin ? item : null,

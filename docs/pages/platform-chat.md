@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-09-02
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -47,6 +47,12 @@ While a response streams, the send button becomes Stop. Clicking it or pressing 
 ### MCP Elicitation
 
 Some MCP tools can ask for additional information while they run. Chat shows these requests as a modal form, validates required fields, and resumes the tool call after you continue. If the request points to an external URL, Chat only opens HTTP or HTTPS links.
+
+### Browser (Playwright)
+
+Agents with Playwright tools can navigate and interact with websites from Chat. The browser runtime is built in. Archestra runs one Playwright deployment for Default and each additional [Environment](/docs/platform-environments). Browser traffic follows its Environment's network policy.
+
+Each caller and conversation gets an isolated browser context. Browser state persists within a conversation but is not shared with other callers or conversations.
 
 #### Context Compaction
 

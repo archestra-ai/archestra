@@ -1,4 +1,7 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  isPlaywrightCatalogItem,
+} from "@archestra/shared";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 
@@ -26,6 +29,8 @@ export function useCanModifyCatalogItem(
     isAdminLoading || isSessionLoading || (!!canReadTeams && teamsLoading);
 
   if (!catalog) return { canModify: false, isLoading };
+  if (isPlaywrightCatalogItem(catalog.id))
+    return { canModify: false, isLoading };
   if (isAdmin) return { canModify: true, isLoading };
 
   const currentUserId = session?.user?.id;

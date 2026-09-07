@@ -13,6 +13,7 @@ import {
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_EXECUTED_AS_META_KEY,
   OAUTH_TOKEN_TYPE,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
@@ -32,6 +33,7 @@ import {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   OrganizationModel,
+  PlaywrightRuntimeModel,
   // SPDX-SnippetEnd
   ToolModel,
 } from "@/models";
@@ -43,7 +45,7 @@ import { secretManager } from "@/secrets-manager";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
-import { beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, mustExist, test } from "@/test";
 import { agentOwner, appOwner } from "@/types";
 import mcpClient, {
   // SPDX-SnippetBegin
@@ -377,6 +379,207 @@ describe("McpClient", () => {
     );
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
+  });
+
+  test("preserves per-conversation connections for non-Playwright agent tools", async () => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__conversation_scoped",
+      description: "Conversation-scoped tool",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+    mockConnect.mockResolvedValue(undefined);
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const call = (conversationId: string, id: string) =>
+      mcpClient.executeToolCallForOwner(
+        { id, name: tool.name, arguments: {} },
+        agentOwner(agentId),
+        undefined,
+        { conversationId },
+      );
+
+    await call("conversation-one", "first");
+    await call("conversation-one", "second");
+    await call("conversation-two", "third");
+
+    expect(mockConnect).toHaveBeenCalledTimes(2);
+  });
+
+  test("isolates a shared Playwright connection per caller and reuses it for that caller", async ({
+    makeUser,
+    makeApp,
+  }) => {
+    const firstCaller = await makeUser({ email: "browser-one@example.com" });
+    const secondCaller = await makeUser({ email: "browser-two@example.com" });
+    const playwrightCatalog = await InternalMcpCatalogModel.create({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      name: "playwright",
+      serverType: "remote",
+      serverUrl: "https://browser.example/mcp",
+    });
+    await PlaywrightRuntimeModel.reconcileAll();
+    const sharedServer = mustExist(
+      await PlaywrightRuntimeModel.findForEnvironment(null),
+    );
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "playwright__browser_navigate",
+      description: "Navigate",
+      parameters: {},
+      catalogId: playwrightCatalog.id,
+    });
+    await AgentToolModel.create(agentId, tool.id, {
+      mcpServerId: sharedServer.id,
+    });
+    mockConnect.mockResolvedValue(undefined);
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const callAs = (userId: string, callId: string) =>
+      mcpClient.executeToolCallForOwner(
+        {
+          id: callId,
+          name: "playwright__browser_navigate",
+          arguments: {},
+        },
+        agentOwner(agentId),
+        {
+          tokenId: `token-${userId}`,
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+          userId,
+        },
+      );
+
+    await callAs(firstCaller.id, "call-first-1");
+    await callAs(firstCaller.id, "call-first-2");
+    await callAs(secondCaller.id, "call-second-1");
+
+    const callWithOrganizationToken = (tokenId: string, callId: string) =>
+      mcpClient.executeToolCallForOwner(
+        {
+          id: callId,
+          name: "playwright__browser_navigate",
+          arguments: {},
+        },
+        agentOwner(agentId),
+        {
+          tokenId,
+          teamId: null,
+          isOrganizationToken: true,
+        },
+      );
+    await callWithOrganizationToken("organization-token-one", "call-org-1");
+    await callWithOrganizationToken("organization-token-one", "call-org-2");
+    await callWithOrganizationToken("organization-token-two", "call-org-3");
+
+    const anonymousResult = await mcpClient.executeToolCallForOwner(
+      {
+        id: "call-anonymous-1",
+        name: "playwright__browser_navigate",
+        arguments: {},
+      },
+      agentOwner(agentId),
+    );
+    const secondAnonymousResult = await mcpClient.executeToolCallForOwner(
+      {
+        id: "call-anonymous-2",
+        name: "playwright__browser_navigate",
+        arguments: {},
+      },
+      agentOwner(agentId),
+    );
+
+    expect(anonymousResult.isError).toBe(true);
+    expect(JSON.stringify(anonymousResult)).toContain(
+      "Playwright requires an authenticated caller identity",
+    );
+    expect(secondAnonymousResult.isError).toBe(true);
+    const app = await makeApp();
+    await AppToolModel.create(app.id, tool.id, {
+      mcpServerId: sharedServer.id,
+      credentialResolutionMode: "static",
+    });
+    const anonymousAppResult = await mcpClient.executeToolCallForOwner(
+      { id: "call-anonymous-app", name: tool.name, arguments: {} },
+      appOwner(app.id),
+    );
+    expect(anonymousAppResult.isError).toBe(true);
+    expect(JSON.stringify(anonymousAppResult)).toContain(
+      "Playwright requires an authenticated caller identity",
+    );
+    expect(mockConnect).toHaveBeenCalledTimes(4);
+  });
+
+  test("isolates Playwright conversations for the same caller", async ({
+    makeUser,
+  }) => {
+    const caller = await makeUser({ email: "browser-chat@example.com" });
+    const playwrightCatalog = await InternalMcpCatalogModel.create({
+      id: PLAYWRIGHT_MCP_CATALOG_ID,
+      name: "playwright",
+      serverType: "remote",
+      serverUrl: "https://browser.example/mcp",
+    });
+    await PlaywrightRuntimeModel.reconcileAll();
+    const sharedServer = mustExist(
+      await PlaywrightRuntimeModel.findForEnvironment(null),
+    );
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "playwright__browser_snapshot",
+      description: "Snapshot",
+      parameters: {},
+      catalogId: playwrightCatalog.id,
+    });
+    await AgentToolModel.create(agentId, tool.id, {
+      mcpServerId: sharedServer.id,
+    });
+    mockConnect.mockResolvedValue(undefined);
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+    const tokenAuth: TokenAuthContext = {
+      tokenId: "chat-token",
+      teamId: null,
+      isOrganizationToken: false,
+      isUserToken: true,
+      userId: caller.id,
+    };
+
+    await mcpClient.executeToolCallForOwner(
+      { id: "call-chat-1", name: tool.name, arguments: {} },
+      agentOwner(agentId),
+      tokenAuth,
+      { conversationId: "conversation-one" },
+    );
+    await mcpClient.executeToolCallForOwner(
+      { id: "call-chat-2", name: tool.name, arguments: {} },
+      agentOwner(agentId),
+      tokenAuth,
+      { conversationId: "conversation-two" },
+    );
+
+    expect(mockConnect).toHaveBeenCalledTimes(2);
+
+    await mcpClient.closeAgentSession({
+      catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+      agentId,
+      conversationId: "conversation-one",
+      userId: caller.id,
+    });
+
+    expect(mockClose).toHaveBeenCalledTimes(1);
+    expect(McpHttpSessionModel.deleteByConnectionKey).toHaveBeenCalledWith(
+      `${PLAYWRIGHT_MCP_CATALOG_ID}:${sharedServer.id}:${agentId}:caller:user:${caller.id}:conversation:conversation-one`,
+    );
   });
 
   // SPDX-SnippetBegin

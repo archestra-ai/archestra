@@ -138,7 +138,7 @@ export type McpServerCardProps = {
     options?: { alsoReinstallCatalog?: boolean },
   ) => void | Promise<void>;
   onCancelInstallation?: (serverId: string) => void;
-  /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
+  /** When true, renders as an automatically managed Playwright runtime. */
   isBuiltInPlaywright?: boolean;
   selection?: {
     selected: boolean;
@@ -625,6 +625,7 @@ export function McpServerCard({
   /** Who is connected and whether a connection needs attention. */
   const hasTrailingCluster =
     !isBuiltinVariant &&
+    !isPlaywrightVariant &&
     (connectionAvatars.length > 0 ||
       hasOrgConnection ||
       Boolean(oauthReauthIndicator));
@@ -982,34 +983,6 @@ export function McpServerCard({
     </>
   );
 
-  const playwrightCardContent = (
-    <>
-      <div className="flex flex-nowrap gap-2 [&>*]:min-w-0">
-        {primaryIssueAction}
-        {chatButton}
-        {!isInstalling && isCurrentUserAuthenticated && needsReinstall && (
-          <PermissionButton
-            permissions={{ mcpServerInstallation: ["create"] }}
-            onClick={triggerReinstall}
-            disabled={showApprovalPanel}
-            size="sm"
-            variant="outline"
-            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Reinstall
-          </PermissionButton>
-        )}
-        {!isInstalling && (
-          <>
-            {uninstallButton}
-            {!hasPersonalConnection && localInstallButton}
-          </>
-        )}
-      </div>
-    </>
-  );
-
   const builtinCardContent = (
     <>
       <div className="flex flex-nowrap gap-2 [&>*]:min-w-0">
@@ -1067,13 +1040,11 @@ export function McpServerCard({
   ) : null;
   const cardActions =
     approvalAction ??
-    (isBuiltinVariant
+    (isBuiltinVariant || isPlaywrightVariant
       ? builtinCardContent
-      : isPlaywrightVariant
-        ? playwrightCardContent
-        : isRemoteVariant
-          ? remoteCardContent
-          : localCardContent);
+      : isRemoteVariant
+        ? remoteCardContent
+        : localCardContent);
   const hasCardBody = Boolean(
     compactInfoRow || (variant === "local" && isInstalling),
   );

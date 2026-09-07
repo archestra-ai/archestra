@@ -2,7 +2,6 @@ import type { IncomingHttpHeaders } from "node:http";
 import {
   classifyMcpRuntimeAlert,
   createMcpServerAlertFingerprint,
-  isPlaywrightCatalogItem,
   mcpRuntimeAlertSource,
   OAUTH_TOKEN_TYPE,
   RouteId,
@@ -41,6 +40,7 @@ import {
   McpServerAlertMuteModel,
   McpServerModel,
   MemberModel,
+  PlaywrightRuntimeModel,
   TeamModel,
   ToolModel,
 } from "@/models";
@@ -393,14 +393,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
 
-        // Playwright browser preview can only be installed as a personal server
-        if (
-          isPlaywrightCatalogItem(serverData.catalogId) &&
-          serverData.scope !== "personal"
-        ) {
+        if (await PlaywrightRuntimeModel.isManagedCatalog(catalogItem.id)) {
           throw new ApiError(
             400,
-            "Playwright browser preview can only be installed as a personal server",
+            "The Playwright browser runtime is managed automatically.",
           );
         }
 
@@ -1318,6 +1314,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
+      await assertNotManagedPlaywrightRuntime(mcpServer);
       if (mcpServer.serverType === "app") {
         throw new ApiError(
           400,
@@ -1640,6 +1637,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         describe: (server) => server.name,
         authorize: async (server) => {
+          await assertNotManagedPlaywrightRuntime(server);
           if (server.serverType === "builtin") {
             throw new ApiError(400, "Cannot delete built-in MCP servers");
           }
@@ -1710,6 +1708,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
+      await assertNotManagedPlaywrightRuntime(mcpServer);
 
       // Prevent deletion of built-in MCP servers
       if (mcpServer.serverType === "builtin") {
@@ -1789,6 +1788,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
+      await assertNotManagedPlaywrightRuntime(mcpServer);
 
       // Mirror the delete-route guards: these server types are not user-managed
       // via this route (restoring one would resurrect a row another lifecycle owns).
@@ -2238,6 +2238,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
       }
+      await assertNotManagedPlaywrightRuntime(mcpServer);
 
       if (mcpServer.serverType === "app") {
         throw new ApiError(
@@ -3051,6 +3052,17 @@ async function findMcpServerInOrganization(
     return null;
   }
   return server;
+}
+
+async function assertNotManagedPlaywrightRuntime(
+  server: McpServer,
+): Promise<void> {
+  if (await PlaywrightRuntimeModel.isManagedCatalog(server.catalogId)) {
+    throw new ApiError(
+      400,
+      "The Playwright browser runtime is managed automatically.",
+    );
+  }
 }
 
 function assertCurrentServerAlertFingerprint(params: {

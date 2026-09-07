@@ -10,23 +10,13 @@ import { expect, type TestFixtures, test } from "./api-fixtures";
 
 test.describe.configure({ retries: 2 });
 
-/**
- * The composer asks "does this user need to install a browser?" by way of three
- * dependent waves of requests: the agent's tools, its delegations, and one more
- * per enabled sub-agent. The screen no longer waits behind them, so the answer
- * arrives while a conversation is already on screen and the composer has to be
- * right about the *unresolved* state as well as the resolved one.
- *
- * Holding the delegations lookup open forever is what makes that window
- * observable at all — it asserts a rule about the state rather than racing a
- * stopwatch against it.
- */
+// Slow delegation discovery must not block drafting a message.
 const BROWSER_CHECK_ROUTE = "**/api/agents/*/delegations*";
 
 const SETUP_CARD = "Browser Setup Required";
 
 test.describe("Chat browser setup", () => {
-  test("leaves the composer alone while the browser-tooling check is in flight", async ({
+  test("leaves the composer usable while delegation discovery is in flight", async ({
     page,
     request,
     makeApiRequest,
@@ -49,16 +39,12 @@ test.describe("Chat browser setup", () => {
     await goToChat(page);
     await expectChatReady(page);
 
-    // Held open for the rest of the test: the check can never resolve, so
-    // anything the composer shows here is what it shows while it does not know.
+    // Keep discovery pending throughout the composer assertions.
     await page.route(BROWSER_CHECK_ROUTE, () => {});
 
     await goToPage(page, `/chat/${conversationId}`);
 
-    // "We are still checking" is not "you need to install a browser". The
-    // message input keeps its place and stays typeable — this agent has no
-    // browser tools at all, and even one that did would not have earned the
-    // card until the check came back.
+    // Drafting remains available even when related tooling has not loaded.
     const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await expect(textarea).toBeEditable();
@@ -70,7 +56,7 @@ test.describe("Chat browser setup", () => {
     await expect(page.getByText(SETUP_CARD)).toHaveCount(0);
   });
 
-  test("hands the composer over to the setup card once a browser is known to be missing", async ({
+  test("keeps the composer usable with Playwright tools and no personal browser installation", async ({
     page,
     request,
     makeApiRequest,
@@ -93,12 +79,8 @@ test.describe("Chat browser setup", () => {
     await goToChat(page);
     await expectChatReady(page);
 
-    // The other half of the rule, and what keeps the assertion above from
-    // passing for the wrong reason: an agent that really does carry a browser
-    // tool, for a user with no install, does get the card. Installing a real
-    // browser per user is out of reach here, so the agent's tool list is the
-    // one thing answered from the test — the install lookup underneath it is
-    // the live one, and genuinely empty.
+    // Playwright is managed by the platform. Discovering a browser tool must
+    // never replace the composer with a personal installation prompt.
     await page.route("**/api/agents/*/tools*", async (route) => {
       await route.fulfill({
         status: 200,
@@ -117,11 +99,14 @@ test.describe("Chat browser setup", () => {
 
     await goToPage(page, `/chat/${conversationId}`);
 
-    await expect(page.getByText(SETUP_CARD)).toBeVisible({ timeout: 15_000 });
+    const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
+    await expect(textarea).toBeEditable({ timeout: 15_000 });
+    await textarea.fill("browse with the managed runtime");
+    await expect(textarea).toHaveValue("browse with the managed runtime");
+    await expect(page.getByText(SETUP_CARD)).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Install Browser" }),
-    ).toBeVisible();
-    await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveCount(0);
+    ).toHaveCount(0);
   });
 });
 

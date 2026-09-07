@@ -1,3 +1,4 @@
+import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -125,9 +126,6 @@ vi.mock("@/lib/organization.query", () => ({
 vi.mock("@/lib/auth/identity-provider-read.query", () => ({
   useIdentityProviders: () => ({ data: [] }),
 }));
-vi.mock("../_parts/catalog-edit-access", () => ({
-  useCanModifyCatalogItem: () => ({ canModify: true, isLoading: false }),
-}));
 vi.mock("../_parts/mcp-server-agent-usage", () => ({
   deriveAgentUsage: () => ({ agents: [], count: 0 }),
   McpServerAgentUsage: () => null,
@@ -181,7 +179,7 @@ function renderPage(overrides: Record<string, unknown> = {}) {
   // mocked above, so this client never fetches.
   const result = render(
     <QueryClientProvider client={new QueryClient()}>
-      <McpCatalogItemPage id="cat-1" />
+      <McpCatalogItemPage id={String(overrides.id ?? "cat-1")} />
     </QueryClientProvider>,
   );
   return result;
@@ -341,6 +339,31 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(
       section("Overview").queryByRole("link", { name: /^Edit\b/ }),
     ).toBeNull();
+  });
+
+  it("hides managed Playwright configuration actions and ignores YAML deep links", () => {
+    useMcpServers.mockReturnValue({
+      data: [
+        {
+          id: "managed-browser",
+          catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+          serverType: "local",
+          ownerId: null,
+          teamId: null,
+          createdAt: "2026-08-02T10:00:00.000Z",
+        },
+      ],
+    });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=yaml") as ReturnType<typeof useSearchParams>,
+    );
+    renderPage({ id: PLAYWRIGHT_MCP_CATALOG_ID, name: "Playwright" });
+
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Configuration/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "K8s YAML" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
   });
 
   it("keeps the issue visible with only Dismiss because remediation is elsewhere on the page", () => {

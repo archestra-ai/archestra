@@ -299,7 +299,7 @@ class InternalMcpCatalogModel {
 
     const searchCondition = and(
       baseSearchCondition,
-      // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
+      // Hidden runtime variants and legacy preset rows are never surfaced.
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
       // App backing catalogs are never surfaced via registry search.
       ne(schema.internalMcpCatalogTable.serverType, "app"),
@@ -1549,7 +1549,7 @@ class InternalMcpCatalogModel {
     const { userId, environmentId } = options ?? {};
 
     const listConditions = [
-      // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
+      // Hidden runtime variants and legacy preset rows are never surfaced.
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
       // Hide soft-deleted catalog items from the registry.
       notDeleted(schema.internalMcpCatalogTable),

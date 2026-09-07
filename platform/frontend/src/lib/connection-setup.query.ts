@@ -93,7 +93,8 @@ async function handleConnectionSetupError(
   const message = getApiErrorMessage(error);
   if (
     message === "Connecting the LLM Proxy is disabled for this organization" ||
-    message === "Connecting skills is disabled for this organization"
+    message === "Connecting skills is disabled for this organization" ||
+    message === "Connecting plugins is disabled for this organization"
   ) {
     await queryClient.invalidateQueries({
       queryKey: organizationKeys.details(),

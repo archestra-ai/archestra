@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { WizardStep } from "@/components/wizard-step";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
@@ -51,8 +52,20 @@ export function PluginInstallDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: organization, isPending: organizationPending } =
-    useOrganization(open);
+  const {
+    data: organization,
+    isPending: organizationPending,
+    isFetchedAfterMount,
+  } = useOrganization(open, { fresh: true });
+  const pluginsFeatureEnabled = useFeature("plugins") === true;
+  const pluginsOnConnectEnabled =
+    pluginsFeatureEnabled &&
+    isFetchedAfterMount &&
+    organization?.connectionPluginsEnabled === true;
+  const pluginsOnConnectDisabled =
+    pluginsFeatureEnabled &&
+    isFetchedAfterMount &&
+    organization?.connectionPluginsEnabled === false;
   const { mutateAsync: createSetup, isPending: setupPending } =
     useCreateConnectionSetup();
   const compatibility = resolvePluginInstallSelection(plugins);
@@ -112,7 +125,7 @@ export function PluginInstallDialog({
   }, [platforms]);
 
   const generate = useCallback(async () => {
-    if (!baseUrl) return;
+    if (!baseUrl || !pluginsOnConnectEnabled) return;
     setResult(null);
     setFailed(false);
     const created = await createSetup({
@@ -123,12 +136,34 @@ export function PluginInstallDialog({
     });
     setResult(created);
     setFailed(!created);
-  }, [baseUrl, clientType, createSetup, platform, pluginIds]);
+  }, [
+    baseUrl,
+    clientType,
+    createSetup,
+    platform,
+    pluginIds,
+    pluginsOnConnectEnabled,
+  ]);
 
   useEffect(() => {
-    if (!open || !platformDetected || organizationPending || !baseUrl) return;
+    if (
+      !open ||
+      !platformDetected ||
+      organizationPending ||
+      !pluginsOnConnectEnabled ||
+      !baseUrl
+    ) {
+      return;
+    }
     void generate();
-  }, [baseUrl, generate, open, organizationPending, platformDetected]);
+  }, [
+    baseUrl,
+    generate,
+    open,
+    organizationPending,
+    platformDetected,
+    pluginsOnConnectEnabled,
+  ]);
 
   return (
     <StandardDialog
@@ -218,43 +253,56 @@ export function PluginInstallDialog({
           </ul>
         </WizardStep>
 
-        <WizardStep n={2} title="Run the setup script" last>
-          <div className="flex flex-col gap-3">
-            <output className="sr-only" aria-live="polite">
-              {failed
-                ? "Setup command generation failed"
-                : result
-                  ? "Setup command ready"
-                  : "Generating setup command"}
-            </output>
-            <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
-              <SetupCommandLine
-                command={result?.command ?? null}
-                pending={organizationPending || setupPending}
-                failed={failed}
-                onRetry={generate}
-              />
+        {pluginsOnConnectDisabled ? (
+          <WizardStep n={2} title="Plugin setup unavailable" last>
+            <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+              Plugins on Connect is disabled for this organization. Existing
+              plugin installs keep working.
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
-              <span className="max-w-2xl">
-                The command downloads a one-time setup script (expires in 15
-                minutes) and pipes it straight to{" "}
-                {platform === "windows" ? "PowerShell" : "Bash"}. It installs
-                only {plugins.length === 1 ? "this plugin" : "these plugins"}{" "}
-                and leaves proxy and MCP configuration unchanged.
-              </span>
-              <button
-                type="button"
-                onClick={generate}
-                disabled={setupPending}
-                className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
-              >
-                <RotateCcw className="size-3" />
-                Regenerate
-              </button>
+          </WizardStep>
+        ) : (
+          <WizardStep n={2} title="Run the setup script" last>
+            <div className="flex flex-col gap-3">
+              <output className="sr-only" aria-live="polite">
+                {failed
+                  ? "Setup command generation failed"
+                  : result
+                    ? "Setup command ready"
+                    : "Generating setup command"}
+              </output>
+              <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
+                <SetupCommandLine
+                  command={result?.command ?? null}
+                  pending={
+                    organizationPending ||
+                    !pluginsOnConnectEnabled ||
+                    setupPending
+                  }
+                  failed={failed}
+                  onRetry={generate}
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                <span className="max-w-2xl">
+                  The command downloads a one-time setup script (expires in 15
+                  minutes) and pipes it straight to{" "}
+                  {platform === "windows" ? "PowerShell" : "Bash"}. It installs
+                  only {plugins.length === 1 ? "this plugin" : "these plugins"}{" "}
+                  and leaves proxy and MCP configuration unchanged.
+                </span>
+                <button
+                  type="button"
+                  onClick={generate}
+                  disabled={!pluginsOnConnectEnabled || setupPending}
+                  className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
+                >
+                  <RotateCcw className="size-3" />
+                  Regenerate
+                </button>
+              </div>
             </div>
-          </div>
-        </WizardStep>
+          </WizardStep>
+        )}
       </div>
     </StandardDialog>
   );

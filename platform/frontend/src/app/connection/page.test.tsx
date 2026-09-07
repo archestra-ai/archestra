@@ -40,6 +40,7 @@ describe("ConnectionPage", () => {
       data: {
         connectionSkillsEnabled: true,
         connectionLlmProxyEnabled: true,
+        connectionPluginsEnabled: true,
       },
       isFetchedAfterMount: false,
       isFetching: true,
@@ -59,7 +60,11 @@ describe("ConnectionPage", () => {
 
   it("hides setup actions during revalidation without dropping selections or enabled inputs", () => {
     const query = {
-      data: { connectionSkillsEnabled: true, connectionLlmProxyEnabled: true },
+      data: {
+        connectionSkillsEnabled: true,
+        connectionLlmProxyEnabled: true,
+        connectionPluginsEnabled: true,
+      },
       isFetchedAfterMount: true,
       isFetching: false,
       isError: false,
@@ -75,7 +80,11 @@ describe("ConnectionPage", () => {
     rerender(<ConnectionPage />);
     expect(screen.getByTestId("connection-flow")).not.toBeVisible();
     expect(connectionFlowMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ skillsEnabled: true, llmProxyEnabled: true }),
+      expect.objectContaining({
+        skillsEnabled: true,
+        llmProxyEnabled: true,
+        pluginsEnabled: true,
+      }),
     );
 
     vi.mocked(useOrganization).mockReturnValue(query);
@@ -88,7 +97,11 @@ describe("ConnectionPage", () => {
 
   it("offers retry instead of a partial setup when settings cannot be verified", () => {
     vi.mocked(useOrganization).mockReturnValue({
-      data: { connectionSkillsEnabled: true, connectionLlmProxyEnabled: true },
+      data: {
+        connectionSkillsEnabled: true,
+        connectionLlmProxyEnabled: true,
+        connectionPluginsEnabled: true,
+      },
       isFetchedAfterMount: true,
       isFetching: false,
       isError: true,
@@ -113,5 +126,25 @@ describe("ConnectionPage", () => {
     act(() => document.dispatchEvent(new Event("visibilitychange")));
 
     expect(refetchOrganizationMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed for plugins while preserving a non-plugin Connect flow", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        connectionSkillsEnabled: true,
+        connectionLlmProxyEnabled: true,
+        connectionPluginsEnabled: false,
+      },
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ConnectionPage />);
+
+    expect(connectionFlowMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pluginsEnabled: false }),
+    );
   });
 });

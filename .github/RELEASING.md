@@ -1,140 +1,99 @@
-# Platform Releases
-## Release Model
+# Release Checklist
 
-Archestra supports one stable feature line at a time.
-`main` produces rolling `X.Y.0-beta.N` releases for explicit customer opt-in.
-`release/X.Y` produces `X.Y.0`, then patch releases for stable installations.
-The latest stable release remains supported until the next feature line becomes stable.
+**Pick one:** release a beta, ship a stable fix, or cut the monthly feature release.
+Release-please handles versions and changelogs. GitHub Actions handles builds.
+Only tested, approved stable releases move `latest`.
 
-Beta versions and experimental features are separate controls.
-Installing a beta does not enable `ARCHESTRA_BETA`.
-Patch releases contain reviewed fixes and no schema or migration-history changes.
-A fix that needs a schema change ships in a separately qualified feature release.
+## Release A Beta
 
-## Release-Please Configuration
+- [ ] Open the release-please PR targeting `main` (for example, `1.4.0-beta.2`).
+- [ ] Review the changelog, wait for PR checks, and merge.
+- [ ] Confirm the **Release Please** workflow publishes the beta.
 
-Release-please configuration is branch-local.
-Do not merge stable release metadata back into `main`.
+Done. Beta users can deploy it; stable users stay on `1.3.x`.
+Installing a beta does not enable the separate `ARCHESTRA_BETA` feature flag.
 
-The initial `main` configuration uses native prerelease versioning with:
+## Ship A Stable Fix
 
-- `prerelease: true`
-- `versioning: prerelease`
-- `prerelease-type: beta`
-- `release-as: 1.4.0-beta.1`
+- [ ] Fix it on `main` first, then cherry-pick it onto a branch from `release/1.3`
+  using `git cherry-pick -x <commit>`.
+- [ ] Open and merge a reviewed, tested PR into `release/1.3`.
+  Include only needed fixes—no features, broad refactors, or schema/migration changes.
+- [ ] Review and merge the release-please PR for the next patch, such as `1.3.51`.
+- [ ] Complete **Test And Approve Stable** below.
 
-Merge the release-please PR for `1.4.0-beta.1` and let its artifacts build.
-Then remove the consumed `release-as` in a configuration-only PR.
-Native prerelease versioning produces later `1.4.0-beta.N` releases.
+Never merge all of `main` into a stable branch.
 
-After `1.4.0` is stable, seed `1.5.0-beta.1` on `main` with a temporary
-`release-as` override. Remove it in a configuration-only PR after that seed builds.
+## Cut The Monthly Feature Release
 
-To cut `release/1.4`, start from the qualified `platform-v1.4.0-beta.N` tag.
-On that branch, set:
+- [ ] Pick a tested beta tag, such as `platform-v1.4.0-beta.2`.
+  Pause beta release PR merges during the cut.
+- [ ] Create `release/1.4` from that tag—not from the latest `main`.
+- [ ] In a config-only PR to `release/1.4`, set the stable column below.
+- [ ] Review and merge release-please's `1.4.0` PR, then **Test And Approve Stable**.
+- [ ] After publication, remove the consumed `release-as` from `release/1.4`.
+  Release-please numbers future patch PRs `1.4.1`, `1.4.2`, etc.
+- [ ] On `main`, set the next beta column below. Merge its release-please PR,
+  wait for `1.5.0-beta.1` to build, then remove the consumed `release-as`.
+- [ ] Resume beta releases. Send future stable fixes to `release/1.4`.
 
-- `prerelease: false`
-- `versioning: always-bump-patch`
-- remove `prerelease-type`
-- `release-as: 1.4.0`
+Edit `packages.platform` in `.github/release-please/release-please-config.json`:
 
-Merge the release-please PR for `1.4.0` and qualify its final artifacts.
-Remove the stable `release-as` only after `1.4.0` is published.
-Native patch versioning then produces `1.4.1`, `1.4.2`, and later patches.
-Make these configuration changes manually; there is no release helper script.
+| Setting | Stable cut (`release/1.4`) | Next beta (`main`) |
+| --- | --- | --- |
+| `versioning` | `always-bump-patch` | `prerelease` |
+| `prerelease` | `false` | `true` |
+| `prerelease-type` | Remove | `beta` |
+| `release-as` (temporary) | `1.4.0` | `1.5.0-beta.1` |
+| `draft` | `true` | `true` |
 
-## Builds And Publication
+Keep each branch's release metadata separate; do not merge it back into `main`.
+We support one stable line. If the next feature release is delayed, keep fixing the old line.
 
-The integrated **Release Please** workflow runs on `main` and `release/*`.
-It builds every release artifact before its publication job can start.
-The same workflow run uploads these immutable artifacts:
+## Test And Approve Stable
 
-- the packaged chart as `release-helm-chart`
-- each image reference and digest as `release-image-*`
+The workflow builds first, then waits for **`stable-release` approval** in GitHub Actions.
+Test this final build, not just the preceding beta:
 
-The publication job downloads those artifacts from the same workflow run.
-It promotes image digests without rebuilding images and publishes the saved chart package.
-There is no JSON manifest, run-ID input, qualification issue parser, or separate stable workflow.
+- [ ] Confirm release PR checks and all artifact builds passed.
+- [ ] Download `release-helm-chart` and `release-image-*` from that workflow run.
+  Install the saved chart in a disposable environment with `ARCHESTRA_BETA=false`;
+  confirm the running image digests match the saved references.
+- [ ] Check a fresh install and an upgrade from the latest stable patch using fictional data.
+  Exercise sign-in, permissions, chat, LLM proxy, MCP tools, workers, and changed behavior.
+  Confirm existing data and access restrictions survive the upgrade.
+- [ ] Check migrations/recovery, logs, and resource use on supported architectures and relevant deployment modes.
+- [ ] Have another maintainer approve `stable-release`, recording a short, sanitized test summary.
+  Never include customer details, secrets, private links, or raw logs.
+- [ ] Confirm the workflow publishes the stable release and chart and updates `latest`.
 
-Releases from `main` use the `beta-release` environment.
-This environment has no required reviewer and publishes versioned beta artifacts.
-Releases from `release/*` use the `stable-release` environment.
-Its required-reviewer gate follows all artifact builds.
-Application tests must pass in the protected release PR; final qualification is manual.
-Approval therefore applies to the exact artifacts from that workflow run.
-GitHub must prevent self-review and allow `stable-release` only from `release/*`, not `main`.
+Approval publishes the saved chart and image digests without rebuilding.
+Production users should still pin exact versions or digests.
 
-Only stable publication updates floating `latest` aliases.
-Production deployments should still pin exact chart versions or image digests.
-The workflow uses the existing GitHub Actions secrets; no registry variable is required.
+## If Something Fails
 
-## Backports
+- **Build failure:** inspect it and rerun failed jobs in the same run when safe.
+- **Failed testing:** reject/cancel the waiting run, clear any consumed `release-as`,
+  backport the fix, and test a new version. Never reuse a version or overwrite its tag.
+- **Partial publication:** inspect GitHub and registries before retrying.
+  Never move `latest` backward or rebuild a published version.
 
-Develop fixes on `main` first whenever practical.
-Create a short-lived branch from the supported `release/X.Y` branch.
-Cherry-pick the fix with `git cherry-pick -x <commit>` and open a PR to `release/X.Y`.
-Do not merge `main` into a release branch.
+<details>
+<summary>One-time setup — before enabling this process</summary>
 
-Maintainers review the backport source, diff, conflicts, dependencies, and test evidence.
-They also confirm that the patch contains no schema or migration-history changes.
-There is no custom release-policy status check.
-Keep features, broad refactors, and unrelated dependency updates out of stable patches.
+- [ ] Freeze old release automation, let publishing finish, and close obsolete release PRs.
+- [ ] Create `beta-release` without required approval.
+- [ ] Create `stable-release` with required reviewers, prevent self-review, and allow
+  deployments only from `release/*`, not `main`. Auto-created environments are unprotected.
+- [ ] Protect `release/*` with PR review and required test checks.
+- [ ] Create `release/1.3` from `platform-v1.3.50`. Apply only release-tooling changes;
+  keep its manifest at `1.3.50`. Set `versioning: always-bump-patch`,
+  `prerelease: false`, and `draft: true`; remove `release-as` and `prerelease-type`.
+- [ ] On `main`, use the beta settings above, but seed `release-as: 1.4.0-beta.1`.
+  Remove that override after the first beta builds.
+- [ ] Verify registry authentication works for release branches and the publication environment.
+- [ ] Lift the freeze when both branches and approvals are ready.
 
-## Qualification
+Repository settings, branch creation, and publication require explicit authorization.
 
-Qualify the final stable build, not only its preceding beta.
-The final version changes metadata and is a separate build.
-
-Before approving `stable-release`:
-
-1. Confirm all artifact builds succeeded and the release PR's required tests passed.
-2. Download the chart and digest artifacts from that workflow run.
-3. Install the chart on a clean disposable environment with `ARCHESTRA_BETA=false`.
-4. Verify the running images match the recorded digests.
-5. Exercise sign-in, authorization, chat, LLM proxy, MCP tools, and workers.
-6. Upgrade a seeded installation from the latest supported stable patch.
-7. Verify its users, teams, permissions, conversations, and integrations remain intact.
-8. Review migrations, mixed-version behavior, recovery, logs, and resource use.
-9. Test both supported image architectures and relevant deployment modes.
-
-Use fictional data during qualification.
-Put only sanitized results in the workflow approval comment.
-Do not include customer names, credentials, private hosts, private links, or raw logs.
-Approval records the maintainer's judgment; it does not replace the checks above.
-
-## Cutover
-
-Before merging the release-process change:
-
-1. Freeze the old release automation and let in-flight publishing finish.
-2. Close obsolete release-please PRs against `main`.
-3. Configure `beta-release` without approval.
-4. Configure `stable-release` with required review and prevented self-review.
-5. Restrict `stable-release` deployments to `release/*` branches.
-6. Protect `release/*` with normal PR review and required test checks.
-7. Create `release/1.3` from `platform-v1.3.50`, not from `main`.
-   Apply only the release tooling changes, keep its manifest at `1.3.50`, and configure
-   `prerelease: false`, `versioning: always-bump-patch`, and `draft: true`.
-   Remove `release-as` and `prerelease-type` on this branch.
-8. Confirm `main` is seeded with `1.4.0-beta.1`.
-9. Verify registry authentication permits the release branches and the publication
-   environment, then lift the freeze when both branches are ready.
-
-Create and protect the environments explicitly before enabling releases.
-An automatically created environment has no approval protection.
-
-During a stable cut, pause merges to the old beta release PR.
-After stable publication, seed the next beta line and resume beta releases.
-
-## Failure And Recovery
-
-- If a build fails, rerun failed jobs for the same workflow run when safe.
-- If artifacts change, run and qualify a new release version.
-- If qualification fails, reject or cancel the pending run to unblock the branch.
-  Clear any consumed `release-as`, backport the fix, and qualify a new version.
-- Never delete or overwrite tags to reuse a version number.
-- If publication partially succeeds, inspect registries and GitHub before retrying.
-- Never move `latest` backward or rebuild an already published version.
-
-Merging release configuration does not authorize publication.
-Stable publication still requires the protected environment approval.
+</details>

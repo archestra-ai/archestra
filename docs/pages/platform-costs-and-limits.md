@@ -40,33 +40,7 @@ Virtual keys and OAuth client credentials identify individual proxy callers. Oth
 
 Each request counts once, using its recorded authentication method. Standard virtual keys take precedence over secondary passthrough keys. Deleted keys remain in their method's totals with no credential identity. Older requests without authentication metadata appear as unknown.
 
-### API
-
-`GET /api/statistics/llm-proxy` returns the same proxy breakdown. It requires `llmCost:read` and scopes results to your organization.
-
-```bash
-curl --get "$ARCHESTRA_URL/api/statistics/llm-proxy" \
-  --header "Authorization: $ARCHESTRA_API_KEY" \
-  --data-urlencode 'timeframe=7d' \
-  --data-urlencode 'authMethod=virtual_key' \
-  --data-urlencode 'limit=10' \
-  --data-urlencode 'offset=0'
-```
-
-| Parameter | Meaning |
-| --- | --- |
-| `timeframe` | Defaults to `24h`; accepts presets or `custom:<ISO-start>_<ISO-end>`. |
-| `authMethod` | Optional authentication-method filter. |
-| `credentialId` | Optional virtual-key UUID or authenticated OAuth application ID. |
-| `limit`, `offset` | Paginate credential rows, ordered by billed spend, then requests. |
-
-Authentication methods are `virtual_key`, `passthrough_virtual_key`, `oauth_client_credentials`, `oauth_user`, `jwks`, `provider_key`, `internal`, and `unknown`.
-
-The response contains `totals`, `timeSeries`, `methods`, `credentials`, and `pagination`. Totals, UTC time buckets, and method summaries cover all matching requests, regardless of pagination. Every summary includes requests, input/output/cache-read tokens, `billedCost`, and `subscriptionCost`.
-
-`billedCost` sums metered usage. `subscriptionCost` sums subscription-covered list-price estimates, which are not billed. Null credential IDs indicate unavailable or inapplicable attribution. Credential names never include secret values.
-
-For a virtual key's weekly report, pass its UUID as `credentialId`. This keeps the report specific even when another key shares its name.
+External dashboards and reports can consume the same breakdown through the [API Reference](platform-api-reference).
 
 See [Proxy Cost Queries](platform-observability#proxy-cost-queries) for equivalent telemetry breakdowns.
 

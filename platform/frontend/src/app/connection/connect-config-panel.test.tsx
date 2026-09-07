@@ -75,7 +75,15 @@ const gateway = {
 const IMPORT_STEP_TITLE = "Import the profile into Claude Desktop";
 const OAUTH_STEP_TITLE = "Finish the OAuth flow";
 
-function renderPanel({ withGateway = false }: { withGateway?: boolean } = {}) {
+function renderPanel({
+  withGateway = false,
+  skillsEnabled = true,
+  llmProxyEnabled = true,
+}: {
+  withGateway?: boolean;
+  skillsEnabled?: boolean;
+  llmProxyEnabled?: boolean;
+} = {}) {
   return render(
     <ConnectConfigPanel
       mcpGateways={withGateway ? [gateway] : null}
@@ -87,6 +95,8 @@ function renderPanel({ withGateway = false }: { withGateway?: boolean } = {}) {
       candidateBaseUrls={["http://localhost:9000/v1"]}
       baseUrlMetadata={null}
       onBaseUrlChange={() => {}}
+      skillsEnabled={skillsEnabled}
+      llmProxyEnabled={llmProxyEnabled}
     />,
   );
 }
@@ -285,5 +295,26 @@ describe("ConnectConfigPanel — import & OAuth step visibility", () => {
 
     expect(screen.queryByText(IMPORT_STEP_TITLE)).toBeNull();
     expect(screen.queryByText(OAUTH_STEP_TITLE)).toBeNull();
+  });
+
+  it("hides the skills row when connecting skills is disabled", () => {
+    vi.mocked(useAllSkills).mockReturnValue({
+      data: [{ id: "s1", name: "Blog editor" }],
+    } as ReturnType<typeof useAllSkills>);
+
+    renderPanel({ skillsEnabled: false });
+
+    expect(screen.queryByText(/Install shared skills/)).toBeNull();
+  });
+
+  it("keeps Claude Desktop MCP-only when the LLM Proxy is disabled", () => {
+    renderPanel({ withGateway: true, llmProxyEnabled: false });
+
+    expect(
+      screen.queryByText(/reuse a Claude Pro or Max subscription/),
+    ).toBeNull();
+    expect(screen.getByText(IMPORT_STEP_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(OAUTH_STEP_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(/Prod Gateway/)).toBeInTheDocument();
   });
 });

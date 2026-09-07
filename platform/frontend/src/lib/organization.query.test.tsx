@@ -1,16 +1,47 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { archestraApiClient } from "@archestra/shared";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   organizationKeys,
   useActiveMemberRole,
   useIsGlobalAdmin,
+  useOrganization,
 } from "@/lib/organization.query";
 
 vi.mock("@/lib/clients/auth/auth-client");
+
+const API_ORIGIN = "http://localhost:9000";
+const server = setupServer();
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeEach(() => {
+  archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
+});
+
+afterEach(() => server.resetHandlers());
+afterAll(() => {
+  server.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
 
 function renderWithClient<T>(hook: () => T) {
   const queryClient = new QueryClient({
@@ -134,6 +165,77 @@ describe("useActiveMemberRole", () => {
     });
     expect(result.current.isPending).toBe(true);
     expect(authClient.organization.getActiveMemberRole).not.toHaveBeenCalled();
+  });
+});
+
+describe("useOrganization", () => {
+  it("refetches Connect settings on mount despite a persisted fresh cache entry", async () => {
+    vi.mocked(authClient.getSession).mockResolvedValue(sessionWith("org-1"));
+    server.use(
+      http.get(`${API_ORIGIN}/api/organization`, () =>
+        HttpResponse.json({
+          connectionSkillsEnabled: false,
+          connectionLlmProxyEnabled: false,
+        }),
+      ),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(organizationKeys.details(), {
+      connectionSkillsEnabled: true,
+      connectionLlmProxyEnabled: true,
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(
+      () => useOrganization(true, { fresh: true }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data?.connectionSkillsEnabled).toBe(false);
+    });
+    expect(result.current.data?.connectionLlmProxyEnabled).toBe(false);
+  });
+
+  it("refetches Connect settings when the window regains focus", async () => {
+    vi.mocked(authClient.getSession).mockResolvedValue(sessionWith("org-1"));
+    let skillsEnabled = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/organization`, () =>
+        HttpResponse.json({
+          connectionSkillsEnabled: skillsEnabled,
+          connectionLlmProxyEnabled: true,
+        }),
+      ),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () => useOrganization(true, { fresh: true }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data?.connectionSkillsEnabled).toBe(true);
+    });
+
+    skillsEnabled = false;
+    act(() => focusManager.setFocused(false));
+    act(() => focusManager.setFocused(true));
+
+    await waitFor(() => {
+      expect(result.current.data?.connectionSkillsEnabled).toBe(false);
+    });
   });
 });
 

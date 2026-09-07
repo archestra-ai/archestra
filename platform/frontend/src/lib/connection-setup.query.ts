@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { handleApiError } from "@/lib/utils";
+import { organizationKeys } from "@/lib/organization.query";
+import { getApiErrorMessage, handleApiError } from "@/lib/utils";
 
 const {
   createConnectionSetup,
@@ -23,7 +24,7 @@ export function useCreateConnectionSetup() {
     mutationFn: async (body: CreateConnectionSetupBody) => {
       const { data, error } = await createConnectionSetup({ body });
       if (error) {
-        handleApiError(error);
+        await handleConnectionSetupError(queryClient, error);
         return null;
       }
       return data;
@@ -49,7 +50,7 @@ export function useCreateConnectionVirtualKey() {
     mutationFn: async (body: CreateConnectionVirtualKeyBody) => {
       const { data, error } = await createConnectionVirtualKey({ body });
       if (error) {
-        handleApiError(error);
+        await handleConnectionSetupError(queryClient, error);
         return null;
       }
       return data;
@@ -72,7 +73,7 @@ export function useCreateConnectionPassthroughKey() {
     mutationFn: async (body: CreateConnectionPassthroughKeyBody) => {
       const { data, error } = await createConnectionPassthroughKey({ body });
       if (error) {
-        handleApiError(error);
+        await handleConnectionSetupError(queryClient, error);
         return null;
       }
       return data;
@@ -82,4 +83,22 @@ export function useCreateConnectionPassthroughKey() {
       queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
     },
   });
+}
+
+async function handleConnectionSetupError(
+  queryClient: ReturnType<typeof useQueryClient>,
+  error: unknown,
+) {
+  // Reconcile a setup that raced an admin disabling a Connect feature.
+  const message = getApiErrorMessage(error);
+  if (
+    message === "Connecting the LLM Proxy is disabled for this organization" ||
+    message === "Connecting skills is disabled for this organization"
+  ) {
+    await queryClient.invalidateQueries({
+      queryKey: organizationKeys.details(),
+      refetchType: "active",
+    });
+  }
+  handleApiError(error);
 }

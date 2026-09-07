@@ -357,6 +357,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Proxy in, and the org's single proxy is resolved server-side.
       let llmProxyId: string | null = null;
       if (provider) {
+        assertConnectLlmProxyEnabled(organization);
         llmProxyId = (
           await requireLlmProxyAccess({ organizationId, userId: user.id })
         ).id;
@@ -420,6 +421,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (skills) {
+        assertConnectSkillsEnabled(organization);
         await requireSkillRead({ userId: user.id, organizationId });
         await assertSkillsBelongToOrg({
           skillIds: skills.skillIds,
@@ -592,6 +594,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!organization) {
         throw new ApiError(404, "Organization not found");
       }
+      assertConnectLlmProxyEnabled(organization);
 
       const { virtualApiKeyId, creditWarning } =
         await ensureConnectionVirtualKey({
@@ -649,6 +652,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "You need llmVirtualKey:create permission to create a passthrough key.",
         );
       }
+
+      const organization = await OrganizationModel.getById(organizationId);
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+      assertConnectLlmProxyEnabled(organization);
 
       // We're generating a connection for the LLM Proxy, so the caller must be
       // able to reach it.
@@ -848,6 +857,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 }> {
   const organization = await OrganizationModel.getById(setup.organizationId);
   if (!organization) throw GONE();
+  if (setup.llmProxyId) assertConnectLlmProxyEnabledOrGone(organization);
+  if (setup.includeSkills) assertConnectSkillsEnabledOrGone(organization);
   const membership = await MemberModel.getByUserId(
     setup.userId,
     setup.organizationId,
@@ -1290,4 +1301,29 @@ function connectionHealthRequesterKey(request: {
     if (firstHop) return `xff-${firstHop}`;
   }
   return `ip-${request.ip}`;
+}
+
+const CONNECT_LLM_PROXY_DISABLED =
+  "Connecting the LLM Proxy is disabled for this organization";
+const CONNECT_SKILLS_DISABLED =
+  "Connecting skills is disabled for this organization";
+
+function assertConnectLlmProxyEnabled(organization: Organization): void {
+  if (!organization.connectionLlmProxyEnabled) {
+    throw new ApiError(403, CONNECT_LLM_PROXY_DISABLED);
+  }
+}
+
+function assertConnectSkillsEnabled(organization: Organization): void {
+  if (!organization.connectionSkillsEnabled) {
+    throw new ApiError(403, CONNECT_SKILLS_DISABLED);
+  }
+}
+
+function assertConnectLlmProxyEnabledOrGone(organization: Organization): void {
+  if (!organization.connectionLlmProxyEnabled) throw GONE();
+}
+
+function assertConnectSkillsEnabledOrGone(organization: Organization): void {
+  if (!organization.connectionSkillsEnabled) throw GONE();
 }

@@ -93,4 +93,26 @@ describe("POST /api/connection-setups/virtual-key", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("anthropic");
   });
+
+  test("403s when the org has disabled connecting the LLM Proxy", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
+      provider: "anthropic",
+    });
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionLlmProxyEnabled: false,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups/virtual-key",
+      payload: { provider: "anthropic" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("LLM Proxy");
+  });
 });

@@ -588,15 +588,139 @@ fi`;
       }),
     ];
     sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" marketplace`)}
-if ! cli claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  warn "Marketplace may already be registered — continuing."
-fi
+${claudeMarketplaceRegistration(ctx.skills.marketplaceName, ctx.skills.cloneUrl)}
 ${installs.join("\n")}`);
   }
 
   startupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 
   return sections;
+}
+
+/**
+ * Claude Code declares user marketplaces in settings.json as a structured
+ * source. Re-adding an identical marketplace is not always idempotent when
+ * the declared fetch identity differs. Compare the declaration first so
+ * matching registrations avoid that error and source or credential changes
+ * are reconciled deliberately. Both URL userinfo and an equivalent Basic
+ * Authorization header are supported representations of the same identity.
+ */
+function claudeMarketplaceRegistration(
+  marketplaceName: string,
+  cloneUrl: string,
+): string {
+  const add = `cli claude plugin marketplace add --scope user ${sh(cloneUrl)}`;
+  const remove = `cli claude plugin marketplace remove --scope user ${sh(marketplaceName)}`;
+  const registrationFailure = sh(
+    `Could not register the "${marketplaceName}" marketplace. Shared skills were not installed.`,
+  );
+
+  return `claude_marketplace_state() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf '%s' unknown
+    return
+  fi
+  ARCHESTRA_MARKETPLACE_NAME=${sh(marketplaceName)} \\
+    ARCHESTRA_MARKETPLACE_URL=${sh(cloneUrl)} \\
+    python3 - <<'ARCHESTRA_MARKETPLACE_PY'
+import base64, json, os
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+name = os.environ["ARCHESTRA_MARKETPLACE_NAME"]
+clone_url = os.environ["ARCHESTRA_MARKETPLACE_URL"]
+config_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+settings_path = config_dir / "settings.json"
+
+try:
+    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+except Exception:
+    print("unknown")
+    raise SystemExit
+
+source = settings.get("extraKnownMarketplaces", {}).get(name, {}).get("source")
+if not isinstance(source, dict):
+    print("add")
+    raise SystemExit
+
+def target(url):
+    parsed = urlsplit(url)
+    if not parsed.scheme or not parsed.hostname:
+        return None
+    host = parsed.hostname.lower()
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    port = parsed.port
+    authority = host if port is None else f"{host}:{port}"
+    return (parsed.scheme.lower(), authority, parsed.path or "/", parsed.query)
+
+def credentials(url):
+    parsed = urlsplit(url)
+    if parsed.username is None:
+        return None
+    return f"{unquote(parsed.username)}:{unquote(parsed.password or '')}"
+
+def headers(value):
+    if isinstance(value, dict):
+        return {str(key).lower(): str(item) for key, item in value.items()}
+    if isinstance(value, list):
+        result = {}
+        for item in value:
+            if isinstance(item, dict) and isinstance(item.get("name"), str):
+                result[item["name"].lower()] = str(item.get("value", ""))
+        return result
+    return {}
+
+declared_url = source.get("url")
+desired_credentials = credentials(clone_url)
+declared_credentials = credentials(declared_url) if isinstance(declared_url, str) else None
+declared_headers = headers(source.get("headers"))
+source_has_extra_fetch_shape = any(
+    source.get(key) not in (None, "", [], {})
+    for key in ("ref", "path", "sparsePaths")
+)
+matches_url_credentials = declared_credentials == desired_credentials and not declared_headers
+if not declared_credentials and desired_credentials:
+    basic = base64.b64encode(desired_credentials.encode()).decode()
+    matches_url_credentials = declared_headers == {"authorization": f"Basic {basic}"}
+
+if (
+    source.get("source") == "git"
+    and isinstance(declared_url, str)
+    and target(declared_url) == target(clone_url)
+    and matches_url_credentials
+    and not source_has_extra_fetch_shape
+):
+    print("matching")
+else:
+    print("replace")
+ARCHESTRA_MARKETPLACE_PY
+}
+
+marketplace_state="$(claude_marketplace_state)"
+case "$marketplace_state" in
+  matching)
+    ok ${sh(`Marketplace "${marketplaceName}" is already registered with the requested source.`)}
+    ;;
+  replace)
+    say ${sh(`Updating the "${marketplaceName}" marketplace source`)}
+    ${remove}
+    ${add}
+    ;;
+  *)
+    if ! marketplace_add_output="$( ${add} )"; then
+      printf '%s\n' "$marketplace_add_output"
+      if [[ "$marketplace_add_output" == *"network source differs from the one declared for it in settings"* ]]; then
+        say ${sh(`Updating the "${marketplaceName}" marketplace source`)}
+        ${remove}
+        ${add}
+      else
+        err ${registrationFailure}
+        exit 1
+      fi
+    fi
+    ;;
+esac`;
 }
 
 /**

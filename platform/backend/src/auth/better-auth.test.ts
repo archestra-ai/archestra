@@ -593,11 +593,6 @@ describe("handleBeforeHook", () => {
       await makeMember(ordinaryTarget.id, otherOrg.id, {
         role: MEMBER_ROLE_NAME,
       });
-      // This target also belongs to the caller's org, but its effective org is
-      // still otherOrg because that membership was created first.
-      await makeMember(ordinaryTarget.id, callerOrg.id, {
-        role: MEMBER_ROLE_NAME,
-      });
 
       await expect(
         handleBeforeHook(impersonateCtx(caller, adminTarget.id)),

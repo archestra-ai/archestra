@@ -16,16 +16,17 @@ spec.loader.exec_module(policy)
 class ReleasePolicyTests(unittest.TestCase):
     def test_complete_release_cycle(self):
         for branch, current, requested, latest in [
-            ("release/1.4", "1.3.50", "1.4.0-beta.1", "1.3.50"),
-            ("release/1.4", "1.4.0-beta.1", "1.4.0-beta.2", "1.3.50"),
-            ("release/1.4", "1.4.0-beta.2", "1.4.0-beta.3", "1.3.50"),
+            ("main", "1.3.50", "1.4.0-beta.1", "1.3.50"),
+            ("main", "1.4.0-beta.1", "1.4.0-beta.2", "1.3.50"),
+            ("main", "1.4.0-beta.2", "1.4.0-beta.2", "1.3.50"),
             ("release/1.3", "1.3.49", "1.3.50", "1.3.49"),
             ("release/1.4", "1.4.0-beta.3", "1.4.0", "1.3.50"),
             ("release/1.4", "1.4.0", "1.4.0", "1.3.50"),
             ("release/1.4", "1.4.0", "1.4.1", "1.4.0"),
             ("release/1.4", "1.4.0", "1.4.1", "1.3.50"),  # Rejected final draft.
             ("release/1.4", "1.4.2", "1.4.3", "1.4.1"),  # Rejected patch draft.
-            ("release/2.0", "1.4.1", "2.0.0-beta.1", "1.4.1"),
+            ("main", "1.4.0-beta.3", "1.5.0-beta.1", "1.4.1"),
+            ("main", "1.9.0-beta.4", "2.0.0-beta.1", "1.9.2"),
         ]:
             with self.subTest(requested=requested):
                 policy.validate_request(branch, current, requested)
@@ -34,6 +35,9 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_invalid_transitions(self):
         for branch, current, requested in [
             ("main", "1.3.49", "1.3.50"),
+            ("main", "1.4.0-beta.1", "1.4.0"),
+            ("main", "1.4.0-beta.1", "1.4.0-beta.3"),
+            ("main", "1.4.0-beta.1", "1.6.0-beta.1"),
             ("release/1.3", "1.3.49", "1.4.0-beta.1"),
             ("release/1.4", "1.3.49", "1.4.0"),
             ("release/1.4", "1.4.0-beta.1", "1.4.0-beta.3"),
@@ -216,7 +220,7 @@ class QualificationTests(unittest.TestCase):
 
 
 class ReleaseCommandTests(unittest.TestCase):
-    def test_prepare_and_consume_request_in_real_repository(self):
+    def test_main_and_stable_trains_in_real_repository(self):
         script = Path(__file__).with_name("release-policy.py").resolve()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -227,7 +231,10 @@ class ReleaseCommandTests(unittest.TestCase):
             manifest_path = config_dir / ".release-please-manifest.json"
             config_path.write_text(
                 json.dumps(
-                    {"packages": {"platform": {"draft": True, "prerelease": False}}}
+                    {
+                        "last-release-sha": "obsolete-cutover-anchor",
+                        "packages": {"platform": {"draft": True, "prerelease": False}},
+                    }
                 )
             )
             manifest_path.write_text(json.dumps({"platform": "1.3.49"}))
@@ -250,12 +257,24 @@ class ReleaseCommandTests(unittest.TestCase):
 
             git("add", ".")
             git("commit", "--quiet", "-m", "initial state")
-            anchor = git("rev-parse", "HEAD")
-            # Previous stable tag on a sibling branch, not in the new branch's ancestry.
-            git("checkout", "--quiet", "-b", "old-release")
-            git("commit", "--quiet", "--allow-empty", "-m", "previous stable release")
-            git("tag", "platform-v1.3.49")
-            git("checkout", "--quiet", "-b", "next-release", anchor)
+
+            def command(branch, latest):
+                return [
+                    "python3",
+                    str(script),
+                    "check",
+                    "--branch",
+                    branch,
+                    "--latest",
+                    latest,
+                ]
+
+            def check(branch, latest):
+                return subprocess.check_output(
+                    command(branch, latest), cwd=root, text=True
+                )
+
+            # Main owns the beta train. Prepare is only the one-time beta.1 seed.
             result = subprocess.run(
                 [
                     "python3",
@@ -263,7 +282,7 @@ class ReleaseCommandTests(unittest.TestCase):
                     "prepare",
                     "1.4.0-beta.1",
                     "--branch",
-                    "release/1.4",
+                    "main",
                 ],
                 cwd=root,
                 check=True,
@@ -271,51 +290,120 @@ class ReleaseCommandTests(unittest.TestCase):
                 text=True,
             )
             self.assertIn("Prepared 1.4.0-beta.1", result.stdout)
-            self.assertEqual(
-                json.loads(config_path.read_text())["last-release-sha"], anchor
-            )
-            self.assertTrue(
-                json.loads(config_path.read_text())["packages"]["platform"][
-                    "prerelease"
-                ]
-            )
-            self.assertEqual(
-                json.loads(manifest_path.read_text())["platform"], "1.3.49"
-            )
-            command = [
-                "python3",
-                str(script),
-                "check",
-                "--branch",
-                "release/1.4",
-                "--latest",
-                "1.3.49",
-            ]
-            self.assertIn(
-                "create_pr=true", subprocess.check_output(command, cwd=root, text=True)
-            )
+            config = json.loads(config_path.read_text())
+            package = config["packages"]["platform"]
+            self.assertNotIn("last-release-sha", config)
+            self.assertEqual(package["release-as"], "1.4.0-beta.1")
+            self.assertEqual(package["versioning"], "prerelease")
+            self.assertTrue(package["prerelease"])
+            self.assertIn("requested=1.3.49", check("main", "1.3.49"))
+
+            # Once release-please consumes an explicit override, pause until it is cleared.
             manifest_path.write_text(json.dumps({"platform": "1.4.0-beta.1"}))
-            self.assertIn(
-                "create_pr=false", subprocess.check_output(command, cwd=root, text=True)
+            output = check("main", "1.3.49")
+            self.assertIn("requested=1.4.0-beta.1", output)
+            self.assertIn("create_pr=false", output)
+            subprocess.run(
+                ["python3", str(script), "prepare", "1.4.0-beta.1", "--branch", "main"],
+                cwd=root,
+                check=True,
+                capture_output=True,
             )
-            git("add", ".")
-            git("commit", "--quiet", "-m", "beta release")
-            candidate_sha = git("rev-parse", "HEAD")
-            git("tag", "platform-v1.4.0-beta.1")
+            self.assertNotIn(
+                "release-as",
+                json.loads(config_path.read_text())["packages"]["platform"],
+            )
+            output = check("main", "1.3.49")
+            self.assertIn("requested=1.4.0-beta.1", output)
+            self.assertIn("create_pr=true", output)
+
+            # A release branch overrides its latest beta to stable, then rolls patches.
             subprocess.run(
                 ["python3", str(script), "prepare", "1.4.0", "--branch", "release/1.4"],
                 cwd=root,
                 check=True,
                 capture_output=True,
             )
-            self.assertFalse(
-                json.loads(config_path.read_text())["packages"]["platform"][
-                    "prerelease"
-                ]
+            package = json.loads(config_path.read_text())["packages"]["platform"]
+            self.assertEqual(package["release-as"], "1.4.0")
+            self.assertEqual(package["versioning"], "always-bump-patch")
+            self.assertFalse(package["prerelease"])
+            manifest_path.write_text(json.dumps({"platform": "1.4.0"}))
+            self.assertIn("create_pr=false", check("release/1.4", "1.3.49"))
+            subprocess.run(
+                ["python3", str(script), "prepare", "1.4.0", "--branch", "release/1.4"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            output = check("release/1.4", "1.3.49")
+            self.assertIn("requested=1.4.0", output)
+            self.assertIn("create_pr=true", output)
+
+            # Main can seed the next train from its preceding beta manifest.
+            manifest_path.write_text(json.dumps({"platform": "1.4.0-beta.2"}))
+            subprocess.run(
+                ["python3", str(script), "prepare", "1.5.0-beta.1", "--branch", "main"],
+                cwd=root,
+                check=True,
+                capture_output=True,
             )
             self.assertEqual(
-                json.loads(config_path.read_text())["last-release-sha"], candidate_sha
+                json.loads(config_path.read_text())["packages"]["platform"][
+                    "release-as"
+                ],
+                "1.5.0-beta.1",
             )
+
+    def test_check_rejects_invalid_branch_configuration(self):
+        script = Path(__file__).with_name("release-policy.py").resolve()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "--quiet", directory], check=True)
+            config_dir = root / ".github/release-please"
+            config_dir.mkdir(parents=True)
+            (config_dir / ".release-please-manifest.json").write_text(
+                json.dumps({"platform": "1.4.0-beta.2"})
+            )
+            config_path = config_dir / "release-please-config.json"
+            beta = {
+                "draft": True,
+                "prerelease": True,
+                "versioning": "prerelease",
+                "prerelease-type": "beta",
+            }
+            stable = {
+                "draft": True,
+                "prerelease": False,
+                "versioning": "always-bump-patch",
+                "prerelease-type": "beta",
+            }
+            for branch, package in (
+                ("release/1.5", beta),
+                ("release/1.4", stable),
+                ("main", {**beta, "prerelease": False}),
+                ("release/1.4", {**beta, "prerelease": False}),
+                ("main", {**beta, "release-as": "1.4.0"}),
+                ("release/1.4", {**stable, "release-as": "1.5.0"}),
+            ):
+                config_path.write_text(json.dumps({"packages": {"platform": package}}))
+                result = subprocess.run(
+                    command := [
+                        "python3",
+                        str(script),
+                        "check",
+                        "--branch",
+                        branch,
+                        "--latest",
+                        "1.3.49",
+                    ],
+                    cwd=root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                with self.subTest(branch=branch, command=command, package=package):
+                    self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":

@@ -66,8 +66,10 @@
     "platform": {
       "component": "platform",
       "release-type": "node",
-      "versioning": "always-bump-patch",
-      "prerelease": false,
+      "versioning": "prerelease",
+      "prerelease-type": "beta",
+      "release-as": "1.4.0-beta.1",
+      "prerelease": true,
       "initial-version": "0.0.1",
       "draft": true,
       "extra-files": [

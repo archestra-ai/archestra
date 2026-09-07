@@ -3,6 +3,7 @@ name: Release Please
 on:
   push:
     branches:
+      - main
       - "release/*"
   workflow_dispatch:
 
@@ -17,7 +18,7 @@ concurrency:
 jobs:
   release-please:
     name: Release Please
-    if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to update manifests and release metadata in the repository.
@@ -43,7 +44,7 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Validate explicit release request
+      - name: Validate branch release policy
         id: policy
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -112,7 +113,8 @@ jobs:
 
       - name: Create or update the next release PR
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        # A consumed release-as request must never generate another PR for the same version.
+        # Native rolling PRs on each branch. Pause only for consumed cutover overrides,
+        # which must be cleared after the seed/final release has built successfully.
         if: ${{ steps.policy.outputs.create_pr == 'true' }}
         id: release-please-pr
         with:
@@ -143,7 +145,7 @@ jobs:
           REQUESTED_VERSION: ${{ steps.policy.outputs.requested }}
         run: |
           if [ "$ACTION_RELEASE_CREATED" = "true" ] && [ "$ACTION_VERSION" != "$REQUESTED_VERSION" ]; then
-            echo "::error::Release-please produced a version other than the reviewed request."
+            echo "::error::Release-please produced a version other than the merged manifest."
             exit 1
           fi
 

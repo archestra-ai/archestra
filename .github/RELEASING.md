@@ -10,12 +10,12 @@ Older versions remain downloadable, but receive no further fixes after that tran
 
 | Source | Version example | Audience |
 | --- | --- | --- |
-| `main` | Commit-tagged development images | Development and integration testing |
-| `release/1.4` during qualification | `1.4.0-beta.1` | Internal testing and explicit preview adopters |
+| `main` | `1.4.0-beta.N` | Development, integration testing, and explicit preview adopters |
 | `release/1.4` after qualification | `1.4.0`, then `1.4.1` | Stable installations |
 
 Versions here are examples. Read GitHub's latest stable release before choosing a line.
-A `-beta.N` version suffix marks a preview release. It is separate from the `ARCHESTRA_BETA` feature flag and does not enable that flag.
+A `-beta.N` version suffix names a preview release. Release-please increments that suffix on `main`.
+The `ARCHESTRA_BETA` feature flag controls experimental product behavior. Installing a beta version does not enable the flag.
 Backward-compatible features increment the minor version. Breaking public contracts require a major version.
 The latest published stable GitHub release identifies the supported line.
 Only **Publish Stable Release** changes that pointer.
@@ -73,43 +73,96 @@ An application or Helm rollback does not undo a database migration.
 Record whether recovery uses compatible old binaries, a forward fix, or a tested backup restore.
 Do not test against production data or put database contents in public evidence.
 
-## Request A Release
+## Rolling Beta And Patch Releases
 
 The tools require Python 3, Git, GitHub CLI, Docker Buildx, and Helm for their respective steps.
 Run commands from `platform/` in a dedicated worktree.
 
-1. Read the latest stable release and choose the correct base.
-2. For a new feature line, create `release/X.Y` from the reviewed main commit.
-   Ensure main's release metadata has been synchronized from the preceding stable release first.
-3. On a short-lived PR branch based on that release branch, prepare an explicit version request:
+Release-please keeps one rolling release PR on each active branch:
+
+- `main` produces `1.4.0-beta.N` with prerelease versioning and prerelease type `beta`.
+- `release/1.3` produces `1.3.N` with `always-bump-patch` versioning.
+
+Normal changes update these release PRs. There is no separate request PR for every version.
+Keep each branch's release-please manifest and configuration on that branch.
+Never copy stable versions or release metadata back to `main`. Main retains its beta ancestry.
+
+Use `prepare` only to configure a cutover or clear a temporary override. It edits release-please configuration only.
+It does not commit, push, or publish.
+
+### Seed The First Rolling Beta
+
+For the initial cutover from stable `1.3.50`, prepare `main` with a temporary `release-as`:
+
+The initial configuration in this PR already seeds `1.4.0-beta.1`.
+The command below is also available for subsequent cutovers.
+
+```bash
+git fetch origin --tags
+python3 ../.github/scripts/release-policy.py prepare 1.4.0-beta.1 --branch main
+git diff -- ../.github/release-please/release-please-config.json
+```
+
+Merge the configuration change through normal review. Merge the release-please PR for `1.4.0-beta.1`.
+Wait for its release and tag to be built successfully. Then clear the temporary override by preparing the same current version:
+
+```bash
+python3 ../.github/scripts/release-policy.py prepare 1.4.0-beta.1 --branch main
+```
+
+Merge that configuration-only change through review. Native prerelease versioning then rolls `beta.2`, `beta.3`, and later betas automatically.
+
+Do not seed `1.5.0-beta.1` while `1.4` is still in qualification.
+After `1.4.0` is published, start the next train on `main` with:
+
+```bash
+python3 ../.github/scripts/release-policy.py prepare 1.5.0-beta.1 --branch main
+```
+
+During a stable cutover, freeze merges to the rolling beta PR on `main` until the next train is seeded.
+Otherwise merged changes can publish additional betas on the old feature line with no supported promotion path.
+
+### Cut A Stable Feature Line
+
+1. Select the tested `platform-v1.4.0-beta.N` tag. Create `release/1.4` from that tag, not from a later `main` commit.
+2. On the new branch, prepare the stable version:
 
    ```bash
    git fetch origin --tags
-   python3 ../.github/scripts/release-policy.py prepare 1.4.0-beta.1 --branch release/1.4
+   python3 ../.github/scripts/release-policy.py prepare 1.4.0 --branch release/1.4
    git diff -- ../.github/release-please/release-please-config.json
    ```
 
-   This edits only release-please configuration. It does not commit, push, or publish.
-   Commit the change and open a PR against the release branch.
-4. After that request merges, release-please opens its version/changelog PR against the same branch.
-   Review the scope and wait for normal PR checks before merging it.
-5. The merged version PR builds versioned images and a packaged chart.
+   Commit the configuration-only final-version request and open a PR against `release/1.4`.
+3. After that PR merges, release-please updates its stable version/changelog PR on the branch.
+   Review its scope and wait for normal PR checks before merging it.
+4. The merged stable PR builds versioned images and a packaged chart.
    The workflow attaches the chart and `release-artifacts.json` to the draft release.
-   Beta releases then publish as GitHub prereleases. Stable releases remain drafts.
+   Stable releases remain drafts until qualification and protected publication finish.
+5. After qualification and stable publication succeed, clear the temporary override with the same version:
 
-Repeat `prepare` with the next beta number when needed.
-To request the final feature release, use `1.4.0` after `1.4.0-beta.N`.
-That request must contain no product changes beyond the qualified candidate.
-For a patch, backport fixes first, then request `1.4.1`.
+   ```bash
+   python3 ../.github/scripts/release-policy.py prepare 1.4.0 --branch release/1.4
+   ```
 
-Every version needs an explicit request. A consumed `release-as` value never creates another version PR.
-The helper refreshes `last-release-sha` on each request to bound the changelog.
-For sibling release branches, it uses the common ancestor with the preceding version's tag.
-For later beta releases and patches, it uses the preceding tag on the same branch.
-Review the resulting changelog; do not reuse a previous request's anchor manually.
+   Merge the configuration-only change through review. Native `always-bump-patch` versioning then rolls patches automatically.
+
+The final-version configuration PR must contain no product changes beyond the qualified beta candidate.
 Keep the manifest under release-please's control; do not edit it to skip beta releases or version checks.
 Do not advance a release branch while its final stable build is being qualified.
 Publication requires the branch head to match the release tag.
+
+### Bootstrap An Existing Maintenance Line
+
+Create `release/1.3` from the latest stable `platform-v1.3.N` tag.
+Apply the release tooling through a reviewed PR without importing feature work.
+Configure native patch versioning by preparing the same stable version on that branch:
+
+```bash
+python3 ../.github/scripts/release-policy.py prepare 1.3.50 --branch release/1.3
+```
+
+Backport fixes before merging the rolling release-please PR. Release-please calculates the next `1.3.N` patch automatically.
 
 ## Qualify The Final Artifacts
 
@@ -168,11 +221,9 @@ After publication:
 
 1. Verify the chart, image aliases, and GitHub latest release agree.
 2. Close the qualification issue with the public release link.
-3. Open a metadata-only PR on `main` carrying the new stable package versions, manifest, chart image tag,
-   generated API version, and changelog. Do not merge the whole release branch.
-   Preserve existing changelog entries and unrelated main changes.
-   Do not carry the branch's `release-as` request or `last-release-sha` anchor.
-4. When a new feature line becomes stable, retire the preceding line. Do not delete its tags or releases.
+3. Keep stable release metadata on its release branch. Never synchronize it into `main`.
+4. Seed the next beta train on `main`, then unfreeze its rolling release PR.
+5. When a new feature line becomes stable, retire the preceding line. Do not delete its tags or releases.
 
 ## Failure And Recovery
 
@@ -180,6 +231,7 @@ After publication:
   Do not use “re-run all jobs” after an artifact upload succeeded, or rebuild a published version.
   A new workflow dispatch may be a no-op after release-please consumed the release PR; it is not build recovery.
 - **Qualification failure:** keep the version off the stable channel. Fix and request a new version.
+  Clear a consumed final-version override before backporting the fix; the rolling PR calculates the next patch.
   A rejected final feature version advances to its first patch and still needs full feature qualification.
   Rejected drafts consume version numbers; published versions can skip those numbers.
   Do not delete or overwrite tags to reuse a version number.
@@ -205,11 +257,15 @@ These are explicit repository-administration steps, not effects of merging the t
 5. Select the current stable tag as the maintenance baseline.
    Create its `release/X.Y` branch from that tag, not from feature-bearing `main`.
    Apply the release-tooling change through review, without importing unrelated product changes.
+   Run `prepare` with that same stable version to configure native patch versioning.
 6. Close or update external automation that assumes merging a release PR on `main` publishes stable.
    Use this runbook and the `managing-archestra-releases` skill as the source of truth.
-7. Lift the freeze when ready. Exercise one beta build and qualification before the first stable publication.
+7. Verify the seed on `main` matches the next feature line. This PR seeds `1.4.0-beta.1`.
+8. Lift the freeze when ready, then build the seed beta and clear its temporary override.
+   Exercise beta qualification before the first stable publication.
 
-Merging the tooling disables release creation on `main`; it does not cut a branch or publish a release.
+Merging enables beta release PRs on `main` unless releases are frozen.
+It does not configure approvals, create a maintenance branch, or publish a stable release.
 Do not merge it without an owner for these cutover steps.
 
 ## Local Checks

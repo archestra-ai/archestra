@@ -21,22 +21,31 @@ def version(value):
 def validate_request(branch, current, requested):
     old = version(current)
     new = version(requested)
+    if branch == "main":
+        if new[3] is None:
+            raise ValueError("Main can only release beta versions")
+        if (
+            current == requested
+            or (new[:3] == old[:3] and old[3] is not None and new[3] == old[3] + 1)
+            or (
+                new[:2] in ((old[0], old[1] + 1), (old[0] + 1, 0)) and new[2:] == (0, 1)
+            )
+        ):
+            return
+        raise ValueError("Main must advance the beta or start the next feature line")
     if branch != f"release/{new[0]}.{new[1]}":
-        raise ValueError(
-            "Release version must match the release/X.Y branch; main cannot release"
-        )
+        raise ValueError("Release version must match the release/X.Y branch")
+    if new[3] is not None and current != requested:
+        raise ValueError("New beta releases belong on main")
     if current == requested:
         return  # A merged release-please PR is ready to build, not another version request.
     if old[3] is not None:
-        allowed = new[:3] == old[:3] and new[3] in (None, old[3] + 1)
-    elif old[:2] == new[:2]:
-        allowed = new == (old[0], old[1], old[2] + 1, None)
+        allowed = new[:3] == old[:3] and new[3] is None
     else:
-        next_line = new[:2] in ((old[0], old[1] + 1), (old[0] + 1, 0))
-        allowed = next_line and new[2:] == (0, 1)
+        allowed = new == (old[0], old[1], old[2] + 1, None)
     if not allowed:
         raise ValueError(
-            "Request the next patch, next minor/major beta.1, next beta, or that beta's stable version"
+            "Release branches can graduate their beta to stable or increment the patch"
         )
 
 
@@ -192,15 +201,17 @@ def main():
         "check-pr", help="Validate release branch PR scope and backport references"
     )
     prepare = commands.add_parser(
-        "prepare", help="Write a version request locally; never commits or pushes"
+        "prepare", help="Configure a release line at cutover; never commits or pushes"
     )
     prepare.add_argument("version")
     prepare.add_argument(
         "--branch",
         required=True,
-        help="Target release/X.Y branch, not the PR head branch",
+        help="Target main or release/X.Y branch, not the PR head branch",
     )
-    check = commands.add_parser("check", help="Validate the branch's release request")
+    check = commands.add_parser(
+        "check", help="Validate the branch's release configuration"
+    )
     check.add_argument("--branch", required=True)
     check.add_argument("--latest", required=True)
     publication = commands.add_parser("check-publication")
@@ -246,17 +257,21 @@ def main():
     ]
     if args.command == "prepare":
         validate_request(args.branch, current, args.version)
-        if current == args.version:
-            raise ValueError(
-                "This version is already in the manifest; request a new version"
-            )
-        # The previous stable tag may live on a sibling release branch. Bound the
-        # first beta's changelog at the common ancestor, not at an unreachable tag.
-        # Refresh this on EVERY request so later betas/patches use their own tag.
-        config["last-release-sha"] = subprocess.check_output(
-            ["git", "merge-base", "HEAD", f"refs/tags/platform-v{current}"], text=True
-        ).strip()
-        package["release-as"] = args.version
+        config.pop("last-release-sha", None)
+        if current != args.version:
+            if args.branch == "main" and version(args.version)[2:] != (0, 1):
+                raise ValueError(
+                    "Only seed beta.1; release-please increments later betas"
+                )
+            if args.branch != "main" and version(current)[3] is None:
+                raise ValueError("Stable patches are calculated automatically")
+            package["release-as"] = args.version
+        else:
+            package.pop("release-as", None)
+        package["versioning"] = (
+            "prerelease" if args.branch == "main" else "always-bump-patch"
+        )
+        package["prerelease-type"] = "beta"
         package["prerelease"] = version(args.version)[3] is not None
         config_path.write_text(json.dumps(config, indent=2) + "\n")
         print(
@@ -264,27 +279,30 @@ def main():
         )
     else:
         requested = package.get("release-as")
-        if not requested:
+        if requested:
+            validate_request(args.branch, current, requested)
+        elif args.branch == "main" and version(current)[3] is None:
+            raise ValueError("Seed the next beta train with release-policy.py prepare")
+        validate_request(args.branch, current, requested or current)
+        validate_supported(requested or current, args.latest)
+        is_beta = args.branch == "main"
+        if not is_beta and version(requested or current)[3] is not None:
             raise ValueError(
-                "No version requested. Run release-policy.py prepare first"
+                "Configure the stable cutover before releasing this branch"
             )
-        validate_request(args.branch, current, requested)
-        validate_supported(requested, args.latest)
-        anchor = config.get("last-release-sha", "")
-        if not re.fullmatch(r"[0-9a-f]{40}", anchor):
-            raise ValueError("Missing changelog anchor; use release-policy.py prepare")
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", anchor, "HEAD"], check=True
-        )
         if (
-            package["prerelease"] != (version(requested)[3] is not None)
+            package["prerelease"] != is_beta
+            or package["versioning"]
+            != ("prerelease" if is_beta else "always-bump-patch")
+            or (is_beta and package.get("prerelease-type") != "beta")
             or not package["draft"]
         ):
             raise ValueError(
-                "Release config must use drafts and match the version's prerelease status"
+                "Use draft beta/prerelease versioning on main and draft patch versioning on release branches"
             )
-        print(f"requested={requested}")
-        print(f"create_pr={'true' if current != requested else 'false'}")
+        # A release action must build the version just merged into the manifest.
+        print(f"requested={current}")
+        print(f"create_pr={'false' if current == requested else 'true'}")
 
 
 if __name__ == "__main__":

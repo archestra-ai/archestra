@@ -108,11 +108,7 @@ function SignUpWithInvitationContent() {
   };
 
   if (isCheckingInvitation && invitationId) {
-    return (
-      <main className="h-full flex flex-col">
-        <LoadingState variant="fill" />
-      </main>
-    );
+    return <LoadingState variant="fill" />;
   }
 
   return (

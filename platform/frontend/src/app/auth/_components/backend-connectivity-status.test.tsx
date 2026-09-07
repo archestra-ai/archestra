@@ -31,7 +31,11 @@ describe("BackendConnectivityStatus", () => {
   it.each([
     "initializing",
     "checking",
-  ] as const)("renders nothing while status is %s", (status) => {
+  ] as const)("keeps an indicator on screen while status is %s", (status) => {
+    // This wraps the whole auth column, and it sits between the session gate's
+    // indicator and the sign-in card. Rendering nothing here blanked the
+    // screen mid-boot — twice on one signed-out load — which reads as the page
+    // having thrown its content away rather than as a wait still in progress.
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status,
       attemptCount: 0,
@@ -41,13 +45,13 @@ describe("BackendConnectivityStatus", () => {
       retry: mockRetry,
     });
 
-    const { container } = render(
+    render(
       <BackendConnectivityStatus>
         <div data-testid="child-content">Login Form</div>
       </BackendConnectivityStatus>,
     );
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByRole("status")).toBeInTheDocument();
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
 

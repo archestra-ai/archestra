@@ -316,7 +316,7 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
     });
 
-    it("keeps a centred indicator on auth pages, which have no shell to hold", () => {
+    it("shows the auth page immediately instead of waiting for the session", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
 
       render(
@@ -325,8 +325,14 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      const status = screen.getByRole("status", { name: "Loading…" });
-      expect(status.querySelector(".animate-spin")).not.toBeNull();
+      // The sign-in form is static and correct for everyone who is not signed
+      // in, so there is no second layout to guess at and nothing to wait for.
+      // Gating it on the session charged every real sign-in the round trip in
+      // order to spare a signed-in visitor a glimpse of a form — and that
+      // visitor is redirected either way, by the branch that fires when the
+      // session resolves.
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+      expect(screen.queryByRole("status", { name: "Loading…" })).toBeNull();
     });
   });
 

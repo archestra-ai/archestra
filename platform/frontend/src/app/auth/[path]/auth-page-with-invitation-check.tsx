@@ -45,11 +45,10 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   // Show loading while checking the invitation or redirecting to the
   // sign-up-with-invitation page
   if (invitationId && isSignUpPath) {
-    return (
-      <main className="h-full flex flex-col">
-        <LoadingState variant="fill" />
-      </main>
-    );
+    // No wrapper: `fill` centres in the frame slot the shell already gives
+    // this route. A `h-full` <main> around it resolves to zero height inside
+    // that flex column and drops the indicator at the top of the screen.
+    return <LoadingState variant="fill" />;
   }
 
   // Block direct sign-up without invitation
@@ -117,40 +116,52 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   return (
     <BackendConnectivityStatus>
       <main className="h-full flex items-center justify-center p-4">
-        <div className="space-y-4 w-full max-w-md">
-          {showLogo && <AppLogo />}
+        {/*
+          The banner sits under the card and out of the column's flow, and the
+          column keeps its own `space-y-4` in a child so the banner's presence
+          cannot add a gap to it either. The queries it depends on answer after
+          the card has painted, and in a vertically centred column anything
+          that joins the column afterwards moves the card — which is what it
+          did, by 55px, every time someone opened sign-in on a deployment still
+          using the default credentials. Out of flow, it can arrive whenever it
+          arrives and nothing above it moves.
+        */}
+        <div className="relative w-full max-w-md">
           {showDefaultCredentialsWarning && (
-            <div className="p-0 m-0 pb-4">
+            <div className="absolute inset-x-0 top-full pt-4">
               <DefaultCredentialsWarning alwaysShow />
             </div>
           )}
-          {showExistingUserMessage && (
-            <Card className="mb-4">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Welcome Back!</CardTitle>
-                <CardDescription>
-                  You already have an account. Please sign in to join the new
-                  organization.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          )}
-          {/*
+          <div className="space-y-4">
+            {showLogo && <AppLogo />}
+            {showExistingUserMessage && (
+              <Card className="mb-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Welcome Back!</CardTitle>
+                  <CardDescription>
+                    You already have an account. Please sign in to join the new
+                    organization.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+            {/*
             callbackURL behavior differs by flow:
             - Invitation flow: Points back to auth page with invitationId preserved.
               After OAuth/SSO completes, user returns here to trigger invitation acceptance.
             - Normal flow: Points to final destination (from redirectTo param or /).
               After auth completes, user goes directly to their intended page.
           */}
-          <AuthViewWithErrorHandling
-            path={path}
-            callbackURL={getAuthCallbackURL({
-              invitationId,
-              redirectTo,
-              searchParams,
-            })}
-          />
-          {isSignInOrSignUp && <CommunityLinks />}
+            <AuthViewWithErrorHandling
+              path={path}
+              callbackURL={getAuthCallbackURL({
+                invitationId,
+                redirectTo,
+                searchParams,
+              })}
+            />
+            {isSignInOrSignUp && <CommunityLinks />}
+          </div>
         </div>
       </main>
     </BackendConnectivityStatus>

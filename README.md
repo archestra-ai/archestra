@@ -78,7 +78,7 @@ Point your users — or your agents, or Claude / Codex / Cursor — at one URL. 
 ## Quickstart
 
 ```bash
-docker pull archestra/platform:1.3.51 # x-release-please-version
+docker pull archestra/platform:latest
 
 docker run \
   -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
@@ -86,7 +86,7 @@ docker run \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v archestra-postgres-data:/var/lib/postgresql/data \
   -v archestra-app-data:/app/data \
-  archestra/platform:1.3.51 # x-release-please-version
+  archestra/platform:latest
 ```
 
 Open <http://localhost:3000>. Full Docker / Helm / Kubernetes instructions

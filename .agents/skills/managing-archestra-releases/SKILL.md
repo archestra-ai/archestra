@@ -31,7 +31,7 @@ Starting a new stable branch adds configuration steps. It uses the same stable p
 2. Configure `.github/release-please/release-please-config.json` with temporary `release-as: X.Y.0` and `draft: true`.
 3. Test and qualify the actual release build artifacts. Do not simply retag beta images.
 4. After publication, remove `release-as` from `release/X.Y`.
-5. Update `main` to the next beta series (for example, `release-as: X.Y+1.0-beta.1`). Remove the override after the first beta builds.
+5. Update `main` to the next beta series (for example, `release-as: 1.5.0-beta.1`). Remove the override after the first beta builds.
 
 ## Safety And Recovery Rules
 
@@ -39,5 +39,6 @@ Starting a new stable branch adds configuration steps. It uses the same stable p
 - **Workflow owns publication:** The GitHub Actions workflow handles container image pushes, chart publication, and git tags. Never push release images, publish Helm charts, or update `latest` tags manually.
 - **Failed build:** Re-run failed jobs in the same workflow run.
 - **Failed qualification:** If testing fails before approval, cancel the run and delete the GitHub draft release. Keep the git tag. Never reuse a failed version number.
-- **Partial publication:** Re-run failed jobs in the original run using the saved artifacts. Never rebuild already published versions or move `latest` backward.
+- **Partial publication:** Keep the draft release and tag. Re-run failed jobs in the original run using the saved artifacts. Never rebuild already published versions or move `latest` backward.
+- **Fresh approval:** A rerun or new candidate needs fresh artifact verification and explicit authorization before any new `stable-release` approval.
 - **Explicit authorization:** Merging release PRs, approving release environments, deleting draft releases, and modifying repository settings are consequential. Always obtain explicit user authorization before performing these actions.

@@ -67,6 +67,7 @@ Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable
    - Confirm existing data remains intact after upgrade.
 5. [ ] Have a second maintainer approve the `stable-release` environment in GitHub Actions.
    - Add a brief, sanitized test summary in the approval comment. Never include sensitive data.
+   - A rerun or new candidate requires a fresh approval after its artifacts are verified.
 6. [ ] Confirm the workflow publishes the GitHub release, updates Helm charts, and points Docker `latest` to the new version.
 
 ## Troubleshooting
@@ -79,8 +80,9 @@ Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable
 - **Partial publication:**
   1. Do not publish artifacts or move `latest` manually.
   2. Inspect GitHub releases and container registries.
-  3. Re-run failed jobs in the original workflow run using the saved artifacts.
-  4. If the retry fails or state remains inconsistent, stop and investigate.
+   3. Keep the existing draft release and git tag. Re-run failed jobs in the original workflow run using the saved artifacts.
+   4. Obtain explicit authorization before approving a retry that waits for `stable-release`.
+   5. If the retry fails or state remains inconsistent, stop and investigate.
 
 <details>
 <summary>One-time setup — initial rollout</summary>
@@ -89,7 +91,7 @@ Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable
 2. [ ] Create GitHub environment `beta-release` without required approvals.
 3. [ ] Create GitHub environment `stable-release` with required reviewers, self-review prevention, and deployment restricted to `release/*`.
 4. [ ] Add branch protection rules for `release/*`.
-5. [ ] Create `release/1.3` from the latest stable tag (`platform-v1.3.51`). Set `versioning: always-bump-patch`, `prerelease: false`, and `draft: true`.
+5. [ ] Create `release/1.3` from the latest stable tag (`platform-v1.3.51`). In its release-tooling-only PR, keep the manifest at that tag's version; set `versioning: always-bump-patch`, `prerelease: false`, and `draft: true`; remove `release-as` and `prerelease-type`.
 6. [ ] On `main`, configure beta settings with temporary `release-as: 1.4.0-beta.1`.
 7. [ ] Confirm registry credentials work for release branches.
 8. [ ] Unfreeze releases once branches and environments are ready.

@@ -99,10 +99,6 @@
         {
           "type": "generic",
           "path": "/docs/pages/platform-deployment.md"
-        },
-        {
-          "type": "generic",
-          "path": "/README.md"
         }
       ]
     }

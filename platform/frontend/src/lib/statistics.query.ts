@@ -21,6 +21,26 @@ const {
   getCostSavingsStatistics,
 } = archestraApiSdk;
 
+export function useProxyCostStatistics({
+  enabled = true,
+  ...query
+}: NonNullable<archestraApiTypes.GetProxyCostStatisticsData["query"]> & {
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["statistics", "llm-proxy", query],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getProxyCostStatistics({
+        query,
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 /**
  * The signed-in user's own cost and usage. The one statistics hook that needs
  * no `llmCost:read`, so it stays enabled on the Costs page for people who see

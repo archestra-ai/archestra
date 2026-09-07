@@ -87,6 +87,12 @@ export const ATTR_GENAI_COMPLETION = "gen_ai.completion";
 // --- archestra custom ---
 export const ATTR_ARCHESTRA_AGENT_TYPE = "archestra.agent.type";
 export const ATTR_ARCHESTRA_COST = "archestra.cost";
+// The OTEL attribute registry has no equivalent for gateway virtual keys or
+// credential-derived billing coverage. IDs belong on spans, never metric labels.
+export const ATTR_ARCHESTRA_BILLING_MODE = "archestra.billing.mode";
+export const ATTR_ARCHESTRA_VIRTUAL_KEY_ID = "archestra.virtual_key.id";
+export const ATTR_ARCHESTRA_PASSTHROUGH_VIRTUAL_KEY_ID =
+  "archestra.passthrough_virtual_key.id";
 export const ATTR_ARCHESTRA_RUN_ID = "archestra.run.id";
 export const ATTR_ARCHESTRA_EXTERNAL_AGENT_ID = "archestra.external_agent_id";
 export const ATTR_ARCHESTRA_TRIGGER_SOURCE = "archestra.trigger.source";

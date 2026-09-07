@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-09-04
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,7 +17,7 @@ The **Costs** tab at `/llm/costs` is the organization-wide rollup for LLM traffi
 - which models are responsible for the largest share of cost
 - whether TOON compression and prompt caching are reducing spend over time
 
-The **LLM Proxy** section reports one total rather than a list. There is a single LLM Proxy, so all of its traffic counts toward that one figure.
+The **LLM Proxy** section attributes usage to credentials and access methods. Selecting a credential filters its spend trend.
 
 For a fuller cost view outside the Archestra UI, use Archestra's exported [metrics](platform-observability#metrics) and the prebuilt [Grafana dashboards](platform-observability#grafana-dashboards). Those surfaces are better suited for long-term monitoring, alerting, and cross-system cost analysis.
 
@@ -31,6 +31,42 @@ Archestra stores both raw spend and savings. Savings can come from:
 Reading organization-wide costs requires `llmCost:read`. See [LLM API Permissions](platform-access-control#llm-api-permissions) for API access details. You can open **My Usage** from your user menu without this permission.
 
 ![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-costs-and-limits_costs.webp)
+
+## Proxy Cost Attribution
+
+Virtual keys and OAuth client credentials identify individual proxy callers. Other methods group requests without naming individual credentials. OAuth sign-ins do not necessarily imply subscription billing.
+
+Each request counts once, using its recorded authentication method. Standard virtual keys take precedence over secondary passthrough keys. Deleted keys remain in their method's totals with no credential identity. Older requests without authentication metadata appear as unknown.
+
+### API
+
+`GET /api/statistics/llm-proxy` returns the same proxy breakdown. It requires `llmCost:read` and scopes results to your organization.
+
+```bash
+curl --get "$ARCHESTRA_URL/api/statistics/llm-proxy" \
+  --header "Authorization: $ARCHESTRA_API_KEY" \
+  --data-urlencode 'timeframe=7d' \
+  --data-urlencode 'authMethod=virtual_key' \
+  --data-urlencode 'limit=10' \
+  --data-urlencode 'offset=0'
+```
+
+| Parameter | Meaning |
+| --- | --- |
+| `timeframe` | Defaults to `24h`; accepts presets or `custom:<ISO-start>_<ISO-end>`. |
+| `authMethod` | Optional authentication-method filter. |
+| `credentialId` | Optional virtual-key UUID or authenticated OAuth application ID. |
+| `limit`, `offset` | Paginate credential rows, ordered by billed spend, then requests. |
+
+Authentication methods are `virtual_key`, `passthrough_virtual_key`, `oauth_client_credentials`, `oauth_user`, `jwks`, `provider_key`, `internal`, and `unknown`.
+
+The response contains `totals`, `timeSeries`, `methods`, `credentials`, and `pagination`. Totals, UTC time buckets, and method summaries cover all matching requests, regardless of pagination. Every summary includes requests, input/output/cache-read tokens, `billedCost`, and `subscriptionCost`.
+
+`billedCost` sums metered usage. `subscriptionCost` sums subscription-covered list-price estimates, which are not billed. Null credential IDs indicate unavailable or inapplicable attribution. Credential names never include secret values.
+
+For a virtual key's weekly report, pass its UUID as `credentialId`. This keeps the report specific even when another key shares its name.
+
+See [Proxy Cost Queries](platform-observability#proxy-cost-queries) for equivalent telemetry breakdowns.
 
 ## My Usage
 

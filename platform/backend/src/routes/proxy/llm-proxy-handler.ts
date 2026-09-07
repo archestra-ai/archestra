@@ -60,6 +60,7 @@ import {
 } from "@/models";
 import { metrics } from "@/observability";
 import {
+  ATTR_ARCHESTRA_BILLING_MODE,
   ATTR_ARCHESTRA_COST,
   ATTR_ARCHESTRA_USAGE_CACHE_CREATION_1H_INPUT_TOKENS,
   ATTR_GENAI_COMPLETION,
@@ -1534,6 +1535,8 @@ async function handleStreaming<
       runId,
       externalAgentId,
       authMethod,
+      virtualKeyId,
+      passthroughVirtualKeyId,
       authenticatedApp,
       source,
       serverAddress: provider.getBaseUrl(),
@@ -1683,6 +1686,7 @@ async function handleStreaming<
           );
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
+            llmSpan.setAttribute(ATTR_ARCHESTRA_BILLING_MODE, billingMode);
           }
         }
         if (state.stopReason) {
@@ -1905,14 +1909,15 @@ async function handleStreaming<
       });
 
       withSessionContext(sessionId, () => {
-        metrics.llm.reportLLMCost(
-          providerName,
-          agent,
-          actualModel,
-          costs.actualCost,
+        metrics.llm.reportLLMCost({
+          provider: providerName,
+          profile: agent,
+          model: actualModel,
+          cost: costs.actualCost,
           source,
           billingMode,
-        );
+          authMethod,
+        });
         metrics.llm.reportLLMCacheCost(
           providerName,
           agent,
@@ -2047,6 +2052,8 @@ async function handleNonStreaming<
     runId,
     externalAgentId,
     authMethod,
+    virtualKeyId,
+    passthroughVirtualKeyId,
     authenticatedApp,
     source,
     serverAddress: provider.getBaseUrl(),
@@ -2154,6 +2161,7 @@ async function handleNonStreaming<
       );
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
+        llmSpan.setAttribute(ATTR_ARCHESTRA_BILLING_MODE, billingMode);
       }
       llmSpan.setAttribute(
         ATTR_GENAI_RESPONSE_FINISH_REASONS,
@@ -2253,14 +2261,15 @@ async function handleNonStreaming<
       });
 
       withSessionContext(sessionId, () => {
-        metrics.llm.reportLLMCost(
-          providerName,
-          agent,
-          actualModel,
-          costs.actualCost,
+        metrics.llm.reportLLMCost({
+          provider: providerName,
+          profile: agent,
+          model: actualModel,
+          cost: costs.actualCost,
           source,
           billingMode,
-        );
+          authMethod,
+        });
         metrics.llm.reportLLMCacheCost(
           providerName,
           agent,
@@ -2340,14 +2349,15 @@ async function handleNonStreaming<
   });
 
   withSessionContext(sessionId, () => {
-    metrics.llm.reportLLMCost(
-      providerName,
-      agent,
-      actualModel,
-      costs.actualCost,
+    metrics.llm.reportLLMCost({
+      provider: providerName,
+      profile: agent,
+      model: actualModel,
+      cost: costs.actualCost,
       source,
       billingMode,
-    );
+      authMethod,
+    });
     metrics.llm.reportLLMCacheCost(
       providerName,
       agent,

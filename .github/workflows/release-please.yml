@@ -11,8 +11,7 @@ permissions: {}
 
 concurrency:
   group: release-please-${{ github.ref }}
-  # Never preempt an in-flight release for the same branch. Subsequent pushes queue
-  # behind the active run so artifact publishing can complete atomically.
+  # Do not interrupt a release waiting for qualification and approval.
   cancel-in-progress: false
 
 jobs:
@@ -47,18 +46,31 @@ jobs:
       - name: Validate branch release policy
         id: policy
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
           RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
+        shell: bash
         run: |
-          if [ "$RELEASE_FREEZE" = "true" ]; then
-            echo "::error::Releases are frozen."
-            exit 1
+          test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
+          CONFIG=.github/release-please/release-please-config.json
+          VERSION=$(jq -r '.platform' .github/release-please/.release-please-manifest.json)
+          OVERRIDE=$(jq -r '.packages.platform["release-as"] // empty' "$CONFIG")
+          NEXT=${OVERRIDE:-$VERSION}
+          jq -e '.packages.platform.draft == true' "$CONFIG"
+          if [ "$BRANCH" = main ]; then
+            [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.0-beta\.[1-9][0-9]*$ ]] \
+              || { echo "::error::Main must release X.Y.0-beta.N"; exit 1; }
+            jq -e '.packages.platform | .prerelease == true and .versioning == "prerelease" and .["prerelease-type"] == "beta"' "$CONFIG"
+          else
+            [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${NEXT%.*}" = "${BRANCH#release/}" ]] \
+              || { echo "::error::Stable version must match release/X.Y"; exit 1; }
+            jq -e '.packages.platform | .prerelease == false and .versioning == "always-bump-patch"' "$CONFIG"
           fi
-          LATEST=$(gh api "repos/${GH_REPO}/releases/latest" --jq '.tag_name')
-          python3 .github/scripts/release-policy.py check \
-            --branch "$BRANCH" --latest "${LATEST#platform-v}" >> "$GITHUB_OUTPUT"
+          echo "requested=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$VERSION" = "$OVERRIDE" ]; then
+            echo "create_pr=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "create_pr=true" >> "$GITHUB_OUTPUT"
+          fi
 
       # release-please runs in TWO invocations (releases first, then PRs) instead of one.
       # A single invocation creates the GitHub release for a just-merged release PR as a
@@ -80,7 +92,7 @@ jobs:
           skip-github-pull-request: true
 
       # All releases start as drafts. Betas publish after artifacts are ready;
-      # stable releases additionally require the Publish Stable Release workflow.
+      # stable releases additionally require approval of the publication job.
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
       # feature rejects that ("state cannot be changed when release is immutable", HTTP
@@ -277,10 +289,15 @@ jobs:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-github-release:
-    name: Record release artifacts
-    # No skipped build is acceptable. Stable releases stay draft for qualification.
+    name: Publish release
+    # No skipped build is acceptable. Stable approval happens after all builds.
     if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'beta-release' || 'stable-release' }}
+    concurrency:
+      # Keep beta publishing independent of stable qualification.
+      group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
+      cancel-in-progress: false
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
@@ -290,8 +307,13 @@ jobs:
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
     permissions:
-      actions: read # Download the packaged chart from this run.
-      contents: write # Required to attach the artifact manifest and publish betas.
+      contents: write # Attach the saved chart and publish the release.
+      id-token: write # Authenticate the existing registry publisher.
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.release-please.outputs.platform_version }}
+      TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -299,28 +321,90 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Generate a token
-        id: generate-token
-        uses: ./.github/actions/github-app-token
-        with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
-
-      - name: Record artifacts and publish beta only
+      - name: Check publication is still allowed
+        shell: bash
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
-          VERSION: ${{ needs.release-please.outputs.platform_version }}
-          AUX_IMAGE_REGISTRY: ${{ vars.RELEASE_AUX_IMAGE_REGISTRY }}
-          ACTIONS_TOKEN: ${{ github.token }}
+          RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: |
-          GH_TOKEN="$ACTIONS_TOKEN" gh run download "$GITHUB_RUN_ID" --name release-helm-chart
-          python3 .github/scripts/release-artifacts.py record --version "$VERSION" --output release-artifacts.json
-          gh release upload "$TAG_NAME" release-artifacts.json "archestra-platform-${VERSION}.tgz" --clobber
+          test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
+          if [[ "$VERSION" != *-beta.* ]]; then
+            LATEST=$(gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name')
+            test "$(printf '%s\n' "$VERSION" "${LATEST#platform-v}" | sort -V | tail -1)" = "$VERSION" \
+              || { echo "::error::A newer stable release already exists"; exit 1; }
+          fi
+
+      - name: Download saved chart
+        uses: ./.github/actions/github-download-artifact
+        with:
+          name: release-helm-chart
+
+      - name: Download saved image references
+        uses: ./.github/actions/github-download-artifact
+        with:
+          pattern: release-image-*
+          path: release-images
+          merge-multiple: true
+
+      - name: Authenticate to artifact registry
+        if: ${{ github.ref_name != 'main' }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Log in to Docker Hub
+        if: ${{ github.ref_name != 'main' }}
+        uses: ./.github/actions/docker-login
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Publish approved stable artifacts without rebuilding
+        if: ${{ github.ref_name != 'main' }}
+        shell: bash
+        run: |
+          MCP_IMAGE=$(cat release-images/mcp-server-base)
+          PLATFORM_IMAGE=$(cat release-images/platform)
+          helm push "archestra-platform-${VERSION}.tgz" "oci://${MCP_IMAGE%/mcp-server-base@*}/helm-charts"
+          for file in release-images/*; do
+            [ "${file##*/}" = platform ] && continue
+            IMAGE=$(cat "$file")
+            # supply-chain-policy: allow-latest approved stable release channel
+            docker buildx imagetools create --tag "${IMAGE%@*}:latest" "$IMAGE"
+          done
+          # Move platform last, after its companion images are ready.
+          # supply-chain-policy: allow-latest approved stable release channel
+          docker buildx imagetools create --tag "${PLATFORM_IMAGE%@*}:latest" "$PLATFORM_IMAGE"
+
+      - name: Publish GitHub release
+        shell: bash
+        run: |
+          # A retry may find an already published immutable release.
+          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft)
+          [ "$IS_DRAFT" = true ] || exit 0
+          gh release upload "$TAG_NAME" "archestra-platform-${VERSION}.tgz" --clobber
           if [[ "$VERSION" == *-beta.* ]]; then
             gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
           fi
+
+      - name: Generate website deployment token
+        if: ${{ github.ref_name != 'main' }}
+        id: website-token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_PRIVATE_KEY }}
+          owner: archestra-ai
+          repositories: website
+          permission-actions: write
+
+      - name: Refresh release website
+        if: ${{ github.ref_name != 'main' }}
+        env:
+          GH_TOKEN: ${{ steps.website-token.outputs.token }}
+        run: gh workflow run deploy-to-vercel.yml --repo archestra-ai/website --ref main
 
   notify-release-failure:
     name: Notify release failure

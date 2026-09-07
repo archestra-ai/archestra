@@ -229,7 +229,7 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          # Stable aliases are owned exclusively by Publish Stable Release.
+          # Stable aliases move only in the release workflow's approved publication job.
           docker buildx imagetools create \
             -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}" \
             $(printf "${IMAGE_REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
@@ -245,3 +245,24 @@ jobs:
           IMAGE_REGISTRY: ${{ inputs.image_registry }}
           IMAGE_NAME: ${{ inputs.image_name }}
           VERSION: ${{ inputs.version }}
+
+      - name: Preserve release image reference
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        shell: bash
+        env:
+          IMAGE: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-image"
+          docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' \
+            | jq -er --arg image "$IMAGE" '.digest | select(test("^sha256:[0-9a-f]{64}$")) | $image + "@" + .' \
+            > "$RUNNER_TEMP/release-image/$IMAGE_NAME"
+
+      - name: Upload release image reference
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: release-image-${{ inputs.image_name }}
+          path: ${{ runner.temp }}/release-image/*
+          if-no-files-found: error

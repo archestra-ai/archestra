@@ -568,9 +568,6 @@ class McpClient {
       conversationId: params.conversationId,
       tokenAuth: {
         tokenId: `session:${params.userId}`,
-        teamId: null,
-        isOrganizationToken: false,
-        isUserToken: true,
         userId: params.userId,
       },
     });
@@ -639,6 +636,21 @@ class McpClient {
     const { tool, catalogItem, resolvedToolCall } = validationResult;
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
+
+    if (
+      isPlaywrightCatalogItem(catalogItem.id) &&
+      !tokenAuth?.userId &&
+      (owner.type === "app" || !tokenAuth?.tokenId)
+    ) {
+      return this.createErrorResult({
+        toolCall,
+        owner,
+        error: "Playwright requires an authenticated caller identity",
+        mcpServerName: catalogItem.name,
+        authInfo,
+        lockedChatContent,
+      });
+    }
 
     // SEP-2243 x-mcp-header: mirror annotated argument values into
     // Mcp-Param-* headers on the upstream call. Widening the passthrough set
@@ -2367,7 +2379,7 @@ class McpClient {
     targetMcpServerId: string;
     agentId: string;
     conversationId: string | undefined;
-    tokenAuth: TokenAuthContext | undefined;
+    tokenAuth: Pick<TokenAuthContext, "userId" | "tokenId"> | undefined;
   }): string {
     const { catalogId, targetMcpServerId, agentId, conversationId, tokenAuth } =
       params;
@@ -2384,11 +2396,7 @@ class McpClient {
     } else if (tokenAuth?.tokenId) {
       callerSegment = `caller:token:${tokenAuth.tokenId}`;
     } else {
-      callerSegment = `caller:anonymous:${randomUUID()}`;
-      logger.warn(
-        { agentId, catalogId },
-        "Playwright tool call has no caller identity; isolating the connection per-request",
-      );
+      throw new Error("Playwright requires an authenticated caller identity");
     }
 
     return conversationId

@@ -40,7 +40,8 @@ export async function initializeManagedPlaywrightRuntime(): Promise<void> {
       { err: error, serverId: server.id },
       "Managed Playwright runtime initialization failed",
     );
-  } finally {
-    await PlaywrightRuntimeModel.retireLegacyInstallations();
+    return;
   }
+
+  await PlaywrightRuntimeModel.retireLegacyInstallations();
 }

@@ -12,7 +12,7 @@ const { getOrLoadDeployment, reloadToolsForServer, waitForDeploymentReady } =
   }));
 
 vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
-  default: { getOrLoadDeployment },
+  default: { getOrLoadDeployment, removeMcpServer: vi.fn() },
 }));
 
 vi.mock("@/services/mcp-reinstall", () => ({ reloadToolsForServer }));
@@ -59,31 +59,56 @@ describe("initializeManagedPlaywrightRuntime", () => {
     });
   });
 
-  test("records a discovery failure without removing the managed runtime", async ({
-    makeInternalMcpCatalog,
-  }) => {
-    await makeInternalMcpCatalog({
-      id: PLAYWRIGHT_MCP_CATALOG_ID,
-      organizationId: null,
-      name: "microsoft__playwright-mcp",
-      serverType: "local",
-      localConfig: {
-        command: "node",
-        transportType: "streamable-http",
-        httpPort: 8080,
-      },
-    });
-    await PlaywrightRuntimeModel.reconcileAll();
-    const server = mustExist(
-      await PlaywrightRuntimeModel.findForEnvironment(null),
-    );
-    reloadToolsForServer.mockRejectedValueOnce(new Error("discovery failed"));
+  for (const failureStage of ["readiness", "discovery"]) {
+    test(`preserves legacy installs after ${failureStage} failure and retires them after a successful retry`, async ({
+      makeInternalMcpCatalog,
+    }) => {
+      await makeInternalMcpCatalog({
+        id: PLAYWRIGHT_MCP_CATALOG_ID,
+        organizationId: null,
+        name: "microsoft__playwright-mcp",
+        serverType: "local",
+        localConfig: {
+          command: "node",
+          transportType: "streamable-http",
+          httpPort: 8080,
+        },
+      });
+      await PlaywrightRuntimeModel.reconcileAll();
+      const server = mustExist(
+        await PlaywrightRuntimeModel.findForEnvironment(null),
+      );
+      const legacy = await McpServerModel.create({
+        name: "legacy-browser",
+        catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
+        serverType: "local",
+        scope: "org",
+      });
+      const failingBoundary =
+        failureStage === "readiness"
+          ? waitForDeploymentReady
+          : reloadToolsForServer;
+      failingBoundary.mockRejectedValueOnce(
+        new Error(`${failureStage} failed`),
+      );
 
-    await expect(initializeManagedPlaywrightRuntime()).resolves.toBeUndefined();
+      await expect(
+        initializeManagedPlaywrightRuntime(),
+      ).resolves.toBeUndefined();
 
-    expect(await McpServerModel.findById(server.id)).toMatchObject({
-      localInstallationStatus: "error",
-      localInstallationError: "discovery failed",
+      expect(await McpServerModel.findById(server.id)).toMatchObject({
+        localInstallationStatus: "error",
+        localInstallationError: `${failureStage} failed`,
+      });
+      expect(await McpServerModel.findById(legacy.id)).not.toBeNull();
+
+      await initializeManagedPlaywrightRuntime();
+
+      expect(await McpServerModel.findById(legacy.id)).toBeNull();
+      expect(await McpServerModel.findById(server.id)).toMatchObject({
+        localInstallationStatus: "success",
+        localInstallationError: null,
+      });
     });
-  });
+  }
 });

@@ -50,7 +50,7 @@ Some MCP tools can ask for additional information while they run. Chat shows the
 
 ### Browser (Playwright)
 
-Agents with Playwright tools can navigate and interact with websites from Chat. The browser runtime is built in: Archestra automatically runs one Playwright deployment for the Default environment and one for each additional Environment, so browser traffic follows that Environment's network policy.
+Agents with Playwright tools can navigate and interact with websites from Chat. The browser runtime is built in. Archestra runs one Playwright deployment for Default and each additional [Environment](/docs/platform-environments). Browser traffic follows its Environment's network policy.
 
 Each caller and conversation gets an isolated browser context. Browser state persists within a conversation but is not shared with other callers or conversations.
 

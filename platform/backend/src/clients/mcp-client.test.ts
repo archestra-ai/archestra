@@ -412,6 +412,7 @@ describe("McpClient", () => {
 
   test("isolates a shared Playwright connection per caller and reuses it for that caller", async ({
     makeUser,
+    makeApp,
   }) => {
     const firstCaller = await makeUser({ email: "browser-one@example.com" });
     const secondCaller = await makeUser({ email: "browser-two@example.com" });
@@ -479,7 +480,7 @@ describe("McpClient", () => {
     await callWithOrganizationToken("organization-token-one", "call-org-2");
     await callWithOrganizationToken("organization-token-two", "call-org-3");
 
-    await mcpClient.executeToolCallForOwner(
+    const anonymousResult = await mcpClient.executeToolCallForOwner(
       {
         id: "call-anonymous-1",
         name: "playwright__browser_navigate",
@@ -487,7 +488,7 @@ describe("McpClient", () => {
       },
       agentOwner(agentId),
     );
-    await mcpClient.executeToolCallForOwner(
+    const secondAnonymousResult = await mcpClient.executeToolCallForOwner(
       {
         id: "call-anonymous-2",
         name: "playwright__browser_navigate",
@@ -496,7 +497,25 @@ describe("McpClient", () => {
       agentOwner(agentId),
     );
 
-    expect(mockConnect).toHaveBeenCalledTimes(6);
+    expect(anonymousResult.isError).toBe(true);
+    expect(JSON.stringify(anonymousResult)).toContain(
+      "Playwright requires an authenticated caller identity",
+    );
+    expect(secondAnonymousResult.isError).toBe(true);
+    const app = await makeApp();
+    await AppToolModel.create(app.id, tool.id, {
+      mcpServerId: sharedServer.id,
+      credentialResolutionMode: "static",
+    });
+    const anonymousAppResult = await mcpClient.executeToolCallForOwner(
+      { id: "call-anonymous-app", name: tool.name, arguments: {} },
+      appOwner(app.id),
+    );
+    expect(anonymousAppResult.isError).toBe(true);
+    expect(JSON.stringify(anonymousAppResult)).toContain(
+      "Playwright requires an authenticated caller identity",
+    );
+    expect(mockConnect).toHaveBeenCalledTimes(4);
   });
 
   test("isolates Playwright conversations for the same caller", async ({

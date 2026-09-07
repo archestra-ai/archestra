@@ -18,7 +18,6 @@ import {
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
-import { useMyTeams } from "@/lib/teams/team.query";
 import { McpCatalogItemPage } from "./page.client";
 
 // The overview is a small part of a page that pulls in install dialogs,
@@ -127,7 +126,6 @@ vi.mock("@/lib/organization.query", () => ({
 vi.mock("@/lib/auth/identity-provider-read.query", () => ({
   useIdentityProviders: () => ({ data: [] }),
 }));
-vi.mock("@/lib/teams/team.query");
 vi.mock("../_parts/mcp-server-agent-usage", () => ({
   deriveAgentUsage: () => ({ agents: [], count: 0 }),
   McpServerAgentUsage: () => null,
@@ -198,10 +196,6 @@ function section(name: string) {
 describe("McpCatalogItemDetailPage overview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useMyTeams).mockReturnValue({
-      data: [],
-      isLoading: false,
-    } as unknown as ReturnType<typeof useMyTeams>);
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
       replace: vi.fn(),

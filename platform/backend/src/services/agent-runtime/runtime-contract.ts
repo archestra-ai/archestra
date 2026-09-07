@@ -9,6 +9,21 @@ export const AGENT_RUNTIME_SHELL_INIT_SCRIPT = `${AGENT_RUNTIME_DIR}/shell-init`
 export const AGENT_RUNTIME_ATTACHMENTS_DIR = `${AGENT_RUNTIME_DIR}/attachments`;
 export const AGENT_RUNTIME_ATTACHMENTS_MANIFEST = `${AGENT_RUNTIME_DIR}/attachments.json`;
 export const AGENT_RUNTIME_INPUTS_READY_FILE = `${AGENT_RUNTIME_DIR}/inputs-ready`;
+export const AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE = `${AGENT_RUNTIME_DIR}/readable-transcript.json`;
+
+/**
+ * A maintained runtime can leave a normalized transcript in the shared run
+ * directory. The bootstrap base64-frames it on stdout after the PTY closes so
+ * the control plane can persist it independently without exposing raw provider
+ * events in the terminal recording.
+ */
+export const AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START =
+  "\u001b]777;archestra-readable-transcript=base64\u0007";
+export const AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_END =
+  "\u001b]777;archestra-readable-transcript=end\u0007";
+
+/** A second readable copy stays useful without doubling very large run logs. */
+export const AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES = 16 * 1024 * 1024;
 
 /**
  * Stable, portable run name: `agent-run-<slug40>-<id8>`.

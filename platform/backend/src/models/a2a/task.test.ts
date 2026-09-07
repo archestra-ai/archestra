@@ -501,6 +501,13 @@ describe("A2ATaskModel", () => {
         runId: run.id,
         transcript: "complete retained transcript",
         observedBytes: Buffer.byteLength("complete retained transcript"),
+        readableTranscript: JSON.stringify({
+          version: 1,
+          provider: "claude-code",
+          entries: [
+            { type: "message", role: "assistant", text: "Readable result" },
+          ],
+        }),
       });
       await backdate(task.id, 10 * 24 * 60 * 60 * 1000);
 
@@ -511,6 +518,12 @@ describe("A2ATaskModel", () => {
 
       expect(
         await agentRunTranscriptStore.stream({
+          runId: run.id,
+          onChunk: () => undefined,
+        }),
+      ).toBeNull();
+      expect(
+        await agentRunTranscriptStore.streamReadable({
           runId: run.id,
           onChunk: () => undefined,
         }),

@@ -40,6 +40,13 @@ All maintained clients send the task ID as both `X-Archestra-Run-Id`
 and `X-Archestra-Session-Id` on LLM and MCP requests. Do the same in any new
 wrapper so the platform can group interactions and tool calls with the run.
 
+All six targets also export their native message and tool history to
+`$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json`. The control plane
+validates and persists this provider-neutral artifact independently of the
+terminal recording. Custom images can opt into the same completed-run view by
+implementing the versioned contract documented under **Agent Runtime → Bring
+Your Own Image → Readable transcript**.
+
 Files attached to the initial Chat instruction are written under
 `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` before the client
 starts. The task names their absolute paths, and

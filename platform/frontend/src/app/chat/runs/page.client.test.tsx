@@ -215,7 +215,7 @@ describe("AgentRunChatSession", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps an attached terminal frame mounted when the run completes", () => {
+  it("switches an attached terminal to retained history when the run completes", () => {
     queryState.value.data = run({
       state: "TASK_STATE_WORKING",
       endedAt: null,
@@ -229,9 +229,8 @@ describe("AgentRunChatSession", () => {
     });
     rerender(<AgentRunChatSession taskId="task-1" />);
 
-    expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
-    expect(screen.queryByText("Retained run output")).not.toBeInTheDocument();
-    expect(terminalState.props?.title).toBe("Output");
+    expect(screen.queryByText("Live terminal task-1")).not.toBeInTheDocument();
+    expect(screen.getByText("Retained run output")).toBeInTheDocument();
   });
 
   it("gives a shared viewer read-only output without owner controls on a live run", () => {

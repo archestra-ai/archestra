@@ -1,5 +1,12 @@
 import type { ServerWebSocketMessage } from "@archestra/shared";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 
@@ -59,7 +66,7 @@ describe("AgentRunLogs", () => {
     expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
       "first chunk second chunk",
     );
-    expect(screen.getByText("Full transcript")).toBeInTheDocument();
+    expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
   });
 
   it("warns when only the bounded tail could be retained", () => {
@@ -123,7 +130,105 @@ describe("AgentRunLogs", () => {
     expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
       "retained output",
     );
-    expect(screen.getByText("Full transcript")).toBeInTheDocument();
+    expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
+  });
+
+  it("opens a normalized readable transcript and keeps terminal replay available", async () => {
+    const user = userEvent.setup();
+    render(<AgentRunLogs run={completedRun} />);
+
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "terminal frame\n" },
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: {
+        runId: "task-1",
+        channel: "readable",
+        logs: JSON.stringify({
+          version: 1,
+          provider: "claude-code",
+          entries: [
+            { type: "message", role: "user", text: "Start of the run" },
+            { type: "message", role: "assistant", text: "End of the run" },
+          ],
+        }),
+      },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: "task-1",
+        source: "full",
+        truncated: false,
+        readable: {
+          provider: "claude-code",
+          version: 1,
+          totalBytes: 100,
+        },
+      },
+    });
+
+    expect(screen.getByText(/Start of the run/)).toBeInTheDocument();
+    expect(screen.getByText(/End of the run/)).toBeInTheDocument();
+    expect(screen.getAllByText("Readable transcript")).toHaveLength(2);
+
+    await user.click(screen.getByRole("tab", { name: "Terminal replay" }));
+
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "terminal frame",
+    );
+    expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
+  });
+
+  it("offers to return to the transcript tail after the reader scrolls up", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<AgentRunLogs run={completedRun} />);
+
+    emit({
+      type: "agent_run_logs",
+      payload: {
+        runId: "task-1",
+        channel: "readable",
+        logs: JSON.stringify({
+          version: 1,
+          provider: "codex",
+          entries: [
+            { type: "message", role: "user", text: "Start" },
+            { type: "message", role: "assistant", text: "End" },
+          ],
+        }),
+      },
+    });
+    emit({
+      type: "agent_run_logs_ended",
+      payload: {
+        runId: "task-1",
+        source: "full",
+        truncated: false,
+        readable: { provider: "codex", version: 1, totalBytes: 100 },
+      },
+    });
+
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    expect(viewport).not.toBeNull();
+    Object.defineProperties(viewport, {
+      scrollHeight: { configurable: true, value: 1_000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, value: 100, writable: true },
+    });
+    fireEvent.scroll(viewport as HTMLElement);
+
+    const returnToTail = await screen.findByRole("button", {
+      name: "Scroll to Bottom",
+    });
+    await user.click(returnToTail);
+
+    expect(viewport?.scrollTop).toBe(1_000);
+    expect(returnToTail).not.toBeInTheDocument();
   });
 });
 

@@ -664,10 +664,19 @@ describe("websocket Agent run authorization and cleanup", () => {
     });
     await AgentRunModel.close({ id: run.id, logs: "final tail\n" });
     const completeTranscript = `${"earlier output\n".repeat(30_000)}done ✓\n`;
+    const readableTranscript = JSON.stringify({
+      version: 1,
+      provider: "claude-code",
+      entries: [
+        { type: "message", role: "user", text: "Build it" },
+        { type: "message", role: "assistant", text: "Done" },
+      ],
+    });
     await agentRunTranscriptStore.persist({
       runId: run.id,
       transcript: completeTranscript,
       observedBytes: Buffer.byteLength(completeTranscript),
+      readableTranscript,
     });
     const ws = {
       readyState: WS.OPEN,
@@ -680,13 +689,29 @@ describe("websocket Agent run authorization and cleanup", () => {
       userIsMcpServerAdmin: false,
     });
 
-    await service.handleMessage(
+    // A remount can unsubscribe while the first database read is in flight.
+    // Only the replacement subscription may deliver the retained JSON stream.
+    const firstSubscription = service.handleMessage(
       {
         type: "subscribe_agent_run_logs",
         payload: { runId: task.id, lines: 100 },
       },
       ws,
     );
+    await service.handleMessage(
+      { type: "unsubscribe_agent_run_logs", payload: { runId: task.id } },
+      ws,
+    );
+    await Promise.all([
+      firstSubscription,
+      service.handleMessage(
+        {
+          type: "subscribe_agent_run_logs",
+          payload: { runId: task.id, lines: 100 },
+        },
+        ws,
+      ),
+    ]);
 
     const sent = vi
       .mocked(ws.send)
@@ -698,14 +723,33 @@ describe("websocket Agent run authorization and cleanup", () => {
         source: "full",
         truncated: false,
         totalBytes: Buffer.byteLength(completeTranscript),
+        readable: {
+          provider: "claude-code",
+          version: 1,
+          totalBytes: Buffer.byteLength(readableTranscript),
+        },
       },
     });
     expect(
       sent
-        .filter((message) => message.type === "agent_run_logs")
+        .filter(
+          (message) =>
+            message.type === "agent_run_logs" &&
+            message.payload.channel !== "readable",
+        )
         .map((message) => message.payload.logs)
         .join(""),
     ).toBe(completeTranscript);
+    expect(
+      sent
+        .filter(
+          (message) =>
+            message.type === "agent_run_logs" &&
+            message.payload.channel === "readable",
+        )
+        .map((message) => message.payload.logs)
+        .join(""),
+    ).toBe(readableTranscript);
   });
 
   test("does not let an Agent administrator attach to another user's run", async ({

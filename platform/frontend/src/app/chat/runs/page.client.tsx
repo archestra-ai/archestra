@@ -39,9 +39,6 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [connectionCommand, setConnectionCommand] = useState<string | null>(
     null,
   );
-  const [liveTerminalTaskId, setLiveTerminalTaskId] = useState<string | null>(
-    null,
-  );
   const [commandCopied, setCommandCopied] = useState(false);
   const run = query.data;
 
@@ -67,9 +64,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   }
 
   const live = !run || run.endedAt === null;
-  const preserveLiveTerminal = isOwner && liveTerminalTaskId === taskId;
-  const showLiveTerminal =
-    (!run && query.isPending) || (isOwner && live) || preserveLiveTerminal;
+  const showLiveTerminal = (!run && query.isPending) || (isOwner && live);
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background">
@@ -163,10 +158,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
             title={live ? "Live terminal" : "Output"}
             showManualCommand={false}
             showDisconnectedStatus={false}
-            onCommandChange={(command) => {
-              setConnectionCommand(command);
-              if (command) setLiveTerminalTaskId(taskId);
-            }}
+            onCommandChange={setConnectionCommand}
             onError={() => void query.refetch()}
             onClosed={() => void query.refetch()}
           />

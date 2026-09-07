@@ -29,7 +29,10 @@ import {
 } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
-import { RETAINED_LOG_BYTES } from "@/services/agent-runtime/output-capture";
+import {
+  AgentRuntimeOutputCapture,
+  RETAINED_LOG_BYTES,
+} from "@/services/agent-runtime/output-capture";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 
@@ -668,16 +671,23 @@ class WebSocketService {
     clientContext: WebSocketClientContext,
   ): Promise<void> {
     this.unsubscribeAgentRunLogs(ws);
+    const abortController = new AbortController();
+    const stream = new PassThrough();
+    this.agentRunLogsSubscriptions.set(ws, { runId, stream, abortController });
 
     const session = await AgentRunModel.findByTaskId(runId);
+    if (abortController.signal.aborted) return;
     if (!session || session.organizationId !== clientContext.organizationId) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
         payload: { runId, error: "Session not found" },
       });
+      this.unsubscribeAgentRunLogs(ws);
       return;
     }
-    if (!(await this.mayViewSessionLogs(session, clientContext))) {
+    const mayView = await this.mayViewSessionLogs(session, clientContext);
+    if (abortController.signal.aborted) return;
+    if (!mayView) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
         payload: {
@@ -685,6 +695,7 @@ class WebSocketService {
           error: "Only the person who started this run can view its logs",
         },
       });
+      this.unsubscribeAgentRunLogs(ws);
       return;
     }
 
@@ -695,7 +706,7 @@ class WebSocketService {
           runId: session.id,
           onChunk: (chunk) => {
             const logs = decoder.write(chunk);
-            if (logs) {
+            if (logs && !abortController.signal.aborted) {
               this.sendToClient(ws, {
                 type: "agent_run_logs",
                 payload: { runId, logs },
@@ -710,6 +721,7 @@ class WebSocketService {
           );
           return null;
         });
+      if (abortController.signal.aborted) return;
       if (transcript?.isComplete) {
         const finalLogs = decoder.end();
         if (finalLogs) {
@@ -718,6 +730,14 @@ class WebSocketService {
             payload: { runId, logs: finalLogs },
           });
         }
+        const readable = await this.streamReadableAgentRunTranscript({
+          ws,
+          runId,
+          sessionId: session.id,
+          taskId: session.taskId,
+          signal: abortController.signal,
+        });
+        if (abortController.signal.aborted) return;
         this.sendToClient(ws, {
           type: "agent_run_logs_ended",
           payload: {
@@ -725,8 +745,10 @@ class WebSocketService {
             source: "full",
             truncated: false,
             totalBytes: transcript.uncompressedBytes,
+            ...(readable ? { readable } : {}),
           },
         });
+        this.unsubscribeAgentRunLogs(ws);
         return;
       }
 
@@ -736,6 +758,14 @@ class WebSocketService {
           payload: { runId, logs: session.logs },
         });
       }
+      const readable = await this.streamReadableAgentRunTranscript({
+        ws,
+        runId,
+        sessionId: session.id,
+        taskId: session.taskId,
+        signal: abortController.signal,
+      });
+      if (abortController.signal.aborted) return;
       this.sendToClient(ws, {
         type: "agent_run_logs_ended",
         payload: {
@@ -745,14 +775,12 @@ class WebSocketService {
             transcript?.isComplete === false ||
             Buffer.byteLength(session.logs ?? "", "utf8") >= RETAINED_LOG_BYTES,
           totalBytes: transcript?.uncompressedBytes,
+          ...(readable ? { readable } : {}),
         },
       });
+      this.unsubscribeAgentRunLogs(ws);
       return;
     }
-
-    const abortController = new AbortController();
-    const stream = new PassThrough();
-    this.agentRunLogsSubscriptions.set(ws, { runId, stream, abortController });
 
     stream.on("data", (chunk: Buffer) => {
       this.sendToClient(ws, {
@@ -769,12 +797,15 @@ class WebSocketService {
     });
 
     try {
-      await resolveAgentRuntimeBackendDriver(session.backend).streamOutput({
+      const output = new AgentRuntimeOutputCapture({
+        backend: resolveAgentRuntimeBackendDriver(session.backend),
         session,
-        destination: stream,
-        lines,
-        abortSignal: abortController.signal,
+        maxTranscriptBytes: RETAINED_LOG_BYTES,
+        throwOnStreamError: true,
+        onTextDelta: (chunk) => stream.write(chunk),
       });
+      await output.follow(abortController.signal, lines);
+      stream.end();
     } catch (error) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
@@ -784,6 +815,62 @@ class WebSocketService {
         },
       });
       this.unsubscribeAgentRunLogs(ws);
+    }
+  }
+
+  private async streamReadableAgentRunTranscript(params: {
+    ws: WebSocket;
+    runId: string;
+    sessionId: string;
+    taskId: string;
+    signal: AbortSignal;
+  }): Promise<
+    { provider: string; version: number; totalBytes: number } | undefined
+  > {
+    const decoder = new StringDecoder("utf8");
+    try {
+      const transcript = await agentRunTranscriptStore.streamReadable({
+        runId: params.sessionId,
+        onChunk: (chunk) => {
+          const logs = decoder.write(chunk);
+          if (!logs || params.signal.aborted) return;
+          this.sendToClient(params.ws, {
+            type: "agent_run_logs",
+            payload: {
+              runId: params.runId,
+              logs,
+              channel: "readable",
+            },
+          });
+        },
+      });
+      if (!transcript || params.signal.aborted) return undefined;
+      const finalLogs = decoder.end();
+      if (finalLogs) {
+        this.sendToClient(params.ws, {
+          type: "agent_run_logs",
+          payload: {
+            runId: params.runId,
+            logs: finalLogs,
+            channel: "readable",
+          },
+        });
+      }
+      return {
+        provider: transcript.provider,
+        version: transcript.version,
+        totalBytes: transcript.uncompressedBytes,
+      };
+    } catch (error) {
+      logger.warn(
+        {
+          error,
+          sessionId: params.sessionId,
+          taskId: params.taskId,
+        },
+        "Could not read the Agent run's readable transcript",
+      );
+      return undefined;
     }
   }
 

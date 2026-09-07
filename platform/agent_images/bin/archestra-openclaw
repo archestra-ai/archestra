@@ -119,14 +119,11 @@ chmod 0600 \
   "${attention_plugin_dir}/openclaw.plugin.json" \
   "${attention_plugin_dir}/package.json"
 
-completion_plugin_dir=""
-if [[ "${runtime_mode}" == "one_shot" ]] \
-  && [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" != "1" ]]; then
-  completion_plugin_dir="${runtime_dir}/openclaw-completion"
-  mkdir -p "${completion_plugin_dir}"
-  cat > "${completion_plugin_dir}/package.json" <<'JSON'
+transcript_plugin_dir="${runtime_dir}/openclaw-transcript"
+mkdir -p "${transcript_plugin_dir}"
+cat > "${transcript_plugin_dir}/package.json" <<'JSON'
 {
-  "name": "archestra-openclaw-completion",
+  "name": "archestra-openclaw-transcript",
   "version": "1.0.0",
   "type": "module",
   "openclaw": {
@@ -134,11 +131,11 @@ if [[ "${runtime_mode}" == "one_shot" ]] \
   }
 }
 JSON
-  cat > "${completion_plugin_dir}/openclaw.plugin.json" <<'JSON'
+cat > "${transcript_plugin_dir}/openclaw.plugin.json" <<'JSON'
 {
-  "id": "archestra-completion",
-  "name": "Archestra completion",
-  "description": "Settles a delegated Agent Runtime task after the native TUI finishes its turn.",
+  "id": "archestra-transcript",
+  "name": "Archestra transcript",
+  "description": "Exports a readable transcript and settles delegated runs after a native turn.",
   "activation": {
     "onStartup": true
   },
@@ -149,11 +146,11 @@ JSON
   }
 }
 JSON
-  cat > "${completion_plugin_dir}/index.mjs" <<'PLUGIN'
-import { writeFile } from "node:fs/promises";
+cat > "${transcript_plugin_dir}/index.mjs" <<'PLUGIN'
+import { rename, writeFile } from "node:fs/promises";
 
 function messageText(message) {
-  if (!message || message.role !== "assistant") return "";
+  if (!message) return "";
   if (typeof message.content === "string") return message.content;
   if (!Array.isArray(message.content)) return "";
   return message.content
@@ -162,10 +159,76 @@ function messageText(message) {
     .join("");
 }
 
+function serialize(value) {
+  if (typeof value === "string") return value;
+  if (value === undefined) return undefined;
+  return JSON.stringify(value);
+}
+
+function optionalTimestamp(message) {
+  const value = message?.timestamp ?? message?.createdAt;
+  if (typeof value === "string") return { timestamp: value };
+  if (typeof value === "number") return { timestamp: new Date(value).toISOString() };
+  return {};
+}
+
+function entriesForMessage(message) {
+  if (!message || typeof message !== "object") return [];
+  const entries = [];
+  const timed = optionalTimestamp(message);
+  const parts = Array.isArray(message.content) ? message.content : [];
+  const text = messageText(message);
+  if ((message.role === "user" || message.role === "assistant") && text) {
+    entries.push({ type: "message", role: message.role, text, ...timed });
+  } else if (
+    (message.role === "user" || message.role === "assistant") &&
+    typeof message.content === "string" &&
+    message.content
+  ) {
+    entries.push({ type: "message", role: message.role, text: message.content, ...timed });
+  }
+
+  const calls = [
+    ...(Array.isArray(message.tool_calls) ? message.tool_calls : []),
+    ...parts.filter((part) => ["tool_use", "tool-call", "toolCall"].includes(part?.type)),
+  ];
+  for (const call of calls) {
+    const fn = call?.function && typeof call.function === "object" ? call.function : {};
+    const name = fn.name ?? call?.name ?? call?.toolName;
+    if (typeof name !== "string") continue;
+    const toolCallId = call?.id ?? call?.toolCallId ?? call?.tool_use_id;
+    const input = serialize(fn.arguments ?? call?.arguments ?? call?.input ?? call?.args);
+    entries.push({
+      type: "tool_call",
+      name,
+      ...(input === undefined ? {} : { input }),
+      ...(typeof toolCallId === "string" ? { toolCallId } : {}),
+      ...timed,
+    });
+  }
+
+  const results = parts.filter((part) =>
+    ["tool_result", "tool-result", "toolResult"].includes(part?.type),
+  );
+  if (message.role === "tool" || message.role === "toolResult") results.push(message);
+  for (const result of results) {
+    const toolCallId = result?.tool_call_id ?? result?.toolCallId ?? result?.tool_use_id;
+    const value = result?.output ?? result?.result ?? result?.content;
+    entries.push({
+      type: "tool_result",
+      text: serialize(value) ?? "[Non-text result omitted]",
+      ...(typeof toolCallId === "string" ? { toolCallId } : {}),
+      ...(result?.is_error === true || result?.isError === true ? { isError: true } : {}),
+      ...timed,
+    });
+  }
+  return entries;
+}
+
 export default {
-  id: "archestra-completion",
-  name: "Archestra completion",
-  description: "Settles delegated native-TUI runs.",
+  id: "archestra-transcript",
+  name: "Archestra transcript",
+  description: "Exports readable native-agent history.",
   configSchema: {
     type: "object",
     additionalProperties: false,
@@ -178,8 +241,23 @@ export default {
       const expectedSessionKey = taskId ? `agent:main:${taskId}` : undefined;
       if (expectedSessionKey && context?.sessionKey !== expectedSessionKey) return;
 
-      const answer = [...event.messages]
+      const transcript = {
+        version: 1,
+        provider: "openclaw",
+        entries: (event.messages ?? []).flatMap(entriesForMessage),
+      };
+      const temporaryPath = `${runtimeDir}/readable-transcript.tmp.json`;
+      await writeFile(temporaryPath, `${JSON.stringify(transcript)}\n`, "utf8");
+      await rename(temporaryPath, `${runtimeDir}/readable-transcript.json`);
+
+      if (
+        process.env.ARCHESTRA_AGENT_RUNTIME_MODE !== "one_shot" ||
+        process.env.ARCHESTRA_AGENT_RUNTIME_PLAIN === "1"
+      ) return;
+
+      const answer = [...(event.messages ?? [])]
         .reverse()
+        .filter((message) => message?.role === "assistant")
         .map(messageText)
         .find((text) => text.trim().length > 0)
         ?.trim();
@@ -197,7 +275,6 @@ export default {
   },
 };
 PLUGIN
-fi
 
 # OpenClaw deliberately owns its generated system prompt. Its supported
 # extension point is the workspace bootstrap files, so expose the Agent's
@@ -256,25 +333,25 @@ jq -n \
   --arg api "${openclaw_api}" \
   --arg workspace "${PWD}" \
   --arg attention_plugin_dir "${attention_plugin_dir}" \
-  --arg completion_plugin_dir "${completion_plugin_dir}" \
+  --arg transcript_plugin_dir "${transcript_plugin_dir}" \
   '({
     logging:{level:"error",consoleLevel:"silent"},
     plugins:{
       enabled:true,
       bundledDiscovery:"allowlist",
-      allow:(["archestra-runtime-attention"] + if $completion_plugin_dir == "" then [] else ["archestra-completion"] end),
-      load:{paths:([$attention_plugin_dir] + if $completion_plugin_dir == "" then [] else [$completion_plugin_dir] end)},
+      allow:["archestra-runtime-attention", "archestra-transcript"],
+      load:{paths:[$attention_plugin_dir, $transcript_plugin_dir]},
       entries:({
         "archestra-runtime-attention":{
           enabled:true,
           hooks:{allowConversationAccess:true,timeoutMs:3000}
         }
-      } + if $completion_plugin_dir == "" then {} else {
-        "archestra-completion":{
+      } + {
+        "archestra-transcript":{
           enabled:true,
           hooks:{allowConversationAccess:true}
         }
-      } end)
+      })
     },
     models:{
       mode:"replace",

@@ -38,18 +38,28 @@ describe("OpenCode image entrypoint", () => {
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
 env > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-env"
 if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
-  plugin_path="$(jq -r '.plugin[] | select(contains("opencode-completion")) | sub("^file://"; "")' "$OPENCODE_CONFIG")"
+  plugin_path="$(jq -r '.plugin[] | select(contains("opencode-transcript")) | sub("^file://"; "")' "$OPENCODE_CONFIG")"
   PLUGIN_PATH="$plugin_path" node --input-type=module <<'JS'
 const plugin = await import("file://" + process.env.PLUGIN_PATH);
 const { access } = await import("node:fs/promises");
-const hooks = await plugin.ArchestraCompletion({
+const hooks = await plugin.ArchestraTranscript({
   client: {
     session: {
       get: async ({ path }) => ({
         data: path.id === "subagent-session" ? { id: path.id, parentID: "session-1" } : { id: path.id },
       }),
       messages: async () => ({
-        data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "OpenCode finished the task." }] }],
+        data: [
+          { info: { role: "user", time: { created: 1788516000000 } }, parts: [{ type: "text", text: "Inspect the file." }] },
+          {
+            info: { role: "assistant", time: { created: 1788516001000 } },
+            parts: [
+              { type: "text", text: "I will inspect it." },
+              { type: "tool", tool: "read_file", callID: "call-1", state: { status: "completed", input: { path: "src/app.ts" }, output: "export const ready = true;" } },
+            ],
+          },
+          { info: { role: "assistant", time: { created: 1788516002000 } }, parts: [{ type: "text", text: "OpenCode finished the task." }] },
+        ],
       }),
     },
   },
@@ -132,17 +142,57 @@ fi
           },
         },
       });
+      expect(config.plugin).toEqual([
+        path.join(runtime, "opencode-attention.js"),
+        `file://${runtime}/opencode-transcript.js`,
+      ]);
       if (mode === "one_shot") {
-        expect(config.plugin).toEqual([
-          path.join(runtime, "opencode-attention.js"),
-          `file://${runtime}/opencode-completion.js`,
-        ]);
         expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
         expect(result.stdout).toContain("OpenCode finished the task.");
-      } else {
-        expect(config.plugin).toEqual([
-          path.join(runtime, "opencode-attention.js"),
-        ]);
+        expect(
+          JSON.parse(
+            await readFile(
+              path.join(runtime, "readable-transcript.json"),
+              "utf8",
+            ),
+          ),
+        ).toEqual({
+          version: 1,
+          provider: "opencode",
+          entries: [
+            {
+              type: "message",
+              role: "user",
+              text: "Inspect the file.",
+              timestamp: "2026-09-04T10:00:00.000Z",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              text: "I will inspect it.",
+              timestamp: "2026-09-04T10:00:01.000Z",
+            },
+            {
+              type: "tool_call",
+              name: "read_file",
+              input: '{"path":"src/app.ts"}',
+              toolCallId: "call-1",
+              timestamp: "2026-09-04T10:00:01.000Z",
+            },
+            {
+              type: "tool_result",
+              text: "export const ready = true;",
+              toolCallId: "call-1",
+              timestamp: "2026-09-04T10:00:01.000Z",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              text: "OpenCode finished the task.",
+              timestamp: "2026-09-04T10:00:02.000Z",
+            },
+          ],
+        });
       }
       expect(
         await readFile(path.join(runtime, "opencode-instructions.md"), "utf8"),

@@ -1,13 +1,14 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { SteerQueue } from "./steer-queue.js";
 
 /**
- * Exercised against a real file on disk. A FIFO and a regular file behave the
- * same for the reader's line-splitting and reopen logic, which is the part
- * worth pinning; named-pipe semantics belong to the kernel.
+ * Regular files cover line parsing; the subprocess test below separately
+ * exercises FIFO shutdown, whose blocking-open behavior differs from files.
  */
 async function withQueue(
   contents: string,
@@ -27,6 +28,64 @@ async function withQueue(
 }
 
 describe("SteerQueue", () => {
+  it.skipIf(process.platform === "win32")(
+    "receives messages from successive FIFO writers",
+    async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "steer-fifo-"));
+      const fifo = path.join(dir, "steer");
+      const errors: unknown[] = [];
+      const queue = new SteerQueue(fifo, (error) => errors.push(error));
+      try {
+        await promisify(execFile)("mkfifo", [fifo]);
+        queue.start();
+        await writeFile(fifo, "first\nsecond\n");
+        expect(await queue.waitForMessage(2000)).toEqual(["first", "second"]);
+        await writeFile(fifo, "third\n");
+        expect(await queue.waitForMessage(2000)).toEqual(["third"]);
+        const writer = await open(fifo, "w");
+        try {
+          const message = Buffer.from("split 🦞 message\n");
+          await writer.write(message.subarray(0, 8));
+          expect(await queue.waitForMessage(100)).toEqual([]);
+          await writer.write(message.subarray(8));
+          expect(await queue.waitForMessage(2000)).toEqual([
+            "split 🦞 message",
+          ]);
+        } finally {
+          await writer.close();
+        }
+        expect(errors).toEqual([]);
+      } finally {
+        queue.stop();
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "exits after stopping a FIFO reader with no writer",
+    async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "steer-fifo-"));
+      const fifo = path.join(dir, "steer");
+      try {
+        await promisify(execFile)("mkfifo", [fifo]);
+        const source = new URL("./steer-queue.ts", import.meta.url).href;
+        const script = `import { SteerQueue } from ${JSON.stringify(source)};
+        const queue = new SteerQueue(${JSON.stringify(fifo)}, console.error);
+        queue.start();
+        setTimeout(() => queue.stop(), 200);`;
+        const result = await promisify(execFile)(
+          process.execPath,
+          ["--import", "tsx", "--input-type=module", "-e", script],
+          { timeout: 5000 },
+        );
+        expect(result.stderr).toBe("");
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("delivers one message per line, in order", async () => {
     await withQueue("first message\nsecond message\n", async (queue) => {
       const delivered = await queue.waitForMessage();

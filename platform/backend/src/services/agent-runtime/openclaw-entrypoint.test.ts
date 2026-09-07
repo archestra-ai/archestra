@@ -48,7 +48,7 @@ describe("OpenClaw image entrypoint", () => {
         `#!/bin/sh
 cp "$PWD/SOUL.md" "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-soul.md"
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
-plugin_dir="$(jq -r '.plugins.load.paths[] | select(contains("openclaw-completion"))' "$OPENCLAW_CONFIG_PATH")"
+plugin_dir="$(jq -r '.plugins.load.paths[] | select(contains("openclaw-transcript"))' "$OPENCLAW_CONFIG_PATH")"
 PLUGIN_PATH="$plugin_dir/index.mjs" node --input-type=module <<'JS'
 const plugin = await import("file://" + process.env.PLUGIN_PATH);
 const { access } = await import("node:fs/promises");
@@ -74,7 +74,19 @@ try {
 await agentEnd(
   {
     success: true,
-    messages: [{ role: "assistant", content: [{ type: "text", text: "OpenClaw finished the task." }] }],
+    messages: [
+      { role: "user", content: "Inspect the file.", timestamp: "2026-09-04T10:00:00Z" },
+      {
+        role: "assistant",
+        timestamp: "2026-09-04T10:00:01Z",
+        content: [
+          { type: "text", text: "I will inspect it." },
+          { type: "tool_use", id: "call-1", name: "read_file", input: { path: "src/app.ts" } },
+        ],
+      },
+      { role: "toolResult", content: "export const ready = true;", toolCallId: "call-1", timestamp: "2026-09-04T10:00:02Z" },
+      { role: "assistant", content: [{ type: "text", text: "OpenClaw finished the task." }], timestamp: "2026-09-04T10:00:03Z" },
+    ],
   },
   { sessionKey: "agent:main:12345678-abcd-4000-8000-123456789abc" },
 );
@@ -134,11 +146,11 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       expect(config.plugins).toMatchObject({
         enabled: true,
         bundledDiscovery: "allowlist",
-        allow: ["archestra-runtime-attention", "archestra-completion"],
+        allow: ["archestra-runtime-attention", "archestra-transcript"],
         load: {
           paths: [
             path.join(runtime, "openclaw-attention"),
-            path.join(runtime, "openclaw-completion"),
+            path.join(runtime, "openclaw-transcript"),
           ],
         },
         entries: {
@@ -146,7 +158,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
             enabled: true,
             hooks: { allowConversationAccess: true, timeoutMs: 3000 },
           },
-          "archestra-completion": {
+          "archestra-transcript": {
             enabled: true,
             hooks: { allowConversationAccess: true },
           },
@@ -169,6 +181,50 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       expect(args).not.toContain("agent");
       expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
       expect(result.stdout).toContain("OpenClaw finished the task.");
+      expect(
+        JSON.parse(
+          await readFile(
+            path.join(runtime, "readable-transcript.json"),
+            "utf8",
+          ),
+        ),
+      ).toEqual({
+        version: 1,
+        provider: "openclaw",
+        entries: [
+          {
+            type: "message",
+            role: "user",
+            text: "Inspect the file.",
+            timestamp: "2026-09-04T10:00:00Z",
+          },
+          {
+            type: "message",
+            role: "assistant",
+            text: "I will inspect it.",
+            timestamp: "2026-09-04T10:00:01Z",
+          },
+          {
+            type: "tool_call",
+            name: "read_file",
+            input: '{"path":"src/app.ts"}',
+            toolCallId: "call-1",
+            timestamp: "2026-09-04T10:00:01Z",
+          },
+          {
+            type: "tool_result",
+            text: "export const ready = true;",
+            toolCallId: "call-1",
+            timestamp: "2026-09-04T10:00:02Z",
+          },
+          {
+            type: "message",
+            role: "assistant",
+            text: "OpenClaw finished the task.",
+            timestamp: "2026-09-04T10:00:03Z",
+          },
+        ],
+      });
       expect(
         await readFile(path.join(runtime, "captured-soul.md"), "utf8"),
       ).toContain("Follow the configured Agent instructions.");

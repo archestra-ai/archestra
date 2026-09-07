@@ -38,24 +38,56 @@ describe("Hermes image entrypoint", () => {
         path.join(bin, "hermes"),
         `#!/bin/sh
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
-if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
   hook_script="$(jq -r '.hooks.post_llm_call[0].command' "$HERMES_HOME/config.yaml")"
   printf '%s' '{"hook_event_name":"on_session_start","session_id":"main-session","extra":{}}' | "$hook_script"
   printf '%s' '{"hook_event_name":"post_llm_call","session_id":"subagent-session","extra":{"assistant_response":"Ignore this subagent answer."}}' | "$hook_script"
   test ! -e "$ARCHESTRA_AGENT_RUNTIME_DIR/turn-complete"
   python3 - "$HERMES_HOME/state.db" <<'PYTHON'
+import json
 import sqlite3
 import sys
 
 with sqlite3.connect(sys.argv[1]) as database:
     database.execute("CREATE TABLE sessions (id TEXT, source TEXT, parent_session_id TEXT, started_at REAL)")
-    database.execute("CREATE TABLE messages (id INTEGER, session_id TEXT, role TEXT, content TEXT, active INTEGER, finish_reason TEXT)")
+    database.execute("CREATE TABLE messages (id INTEGER, session_id TEXT, role TEXT, content TEXT, tool_call_id TEXT, tool_calls TEXT, tool_name TEXT, timestamp REAL, active INTEGER, finish_reason TEXT)")
     database.execute("INSERT INTO sessions VALUES ('main-session', 'tui', NULL, 1)")
-    database.execute("INSERT INTO messages VALUES (1, 'main-session', 'user', 'Run the task.', 1, NULL)")
-    database.execute("INSERT INTO messages VALUES (2, 'main-session', 'assistant', 'Hermes finished the task.', 1, 'stop')")
+    database.execute("INSERT INTO messages VALUES (1, 'main-session', 'user', 'Run the task.', NULL, NULL, NULL, 1788516000, 1, NULL)")
+    tool_calls = json.dumps([{"id": "call-1", "function": {"name": "read_file", "arguments": json.dumps({"path": "src/app.ts"})}}])
+    database.execute("INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (2, 'main-session', 'assistant', 'I will inspect it.', None, tool_calls, None, 1788516001, 1, None))
+    database.execute("INSERT INTO messages VALUES (3, 'main-session', 'tool', 'export const ready = true;', 'call-1', NULL, 'read_file', 1788516002, 1, NULL)")
+    database.execute("INSERT INTO messages VALUES (4, 'main-session', 'assistant', 'Hermes finished the task.', NULL, NULL, NULL, 1788516003, 1, 'stop')")
 PYTHON
+if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
   trap 'exit 0' TERM
   while :; do sleep 1; done
+else
+  rm "$ARCHESTRA_AGENT_RUNTIME_DIR/hermes-main-session"
+  python3 - "$HERMES_HOME/plugins/archestra-attention/__init__.py" <<'PYTHON'
+import importlib.util
+import os
+import sqlite3
+import sys
+import threading
+spec = importlib.util.spec_from_file_location("plugin", sys.argv[1])
+plugin = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plugin)
+callbacks = {}
+class Context:
+    def register_hook(self, name, callback):
+        callbacks[name] = callback
+plugin.register(Context())
+callbacks["on_session_start"](session_id="main-session")
+# The final export must survive a short exclusive writer transaction.
+writer = sqlite3.connect(os.path.join(os.environ["HERMES_HOME"], "state.db"), check_same_thread=False)
+writer.execute("BEGIN EXCLUSIVE")
+release = threading.Timer(1, writer.commit)
+release.start()
+try:
+    callbacks["on_session_end"](session_id="main-session", completed=True)
+finally:
+    release.join()
+    writer.close()
+PYTHON
 fi
 `,
       );
@@ -100,18 +132,79 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       expect(config.mcp_servers.archestra.headers.Authorization).toBe(
         "Bearer test-token",
       );
+      expect(config.hooks).toEqual({
+        on_session_start: [{ command: `${runtime}/hermes-runtime-hook.sh` }],
+        post_llm_call: [{ command: `${runtime}/hermes-runtime-hook.sh` }],
+        on_session_end: [{ command: `${runtime}/hermes-runtime-hook.sh` }],
+      });
+      expect(config.hooks_auto_accept).toBe(true);
       if (mode === "one_shot") {
-        expect(config.hooks).toEqual({
-          on_session_start: [
-            { command: `${runtime}/hermes-completion-hook.sh` },
-          ],
-          post_llm_call: [{ command: `${runtime}/hermes-completion-hook.sh` }],
-        });
-        expect(config.hooks_auto_accept).toBe(true);
         expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
         expect(result.stdout).toContain("Hermes finished the task.");
+        expect(
+          JSON.parse(
+            await readFile(
+              path.join(runtime, "readable-transcript.json"),
+              "utf8",
+            ),
+          ),
+        ).toEqual({
+          version: 1,
+          provider: "hermes",
+          entries: [
+            {
+              type: "message",
+              role: "user",
+              text: "Run the task.",
+              timestamp: "2026-09-04T10:00:00Z",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              text: "I will inspect it.",
+              timestamp: "2026-09-04T10:00:01Z",
+            },
+            {
+              type: "tool_call",
+              name: "read_file",
+              input: '{"path":"src/app.ts"}',
+              toolCallId: "call-1",
+              timestamp: "2026-09-04T10:00:01Z",
+            },
+            {
+              type: "tool_result",
+              text: "export const ready = true;",
+              toolCallId: "call-1",
+              timestamp: "2026-09-04T10:00:02Z",
+            },
+            {
+              type: "message",
+              role: "assistant",
+              text: "Hermes finished the task.",
+              timestamp: "2026-09-04T10:00:03Z",
+            },
+          ],
+        });
       } else {
-        expect(config.hooks).toBeUndefined();
+        const transcript = JSON.parse(
+          await readFile(
+            path.join(runtime, "readable-transcript.json"),
+            "utf8",
+          ),
+        );
+        expect(
+          transcript.entries.map((entry: { type: string }) => entry.type),
+        ).toEqual([
+          "message",
+          "message",
+          "tool_call",
+          "tool_result",
+          "message",
+        ]);
+        expect(transcript.entries.at(-1).text).toBe(
+          "Hermes finished the task.",
+        );
+        await writeFile(path.join(runtime, "attention-calls"), "");
         const plugin = path.join(
           runtime,
           "hermes",

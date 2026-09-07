@@ -1,6 +1,8 @@
 # Release Checklist
 
-**Pick one:** release a beta, ship a stable fix, or cut the monthly feature release.
+There are two publication pipelines: beta on `main` and stable on `release/X.Y`.
+Stable patches and the first release of a new feature line use the same stable pipeline.
+Starting a feature line adds branch/config preparation; "monthly" is a target cadence, not a scheduled job.
 [Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches)
 handles versions and changelogs. GitHub Actions handles builds.
 Only tested, approved stable releases move `latest`.
@@ -16,14 +18,20 @@ Installing a beta does not enable the separate `ARCHESTRA_BETA` feature flag.
 
 ## Ship A Stable Fix
 
-- [ ] Fix it on `main` first, then cherry-pick it onto a branch from `release/1.3`
-  using `git cherry-pick -x <commit>`.
-- [ ] Open and merge a reviewed, tested PR into `release/1.3`.
+- [ ] Fix it on `main` first. This is already the beta line; its next release-please PR includes the fix.
+  Do not create a separate beta branch or cherry-pick the same fix back onto `main`.
+- [ ] Identify the supported stable branch, such as `release/1.3` before `1.4.0` publishes.
+  Create a backport PR branch from it and run `git cherry-pick -x <main-fix-sha>`.
+- [ ] Open and merge a reviewed, tested PR into that stable branch.
   Include only needed fixes—no features, broad refactors, or schema/migration changes.
-- [ ] Review and merge the release-please PR for the next patch, such as `1.3.51`.
+- [ ] Review and merge the release-please PR for the next patch, such as `1.3.52`.
 - [ ] Complete **Test And Approve Stable** below.
 
-Never merge all of `main` into a stable branch.
+If `release/1.4` was already cut from a beta before the fix landed, it does not inherit later `main` commits.
+When that candidate also needs the fix, use a separate `git cherry-pick -x` backport PR targeting it.
+The fix then reaches the rolling beta through `main`, and each selected stable/candidate branch through its own backport.
+Only one published stable line is supported; an unpublished candidate is not a second production line.
+Never merge all of `main` into a stable or candidate branch or copy its release metadata during conflict resolution.
 
 ## Cut The Monthly Feature Release
 
@@ -48,12 +56,16 @@ Edit `packages.platform` in `.github/release-please/release-please-config.json`:
 | `release-as` (temporary) | `1.4.0` | `1.5.0-beta.1` |
 | `draft` | `true` | `true` |
 
+`draft: true` controls the GitHub release, not whether the release-please pull request is a draft.
 Keep each branch's release metadata separate; do not merge it back into `main`.
 We support one stable line. If the next feature release is delayed, keep fixing the old line.
 
 ## Test And Approve Stable
 
 The workflow builds first, then waits for **`stable-release` approval** in GitHub Actions.
+This applies to both patch releases and the first stable release of a new feature line.
+Merging an ordinary backport PR only contributes to the rolling release PR; it does not publish a versioned release.
+Merging the release-please PR starts the final build; stable publication still requires approval.
 Test this final build, not just the preceding beta:
 
 - [ ] Confirm release PR checks and all artifact builds passed.
@@ -80,6 +92,9 @@ Production users should still pin exact versions or digests.
   Never reuse a version or overwrite its tag.
 - **Partial publication:** inspect GitHub and registries before retrying.
   Keep the draft and rerun failed jobs in the original run using its saved artifacts.
+  Let that workflow perform uploads, publication, and alias updates; do not perform those steps manually afterward.
+  Inspect the retry result. If state remains inconsistent, investigate rather than manually moving `latest` or editing the release.
+  Obtain explicit authorization if the retry requires fresh environment approval.
   Never move `latest` backward or rebuild a published version.
 
 A higher stable draft blocks lower stable publication, including while qualification is pending.

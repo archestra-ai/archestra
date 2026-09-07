@@ -134422,7 +134422,7 @@
                     "properties": {
                       "skillIds": {
                         "minItems": 1,
-                        "maxItems": 200,
+                        "maxItems": 500,
                         "type": "array",
                         "items": {
                           "type": "string",

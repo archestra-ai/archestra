@@ -105,6 +105,11 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain("'[U]'");
     expect(script).toContain("/connection page and pick");
     expect(script).toContain("$key -eq 'u' -or $key -eq 'U'");
+    // the [C] closing beat must leave a non-[C] queued key (an early [U]) in
+    // PendingKey so the update offer can consume it, mirroring the bash guard
+    expect(script).toContain(
+      "if ($key -and $key -ne 'c' -and $key -ne 'C') { $Script:PendingKey = $key; $key = '' }",
+    );
   });
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {

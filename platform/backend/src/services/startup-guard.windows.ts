@@ -567,8 +567,11 @@ function Show-ArchReconfigureOffer {
   if (-not $UseVt) { Show-ArchReconfigureHint }
   $key = ''
   if ($null -ne $Script:PendingKey) {
-    # a key typed ahead during the probes counts as the pressed key
-    $key = $Script:PendingKey; $Script:PendingKey = $null
+    # only [C] is answered here; any other queued key (e.g. a [U] meant for the
+    # update offer below) is left in PendingKey so that beat can read it
+    if ($Script:PendingKey -eq 'c' -or $Script:PendingKey -eq 'C') {
+      $key = $Script:PendingKey; $Script:PendingKey = $null
+    }
   } else {
     $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
     while ([DateTime]::UtcNow -lt $deadline) {
@@ -576,6 +579,9 @@ function Show-ArchReconfigureOffer {
       if ($key) { break }
       Start-Sleep -Milliseconds 40
     }
+    # a non-[C] key pressed here belongs to the update offer below: stash it so
+    # this closing beat doesn't swallow it
+    if ($key -and $key -ne 'c' -and $key -ne 'C') { $Script:PendingKey = $key; $key = '' }
   }
   Clear-ArchReconfigureHint
   if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
@@ -596,11 +602,16 @@ function Show-ArchVersionUpdate {
   Write-Arch '[U]' Cyan -NoNewline
   Write-Arch ' for the steps to update this startup check' DarkGray
   $key = ''
-  $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
-  while ([DateTime]::UtcNow -lt $deadline) {
-    $key = Read-ArchKey
-    if ($key) { break }
-    Start-Sleep -Milliseconds 40
+  if ($null -ne $Script:PendingKey) {
+    # a [U] typed ahead during the probes (left in place by the closing beat) answers here
+    $key = $Script:PendingKey; $Script:PendingKey = $null
+  } else {
+    $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
+    while ([DateTime]::UtcNow -lt $deadline) {
+      $key = Read-ArchKey
+      if ($key) { break }
+      Start-Sleep -Milliseconds 40
+    }
   }
   if ($key -eq 'u' -or $key -eq 'U') {
     Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan

@@ -111,7 +111,7 @@ live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 - 🛡️ [**Security & bug bounty**](https://archestra.ai/docs/security)
 - 🤝 [**Contributing**](https://archestra.ai/docs/contributing) —
   set up the dev env, run e2e tests, open a PR.
-- [**Developer release guide**](.github/RELEASING.md) —
+- [**Developer release guide**](platform/dev/RELEASE.md) —
   rolling beta and patch lines, backports, cutovers, and qualification.
 
 Thank you for continuously making **Archestra** better — you're awesome 🫶

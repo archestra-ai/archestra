@@ -4,7 +4,7 @@ description: "Guides Archestra beta, stable, and patch releases. Use when cuttin
 ---
 
 # Managing Archestra Releases
-Read `.github/RELEASING.md` before acting; it is the release source of truth.
+Read `platform/dev/RELEASE.md` before acting; it is the release source of truth.
 Inspect the target branch, latest stable tag, release-please configuration, and release PR.
 Keep rolling betas on `main` and stable patches on `release/X.Y`.
 Make cutover overrides directly in release-please configuration; do not invent a helper.

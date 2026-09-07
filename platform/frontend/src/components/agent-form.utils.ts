@@ -99,12 +99,7 @@ export const TOOL_CONNECTION_PROMPTING: Record<
     "Nothing can be sent until every credential the tools need is connected.",
 };
 
-/**
- * The fixed lead-in {@link TOOL_CONNECTION_PROMPTING} is read against. The
- * per-choice line names a consequence without saying which decision it answers,
- * so this states the question. Record-neutral, for the same reason as those
- * lines — one string serves an agent, a gateway and a proxy alike.
- */
+/** Record-neutral purpose copy shared by agents, gateways, and proxies. */
 export const MISSING_CREDENTIAL_SUMMARY =
   "Some tools need a credential the user must connect first. This decides when they are prompted for it.";
 

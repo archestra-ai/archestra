@@ -130,21 +130,11 @@ export function AgentToolBehaviorSettings({
           <Label htmlFor="missing-credential-behavior">
             Missing connections
           </Label>
-          {/* Purpose first, then the current status stated inline: the closed
-              select shows only a terse label and Radix leaves the menu
-              unmounted while the setting is read. The status line changes with
-              the selection; when All mode pins the behavior it reports the
-              pinned effect instead. Spans keep machine-translate from
-              re-parenting a bare node next to the link. */}
+          {/* Keep the closed setting focused on its purpose. The richer
+              per-option explanations belong in the open menu. The span keeps
+              machine-translate from re-parenting a bare node next to the link. */}
           <FieldDescription>
             <span>{MISSING_CREDENTIAL_SUMMARY} </span>
-            {locked ? (
-              <span>All mode always asks when a tool needs it. </span>
-            ) : (
-              <span>
-                {TOOL_CONNECTION_PROMPTING[missingCredentialBehavior]}{" "}
-              </span>
-            )}
             <ExternalDocsLink
               href={toolConnectionsDocsUrl}
               className="underline"

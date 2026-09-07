@@ -138,7 +138,13 @@ This command will:
 
 ### Configuration
 
-The Helm chart provides extensive configuration options through values. For the complete configuration reference, see the [values.yaml file](https://github.com/archestra-ai/archestra/blob/main/platform/helm/archestra/values.yaml).
+View the configuration defaults for the exact chart version you selected:
+
+```bash
+helm show values \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --version "$ARCHESTRA_VERSION"
+```
 
 #### Core Configuration
 
@@ -916,7 +922,7 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop; custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest`
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:<platform-version>`, including beta versions.
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`

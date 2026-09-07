@@ -427,7 +427,8 @@ archestra:
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
-    # If not set, defaults to "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest"
+    # Leave empty to use mcp-server-base with the platform's version, including beta versions.
+    # Override only to use a deliberately selected compatible image.
     baseImage: ""
 
     # Resource requests/limits applied to generated MCP server containers

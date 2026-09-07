@@ -812,51 +812,50 @@ function CreateProjectDialog({
         }
         fallbackType="project"
       >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="new-project-name">Name *</Label>
-            <Input
-              autoFocus
-              id="new-project-name"
-              maxLength={PROJECT_NAME_MAX_LENGTH}
-              aria-invalid={!!form.formState.errors.name}
-              {...form.register("name", {
-                required: "Project name is required.",
-                maxLength: {
-                  value: PROJECT_NAME_MAX_LENGTH,
-                  message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-                },
-              })}
-            />
-            {form.formState.errors.name?.message && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.name.message}
-              </p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-project-description">Description</Label>
-            <Textarea
-              id="new-project-description"
-              placeholder="What is this project about?"
-              rows={3}
-              maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-              aria-invalid={!!form.formState.errors.description}
-              {...form.register("description", {
-                maxLength: {
-                  value: PROJECT_DESCRIPTION_MAX_LENGTH,
-                  message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
-                },
-              })}
-            />
-            {form.formState.errors.description?.message && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.description.message}
-              </p>
-            )}
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="new-project-name">Name *</Label>
+          <Input
+            autoFocus
+            id="new-project-name"
+            maxLength={PROJECT_NAME_MAX_LENGTH}
+            aria-invalid={!!form.formState.errors.name}
+            {...form.register("name", {
+              required: "Project name is required.",
+              maxLength: {
+                value: PROJECT_NAME_MAX_LENGTH,
+                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+              },
+            })}
+          />
+          {form.formState.errors.name?.message && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.name.message}
+            </p>
+          )}
         </div>
       </IdentityFields>
+
+      <div className="space-y-2">
+        <Label htmlFor="new-project-description">Description</Label>
+        <Textarea
+          id="new-project-description"
+          placeholder="What is this project about?"
+          rows={3}
+          maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+          aria-invalid={!!form.formState.errors.description}
+          {...form.register("description", {
+            maxLength: {
+              value: PROJECT_DESCRIPTION_MAX_LENGTH,
+              message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+            },
+          })}
+        />
+        {form.formState.errors.description?.message && (
+          <p className="text-xs text-destructive">
+            {form.formState.errors.description.message}
+          </p>
+        )}
+      </div>
 
       {canReadAgents === true && (
         <div className="space-y-2">

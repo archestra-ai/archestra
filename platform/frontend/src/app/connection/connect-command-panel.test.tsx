@@ -319,6 +319,25 @@ describe("ConnectCommandPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps non-plugin setup functional without querying, reviewing, or sending plugins", async () => {
+    renderPanel({ pluginsEnabled: false });
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mcpGatewayId: "g1",
+          provider: "anthropic",
+        }),
+      ),
+    );
+    expect(pluginsMock).toHaveBeenCalledWith(false);
+    expect(createSetupMock.mock.calls.at(-1)?.[0].pluginIds).toBeUndefined();
+    expect(
+      screen.queryByTestId("connect-change-plugins"),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByText(COMMAND)).toBeInTheDocument();
+  });
+
   it("generates a plugin-only setup when no gateway, proxy, or skill exists", async () => {
     allSkillsMock.mockReturnValue({ data: [] });
     renderPanel({

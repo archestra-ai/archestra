@@ -45,6 +45,8 @@ interface ConnectionFlowProps {
   skillsEnabled?: boolean;
   /** When false, the page does not offer routing through the LLM Proxy. */
   llmProxyEnabled?: boolean;
+  /** When false, the page does not offer installing plugins. */
+  pluginsEnabled?: boolean;
 }
 
 export function ConnectionFlow({
@@ -57,6 +59,7 @@ export function ConnectionFlow({
   connectionBaseUrls,
   skillsEnabled = true,
   llmProxyEnabled = true,
+  pluginsEnabled = true,
 }: ConnectionFlowProps) {
   const searchParams = useSearchParams();
   const urlGatewayId = searchParams.get("gatewayId");
@@ -265,6 +268,7 @@ export function ConnectionFlow({
           baseUrlMetadata={connectionBaseUrls}
           onBaseUrlChange={setUserBaseUrl}
           skillsEnabled={skillsEnabled}
+          pluginsEnabled={pluginsEnabled}
         />
       )}
 

@@ -11,8 +11,10 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 vi.mock("@/lib/connection-setup.query");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
 
+import { useFeature } from "@/lib/config/config.query";
 import { useCreateConnectionSetup } from "@/lib/connection-setup.query";
 import {
   useAppearanceSettings,
@@ -29,9 +31,11 @@ beforeEach(() => {
     expiresAt: "2026-08-22T10:15:00.000Z",
   });
   vi.mocked(useOrganization).mockReturnValue({
-    data: { connectionBaseUrls: null },
+    data: { connectionBaseUrls: null, connectionPluginsEnabled: true },
     isPending: false,
+    isFetchedAfterMount: true,
   } as unknown as ReturnType<typeof useOrganization>);
+  vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(useAppearanceSettings).mockReturnValue({
     data: undefined,
   } as unknown as ReturnType<typeof useAppearanceSettings>);
@@ -74,6 +78,36 @@ describe("PluginInstallDialog", () => {
     expect(
       await screen.findByText("curl -fsSL https://example.test/setup | bash"),
     ).toBeVisible();
+  });
+
+  it("shows the organization policy state instead of generating a disabled install command", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { connectionBaseUrls: null, connectionPluginsEnabled: false },
+      isPending: false,
+      isFetchedAfterMount: true,
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(
+      <PluginInstallDialog
+        plugins={[
+          {
+            id: "plugin-disabled",
+            displayName: "Disabled plugin",
+            clientType: "claude-code",
+            supportedPlatforms: ["posix"],
+          },
+        ]}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Plugins on Connect is disabled for this organization. Existing plugin installs keep working.",
+      ),
+    ).toBeVisible();
+    expect(createSetup).not.toHaveBeenCalled();
   });
 
   it("reuses the Connection review row Change interaction", async () => {

@@ -139,6 +139,46 @@ describe("POST /api/connection-setups with plugins", () => {
     expect(duplicate.statusCode).toBe(400);
   });
 
+  test("rejects explicit plugins and omits implicit plugins when Connect delivery is disabled", async ({
+    makeAgent,
+  }) => {
+    const plugin = await seedPlugin("claude-code");
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionPluginsEnabled: false,
+    });
+
+    const explicit = await postPluginSetup([plugin.id]);
+    expect(explicit.statusCode).toBe(403);
+    expect(explicit.body).toContain(
+      "Connecting plugins is disabled for this organization",
+    );
+
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Plugin policy gateway",
+    });
+    const implicit = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        platform: "macos",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+      },
+    });
+
+    expect(implicit.statusCode).toBe(200);
+    expect(implicit.json().plugins).toEqual([]);
+    expect(
+      await ConnectionSetupModel.getPluginIds({
+        connectionSetupId: implicit.json().id,
+      }),
+    ).toEqual([]);
+  });
+
   test("rejects disabled and cross-organization plugins", async ({
     makeOrganization,
   }) => {

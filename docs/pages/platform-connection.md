@@ -168,7 +168,7 @@ Selecting **Any Client** gives copy-paste instructions instead of a one-command 
 
 Go to **Settings → Connection** to set what the page offers everyone. **Available clients** is the list of clients it shows setup instructions for — remove a chip to drop that client. "Any client" is always shown.
 
-You can turn off **LLM Proxy on Connect** and **Skills on Connect**. The page then omits those sections, and new setup commands cannot include them. Clients already connected keep working.
+You can turn off **LLM Proxy on Connect**, **Skills on Connect**, and **Plugins on Connect**. The page then omits those sections, and new setup commands cannot include them. Plugin management and existing installs keep working.
 
 The same page holds the defaults it pre-selects — an MCP gateway, a client, and the provider key a setup command's virtual key maps to — and the base URLs it hands out.
 

@@ -584,6 +584,7 @@ export const UpdateConnectionSettingsSchema = z.object({
     .optional(),
   connectionSkillsEnabled: z.boolean().optional(),
   connectionLlmProxyEnabled: z.boolean().optional(),
+  connectionPluginsEnabled: z.boolean().optional(),
   connectionBaseUrls: z
     .array(ConnectionBaseUrlSchema)
     .max(50)

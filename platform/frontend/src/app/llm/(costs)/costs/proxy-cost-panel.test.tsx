@@ -133,10 +133,16 @@ test("shows an OAuth application's own totals when its credential is selected", 
   );
   expect(screen.queryByText("$3.50")).not.toBeInTheDocument();
   expect(await screen.findAllByText("$1.25")).toHaveLength(2);
-  fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Back to all credentials" }),
+  );
   expect(
     await screen.findByRole("button", { name: "Build pipeline" }),
   ).toBeInTheDocument();
+  expect(screen.getAllByText("$3.50")).toHaveLength(2);
+  expect(
+    screen.queryByRole("button", { name: "Back to all credentials" }),
+  ).not.toBeInTheDocument();
 });
 
 test("renders a retryable error rather than an empty usage report and recovers", async () => {

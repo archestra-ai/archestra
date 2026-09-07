@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes, StatisticsTimeFrame } from "@archestra/shared";
+import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -153,9 +154,16 @@ export function ProxyCostPanel({
                 />
               </LineChart>
             </ChartContainer>
-            <p className="text-xs text-muted-foreground">
-              Select a credential to focus the trend.
-            </p>
+            {credential ? (
+              <Button variant="outline" size="sm" onClick={reset}>
+                <ArrowLeft />
+                <span>Back to all credentials</span>
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Select a credential to focus the trend.
+              </p>
+            )}
             <div className="overflow-x-auto rounded-md border">
               <Table className="min-w-[680px]">
                 <TableHeader>

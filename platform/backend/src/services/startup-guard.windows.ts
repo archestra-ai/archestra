@@ -912,10 +912,22 @@ export function buildWindowsStartupGuardInstallSection(
   return `Say ${psq(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 $archGuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuardPath)
+# A guard installed BEFORE the version-check feature has no $GuardFormatVersion
+# stamp and no [U] update check, so at launch it can never nudge the user to
+# re-connect on its own. Running connect is the one moment we can lift such a
+# user onto the current guard, so we upgrade it in place, automatically, with no
+# prompt. (A guard already carrying the stamp is just refreshed silently.)
+$archGuardPreFeature = $false
+if ((Test-Path $archGuardPath) -and -not (Select-String -Path $archGuardPath -Pattern 'GuardFormatVersion' -Quiet -ErrorAction SilentlyContinue)) {
+  $archGuardPreFeature = $true
+}
 $archGuardBody = @'
 ${renderStartupGuardPowerShell(ctx, client)}'@
 [IO.File]::WriteAllText($archGuardPath, $archGuardBody, (New-Object System.Text.UTF8Encoding $true))
 Write-Host ('Updated ' + $archGuardPath)
+if ($archGuardPreFeature) {
+  Ok ${psq(`Upgraded your existing ${client.label} startup guard to the version-aware format automatically — no re-connect prompt was needed.`)}
+}
 # A fresh connect re-arms every check: forget remotes a previous guard
 # disconnected.
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(client.skipRelpath)})

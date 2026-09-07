@@ -74,6 +74,8 @@ Under the checks the guard always shows its two keys: "To skip press [Space] · 
 
 The same health request also tells the guard whether a newer version of the setup is available. The guard remembers the version it was installed at and compares it to the version the platform reports. When the platform is ahead, the guard shows an "update" line with one more key — press `U` to see the steps to re-run the setup from the Connection page. The line is advisory only: it never blocks the launch, and a non-interactive run — `codex exec` or `claude -p`, for example — just prints a one-line note on stderr instead. An older or rolled-back instance stays silent, so you are nudged only when there is genuinely a newer setup to pick up.
 
+A guard installed before this version check cannot show that update line — it predates the check. The next time you run the setup, the script spots the older guard and upgrades it in place automatically, with no prompt. The replacement matches the version the platform reports, so it stays silent on the next launch instead of nudging you again.
+
 The guard lives under `~/.archestra/`, hooked in by a marked wrapper block in your shell profile — on Windows, in each PowerShell edition's `profile.ps1`. Each client has its own file and its own disable variable:
 
 | Client | macOS / Linux | Windows | Disable with |

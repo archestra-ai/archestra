@@ -257,6 +257,47 @@ async function readClaudeLog(guardHome: GuardHome): Promise<string> {
     : "";
 }
 
+/**
+ * Runs the real install section (the connect step that writes the guard) in a
+ * sandboxed $HOME, with a minimal preamble supplying the setup script's say/ok
+ * helpers. `preExistingGuard`, when given, is written to the guard path first so
+ * the section's pre-feature detection has a prior guard to inspect. Returns the
+ * install's stdout and the path of the guard it wrote.
+ */
+async function runInstallSection(params: {
+  preExistingGuard?: string;
+}): Promise<{ stdout: string; guardFile: string }> {
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-install-"));
+  const home = path.join(dir, "home");
+  const guardFile = path.join(home, CLAUDE_CODE_GUARD_SCRIPT_RELPATH);
+  await mkdir(path.dirname(guardFile), { recursive: true });
+  if (params.preExistingGuard !== undefined) {
+    await writeFile(guardFile, params.preExistingGuard, "utf8");
+  }
+  const preamble = [
+    "ARCH_C_RESET=''; ARCH_C_HEAD=''; ARCH_C_OK=''",
+    `say()  { printf '\\n==> %s\\n' "$1"; }`,
+    `ok()   { printf '==> %s\\n' "$1"; }`,
+    "",
+  ].join("\n");
+  const scriptFile = path.join(dir, "install.sh");
+  await writeFile(
+    scriptFile,
+    preamble + buildStartupGuardInstallSection(CTX, CLAUDE_CODE_GUARD_CLIENT),
+    "utf8",
+  );
+  const { stdout } = await execFileAsync("bash", [scriptFile], {
+    env: {
+      ...process.env,
+      HOME: home,
+      SHELL: "/bin/bash",
+    } as Record<string, string>,
+  });
+  // the sandbox $HOME (and the guard it wrote) is left on disk for the caller to
+  // read back, then reaped by the OS temp sweeper.
+  return { stdout, guardFile };
+}
+
 describe("buildStartupGuardContext", () => {
   test("derives refs and the single health URL from the connect-wired URLs", () => {
     const setupCtx: SetupScriptContext = {
@@ -1019,5 +1060,64 @@ describe("buildStartupGuardInstallSection", () => {
     expect(section).toContain('command claude "$@"');
     // strip-then-append keeps re-runs from duplicating the block
     expect(section).toContain("awk -v start=");
+  });
+
+  test("detects a pre-feature guard (no version stamp) and upgrades it without prompting", () => {
+    const section = buildStartupGuardInstallSection(
+      CTX,
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
+    // a guard installed before the version check has no GUARD_FORMAT_VERSION
+    // line; the install reads the existing file before overwriting it
+    expect(section).toContain("grep -q 'GUARD_FORMAT_VERSION='");
+    expect(section).toContain("archestra_guard_pre_feature=1");
+    // and announces the automatic, prompt-free upgrade
+    expect(section).toContain(
+      "Upgraded your existing Claude Code startup guard",
+    );
+  });
+
+  test("auto-upgrades a pre-feature guard in place; a stamped or absent guard is refreshed silently", async () => {
+    // A guard from before the version-check feature: no GUARD_FORMAT_VERSION.
+    const preFeature = await runInstallSection({
+      preExistingGuard:
+        "#!/usr/bin/env bash\n# archestra guard (pre version-check)\nexit 0\n",
+    });
+    expect(preFeature.stdout).toContain(
+      "Upgraded your existing Claude Code startup guard",
+    );
+    // the replacement now carries the current version stamp
+    expect(await readFile(preFeature.guardFile, "utf8")).toContain(
+      `GUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}`,
+    );
+
+    // a guard that already carries the stamp is refreshed, but NOT announced as
+    // an upgrade — a version-behind feature guard reaches connect via its own
+    // [U] launch nudge, not this pre-feature path
+    const stamped = await runInstallSection({
+      preExistingGuard: `#!/usr/bin/env bash\nGUARD_FORMAT_VERSION=${STARTUP_GUARD_FORMAT_VERSION}\nexit 0\n`,
+    });
+    expect(stamped.stdout).not.toContain("Upgraded your existing");
+
+    // first-ever connect (no guard yet) is a plain install, not an upgrade
+    const fresh = await runInstallSection({});
+    expect(fresh.stdout).not.toContain("Upgraded your existing");
+  });
+
+  test("the auto-upgraded guard is stamped current, so it does not then immediately nag to update", async () => {
+    // Reconciles with the stale-version [U] behavior: right after connect lifts
+    // a pre-feature user onto the current guard, that guard sees the instance at
+    // an EQUAL version and stays silent — no [U] nag on the very next launch.
+    const { guardFile } = await runInstallSection({
+      preExistingGuard:
+        "#!/usr/bin/env bash\n# archestra guard (pre version-check)\nexit 0\n",
+    });
+    const { stdout, stderr } = await runGuardNonInteractive({
+      script: await readFile(guardFile, "utf8"),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION}}`,
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toBe("");
   });
 });

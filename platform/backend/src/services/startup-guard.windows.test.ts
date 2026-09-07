@@ -366,6 +366,23 @@ describe("buildWindowsStartupGuardInstallSection (Claude Code)", () => {
     );
   });
 
+  test("detects a pre-feature guard (no version stamp) and upgrades it without prompting", () => {
+    const section = buildWindowsStartupGuardInstallSection(
+      CTX,
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
+    // a guard installed before the version check has no $GuardFormatVersion
+    // line; the install inspects the existing file before overwriting it
+    expect(section).toContain(
+      "Select-String -Path $archGuardPath -Pattern 'GuardFormatVersion'",
+    );
+    expect(section).toContain("$archGuardPreFeature = $true");
+    // and announces the automatic, prompt-free upgrade
+    expect(section).toContain(
+      "Upgraded your existing Claude Code startup guard",
+    );
+  });
+
   test("defines the wrapper in the CURRENT session too, so the screen works without a new window", () => {
     const section = buildWindowsStartupGuardInstallSection(
       CTX,

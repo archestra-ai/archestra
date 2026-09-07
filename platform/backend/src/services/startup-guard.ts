@@ -1148,9 +1148,24 @@ export function buildStartupGuardInstallSection(
 
   return `say ${sh(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 mkdir -p "$(dirname "${guardPath}")"
+# A guard installed BEFORE the version-check feature has no GUARD_FORMAT_VERSION
+# stamp and no [U] update check, so at launch it can never nudge the user to
+# re-connect on its own — the [U] launch prompt only exists in version-aware
+# guards. Running connect is therefore the one moment we can lift such a user
+# onto the current guard, so we upgrade it in place, automatically, with no
+# prompt. (A guard that already carries the stamp is just refreshed silently; if
+# it was merely a version behind, its own [U] launch nudge is what sent the user
+# here.)
+archestra_guard_pre_feature=0
+if [ -f "${guardPath}" ] && ! grep -q 'GUARD_FORMAT_VERSION=' "${guardPath}" 2>/dev/null; then
+  archestra_guard_pre_feature=1
+fi
 cat > "${guardPath}" <<'${GUARD_FILE_EOF}'
 ${renderStartupGuardScript(ctx, client)}${GUARD_FILE_EOF}
 chmod +x "${guardPath}"
+if [ "$archestra_guard_pre_feature" = "1" ]; then
+  ok ${sh(`Upgraded your existing ${client.label} startup guard to the version-aware format automatically — no re-connect prompt was needed.`)}
+fi
 # A fresh connect re-arms every check: forget remotes a previous guard
 # disconnected.
 rm -f "$HOME/${client.skipRelpath}"

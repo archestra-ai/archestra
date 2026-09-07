@@ -7554,7 +7554,7 @@ export const updateAgentSettings = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * Update /connection admin settings (default gateway/proxy, hidden clients/providers)
+ * Update /connection admin settings (default gateway, hidden clients, skills/LLM proxy availability)
  *
  * Authentication:
  *

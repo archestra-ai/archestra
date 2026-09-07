@@ -1,6 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  OWNER_ROLE_NAME,
   type Permissions,
 } from "@archestra/shared";
 import { allAvailableActions } from "@archestra/shared/access-control";
@@ -93,12 +94,20 @@ function createMockContext(overrides: {
   context?: {
     newSession?: {
       user: { id: string; email: string };
-      session: { id: string; activeOrganizationId?: string | null };
+      session: {
+        id: string;
+        activeOrganizationId?: string | null;
+        impersonatedBy?: string | null;
+      };
     } | null;
     /** Present on sign-out: the session being terminated. */
     session?: {
       user: { id: string; email: string; name?: string | null };
-      session: { id: string; activeOrganizationId?: string | null };
+      session: {
+        id: string;
+        activeOrganizationId?: string | null;
+        impersonatedBy?: string | null;
+      };
     } | null;
   };
 }): HookEndpointContext {
@@ -489,15 +498,19 @@ describe("handleBeforeHook", () => {
   });
 
   describe("impersonation permission gate", () => {
-    const impersonateCtx = (user: { id: string; email: string }) =>
+    const impersonateCtx = (
+      user: { id: string; email: string },
+      targetUserId = "some-target-user",
+      session: { impersonatedBy?: string | null } = {},
+    ) =>
       createMockContext({
         path: "/admin/impersonate-user",
         method: "POST",
-        body: { userId: "some-target-user" },
+        body: { userId: targetUserId },
         context: {
           session: {
             user,
-            session: { id: "session-id" },
+            session: { id: "session-id", ...session },
           },
         },
       });
@@ -510,8 +523,26 @@ describe("handleBeforeHook", () => {
       const org = await makeOrganization();
       const adminUser = await makeUser({ role: "admin" });
       await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
+      const adminTarget = await makeUser({ role: "admin" });
+      await makeMember(adminTarget.id, org.id, { role: ADMIN_ROLE_NAME });
 
-      const ctx = impersonateCtx(adminUser);
+      const ctx = impersonateCtx(adminUser, adminTarget.id);
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("allows callers still holding better-auth's owner creator role", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const ownerUser = await makeUser({ role: "admin" });
+      await makeMember(ownerUser.id, org.id, { role: OWNER_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      const ctx = impersonateCtx(ownerUser, target.id);
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
     });
@@ -547,6 +578,69 @@ describe("handleBeforeHook", () => {
       await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
     });
 
+    test("rejects admin and ordinary targets whose effective organization differs", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const callerOrg = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const caller = await makeUser({ role: "admin" });
+      await makeMember(caller.id, callerOrg.id, { role: ADMIN_ROLE_NAME });
+      const adminTarget = await makeUser({ role: "admin" });
+      await makeMember(adminTarget.id, otherOrg.id, { role: ADMIN_ROLE_NAME });
+      const ordinaryTarget = await makeUser();
+      await makeMember(ordinaryTarget.id, otherOrg.id, {
+        role: MEMBER_ROLE_NAME,
+      });
+
+      await expect(
+        handleBeforeHook(impersonateCtx(caller, adminTarget.id)),
+      ).rejects.toThrow(APIError);
+      await expect(
+        handleBeforeHook(impersonateCtx(caller, ordinaryTarget.id)),
+      ).rejects.toThrow(APIError);
+
+      const deniedTargetIds = (
+        await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.organizationId, callerOrg.id))
+      )
+        .filter(
+          (row) =>
+            row.action === "auth.impersonation_started" &&
+            row.outcome === "denied",
+        )
+        .map((row) => row.resourceId);
+      expect(deniedTargetIds).toEqual(
+        expect.arrayContaining([adminTarget.id, ordinaryTarget.id]),
+      );
+    });
+
+    test("rejects self and nested impersonation", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const caller = await makeUser({ role: "admin" });
+      await makeMember(caller.id, org.id, { role: ADMIN_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      await expect(
+        handleBeforeHook(impersonateCtx(caller, caller.id)),
+      ).rejects.toThrow(APIError);
+      await expect(
+        handleBeforeHook(
+          impersonateCtx(caller, target.id, {
+            impersonatedBy: "original-user",
+          }),
+        ),
+      ).rejects.toThrow(APIError);
+    });
+
     test("leaves unauthenticated calls for better-auth to reject", async () => {
       const ctx = createMockContext({
         path: "/admin/impersonate-user",
@@ -577,8 +671,10 @@ describe("handleBeforeHook", () => {
       // Org admin promoted after bootstrap: no system-level role yet.
       const orgAdmin = await makeUser();
       await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
 
-      await handleBeforeHook(impersonateCtx(orgAdmin));
+      await handleBeforeHook(impersonateCtx(orgAdmin, target.id));
 
       const [row] = await db
         .select({ role: schema.usersTable.role })

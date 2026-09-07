@@ -1,7 +1,7 @@
 "use client";
 
-import { useIsFetching } from "@tanstack/react-query";
-import { useEffect, useSyncExternalStore } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 /**
  * Whether anything on screen is still waiting for its first bytes.
@@ -17,18 +17,36 @@ import { useEffect, useSyncExternalStore } from "react";
  * exception; see {@link useReportSearchInFlight}.
  */
 export function useIsAppLoading(): boolean {
+  const client = useQueryClient();
+  const subscribe = useCallback(
+    (onChange: () => void) =>
+      client.getQueryCache().subscribe((event) => {
+        // Observer options change during rendering. Subscribing to those can
+        // repeatedly interrupt the shell before its loading state commits.
+        if (
+          event.type === "added" ||
+          event.type === "removed" ||
+          event.type === "updated"
+        ) {
+          onChange();
+        }
+      }),
+    [client],
+  );
+  const getSnapshot = useCallback(
+    () =>
+      client.isFetching({
+        predicate: (query) => query.state.data === undefined,
+      }) > 0,
+    [client],
+  );
   const searchesInFlight = useSyncExternalStore(
     searchActivity.subscribe,
     searchActivity.getSnapshot,
     searchActivity.getServerSnapshot,
   );
 
-  const isFetching =
-    useIsFetching({
-      predicate: (query) =>
-        query.state.data === undefined &&
-        query.state.fetchStatus === "fetching",
-    }) > 0;
+  const isFetching = useSyncExternalStore(subscribe, getSnapshot, () => false);
 
   // A search already accounts for its own wait twice over — the box is lit and
   // the table it filters is drawing a progress bar across its top edge. Adding

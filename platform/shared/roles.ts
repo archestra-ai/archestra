@@ -4,6 +4,12 @@ export const ADMIN_ROLE_NAME = "admin";
 export const PLATFORM_ADMIN_ROLE_NAME = "platform_admin";
 export const EDITOR_ROLE_NAME = "editor";
 export const MEMBER_ROLE_NAME = "member";
+/**
+ * better-auth's default organization creator role. It is not one of our
+ * predefined roles; legacy permissions fall back to Admin only when no custom
+ * role with this identifier exists.
+ */
+export const OWNER_ROLE_NAME = "owner";
 export const PredefinedRoleNameSchema = z.enum([
   ADMIN_ROLE_NAME,
   PLATFORM_ADMIN_ROLE_NAME,

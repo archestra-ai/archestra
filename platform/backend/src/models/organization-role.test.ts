@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  OWNER_ROLE_NAME,
   PLATFORM_ADMIN_ROLE_NAME,
 } from "@archestra/shared";
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
@@ -230,6 +231,36 @@ describe("OrganizationRoleModel", () => {
         org.id,
       );
       expect(permissions).toEqual({});
+    });
+
+    test("should treat better-auth owner as admin when no custom owner role exists", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const permissions = await OrganizationRoleModel.getPermissions(
+        OWNER_ROLE_NAME,
+        org.id,
+      );
+      expect(permissions).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
+      expect(permissions.member).toContain("impersonate");
+    });
+
+    test("should use a custom owner role when one exists", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
+        role: OWNER_ROLE_NAME,
+        name: "Owner",
+        permission: { agent: ["read"] },
+      });
+
+      const permissions = await OrganizationRoleModel.getPermissions(
+        OWNER_ROLE_NAME,
+        org.id,
+      );
+      expect(permissions).toEqual({ agent: ["read"] });
     });
 
     test("should cache custom role permissions until invalidated", async ({

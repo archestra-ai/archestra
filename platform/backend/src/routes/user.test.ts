@@ -177,7 +177,7 @@ describe("user routes", () => {
       await nonMemberApp.close();
     });
 
-    test("GET /api/user/impersonable lists org users excluding self and system admins", async ({
+    test("GET /api/user/impersonable lists org users excluding self", async ({
       makeUser: makeOtherUser,
       makeMember,
     }) => {
@@ -207,10 +207,9 @@ describe("user routes", () => {
 
       const ids = candidates.map((c) => c.id);
       expect(ids).toContain(memberUser.id);
-      // self excluded
       expect(ids).not.toContain(user.id);
-      // system admins excluded — better-auth would reject impersonating them anyway
-      expect(ids).not.toContain(adminUser.id);
+      // other admins are impersonable — viewing-as an admin is the role debugger
+      expect(ids).toContain(adminUser.id);
 
       const member = candidates.find((c) => c.id === memberUser.id);
       expect(member?.role).toBe(MEMBER_ROLE_NAME);

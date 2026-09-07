@@ -31,11 +31,11 @@ export async function listImpersonableUsers(params: {
   const members = await MemberModel.findAllByOrganization(
     params.organizationId,
   );
-  // filtering out the current user and system admins.
-  // impersonation is a feature provided by better-auth and
-  // system admins are not impersonable in the  better-auth's adminRoles.
-  // in fact system admin is the first users bootstrapped in archestra.
+  // Exclude the caller only. System-level `user.role = "admin"` is synced
+  // onto anyone whose org role grants `member:impersonate`, so filtering
+  // those out made it impossible to view-as another admin — the role
+  // debugger's actual job. better-auth is configured to allow it.
   return members
-    .filter((m) => m.id !== params.currentUserId && m.systemRole !== "admin")
+    .filter((m) => m.id !== params.currentUserId)
     .map(({ systemRole: _systemRole, ...rest }) => rest);
 }

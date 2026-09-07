@@ -112,7 +112,7 @@ live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 - 🤝 [**Contributing**](https://archestra.ai/docs/contributing) —
   set up the dev env, run e2e tests, open a PR.
 - [**Developer release guide**](.github/RELEASING.md) —
-  stable branches, backports, release candidates, and qualification.
+  stable branches, backports, beta releases, and qualification.
 
 Thank you for continuously making **Archestra** better — you're awesome 🫶
 

@@ -11,10 +11,10 @@ from pathlib import Path
 
 def version(value):
     match = re.fullmatch(
-        r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-rc\.([1-9]\d*))?", value
+        r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-beta\.([1-9]\d*))?", value
     )
     if not match:
-        raise ValueError("Expected X.Y.Z or X.Y.Z-rc.N, without a tag prefix")
+        raise ValueError("Expected X.Y.Z or X.Y.Z-beta.N, without a tag prefix")
     return tuple(int(part) if part is not None else None for part in match.groups())
 
 
@@ -36,7 +36,7 @@ def validate_request(branch, current, requested):
         allowed = next_line and new[2:] == (0, 1)
     if not allowed:
         raise ValueError(
-            "Request the next patch, next minor/major rc.1, next RC, or that RC's stable version"
+            "Request the next patch, next minor/major beta.1, next beta, or that beta's stable version"
         )
 
 
@@ -59,7 +59,7 @@ def validate_publication(*, requested, latest, branch, tag_sha, run, release):
     validate_request(branch, requested, requested)
     validate_supported(requested, latest)
     if version(requested)[3] is not None:
-        raise ValueError("RCs cannot be promoted to the stable channel")
+        raise ValueError("Beta releases cannot be promoted to the stable channel")
     if release["tag_name"] != f"platform-v{requested}" or release["prerelease"]:
         raise ValueError("Release metadata does not match the requested stable version")
     if not release["draft"] and requested != latest:
@@ -172,7 +172,7 @@ def check_pr(event):
         return  # Version/configuration PRs still require maintainer review.
     if version(current)[3] is not None and version(requested)[3] is None:
         raise ValueError(
-            "Final-version requests must not contain product changes; first qualify another RC"
+            "Final-version requests must not contain product changes; first qualify another beta"
         )
     originals = re.findall(r"(?m)^Backport-of: ([0-9a-f]{40})$", pr.get("body") or "")
     if not originals:
@@ -251,8 +251,8 @@ def main():
                 "This version is already in the manifest; request a new version"
             )
         # The previous stable tag may live on a sibling release branch. Bound the
-        # first RC's changelog at the common ancestor, not at an unreachable tag.
-        # Refresh this on EVERY request so later RCs/patches use their own tag.
+        # first beta's changelog at the common ancestor, not at an unreachable tag.
+        # Refresh this on EVERY request so later betas/patches use their own tag.
         config["last-release-sha"] = subprocess.check_output(
             ["git", "merge-base", "HEAD", f"refs/tags/platform-v{current}"], text=True
         ).strip()

@@ -16,15 +16,16 @@ spec.loader.exec_module(policy)
 class ReleasePolicyTests(unittest.TestCase):
     def test_complete_release_cycle(self):
         for branch, current, requested, latest in [
-            ("release/1.4", "1.3.49", "1.4.0-rc.1", "1.3.49"),
-            ("release/1.4", "1.4.0-rc.1", "1.4.0-rc.2", "1.3.50"),
+            ("release/1.4", "1.3.50", "1.4.0-beta.1", "1.3.50"),
+            ("release/1.4", "1.4.0-beta.1", "1.4.0-beta.2", "1.3.50"),
+            ("release/1.4", "1.4.0-beta.2", "1.4.0-beta.3", "1.3.50"),
             ("release/1.3", "1.3.49", "1.3.50", "1.3.49"),
-            ("release/1.4", "1.4.0-rc.2", "1.4.0", "1.3.50"),
+            ("release/1.4", "1.4.0-beta.3", "1.4.0", "1.3.50"),
             ("release/1.4", "1.4.0", "1.4.0", "1.3.50"),
             ("release/1.4", "1.4.0", "1.4.1", "1.4.0"),
             ("release/1.4", "1.4.0", "1.4.1", "1.3.50"),  # Rejected final draft.
             ("release/1.4", "1.4.2", "1.4.3", "1.4.1"),  # Rejected patch draft.
-            ("release/2.0", "1.4.1", "2.0.0-rc.1", "1.4.1"),
+            ("release/2.0", "1.4.1", "2.0.0-beta.1", "1.4.1"),
         ]:
             with self.subTest(requested=requested):
                 policy.validate_request(branch, current, requested)
@@ -33,18 +34,18 @@ class ReleasePolicyTests(unittest.TestCase):
     def test_invalid_transitions(self):
         for branch, current, requested in [
             ("main", "1.3.49", "1.3.50"),
-            ("release/1.3", "1.3.49", "1.4.0-rc.1"),
+            ("release/1.3", "1.3.49", "1.4.0-beta.1"),
             ("release/1.4", "1.3.49", "1.4.0"),
-            ("release/1.4", "1.4.0-rc.1", "1.4.0-rc.3"),
+            ("release/1.4", "1.4.0-beta.1", "1.4.0-beta.3"),
             ("release/1.4", "1.4.0", "1.4.2"),
-            ("release/1.4", "1.4.0", "1.4.0-rc.1"),
-            ("release/1.5", "1.3.49", "1.5.0-rc.1"),
+            ("release/1.4", "1.4.0", "1.4.0-beta.1"),
+            ("release/1.5", "1.3.49", "1.5.0-beta.1"),
         ]:
             with self.subTest(requested=requested), self.assertRaises(ValueError):
                 policy.validate_request(branch, current, requested)
 
     def test_retired_and_future_lines_cannot_publish(self):
-        for requested in ("1.3.51", "1.4.0-rc.2", "1.4.0", "1.6.0-rc.1"):
+        for requested in ("1.3.51", "1.4.0-beta.2", "1.4.0", "1.6.0-beta.1"):
             with self.subTest(requested=requested), self.assertRaises(ValueError):
                 policy.validate_supported(requested, "1.4.1")
 
@@ -53,8 +54,10 @@ class ReleasePolicyTests(unittest.TestCase):
             "dev",
             "v1.4.0",
             "01.4.0",
-            "1.4.0-beta.1",
-            "1.4.0-rc.0",
+            "1.4.0-rc.1",
+            "1.4.0-beta.0",
+            "1.4.0-beta.01",
+            "1.4.0-beta1",
             "1.4.0\n",
             "1.4.0;echo unsafe",
         ):
@@ -99,9 +102,9 @@ class ReleasePolicyTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 policy.validate_publication(**args)
 
-    def test_rc_cannot_publish_as_stable(self):
+    def test_beta_cannot_publish_as_stable(self):
         args = self.publication()
-        args["requested"] = "1.4.0-rc.1"
+        args["requested"] = "1.4.0-beta.1"
         with self.assertRaises(ValueError):
             policy.validate_publication(**args)
 
@@ -167,11 +170,11 @@ class BackportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "schema"):
             self.check(files="platform/backend/src/database/migrations/0001.sql")
         with self.assertRaisesRegex(ValueError, "Final-version"):
-            self.check(current="1.4.0-rc.1", requested="1.4.0")
+            self.check(current="1.4.0-beta.1", requested="1.4.0")
 
     def test_version_only_pr_needs_no_backport_reference(self):
         self.check(
-            current="1.4.0-rc.1", requested="1.4.0", files="platform/package.json"
+            current="1.4.0-beta.1", requested="1.4.0", files="platform/package.json"
         )
 
 
@@ -258,7 +261,7 @@ class ReleaseCommandTests(unittest.TestCase):
                     "python3",
                     str(script),
                     "prepare",
-                    "1.4.0-rc.1",
+                    "1.4.0-beta.1",
                     "--branch",
                     "release/1.4",
                 ],
@@ -267,7 +270,7 @@ class ReleaseCommandTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertIn("Prepared 1.4.0-rc.1", result.stdout)
+            self.assertIn("Prepared 1.4.0-beta.1", result.stdout)
             self.assertEqual(
                 json.loads(config_path.read_text())["last-release-sha"], anchor
             )
@@ -291,14 +294,14 @@ class ReleaseCommandTests(unittest.TestCase):
             self.assertIn(
                 "create_pr=true", subprocess.check_output(command, cwd=root, text=True)
             )
-            manifest_path.write_text(json.dumps({"platform": "1.4.0-rc.1"}))
+            manifest_path.write_text(json.dumps({"platform": "1.4.0-beta.1"}))
             self.assertIn(
                 "create_pr=false", subprocess.check_output(command, cwd=root, text=True)
             )
             git("add", ".")
-            git("commit", "--quiet", "-m", "release candidate")
+            git("commit", "--quiet", "-m", "beta release")
             candidate_sha = git("rev-parse", "HEAD")
-            git("tag", "platform-v1.4.0-rc.1")
+            git("tag", "platform-v1.4.0-beta.1")
             subprocess.run(
                 ["python3", str(script), "prepare", "1.4.0", "--branch", "release/1.4"],
                 cwd=root,

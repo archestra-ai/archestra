@@ -78,7 +78,7 @@ jobs:
           target-branch: ${{ github.ref_name }}
           skip-github-pull-request: true
 
-      # All releases start as drafts. RCs publish after artifacts are ready;
+      # All releases start as drafts. Betas publish after artifacts are ready;
       # stable releases additionally require the Publish Stable Release workflow.
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
@@ -268,7 +268,7 @@ jobs:
     with:
       version: ${{ needs.release-please.outputs.platform_version }}
       # Stable charts remain workflow artifacts until explicit qualification/publication.
-      push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-rc.') }}
+      push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-beta.') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
@@ -289,7 +289,7 @@ jobs:
       - publish-platform-helm-chart
     permissions:
       actions: read # Download the packaged chart from this run.
-      contents: write # Required to attach the artifact manifest and publish RCs.
+      contents: write # Required to attach the artifact manifest and publish betas.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -304,7 +304,7 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Record artifacts and publish RC only
+      - name: Record artifacts and publish beta only
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -316,7 +316,7 @@ jobs:
           GH_TOKEN="$ACTIONS_TOKEN" gh run download "$GITHUB_RUN_ID" --name release-helm-chart
           python3 .github/scripts/release-artifacts.py record --version "$VERSION" --output release-artifacts.json
           gh release upload "$TAG_NAME" release-artifacts.json "archestra-platform-${VERSION}.tgz" --clobber
-          if [[ "$VERSION" == *-rc.* ]]; then
+          if [[ "$VERSION" == *-beta.* ]]; then
             gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
           fi
 

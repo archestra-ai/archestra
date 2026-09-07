@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--commit", default=os.environ.get("GITHUB_SHA"))
     parser.add_argument("--run-id", default=os.environ.get("GITHUB_RUN_ID"))
     args = parser.parse_args()
-    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?", args.version):
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-beta\.[1-9]\d*)?", args.version):
         raise ValueError("Invalid release version")
     registry = os.environ.get("AUX_IMAGE_REGISTRY", "")
     names = image_names(registry)

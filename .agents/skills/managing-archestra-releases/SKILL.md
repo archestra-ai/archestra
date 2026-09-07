@@ -1,6 +1,6 @@
 ---
 name: managing-archestra-releases
-description: "Prepares Archestra release candidates, stable patches, and qualified publication. Use when cutting, publishing, or recovering a platform release or backporting a fix."
+description: "Prepares Archestra beta releases, stable patches, and qualified publication. Use when cutting, publishing, or recovering a platform release or backporting a fix."
 ---
 
 # Managing Archestra Releases
@@ -15,10 +15,10 @@ Do not use older instructions that publish a stable release by merging a release
    That command only edits configuration; review its diff before committing.
 4. Keep product work on `main`. Release branches accept reviewed stabilization fixes only.
 5. For publication, require completed qualification of the final artifacts and their recorded manifest checksum.
-   An RC's tests do not qualify a rebuilt final version automatically.
+   A beta release's tests do not qualify a rebuilt final version automatically.
 6. Report the exact stage reached and any remaining approval or setup requirements.
 
-Never invent passing qualification results, bypass the release freeze, or promote an RC to `latest`.
+Never invent passing qualification results, bypass the release freeze, or promote a beta release to `latest`.
 Never publish, dispatch a release workflow, change repository settings, or move aliases without explicit authorization.
 A request to prepare a release PR is not authorization to publish that release.
 

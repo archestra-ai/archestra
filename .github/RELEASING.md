@@ -11,10 +11,11 @@ Older versions remain downloadable, but receive no further fixes after that tran
 | Source | Version example | Audience |
 | --- | --- | --- |
 | `main` | Commit-tagged development images | Development and integration testing |
-| `release/1.4` during qualification | `1.4.0-rc.1` | Internal testing and explicit preview adopters |
+| `release/1.4` during qualification | `1.4.0-beta.1` | Internal testing and explicit preview adopters |
 | `release/1.4` after qualification | `1.4.0`, then `1.4.1` | Stable installations |
 
 Versions here are examples. Read GitHub's latest stable release before choosing a line.
+A `-beta.N` version suffix marks a preview release. It is separate from the `ARCHESTRA_BETA` feature flag and does not enable that flag.
 Backward-compatible features increment the minor version. Breaking public contracts require a major version.
 The latest published stable GitHub release identifies the supported line.
 Only **Publish Stable Release** changes that pointer.
@@ -67,7 +68,7 @@ Never copy a migration journal or snapshots wholesale from `main` into a stable 
 
 For feature releases, review migration ordering, write locks, mixed-version operation, and data preservation.
 Use forward-compatible changes when old and new application processes overlap.
-Test upgrades from the latest supported patch, including fixes made during RC qualification.
+Test upgrades from the latest supported patch, including fixes made during beta qualification.
 An application or Helm rollback does not undo a database migration.
 Record whether recovery uses compatible old binaries, a forward fix, or a tested backup restore.
 Do not test against production data or put database contents in public evidence.
@@ -84,7 +85,7 @@ Run commands from `platform/` in a dedicated worktree.
 
    ```bash
    git fetch origin --tags
-   python3 ../.github/scripts/release-policy.py prepare 1.4.0-rc.1 --branch release/1.4
+   python3 ../.github/scripts/release-policy.py prepare 1.4.0-beta.1 --branch release/1.4
    git diff -- ../.github/release-please/release-please-config.json
    ```
 
@@ -94,26 +95,26 @@ Run commands from `platform/` in a dedicated worktree.
    Review the scope and wait for normal PR checks before merging it.
 5. The merged version PR builds versioned images and a packaged chart.
    The workflow attaches the chart and `release-artifacts.json` to the draft release.
-   RCs then publish as GitHub prereleases. Stable releases remain drafts.
+   Beta releases then publish as GitHub prereleases. Stable releases remain drafts.
 
-Repeat `prepare` with the next RC number when needed.
-To request the final feature release, use `1.4.0` after `1.4.0-rc.N`.
+Repeat `prepare` with the next beta number when needed.
+To request the final feature release, use `1.4.0` after `1.4.0-beta.N`.
 That request must contain no product changes beyond the qualified candidate.
 For a patch, backport fixes first, then request `1.4.1`.
 
 Every version needs an explicit request. A consumed `release-as` value never creates another version PR.
 The helper refreshes `last-release-sha` on each request to bound the changelog.
 For sibling release branches, it uses the common ancestor with the preceding version's tag.
-For later RCs and patches, it uses the preceding tag on the same branch.
+For later beta releases and patches, it uses the preceding tag on the same branch.
 Review the resulting changelog; do not reuse a previous request's anchor manually.
-Keep the manifest under release-please's control; do not edit it to skip RCs or version checks.
+Keep the manifest under release-please's control; do not edit it to skip beta releases or version checks.
 Do not advance a release branch while its final stable build is being qualified.
 Publication requires the branch head to match the release tag.
 
 ## Qualify The Final Artifacts
 
-The final version is a separate build from the RC because version metadata changes.
-Do not claim it is bit-for-bit identical to the RC. Qualify the final build itself.
+The final version is a separate build from the beta release because version metadata changes.
+Do not claim it is bit-for-bit identical to the beta release. Qualify the final build itself.
 Publication reuses that final build; it does not rebuild images or repackage the chart.
 
 1. Wait for the entire **Release Please** build run to succeed.
@@ -135,7 +136,7 @@ Publication reuses that final build; it does not rebuild images or repackage the
 
 The checklist is a human qualification gate, not a claim of automated upgrade coverage.
 Existing PR tests cannot replace exercising released binaries against an existing installation.
-If the supported patch advances during RC testing, repeat upgrade qualification from that patch.
+If the supported patch advances during beta testing, repeat upgrade qualification from that patch.
 Any rebuilt image or changed chart invalidates the recorded identity and requires requalification.
 
 All issues, logs, release assets, and workflow inputs in this repository are public-facing.
@@ -156,7 +157,7 @@ Run **Publish Stable Release** from `main` with:
 The `stable-release` environment requires an independent maintainer's approval.
 The reviewer checks the issue, version, build, and manifest identity before approving.
 The workflow checks the supported line, exact build commit, artifact-recording job, and artifact identities.
-It rejects RCs, retired lines, mismatched builds, changed artifacts, and an active release freeze.
+It rejects beta releases, retired lines, mismatched builds, changed artifacts, and an active release freeze.
 
 It publishes the preserved Helm archive, updates companion image aliases, and updates platform `latest` last.
 It then publishes the stable GitHub release and refreshes the release website.
@@ -206,7 +207,7 @@ These are explicit repository-administration steps, not effects of merging the t
    Apply the release-tooling change through review, without importing unrelated product changes.
 6. Close or update external automation that assumes merging a release PR on `main` publishes stable.
    Use this runbook and the `managing-archestra-releases` skill as the source of truth.
-7. Lift the freeze when ready. Exercise one RC build and qualification before the first stable publication.
+7. Lift the freeze when ready. Exercise one beta build and qualification before the first stable publication.
 
 Merging the tooling disables release creation on `main`; it does not cut a branch or publish a release.
 Do not merge it without an owner for these cutover steps.

@@ -128,8 +128,8 @@ class ReleaseArtifactTests(unittest.TestCase):
                 self.run_cli("publish")
             run.assert_not_called()
 
-    def test_rc_never_moves_stable_aliases(self):
-        candidate = "1.4.0-rc.1"
+    def test_beta_records_artifacts_but_never_moves_stable_aliases(self):
+        candidate = "1.4.0-beta.1"
         self.chart.rename(f"archestra-platform-{candidate}.tgz")
         self.manifest["version"] = candidate
         self.path.write_text(json.dumps(self.manifest))
@@ -141,7 +141,9 @@ class ReleaseArtifactTests(unittest.TestCase):
             ),
             patch.object(artifacts.subprocess, "run") as run,
         ):
-            with self.assertRaises(ValueError):
+            self.run_cli("record", version=candidate)
+            self.run_cli("check", version=candidate)
+            with self.assertRaisesRegex(ValueError, "Only stable versions"):
                 self.run_cli("publish", version=candidate)
             run.assert_not_called()
 

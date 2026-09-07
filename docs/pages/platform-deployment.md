@@ -14,7 +14,7 @@ The Archestra Platform can be deployed using Docker for development and testing,
 Pin an exact chart version or image digest in production.
 Choose a published stable version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases).
 Docker `latest` follows the qualified stable release, not ongoing development.
-Versions ending in `-rc.N` are opt-in release candidates.
+Versions ending in `-beta.N` are opt-in beta releases.
 
 Patch releases contain fixes. Monthly feature releases introduce new functionality after qualification.
 Only the current stable feature line receives fixes.

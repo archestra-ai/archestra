@@ -30,12 +30,13 @@ cat > "${attention_plugin_dir}/__init__.py" <<'PLUGIN'
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 from typing import Any
 
 
 def register(ctx: Any) -> None:
-    ctx.register_hook("on_session_start", _clear)
+    ctx.register_hook("on_session_start", _on_session_start)
     ctx.register_hook("pre_llm_call", _clear)
     ctx.register_hook("pre_tool_call", _pre_tool_call)
     ctx.register_hook("post_tool_call", _post_tool_call)
@@ -58,7 +59,13 @@ def _pre_approval_request(**_: Any) -> None:
     _attention("set", "Permission needed")
 
 
-def _on_session_end(completed: bool = False, **_: Any) -> None:
+def _on_session_start(session_id: str = "", **_: Any) -> None:
+    _clear()
+    _transcript_hook("on_session_start", session_id)
+
+
+def _on_session_end(completed: bool = False, session_id: str = "", **_: Any) -> None:
+    _transcript_hook("on_session_end", session_id)
     if os.environ.get("ARCHESTRA_AGENT_RUNTIME_MODE", "one_shot") == "interactive" and completed:
         _attention("set", "Waiting for input")
     else:
@@ -67,6 +74,26 @@ def _on_session_end(completed: bool = False, **_: Any) -> None:
 
 def _clear(**_: Any) -> None:
     _attention("clear")
+
+
+def _transcript_hook(event: str, session_id: str) -> None:
+    # The native TUI loads plugins but does not consistently register shell
+    # hooks. Forward its lifecycle events through the same transcript writer.
+    if not session_id:
+        return
+    runtime_dir = os.environ.get("ARCHESTRA_AGENT_RUNTIME_DIR", "/var/run/archestra")
+    try:
+        subprocess.run(
+            [os.path.join(runtime_dir, "hermes-runtime-hook.sh")],
+            input=json.dumps({"hook_event_name": event, "session_id": session_id}),
+            text=True,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 def _attention(action: str, label: str = "") -> None:

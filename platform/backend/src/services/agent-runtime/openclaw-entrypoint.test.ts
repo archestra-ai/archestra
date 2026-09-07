@@ -84,7 +84,7 @@ await agentEnd(
           { type: "tool_use", id: "call-1", name: "read_file", input: { path: "src/app.ts" } },
         ],
       },
-      { role: "tool", content: "export const ready = true;", tool_call_id: "call-1", timestamp: "2026-09-04T10:00:02Z" },
+      { role: "toolResult", content: "export const ready = true;", toolCallId: "call-1", timestamp: "2026-09-04T10:00:02Z" },
       { role: "assistant", content: [{ type: "text", text: "OpenClaw finished the task." }], timestamp: "2026-09-04T10:00:03Z" },
     ],
   },

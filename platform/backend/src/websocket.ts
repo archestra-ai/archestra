@@ -671,16 +671,23 @@ class WebSocketService {
     clientContext: WebSocketClientContext,
   ): Promise<void> {
     this.unsubscribeAgentRunLogs(ws);
+    const abortController = new AbortController();
+    const stream = new PassThrough();
+    this.agentRunLogsSubscriptions.set(ws, { runId, stream, abortController });
 
     const session = await AgentRunModel.findByTaskId(runId);
+    if (abortController.signal.aborted) return;
     if (!session || session.organizationId !== clientContext.organizationId) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
         payload: { runId, error: "Session not found" },
       });
+      this.unsubscribeAgentRunLogs(ws);
       return;
     }
-    if (!(await this.mayViewSessionLogs(session, clientContext))) {
+    const mayView = await this.mayViewSessionLogs(session, clientContext);
+    if (abortController.signal.aborted) return;
+    if (!mayView) {
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
         payload: {
@@ -688,6 +695,7 @@ class WebSocketService {
           error: "Only the person who started this run can view its logs",
         },
       });
+      this.unsubscribeAgentRunLogs(ws);
       return;
     }
 
@@ -698,7 +706,7 @@ class WebSocketService {
           runId: session.id,
           onChunk: (chunk) => {
             const logs = decoder.write(chunk);
-            if (logs) {
+            if (logs && !abortController.signal.aborted) {
               this.sendToClient(ws, {
                 type: "agent_run_logs",
                 payload: { runId, logs },
@@ -713,6 +721,7 @@ class WebSocketService {
           );
           return null;
         });
+      if (abortController.signal.aborted) return;
       if (transcript?.isComplete) {
         const finalLogs = decoder.end();
         if (finalLogs) {
@@ -726,7 +735,9 @@ class WebSocketService {
           runId,
           sessionId: session.id,
           taskId: session.taskId,
+          signal: abortController.signal,
         });
+        if (abortController.signal.aborted) return;
         this.sendToClient(ws, {
           type: "agent_run_logs_ended",
           payload: {
@@ -737,6 +748,7 @@ class WebSocketService {
             ...(readable ? { readable } : {}),
           },
         });
+        this.unsubscribeAgentRunLogs(ws);
         return;
       }
 
@@ -751,7 +763,9 @@ class WebSocketService {
         runId,
         sessionId: session.id,
         taskId: session.taskId,
+        signal: abortController.signal,
       });
+      if (abortController.signal.aborted) return;
       this.sendToClient(ws, {
         type: "agent_run_logs_ended",
         payload: {
@@ -764,12 +778,9 @@ class WebSocketService {
           ...(readable ? { readable } : {}),
         },
       });
+      this.unsubscribeAgentRunLogs(ws);
       return;
     }
-
-    const abortController = new AbortController();
-    const stream = new PassThrough();
-    this.agentRunLogsSubscriptions.set(ws, { runId, stream, abortController });
 
     stream.on("data", (chunk: Buffer) => {
       this.sendToClient(ws, {
@@ -812,6 +823,7 @@ class WebSocketService {
     runId: string;
     sessionId: string;
     taskId: string;
+    signal: AbortSignal;
   }): Promise<
     { provider: string; version: number; totalBytes: number } | undefined
   > {
@@ -821,7 +833,7 @@ class WebSocketService {
         runId: params.sessionId,
         onChunk: (chunk) => {
           const logs = decoder.write(chunk);
-          if (!logs) return;
+          if (!logs || params.signal.aborted) return;
           this.sendToClient(params.ws, {
             type: "agent_run_logs",
             payload: {
@@ -832,7 +844,7 @@ class WebSocketService {
           });
         },
       });
-      if (!transcript) return undefined;
+      if (!transcript || params.signal.aborted) return undefined;
       const finalLogs = decoder.end();
       if (finalLogs) {
         this.sendToClient(params.ws, {

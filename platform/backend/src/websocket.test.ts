@@ -689,13 +689,29 @@ describe("websocket Agent run authorization and cleanup", () => {
       userIsMcpServerAdmin: false,
     });
 
-    await service.handleMessage(
+    // A remount can unsubscribe while the first database read is in flight.
+    // Only the replacement subscription may deliver the retained JSON stream.
+    const firstSubscription = service.handleMessage(
       {
         type: "subscribe_agent_run_logs",
         payload: { runId: task.id, lines: 100 },
       },
       ws,
     );
+    await service.handleMessage(
+      { type: "unsubscribe_agent_run_logs", payload: { runId: task.id } },
+      ws,
+    );
+    await Promise.all([
+      firstSubscription,
+      service.handleMessage(
+        {
+          type: "subscribe_agent_run_logs",
+          payload: { runId: task.id, lines: 100 },
+        },
+        ws,
+      ),
+    ]);
 
     const sent = vi
       .mocked(ws.send)

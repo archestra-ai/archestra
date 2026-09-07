@@ -210,7 +210,7 @@ function entriesForMessage(message) {
   const results = parts.filter((part) =>
     ["tool_result", "tool-result", "toolResult"].includes(part?.type),
   );
-  if (message.role === "tool") results.push(message);
+  if (message.role === "tool" || message.role === "toolResult") results.push(message);
   for (const result of results) {
     const toolCallId = result?.tool_call_id ?? result?.toolCallId ?? result?.tool_use_id;
     const value = result?.output ?? result?.result ?? result?.content;

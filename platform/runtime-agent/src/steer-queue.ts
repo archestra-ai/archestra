@@ -1,5 +1,5 @@
-import { createReadStream, type ReadStream } from "node:fs";
-import { createInterface, type Interface } from "node:readline";
+import { closeSync, constants, openSync, readSync } from "node:fs";
+import { StringDecoder } from "node:string_decoder";
 
 /**
  * Messages a human sent into a live session, delivered at turn boundaries.
@@ -8,14 +8,12 @@ import { createInterface, type Interface } from "node:readline";
  * lines is what makes a steer atomic: a message can never be spliced into the
  * middle of a tool call, which is the failure the FIFO exists to avoid.
  *
- * A FIFO returns EOF every time the last writer closes, so the reader reopens
- * in a loop. Without that the queue would go deaf after the first message.
+ * Keep a nonblocking reader open across writer disconnects. EOF means no
+ * current writer, not that this long-lived steering channel has ended.
  */
 export class SteerQueue {
   private readonly pending: string[] = [];
   private stopped = false;
-  private stream: ReadStream | null = null;
-  private lines: Interface | null = null;
 
   constructor(
     private readonly fifoPath: string,
@@ -28,8 +26,6 @@ export class SteerQueue {
 
   stop(): void {
     this.stopped = true;
-    this.lines?.close();
-    this.stream?.destroy();
   }
 
   /** Take everything queued since the last call, oldest first. */
@@ -72,24 +68,38 @@ export class SteerQueue {
 
   private async readForever(): Promise<void> {
     while (!this.stopped) {
+      let fd: number | undefined;
       try {
-        const stream = createReadStream(this.fifoPath);
-        const lines = createInterface({ input: stream });
-        this.stream = stream;
-        this.lines = lines;
-        for await (const line of lines) {
-          this.enqueue(line);
+        // Blocking FIFO opens/reads cannot be cancelled on shutdown. Keeping
+        // this nonblocking descriptor also avoids losing writes during reopen.
+        fd = openSync(this.fifoPath, constants.O_RDONLY | constants.O_NONBLOCK);
+        const buffer = Buffer.alloc(65536);
+        const decoder = new StringDecoder("utf8");
+        let pending = "";
+        while (!this.stopped) {
+          let bytes = 0;
+          try {
+            bytes = readSync(fd, buffer, 0, buffer.length, null);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "EAGAIN") throw error;
+          }
+          if (bytes > 0) {
+            pending += decoder.write(buffer.subarray(0, bytes));
+            let newline = pending.indexOf("\n");
+            while (newline !== -1) {
+              this.enqueue(pending.slice(0, newline));
+              pending = pending.slice(newline + 1);
+              newline = pending.indexOf("\n");
+            }
+          }
+          await delay(100);
         }
-        lines.close();
       } catch (error) {
-        if (!this.stopped) {
-          this.onError(error);
-          await delay(1000);
-        }
+        if (!this.stopped) this.onError(error);
       } finally {
-        this.lines = null;
-        this.stream = null;
+        if (fd !== undefined) closeSync(fd);
       }
+      if (!this.stopped) await delay(100);
     }
   }
 }

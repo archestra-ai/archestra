@@ -344,7 +344,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateConnectionSettings,
         description:
-          "Update /connection admin settings (default gateway/proxy, hidden clients/providers)",
+          "Update /connection admin settings (default gateway, hidden clients, skills/LLM proxy availability)",
         tags: ["Organization"],
         body: UpdateConnectionSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),

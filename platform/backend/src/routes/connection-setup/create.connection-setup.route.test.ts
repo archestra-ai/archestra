@@ -720,4 +720,47 @@ describe("POST /api/connection-setups", () => {
     ]);
     expect(personalKey.id).not.toBe(mappedKey.id);
   });
+
+  test("403s a proxy setup when the org has disabled connecting the LLM Proxy", async () => {
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionLlmProxyEnabled: false,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "anthropic",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("LLM Proxy");
+  });
+
+  test("403s a skills setup when the org has disabled connecting skills", async () => {
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionSkillsEnabled: false,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        skills: {
+          skillIds: ["3e0c8d4e-7a8b-4f43-9e1d-2f56a1b6c7d8"],
+          ttlDays: 30,
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("skills");
+  });
 });

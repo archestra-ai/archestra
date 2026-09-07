@@ -73,6 +73,13 @@ interface ConnectConfigPanelProps {
   candidateBaseUrls: readonly string[];
   baseUrlMetadata: readonly ConnectionBaseUrl[] | null | undefined;
   onBaseUrlChange: (url: string) => void;
+  /** When false, shared skills are not offered in the profile. */
+  skillsEnabled?: boolean;
+  /**
+   * When false, the profile is MCP-only (no inference keys). Distinct from
+   * `llmProxyId === null`, which still means the caller cannot read the proxy.
+   */
+  llmProxyEnabled?: boolean;
 }
 
 /**
@@ -93,6 +100,8 @@ export function ConnectConfigPanel({
   candidateBaseUrls,
   baseUrlMetadata,
   onBaseUrlChange,
+  skillsEnabled = true,
+  llmProxyEnabled = true,
 }: ConnectConfigPanelProps) {
   const providerCatalog = useModelProviderCatalog();
   // Target OS — only used to label the downloaded file; the profile itself is
@@ -113,14 +122,15 @@ export function ConnectConfigPanel({
   // marketplace in its Directory, where the user installs individual skills.
   const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
   const { data: allSkills } = useAllSkills({
-    enabled: canAdminSkills === true,
+    enabled: skillsEnabled && canAdminSkills === true,
     // Rides along with the generated config rather than gating it, so it waits
     // for the download panel to render first. Same catalogue walk as the
     // review step's list.
     deferMs: 750,
   });
   const skills = allSkills ?? [];
-  const skillsEligible = canAdminSkills === true && skills.length > 0;
+  const skillsEligible =
+    skillsEnabled && canAdminSkills === true && skills.length > 0;
   const skillIds = useMemo(() => skills.map((s) => s.id), [skills]);
   const [includeSkills, setIncludeSkills] = useState(true);
 
@@ -129,7 +139,8 @@ export function ConnectConfigPanel({
   // the download is blocked for good (no virtual-key permission, or no Anthropic
   // key to back the embedded key), they're just noise, so we hide them and let
   // step 3 carry the explanation.
-  const { unavailable: downloadBlocked } = useConfigProfileAvailability();
+  const { unavailable: inferenceBlocked } = useConfigProfileAvailability();
+  const downloadBlocked = llmProxyEnabled && inferenceBlocked;
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
 
@@ -137,9 +148,10 @@ export function ConnectConfigPanel({
   const canPickGateway =
     !!gateway && mcpGateways !== null && mcpGateways.length > 1;
 
-  // The profile's whole point is the inference endpoint, so the LLM Proxy is
-  // required; the MCP gateway is optional (it only adds the managed server).
-  if (!llmProxyId) {
+  // The profile's usual point is the inference endpoint. When the org has
+  // turned that off, MCP-only profiles are still useful. When the caller
+  // simply cannot read the proxy, keep the previous fail-closed copy.
+  if (llmProxyEnabled && !llmProxyId) {
     return (
       <WizardStep n={2} title="Review the setup" last>
         <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
@@ -148,6 +160,31 @@ export function ConnectConfigPanel({
             LLM Proxy
           </Link>{" "}
           is required to generate a configuration profile.
+        </div>
+      </WizardStep>
+    );
+  }
+
+  if (!llmProxyEnabled && !gateway) {
+    return (
+      <WizardStep n={2} title="Review the setup" last>
+        <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+          {(mcpGateways?.length ?? 0) === 0 ? (
+            <>
+              An{" "}
+              <Link
+                href="/mcp/gateways"
+                className="underline hover:text-foreground"
+              >
+                MCP gateway
+              </Link>{" "}
+              is required to generate a configuration profile.
+            </>
+          ) : (
+            <span>
+              Select an MCP gateway to generate a configuration profile.
+            </span>
+          )}
         </div>
       </WizardStep>
     );
@@ -183,13 +220,16 @@ export function ConnectConfigPanel({
               for tools
             </SummaryRow>
           )}
-          <SummaryRow>
-            Route{" "}
-            <span className="font-medium text-foreground">
-              {providerCatalog.label("anthropic")}
-            </span>{" "}
-            through <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>
-          </SummaryRow>
+          {llmProxyEnabled && (
+            <SummaryRow>
+              Route{" "}
+              <span className="font-medium text-foreground">
+                {providerCatalog.label("anthropic")}
+              </span>{" "}
+              through{" "}
+              <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>
+            </SummaryRow>
+          )}
           {skillsEligible && (
             <SummaryRow
               done={includeSkills}
@@ -275,17 +315,19 @@ export function ConnectConfigPanel({
         last={downloadBlocked}
       >
         <div className="flex flex-col gap-3">
-          <Alert variant="info">
-            <Info />
-            <AlertDescription>
-              Claude Desktop's third-party inference cannot reuse a Claude Pro
-              or Max subscription. To keep paying through a subscription,
-              connect Claude Code in passthrough mode instead.
-            </AlertDescription>
-          </Alert>
+          {llmProxyEnabled && (
+            <Alert variant="info">
+              <Info />
+              <AlertDescription>
+                Claude Desktop's third-party inference cannot reuse a Claude Pro
+                or Max subscription. To keep paying through a subscription,
+                connect Claude Code in passthrough mode instead.
+              </AlertDescription>
+            </Alert>
+          )}
           <ConfigDownloadStep
             baseUrl={baseUrl}
-            llmProxyId={llmProxyId}
+            llmProxyId={llmProxyEnabled ? llmProxyId : null}
             gateway={
               gateway
                 ? { slug: gatewaySlug ?? gateway.id, name: gateway.name }
@@ -395,8 +437,8 @@ type ProvisionState =
   | { status: "loading" }
   | {
       status: "ready";
-      passthroughKey: string;
-      virtualKey: string;
+      passthroughKey: string | null;
+      virtualKey: string | null;
       creditWarning?: ConnectionCreditWarning | null;
     }
   | { status: "error" };
@@ -461,7 +503,7 @@ function ConfigDownloadStep({
 }: {
   baseUrl: string;
   /** Needed for the passthrough-key provisioning payload, not URLs. */
-  llmProxyId: string;
+  llmProxyId: string | null;
   gateway: { slug: string; name: string } | null;
   /** Already gated on skill-admin eligibility by the parent. */
   includeSkills: boolean;
@@ -477,7 +519,11 @@ function ConfigDownloadStep({
   const { mutateAsync: createShareLink, isPending: mintingShareLink } =
     useCreateSkillShareLink();
 
-  const [state, setState] = useState<ProvisionState>({ status: "loading" });
+  const [state, setState] = useState<ProvisionState>(
+    llmProxyId
+      ? { status: "loading" }
+      : { status: "ready", passthroughKey: null, virtualKey: null },
+  );
   const [showAddProviderKey, setShowAddProviderKey] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   // Set when the share-link mint fails on a download click, so the profile is
@@ -488,6 +534,10 @@ function ConfigDownloadStep({
   // single fire is enough; the ref survives strict-mode's double-invoke.
   const firedRef = useRef(false);
   const provision = useCallback(() => {
+    if (!llmProxyId) {
+      setState({ status: "ready", passthroughKey: null, virtualKey: null });
+      return;
+    }
     setState({ status: "loading" });
     Promise.all([
       provisionPassthrough({ llmProxyId }),
@@ -511,11 +561,12 @@ function ConfigDownloadStep({
   // Provision once the prerequisites resolve: the user can mint keys and the
   // Anthropic provider key (which the standard virtual key wraps) exists.
   useEffect(() => {
+    if (!llmProxyId) return;
     if (canCreateVirtualKey !== true || !anthropicHasKey) return;
     if (firedRef.current) return;
     firedRef.current = true;
     provision();
-  }, [canCreateVirtualKey, anthropicHasKey, provision]);
+  }, [llmProxyId, canCreateVirtualKey, anthropicHasKey, provision]);
 
   // Build + download on click. When skills are included, the marketplace share
   // link is minted here (not eagerly) so previewing never spawns a link, and
@@ -550,7 +601,7 @@ function ConfigDownloadStep({
     downloadClaudeDesktopConfig(profile, generateConfigFilename());
   }, [state, includeSkills, skillIds, createShareLink, baseUrl, gateway]);
 
-  if (canCreateVirtualKey === false) {
+  if (llmProxyId && canCreateVirtualKey === false) {
     return (
       <p className="text-sm text-muted-foreground">
         You don't have permission to create virtual keys. Ask an admin to
@@ -568,7 +619,7 @@ function ConfigDownloadStep({
 
   // No Anthropic provider key → the standard virtual key can't be minted. Offer
   // to add one inline (or point at an admin), exactly like the command panel.
-  if (canCreateVirtualKey === true && !anthropicHasKey) {
+  if (llmProxyId && canCreateVirtualKey === true && !anthropicHasKey) {
     return (
       <>
         <p className="text-sm text-muted-foreground">

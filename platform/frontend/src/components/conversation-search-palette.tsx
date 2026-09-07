@@ -115,8 +115,7 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
 function useNavigationDestinations() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const pluginsEnabled = useFeature("plugins");
-  // Connect needs both halves of what it explains, exactly as the sidebar
-  // gates its own row.
+  // Connect is useful with either half, exactly as the sidebar gates its row.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const { data: canReadMcpGateway } = useHasPermissions({
     mcpGateway: ["read"],
@@ -133,7 +132,7 @@ function useNavigationDestinations() {
     return items
       .filter((item) => {
         if (item.url === "/connection") {
-          return canReadLlmProxy === true && canReadMcpGateway === true;
+          return canReadLlmProxy === true || canReadMcpGateway === true;
         }
         if (item.url === "/plugins") return pluginsEnabled === true;
         return isNavItemPermitted(item, permissionMap);

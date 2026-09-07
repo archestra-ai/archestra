@@ -41,6 +41,10 @@ interface ConnectionFlowProps {
   shownProviders?: readonly SupportedProvider[] | null;
   /** Admin-curated descriptions and default flag for env-configured base URLs. */
   connectionBaseUrls?: readonly ConnectionBaseUrl[] | null;
+  /** When false, the page does not offer installing shared skills. */
+  skillsEnabled?: boolean;
+  /** When false, the page does not offer routing through the LLM Proxy. */
+  llmProxyEnabled?: boolean;
 }
 
 export function ConnectionFlow({
@@ -51,6 +55,8 @@ export function ConnectionFlow({
   shownClientIds,
   shownProviders,
   connectionBaseUrls,
+  skillsEnabled = true,
+  llmProxyEnabled = true,
 }: ConnectionFlowProps) {
   const searchParams = useSearchParams();
   const urlGatewayId = searchParams.get("gatewayId");
@@ -144,7 +150,8 @@ export function ConnectionFlow({
   const urlProvider: SupportedProvider | null =
     urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
 
-  const skillsVisible = useSkillsMarketplaceVisible(client);
+  const marketplaceVisible = useSkillsMarketplaceVisible(client);
+  const skillsVisible = skillsEnabled && marketplaceVisible;
 
   // Manual flow (n8n / Any client): one wizard-rail entry per instruction
   // block, numbered after the client step.
@@ -206,7 +213,7 @@ export function ConnectionFlow({
           ),
       });
     }
-    if (canReadLlmProxy) {
+    if (llmProxyEnabled && canReadLlmProxy) {
       manualSteps.push({
         key: "proxy",
         title: "Route through the LLM Proxy to make it secure",
@@ -247,7 +254,9 @@ export function ConnectionFlow({
           mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
           mcpGatewayId={effectiveMcpId}
           onMcpGatewaySelect={handleMcpSelect}
-          llmProxyId={canReadLlmProxy ? (llmProxyId ?? null) : null}
+          llmProxyId={
+            llmProxyEnabled && canReadLlmProxy ? (llmProxyId ?? null) : null
+          }
           shownProviders={shownProviders}
           urlProvider={urlProvider}
           onProviderSelect={(p) => updateUrlParams({ providerId: p })}
@@ -255,6 +264,7 @@ export function ConnectionFlow({
           candidateBaseUrls={candidateBaseUrls}
           baseUrlMetadata={connectionBaseUrls}
           onBaseUrlChange={setUserBaseUrl}
+          skillsEnabled={skillsEnabled}
         />
       )}
 
@@ -265,11 +275,15 @@ export function ConnectionFlow({
           mcpGatewayId={effectiveMcpId}
           onMcpGatewaySelect={handleMcpSelect}
           gatewaySlug={selectedMcp?.slug ?? effectiveMcpId}
-          llmProxyId={canReadLlmProxy ? (llmProxyId ?? null) : null}
+          llmProxyId={
+            llmProxyEnabled && canReadLlmProxy ? (llmProxyId ?? null) : null
+          }
           baseUrl={baseUrl}
           candidateBaseUrls={candidateBaseUrls}
           baseUrlMetadata={connectionBaseUrls}
           onBaseUrlChange={setUserBaseUrl}
+          skillsEnabled={skillsEnabled}
+          llmProxyEnabled={llmProxyEnabled}
         />
       )}
 

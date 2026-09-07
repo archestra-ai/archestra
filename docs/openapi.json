@@ -312550,6 +312550,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -312744,6 +312750,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -313633,6 +313641,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -313827,6 +313841,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -314971,6 +314987,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -315165,6 +315187,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -315910,6 +315934,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -316104,6 +316134,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -316845,6 +316877,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -317039,6 +317077,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -317780,6 +317820,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -317974,6 +318020,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -318727,6 +318775,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -318921,6 +318975,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -319185,7 +319241,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update /connection admin settings (default gateway/proxy, hidden clients/providers)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "Update /connection admin settings (default gateway, hidden clients, skills/LLM proxy availability)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
         "requestBody": {
           "required": true,
           "content": {
@@ -319224,6 +319280,12 @@
                   },
                   "connectionShownProviders": {
                     "not": {}
+                  },
+                  "connectionSkillsEnabled": {
+                    "type": "boolean"
+                  },
+                  "connectionLlmProxyEnabled": {
+                    "type": "boolean"
                   },
                   "connectionBaseUrls": {
                     "nullable": true,
@@ -319719,6 +319781,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -319913,6 +319981,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -320692,6 +320762,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -320886,6 +320962,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -321697,6 +321775,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -321891,6 +321975,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -322645,6 +322731,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -322839,6 +322931,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -323625,6 +323719,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -323819,6 +323919,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -324542,6 +324644,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -324736,6 +324844,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",
@@ -326647,6 +326757,12 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "connectionSkillsEnabled": {
+                      "type": "boolean"
+                    },
+                    "connectionLlmProxyEnabled": {
+                      "type": "boolean"
+                    },
                     "modelProviderOverrides": {
                       "nullable": true,
                       "type": "object",
@@ -326841,6 +326957,8 @@
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
+                    "connectionSkillsEnabled",
+                    "connectionLlmProxyEnabled",
                     "modelProviderOverrides",
                     "messagingChannelOverrides",
                     "knowledgeConnectorOverrides",

@@ -367,6 +367,24 @@ const organizationsTable = pgTable("organization", {
   ).$type<ConnectionDefaultProviderKeys>(),
 
   /**
+   * When false, /connection does not offer installing shared skills, and
+   * connection-setup APIs refuse a skills payload. Existing client configs
+   * and the skills product itself are unchanged.
+   */
+  connectionSkillsEnabled: boolean("connection_skills_enabled")
+    .notNull()
+    .default(true),
+
+  /**
+   * When false, /connection does not offer routing through the LLM Proxy,
+   * and connection-setup APIs refuse a provider/proxy payload. Existing
+   * client configs and /llm/proxy stay available.
+   */
+  connectionLlmProxyEnabled: boolean("connection_llm_proxy_enabled")
+    .notNull()
+    .default(true),
+
+  /**
    * Admin overrides of the built-in model-provider catalog, keyed by provider
    * id. A `hidden` entry is switched off everywhere: the provider disappears
    * from the pickers and the API refuses to create a key for it. The other

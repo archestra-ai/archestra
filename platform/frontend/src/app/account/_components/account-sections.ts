@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Ticket,
   User,
+  Users,
 } from "lucide-react";
 
 /**
@@ -23,6 +24,7 @@ export const accountSections = [
     href: "/account/permissions",
     Icon: ListChecks,
   },
+  { id: "teams", label: "My Teams", href: "/account/teams", Icon: Users },
   {
     id: "api-keys",
     label: "API Keys",

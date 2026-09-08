@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfileCard } from "@/components/settings/profile-card";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useActiveMemberRole } from "@/lib/organization.query";
 
 const mockUpdateNameMutateAsync = vi.fn();
@@ -21,6 +21,11 @@ describe("ProfileCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateNameMutateAsync.mockResolvedValue(true);
+    // The save bar's button runs through PermissionButton; the profile edit has
+    // no RBAC gate ({} permissions), so it is always granted.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
     vi.mocked(useActiveMemberRole).mockReturnValue({
       data: "admin",
       isPending: false,
@@ -128,21 +133,41 @@ describe("ProfileCard", () => {
     ).toBeVisible();
   });
 
-  it("submits a changed name and keeps the button idle until it changes", async () => {
+  it("hides the save bar until the name changes, then saves through it", async () => {
     render(<ProfileCard />);
 
-    const submit = screen.getByRole("button", { name: "Update profile" });
-    expect(submit).toBeDisabled();
+    // The footer save bar stays out of the way until there is something to
+    // save — no Save control on first paint.
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Updated Name" },
     });
-    await waitFor(() => expect(submit).toBeEnabled());
 
-    fireEvent.click(submit);
+    const save = await screen.findByRole("button", { name: "Save" });
+    expect(save).toBeEnabled();
+
+    fireEvent.click(save);
 
     await waitFor(() => {
       expect(mockUpdateNameMutateAsync).toHaveBeenCalledWith("Updated Name");
     });
+  });
+
+  it("drops the change and hides the save bar again on cancel", async () => {
+    render(<ProfileCard />);
+
+    const nameField = screen.getByLabelText("Name");
+    fireEvent.change(nameField, { target: { value: "Half-typed" } });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    // Cancel reverts to the saved name and pulls the bar back down without
+    // calling the mutation.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull(),
+    );
+    expect(nameField).toHaveValue("Original Name");
+    expect(mockUpdateNameMutateAsync).not.toHaveBeenCalled();
   });
 });

@@ -1,12 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { SettingsBlock } from "@/components/settings/settings-block";
+import {
+  SettingsBlock,
+  SettingsSaveBar,
+} from "@/components/settings/settings-block";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import {
   Form,
@@ -91,6 +92,9 @@ function ProfileForm({
 
   return (
     <Form {...form}>
+      {/* Enter in the name field still submits; the visible save control is the
+          sticky footer bar shared with the /settings/* pages, which floats up
+          only once the name is dirty. */}
       <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
         {/* The avatar takes the gutter beside the first field only; the name
             input flexes into what is left, so every input in the form still
@@ -140,15 +144,17 @@ function ProfileForm({
           valueClassName="capitalize"
           note="Set by an organization admin. You can't change your own role."
         />
-
-        <Button
-          type="submit"
-          disabled={updateName.isPending || !form.formState.isDirty}
-        >
-          {updateName.isPending && <Loader2 className="size-4 animate-spin" />}
-          <span>Update profile</span>
-        </Button>
       </form>
+
+      {/* Self-service edit: no RBAC gate, so the bar's permission set is empty
+          and it always renders as enabled once there are changes. */}
+      <SettingsSaveBar
+        hasChanges={form.formState.isDirty}
+        isSaving={updateName.isPending}
+        permissions={{}}
+        onSave={form.handleSubmit(onSubmit)}
+        onCancel={() => form.reset()}
+      />
     </Form>
   );
 }
@@ -210,7 +216,8 @@ function ProfileSkeleton() {
             <Skeleton className="h-4 w-2/3" />
           </div>
         ))}
-        <Skeleton className="h-9 w-32" />
+        {/* No trailing button skeleton: the save control is a footer bar that
+            appears only once the name is edited, never on first paint. */}
       </div>
     </SettingsBlock>
   );

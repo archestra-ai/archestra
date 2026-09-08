@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { LoadingState } from "@/components/loading";
@@ -55,6 +56,14 @@ export default function ConnectionPage() {
     organization?.connectionDefaultMcpGatewayId ?? null;
   const adminDefaultClientId = organization?.connectionDefaultClientId ?? null;
 
+  if (
+    !isApproval &&
+    !searchParams.get("clientId") &&
+    searchParams.get("mode") !== "manual"
+  ) {
+    return <ConnectWithAi />;
+  }
+
   return (
     <PageLayout
       title={
@@ -70,7 +79,16 @@ export default function ConnectionPage() {
           </>
         )
       }
-      actionButton={!isApproval ? <ConnectWithAi /> : undefined}
+      actionButton={
+        !isApproval ? (
+          <Link
+            href="/connection"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            Connect with your AI
+          </Link>
+        ) : undefined
+      }
       maxWidth="wizard"
     >
       {organizationQuery.isFetching ||

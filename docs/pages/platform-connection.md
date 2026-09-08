@@ -8,17 +8,19 @@ lastUpdated: 2026-09-08
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-![The Connection page with Claude Code selected, showing the one-time setup command](/docs/automated_screenshots/platform-claude-code-example_connect-page.webp)
+![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-The Connection page lets you connect your local coding agent to Archestra with a single command. You pick the client — Claude Code, Codex, etc., and the page gives you a setup script to paste and run in your terminal.
+The Connection page provides a prompt for your coding agent.
+Your agent prepares the connection; you review and approve it in your browser.
+
+**Other ways to connect** opens manual setup for Claude Desktop, Cursor, n8n, and other clients.
+Client-specific links still open their setup instructions directly.
 
 On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
 
 ## Connect From Your Coding Client
 
-![Copy a setup prompt from Connect with your AI](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
-
-The **Connect with your AI** button provides a prompt for your deployment.
+The terminal on the Connection page provides a prompt for your deployment.
 You can also give your coding agent this prompt, replacing the example hostname:
 
 > Read https://ai.example.com/connect.md and connect this client.

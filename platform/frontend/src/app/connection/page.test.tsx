@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
@@ -13,6 +14,7 @@ const connectionFlowMock = vi.fn((_props: unknown) => (
 ));
 const refetchOrganizationMock = vi.fn();
 
+vi.mock("next/navigation");
 vi.mock("@/lib/agent.query");
 vi.mock("@/lib/llm-proxy.query");
 vi.mock("@/lib/organization.query");
@@ -26,6 +28,9 @@ vi.mock("./connection-flow", () => ({
 describe("ConnectionPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("mode=manual") as ReturnType<typeof useSearchParams>,
+    );
     refetchOrganizationMock.mockResolvedValue({});
     vi.mocked(useDefaultMcpGateway).mockReturnValue({
       data: undefined,
@@ -33,6 +38,41 @@ describe("ConnectionPage", () => {
     vi.mocked(useLlmProxy).mockReturnValue({
       data: undefined,
     } as ReturnType<typeof useLlmProxy>);
+  });
+
+  it("shows only the prompt by default, without preparing a manual setup", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+    render(<ConnectionPage />);
+    expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Other ways to connect" }),
+    ).toHaveAttribute("href", "/connection?mode=manual");
+    expect(connectionFlowMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "clientId=claude-desktop",
+    "connectRequest=request&clientId=codex",
+  ])("opens setup directly for %s", (query) => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(query) as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {},
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+    render(<ConnectionPage />);
+    expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
+    expect(connectionFlowMock).toHaveBeenCalled();
   });
 
   it("fails closed while a persisted enabled value is being revalidated", () => {

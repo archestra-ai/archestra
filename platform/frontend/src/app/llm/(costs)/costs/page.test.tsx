@@ -29,6 +29,7 @@ type StatisticsHookParams = {
 };
 
 vi.mock("@/lib/statistics.query", () => ({
+  useProxyCostStatistics: () => ({ isPending: true }),
   useTeamStatistics: (params: StatisticsHookParams) =>
     mockUseTeamStatistics(params),
   useProfileStatistics: (params: StatisticsHookParams) =>
@@ -569,59 +570,6 @@ describe("OrganizationCostsPage", () => {
       expect(table?.className).toContain("table-auto");
     }
   });
-  it("reports LLM Proxy usage as one total rather than a table of proxies", () => {
-    // The organization has a single LLM Proxy, so whatever proxy-attributed
-    // rows come back are one entity's usage — including a deployment holding
-    // more than one organization, which is what these two rows stand in for.
-    mockUseProfileStatistics.mockReturnValue({
-      data: [
-        {
-          agentId: "proxy-1",
-          agentName: "LLM Proxy",
-          teamName: "No Team",
-          agentType: "llm_proxy",
-          requests: 1200,
-          inputTokens: 900,
-          outputTokens: 100,
-          cacheReadTokens: 0,
-          cost: 12.5,
-          timeSeries: [{ timestamp: "2026-08-11T00:00:00.000Z", value: 12.5 }],
-        },
-        {
-          agentId: "proxy-2",
-          agentName: "LLM Proxy",
-          teamName: "No Team",
-          agentType: "llm_proxy",
-          requests: 34,
-          inputTokens: 40,
-          outputTokens: 60,
-          cacheReadTokens: 0,
-          cost: 0.25,
-          timeSeries: [{ timestamp: "2026-08-11T00:00:00.000Z", value: 0.25 }],
-        },
-      ],
-    });
-
-    const { getAllByTestId } = render(<OrganizationCostsPage />);
-
-    expect(screen.getByText("1,234")).toBeInTheDocument();
-    expect(screen.getByText("1,100")).toBeInTheDocument();
-    expect(screen.getByText("$12.75")).toBeInTheDocument();
-
-    // One series keyed by the data field, and the buckets the rows share are
-    // summed rather than repeated — a duplicate timestamp would render as
-    // whichever point the chart reached first.
-    const chart = getAllByTestId("chart").find((el) =>
-      (el.getAttribute("data-config") ?? "").includes('"cost"'),
-    );
-    expect(chart).toBeDefined();
-    const lines = Array.from(
-      chart?.querySelectorAll("[data-testid='chart-line']") ?? [],
-    );
-    expect(lines).toHaveLength(1);
-    expect(lines[0].getAttribute("data-key")).toBe("cost");
-  });
-
   it("splits an app's build and runtime cost and discloses a shared build session", async () => {
     mockUseAppStatistics.mockReturnValue({
       data: {

@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-09-04
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,7 +17,7 @@ The **Costs** tab at `/llm/costs` is the organization-wide rollup for LLM traffi
 - which models are responsible for the largest share of cost
 - whether TOON compression and prompt caching are reducing spend over time
 
-The **LLM Proxy** section reports one total rather than a list. There is a single LLM Proxy, so all of its traffic counts toward that one figure.
+The **LLM Proxy** section attributes usage to credentials and access methods. Selecting a credential filters its spend trend.
 
 For a fuller cost view outside the Archestra UI, use Archestra's exported [metrics](platform-observability#metrics) and the prebuilt [Grafana dashboards](platform-observability#grafana-dashboards). Those surfaces are better suited for long-term monitoring, alerting, and cross-system cost analysis.
 
@@ -31,6 +31,16 @@ Archestra stores both raw spend and savings. Savings can come from:
 Reading organization-wide costs requires `llmCost:read`. See [LLM API Permissions](platform-access-control#llm-api-permissions) for API access details. You can open **My Usage** from your user menu without this permission.
 
 ![Organization Costs showing billed spend, subscription-covered usage, requests, tokens, and cost trends](/docs/automated_screenshots/platform-costs-and-limits_costs.webp)
+
+## Proxy Cost Attribution
+
+![Proxy spend by credential, with billed spend and subscription estimates](/docs/automated_screenshots/platform-costs-and-limits_proxy-attribution.webp)
+
+Virtual keys and OAuth client credentials identify individual proxy callers. Other methods group requests without naming individual credentials. OAuth sign-ins do not necessarily imply subscription billing.
+
+Each request counts once, using its recorded authentication method. Standard virtual keys take precedence over secondary passthrough keys. Deleted keys remain in their method's totals with no credential identity. Older requests without authentication metadata appear as unknown.
+
+External dashboards and reports can consume the same breakdown through the [API Reference](platform-api-reference).
 
 ## My Usage
 

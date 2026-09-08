@@ -20,8 +20,10 @@ import {
   ATTR_ARCHESTRA_APP_NAME,
   ATTR_ARCHESTRA_AUTH_METHOD,
   ATTR_ARCHESTRA_EXTERNAL_AGENT_ID,
+  ATTR_ARCHESTRA_PASSTHROUGH_VIRTUAL_KEY_ID,
   ATTR_ARCHESTRA_RUN_ID,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
+  ATTR_ARCHESTRA_VIRTUAL_KEY_ID,
   ATTR_GENAI_OPERATION_NAME,
   ATTR_GENAI_PROMPT,
   ATTR_GENAI_PROVIDER_NAME,
@@ -81,6 +83,8 @@ export async function startActiveLlmSpan<T>(params: {
   runId?: string;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
+  virtualKeyId?: string;
+  passthroughVirtualKeyId?: string;
   authenticatedApp?: { id: string; name: string; clientId: string };
   source?: InteractionSource;
   serverAddress?: string;
@@ -147,6 +151,15 @@ export async function startActiveLlmSpan<T>(params: {
     }
     if (params.authMethod) {
       span.setAttribute(ATTR_ARCHESTRA_AUTH_METHOD, params.authMethod);
+    }
+    if (params.virtualKeyId) {
+      span.setAttribute(ATTR_ARCHESTRA_VIRTUAL_KEY_ID, params.virtualKeyId);
+    }
+    if (params.passthroughVirtualKeyId) {
+      span.setAttribute(
+        ATTR_ARCHESTRA_PASSTHROUGH_VIRTUAL_KEY_ID,
+        params.passthroughVirtualKeyId,
+      );
     }
     if (params.authenticatedApp) {
       span.setAttribute(ATTR_ARCHESTRA_APP_ID, params.authenticatedApp.id);

@@ -25,7 +25,7 @@ import { getUsageTokens as getOllamaNativeUsage } from "@/routes/proxy/adapters/
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
 import { responsesUsageTokens } from "@/routes/proxy/adapters/responses-usage";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
-import type { GatewayAgent } from "@/types";
+import type { GatewayAgent, InteractionAuthMethod } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 type UsageExtractor =
@@ -251,7 +251,12 @@ export function initializeMetrics(labelKeys: string[]): void {
     // per-token charge) from subscription-covered traffic (flat-rate, not
     // billed), so billed spend is sum(llm_cost_total{billing_mode="metered"}).
     help: "Total estimated (list-price) cost in USD",
-    labelNames: [...baseLabelNames, "billing_mode", ...nextLabelKeys],
+    labelNames: [
+      ...baseLabelNames,
+      "billing_mode",
+      "auth_method",
+      ...nextLabelKeys,
+    ],
     enableExemplars: true,
   });
 
@@ -456,14 +461,23 @@ export function reportBlockedTools(
  * @param cost The cost in USD
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  */
-export function reportLLMCost(
-  provider: SupportedProvider,
-  profile: GatewayAgent,
-  model: string,
-  cost: number | null | undefined,
-  source: InteractionSource,
-  billingMode: BillingMode,
-): void {
+export function reportLLMCost({
+  provider,
+  profile,
+  model,
+  cost,
+  source,
+  billingMode,
+  authMethod = "unknown",
+}: {
+  provider: SupportedProvider;
+  profile: GatewayAgent;
+  model: string;
+  cost: number | null | undefined;
+  source: InteractionSource;
+  billingMode: BillingMode;
+  authMethod?: InteractionAuthMethod;
+}): void {
   if (!llmCostTotal) {
     logger.warn("LLM metrics not initialized, skipping cost reporting");
     return;
@@ -474,7 +488,7 @@ export function reportLLMCost(
   llmCostTotal.inc({
     labels: buildMetricLabels(
       profile,
-      { provider, billing_mode: billingMode },
+      { provider, billing_mode: billingMode, auth_method: authMethod },
       model,
       source,
     ),
@@ -918,7 +932,11 @@ export function reportKbLlmCall(params: {
   // Knowledge-base calls use a real (metered) provider key. `billing_mode` is a
   // required label on llm_cost_total; the token/duration metrics ignore extra
   // labels, so setting it here is safe for all of them.
-  const costLabels = { ...labels, billing_mode: "metered" };
+  const costLabels = {
+    ...labels,
+    billing_mode: "metered",
+    auth_method: "internal",
+  };
 
   const exemplarLabels = getExemplarLabels();
 

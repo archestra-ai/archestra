@@ -61379,6 +61379,11 @@ export type GetKnowledgeBasesData = {
     query?: {
         limit?: number;
         offset?: number;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        authorIds?: Array<string>;
+        excludeAuthorIds?: Array<string>;
+        excludeOtherPersonal?: boolean;
         search?: string;
         /**
          * Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires `knowledgeSource:delete`.
@@ -61467,6 +61472,8 @@ export type GetKnowledgeBasesResponses = {
             organizationId: string;
             name: string;
             description: string | null;
+            visibility: 'private' | 'org-wide' | 'team-scoped';
+            teamIds: Array<string>;
             status: string;
             createdAt: string;
             updatedAt: string;
@@ -61517,6 +61524,8 @@ export type CreateKnowledgeBaseData = {
             keyId?: string;
             valueId?: string;
         }>;
+        visibility?: 'private' | 'org-wide' | 'team-scoped';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -61597,6 +61606,8 @@ export type CreateKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
+        visibility: 'private' | 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -61779,6 +61790,8 @@ export type GetKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
+        visibility: 'private' | 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -61803,6 +61816,8 @@ export type UpdateKnowledgeBaseData = {
             keyId?: string;
             valueId?: string;
         }>;
+        visibility?: 'private' | 'org-wide' | 'team-scoped';
+        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -61885,6 +61900,8 @@ export type UpdateKnowledgeBaseResponses = {
         organizationId: string;
         name: string;
         description: string | null;
+        visibility: 'private' | 'org-wide' | 'team-scoped';
+        teamIds: Array<string>;
         status: string;
         createdAt: string;
         updatedAt: string;
@@ -65575,6 +65592,8 @@ export type GetConnectorKnowledgeBasesResponses = {
             organizationId: string;
             name: string;
             description: string | null;
+            visibility: 'private' | 'org-wide' | 'team-scoped';
+            teamIds: Array<string>;
             status: string;
             createdBy: string | null;
             createdAt: string;

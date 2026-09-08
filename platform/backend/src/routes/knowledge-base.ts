@@ -13,6 +13,12 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  canAccessKnowledgeBase,
+  findAccessibleKnowledgeBase,
+  validateKnowledgeBaseAccess,
+} from "@/services/knowledge-base-access";
+import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
 
 // 0 = follow the documents sync schedule (no interval-scheduled passes);
 // anything else must clear the interval floor.
@@ -269,6 +275,31 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "while the knowledge base is in the trash.",
         tags: ["Knowledge Bases"],
         querystring: PaginationQuerySchema.extend({
+          scope: z.enum(["personal", "team", "org"]).optional(),
+          teamIds: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string()),
+            )
+            .optional(),
+          authorIds: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string()),
+            )
+            .optional(),
+          excludeAuthorIds: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string()),
+            )
+            .optional(),
+          excludeOtherPersonal: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value === "true" : value),
+              z.boolean(),
+            )
+            .optional(),
           search: z.string().optional(),
           status: z
             .enum(["active", "deleted"])
@@ -290,7 +321,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, status, labels },
+        query: { limit, offset, search, status, labels, ...scopeFilters },
         organizationId,
         user,
       },
@@ -323,12 +354,20 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           status,
           labelFilteredIds,
+          canReadAll: access.canReadAll,
+          viewerTeamIds: access.teamIds,
+          viewerUserId: user.id,
+          ...scopeFilters,
         }),
         KnowledgeBaseModel.countByOrganization({
           organizationId,
           search,
           status,
           labelFilteredIds,
+          canReadAll: access.canReadAll,
+          viewerTeamIds: access.teamIds,
+          viewerUserId: user.id,
+          ...scopeFilters,
         }),
       ]);
 
@@ -435,12 +474,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: z.string().min(1),
           description: z.string().optional(),
           labels: z.array(LabelWithDetailsSchema).optional(),
+          visibility: KnowledgeBaseVisibilitySchema.optional(),
+          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      const visibility = body.visibility ?? "org-wide";
+      const teamIds = body.teamIds ?? [];
+      await validateKnowledgeBaseAccess({
+        organizationId,
+        visibility,
+        teamIds,
+      });
       const kg = await KnowledgeBaseModel.create({
+        visibility,
+        teamIds: visibility === "team-scoped" ? [...new Set(teamIds)] : [],
         organizationId,
         createdBy: user.id,
         name: body.name,
@@ -496,18 +546,29 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
           labels: z.array(LabelWithDetailsSchema).optional(),
+          visibility: KnowledgeBaseVisibilitySchema.optional(),
+          teamIds: z.array(z.string()).optional(),
         }),
         response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
-      await findKnowledgeBaseOrThrow({
+      const current = await findKnowledgeBaseOrThrow({
         id,
         organizationId,
         userId: user.id,
       });
-
+      const visibility = body.visibility ?? current.visibility;
+      const teamIds = body.teamIds ?? current.teamIds;
+      await validateKnowledgeBaseAccess({
+        organizationId,
+        visibility,
+        teamIds,
+        current,
+      });
       const { labels, ...columns } = body;
+      columns.teamIds =
+        visibility === "team-scoped" ? [...new Set(teamIds)] : [];
       const updated = await KnowledgeBaseModel.update(id, columns);
       if (!updated) {
         throw new ApiError(404, "Knowledge base not found");
@@ -534,11 +595,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Soft-delete several knowledge bases in one request, removing their " +
           "connector assignments. Ids the caller cannot see are reported in " +
-          "`failed` and leave the rest of the batch applied. There is no " +
-          "matching PATCH: a knowledge base has no visibility of its own — it " +
-          "is reached through the connectors and documents assigned to it — " +
-          "so its only editable fields are its name and description, which " +
-          "are per-row by nature.",
+          "`failed` and leave the rest of the batch applied.",
         tags: ["Knowledge Bases"],
         body: BulkDeleteBodySchema,
         response: constructResponseSchema(BulkOutcomeSchema),
@@ -644,12 +701,19 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, organizationId, user }, reply) => {
       const kb = await KnowledgeBaseModel.findDeletedByIdForOrganization(
         id,
         organizationId,
       );
-      if (!kb) {
+      if (
+        !kb ||
+        !(await canAccessKnowledgeBase({
+          knowledgeBase: kb,
+          organizationId,
+          userId: user.id,
+        }))
+      ) {
         throw new ApiError(404, "Knowledge base not found");
       }
 
@@ -3399,11 +3463,7 @@ async function findKnowledgeBaseOrThrow(params: {
   organizationId: string;
   userId: string;
 }) {
-  const kg = await KnowledgeBaseModel.findById(params.id);
-  if (!kg || kg.organizationId !== params.organizationId) {
-    throw new ApiError(404, "Knowledge base not found");
-  }
-  return kg;
+  return findAccessibleKnowledgeBase(params);
 }
 
 /**

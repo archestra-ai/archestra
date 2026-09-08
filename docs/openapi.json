@@ -241527,6 +241527,60 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "teamIds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "authorIds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "excludeAuthorIds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeOtherPersonal",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",
@@ -241584,6 +241638,20 @@
                           "description": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "private",
+                              "org-wide",
+                              "team-scoped"
+                            ]
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "status": {
                             "type": "string"
@@ -241819,6 +241887,8 @@
                           "organizationId",
                           "name",
                           "description",
+                          "visibility",
+                          "teamIds",
                           "status",
                           "createdAt",
                           "updatedAt",
@@ -242167,6 +242237,20 @@
                         "value"
                       ]
                     }
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "org-wide",
+                      "team-scoped"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -242198,6 +242282,20 @@
                     "description": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "status": {
                       "type": "string"
@@ -242244,6 +242342,8 @@
                     "organizationId",
                     "name",
                     "description",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt",
@@ -242534,6 +242634,20 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -242579,6 +242693,8 @@
                     "organizationId",
                     "name",
                     "description",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt",
@@ -242876,6 +242992,20 @@
                         "value"
                       ]
                     }
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "org-wide",
+                      "team-scoped"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -242916,6 +243046,20 @@
                     "description": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "status": {
                       "type": "string"
@@ -242962,6 +243106,8 @@
                     "organizationId",
                     "name",
                     "description",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt",
@@ -243490,7 +243636,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Soft-delete several knowledge bases in one request, removing their connector assignments. Ids the caller cannot see are reported in `failed` and leave the rest of the batch applied. There is no matching PATCH: a knowledge base has no visibility of its own — it is reached through the connectors and documents assigned to it — so its only editable fields are its name and description, which are per-row by nature.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "description": "Soft-delete several knowledge bases in one request, removing their connector assignments. Ids the caller cannot see are reported in `failed` and leave the rest of the batch applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "requestBody": {
           "required": true,
           "content": {
@@ -258910,6 +259056,20 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "private",
+                              "org-wide",
+                              "team-scoped"
+                            ]
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "status": {
                             "type": "string"
                           },
@@ -258936,6 +259096,8 @@
                           "organizationId",
                           "name",
                           "description",
+                          "visibility",
+                          "teamIds",
                           "status",
                           "createdBy",
                           "createdAt",

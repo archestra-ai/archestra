@@ -6,7 +6,10 @@ import {
   ilike,
   inArray,
   isNotNull,
+  ne,
+  notInArray,
   or,
+  sql,
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -33,9 +36,93 @@ function buildOrgFilters(params: {
    * by the route so the list and count queries agree without resolving twice.
    */
   labelFilteredIds?: string[];
+  canReadAll?: boolean;
+  viewerTeamIds?: string[];
+  viewerUserId?: string;
+  scope?: "personal" | "team" | "org";
+  teamIds?: string[];
+  authorIds?: string[];
+  excludeAuthorIds?: string[];
+  excludeOtherPersonal?: boolean;
 }) {
   const normalizedSearch = params.search?.trim();
   return [
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    ...(params.canReadAll === false
+      ? [
+          or(
+            eq(schema.knowledgeBasesTable.visibility, "org-wide"),
+            ...(params.viewerUserId
+              ? [
+                  and(
+                    eq(schema.knowledgeBasesTable.visibility, "private"),
+                    eq(
+                      schema.knowledgeBasesTable.createdBy,
+                      params.viewerUserId,
+                    ),
+                  ),
+                ]
+              : []),
+            ...(params.viewerTeamIds ?? []).map((id) =>
+              and(
+                eq(schema.knowledgeBasesTable.visibility, "team-scoped"),
+                sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
+              ),
+            ),
+          ),
+        ]
+      : []),
+    // SPDX-SnippetEnd
+    ...(params.scope
+      ? [
+          eq(
+            schema.knowledgeBasesTable.visibility,
+            (
+              {
+                personal: "private",
+                team: "team-scoped",
+                org: "org-wide",
+              } as const
+            )[params.scope],
+          ),
+        ]
+      : []),
+    ...(params.teamIds?.length
+      ? [
+          or(
+            ...params.teamIds.map(
+              (id) =>
+                sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
+            ),
+          ),
+        ]
+      : []),
+    ...(params.authorIds?.length
+      ? [inArray(schema.knowledgeBasesTable.createdBy, params.authorIds)]
+      : []),
+    ...(params.excludeAuthorIds?.length
+      ? [
+          or(
+            sql`${schema.knowledgeBasesTable.createdBy} IS NULL`,
+            notInArray(
+              schema.knowledgeBasesTable.createdBy,
+              params.excludeAuthorIds,
+            ),
+          ),
+        ]
+      : []),
+    ...(params.excludeOtherPersonal
+      ? [
+          or(
+            ne(schema.knowledgeBasesTable.visibility, "private"),
+            params.viewerUserId
+              ? eq(schema.knowledgeBasesTable.createdBy, params.viewerUserId)
+              : sql`false`,
+          ),
+        ]
+      : []),
     ...(params.labelFilteredIds !== undefined
       ? [inArray(schema.knowledgeBasesTable.id, params.labelFilteredIds)]
       : []),
@@ -66,6 +153,14 @@ class KnowledgeBaseModel {
     status?: "active" | "deleted";
     /** Knowledge base ids matching a `?labels=` filter; omit when not filtering. */
     labelFilteredIds?: string[];
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
+    viewerUserId?: string;
+    scope?: "personal" | "team" | "org";
+    teamIds?: string[];
+    authorIds?: string[];
+    excludeAuthorIds?: string[];
+    excludeOtherPersonal?: boolean;
   }): Promise<KnowledgeBase[]> {
     const filters = buildOrgFilters(params);
 
@@ -288,6 +383,14 @@ class KnowledgeBaseModel {
     status?: "active" | "deleted";
     /** Knowledge base ids matching a `?labels=` filter; omit when not filtering. */
     labelFilteredIds?: string[];
+    canReadAll?: boolean;
+    viewerTeamIds?: string[];
+    viewerUserId?: string;
+    scope?: "personal" | "team" | "org";
+    teamIds?: string[];
+    authorIds?: string[];
+    excludeAuthorIds?: string[];
+    excludeOtherPersonal?: boolean;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -355,6 +458,8 @@ class KnowledgeBaseModel {
       description: row.description ?? null,
       organizationId: row.organizationId,
       status: row.status,
+      visibility: row.visibility,
+      teamIds: row.teamIds,
       connectors: connectors.map((c) => c.name).sort(),
       createdAt: row.createdAt.toISOString(),
     };

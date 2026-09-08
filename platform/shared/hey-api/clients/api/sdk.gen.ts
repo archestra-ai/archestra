@@ -4763,7 +4763,7 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * Soft-delete several knowledge bases in one request, removing their connector assignments. Ids the caller cannot see are reported in `failed` and leave the rest of the batch applied. There is no matching PATCH: a knowledge base has no visibility of its own — it is reached through the connectors and documents assigned to it — so its only editable fields are its name and description, which are per-row by nature.
+ * Soft-delete several knowledge bases in one request, removing their connector assignments. Ids the caller cannot see are reported in `failed` and leave the rest of the batch applied.
  *
  * Authentication:
  *

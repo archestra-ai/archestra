@@ -71,11 +71,12 @@ export async function importAgentFromPayload(
   const labels = data.labels.map((l) => ({ key: l.key, value: l.value }));
 
   // 5. Resolve knowledge bases (by name)
-  const knowledgeBaseIds = await resolveKnowledgeBases(
-    data.knowledgeBases,
+  const knowledgeBaseIds = await resolveKnowledgeBases({
+    kbRefs: data.knowledgeBases,
     organizationId,
+    userId,
     warnings,
-  );
+  });
 
   // 6. Resolve connectors (by name + type + user visibility)
   const knowledgeSourceAccess =
@@ -382,19 +383,33 @@ async function resolveAndAssignDelegations(
  * Resolve knowledge bases by name in the organization.
  * Returns the IDs of found KBs and adds warnings for missing ones.
  */
-async function resolveKnowledgeBases(
-  kbRefs: AgentExportPayload["knowledgeBases"],
-  organizationId: string,
-  warnings: ImportWarning[],
-): Promise<string[]> {
+async function resolveKnowledgeBases({
+  kbRefs,
+  organizationId,
+  userId,
+  warnings,
+}: {
+  kbRefs: AgentExportPayload["knowledgeBases"];
+  organizationId: string;
+  userId: string;
+  warnings: ImportWarning[];
+}): Promise<string[]> {
   if (kbRefs.length === 0) return [];
 
   const resolvedIds: string[] = [];
+  const access =
+    await knowledgeSourceAccessControlService.buildAccessControlContext({
+      userId,
+      organizationId,
+    });
 
   for (const ref of kbRefs) {
     const kb = await KnowledgeBaseModel.findByName(ref.name, organizationId);
 
-    if (!kb) {
+    if (
+      !kb ||
+      !knowledgeSourceAccessControlService.canAccessKnowledgeBase(access, kb)
+    ) {
       warnings.push({
         type: "knowledgeBase",
         name: ref.name,

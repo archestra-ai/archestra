@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { index, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, jsonb, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type { KnowledgeBaseVisibility } from "@/types/knowledge-base";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -10,6 +11,15 @@ const knowledgeBasesTable = softDeletablePgTable(
     organizationId: text("organization_id").notNull(),
     name: text("name").notNull(),
     description: text("description"),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    visibility: text("visibility")
+      .$type<KnowledgeBaseVisibility>()
+      .notNull()
+      .default("org-wide"),
+    teamIds: jsonb("team_ids").$type<string[]>().notNull().default([]),
+    // SPDX-SnippetEnd
     status: text("status").notNull().default("active"),
     /**
      * Who created this. Nullable: rows predating creator tracking have no

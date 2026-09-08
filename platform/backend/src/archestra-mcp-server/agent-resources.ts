@@ -9,6 +9,7 @@ import {
 } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -345,6 +346,7 @@ export async function handleCreateResource<
         args.connectorIds !== undefined
       ) {
         await validateKnowledgeAssignments({
+          userId: context.userId,
           organizationId: context.organizationId,
           knowledgeBaseIds: args.knowledgeBaseIds,
           connectorIds: args.connectorIds,
@@ -641,6 +643,7 @@ export async function handleEditResource<
         args.connectorIds !== undefined
       ) {
         await validateKnowledgeAssignments({
+          userId: context.userId,
           organizationId: context.organizationId,
           knowledgeBaseIds: args.knowledgeBaseIds,
           connectorIds: args.connectorIds,
@@ -719,6 +722,7 @@ async function resolveNewAgentEnvironmentId(params: {
 }
 
 async function validateKnowledgeAssignments(params: {
+  userId?: string;
   organizationId?: string;
   knowledgeBaseIds?: string[];
   connectorIds?: string[];
@@ -732,9 +736,24 @@ async function validateKnowledgeAssignments(params: {
   }
 
   if (knowledgeBaseIds) {
+    const access = params.userId
+      ? await knowledgeSourceAccessControlService.buildAccessControlContext({
+          userId: params.userId,
+          organizationId,
+        })
+      : null;
     for (const kbId of knowledgeBaseIds) {
       const knowledgeBase = await KnowledgeBaseModel.findById(kbId);
-      if (!knowledgeBase || knowledgeBase.organizationId !== organizationId) {
+      if (
+        !knowledgeBase ||
+        knowledgeBase.organizationId !== organizationId ||
+        !(access
+          ? knowledgeSourceAccessControlService.canAccessKnowledgeBase(
+              access,
+              knowledgeBase,
+            )
+          : knowledgeBase.visibility === "org-wide")
+      ) {
         throw createValidationError(
           ["knowledgeBaseIds"],
           `Knowledge base not found for this organization: ${kbId}`,

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.53](https://github.com/archestra-ai/archestra/compare/platform-v1.3.52...platform-v1.3.53) (2026-09-08)
+
+
+### Bug Fixes
+
+* **chat:** backport Bedrock IAM proxy authentication to 1.3 ([#7733](https://github.com/archestra-ai/archestra/issues/7733)) ([d057197](https://github.com/archestra-ai/archestra/commit/d057197751a739f453ed6e30e18c572fa6adefb4))
+
 ## [1.3.52](https://github.com/archestra-ai/archestra/compare/platform-v1.3.51...platform-v1.3.52) (2026-09-08)
 
 

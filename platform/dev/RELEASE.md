@@ -31,9 +31,9 @@ Archestra uses two release pipelines:
 
 This is a complete cutover. Once the new stable release publishes, it becomes the only supported stable line and the previous line becomes read-only. The release operator or release agent completes all GitHub configuration and pull-request steps; contributors do not need to change their workflow.
 
-1. [ ] Choose a tested beta tag (for example, `platform-v1.4.0-beta.2`). Confirm it is a published prerelease on `main`, passed qualification, and has no conflicting stable branch, tag, or draft release.
+1. [ ] Choose a tested beta tag (for example, `platform-v1.4.0-beta.2`). Confirm it is a published prerelease on `main` and passed qualification. Reconcile any existing target branch, tag, draft release, release PR, queue ruleset, and candidate workflow before continuing: resume only exact, protected state for that beta commit; never recreate objects or overwrite ambiguous state.
 2. [ ] Get explicit approval for the stable cut. State the beta tag, `X.Y.0` version, new branch, previous line that will become EOL, repository-setting changes, and PRs that will be created and merged.
-3. [ ] If the live `release/*` required-check rule blocks branch creation, temporarily set only `do_not_enforce_on_create: true` under the approved setting changes. Preserve the original ruleset payload.
+3. [ ] If the live `release/*` required-check rule blocks branch creation, temporarily set only `do_not_enforce_on_create: true` under the approved setting changes. Preserve the original ruleset payload and arrange restoration before changing it. If branch creation or any following verification fails, restore and read back the original ruleset before stopping.
 4. [ ] Create `release/1.4` from that tag (not from `main`), then immediately restore and verify the original core ruleset:
    ```bash
    git checkout -b release/1.4 platform-v1.4.0-beta.2

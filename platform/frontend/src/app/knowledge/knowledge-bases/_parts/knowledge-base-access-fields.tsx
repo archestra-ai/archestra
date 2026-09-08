@@ -41,7 +41,7 @@ export function KnowledgeBaseAccessFields({
               options={[
                 {
                   value: "private",
-                  label: "Only me",
+                  label: "Personal",
                   description: "Only you can access this knowledge base",
                   icon: User,
                 },

@@ -142,7 +142,7 @@ it("creates a personal knowledge base without requiring a team", async () => {
   });
   await user.type(screen.getByLabelText("Name"), "Research notes");
   await user.click(screen.getByRole("button", { name: /Organization Anyone/ }));
-  await user.click(screen.getByRole("button", { name: /Only me Only you/ }));
+  await user.click(screen.getByRole("button", { name: /Personal Only you/ }));
   await user.click(
     screen.getByRole("button", { name: "Create Knowledge Base" }),
   );

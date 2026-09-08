@@ -88,6 +88,54 @@ test("returns text and structured data through the real A2A SDK", async ({
       statusReason: null,
     });
     expect(runs.every((run) => run.completedAt instanceof Date)).toBe(true);
+    const verified = await A2aRemoteAgentModel.findByIdForOrganization({
+      id: target.remoteAgent.id,
+      organizationId: organization.id,
+    });
+    expect(verified?.connection.lastVerifiedAt).toBeInstanceOf(Date);
+  });
+});
+
+test("persists and polls a non-terminal remote task to completion", async ({
+  makeAgent,
+  makeOrganization,
+}) => {
+  await withFixture({ authMode: "none" }, async ({ baseUrl, journal }) => {
+    const organization = await makeOrganization();
+    const parent = await makeAgent({
+      name: "Polling parent",
+      organizationId: organization.id,
+    });
+    const target = await createTarget({
+      baseUrl,
+      organizationId: organization.id,
+      auth: { type: "none" },
+    });
+
+    await expect(
+      executeOutboundA2aDelegation({
+        target,
+        message: "[fixture:delayed] complete after polling",
+        context: makeContext({ parent, organizationId: organization.id }),
+      }),
+    ).resolves.toBe("Fixture response: complete after polling");
+
+    const [run] = await db
+      .select()
+      .from(schema.a2aOutboundRunsTable)
+      .where(
+        eq(schema.a2aOutboundRunsTable.connectionId, target.connection.id),
+      );
+    expect(run).toMatchObject({
+      state: "completed",
+      remoteTaskId: "00000000-0000-4000-8000-000000000001",
+      remoteContextId: "10000000-0000-4000-8000-000000000001",
+    });
+    expect(
+      (await journal()).requests.some(
+        (request) => request.body?.method === "GetTask",
+      ),
+    ).toBe(true);
   });
 });
 
@@ -187,6 +235,41 @@ test("persists failed remote task state and identifiers", async ({
   });
 });
 
+test("cancels a still-working remote task when the parent aborts", async ({
+  makeAgent,
+  makeOrganization,
+}) => {
+  await withFixture({ authMode: "none" }, async ({ baseUrl, journal }) => {
+    const organization = await makeOrganization();
+    const parent = await makeAgent({
+      name: "Cancellation parent",
+      organizationId: organization.id,
+    });
+    const target = await createTarget({
+      baseUrl,
+      organizationId: organization.id,
+      auth: { type: "none" },
+    });
+    const controller = new AbortController();
+    const delegation = executeOutboundA2aDelegation({
+      target,
+      message: "[fixture:working] cancel this task",
+      context: {
+        ...makeContext({ parent, organizationId: organization.id }),
+        abortSignal: controller.signal,
+      },
+    });
+    setTimeout(() => controller.abort(), 100);
+
+    await expect(delegation).rejects.toMatchObject({ name: "AbortError" });
+    expect(
+      (await journal()).requests.some(
+        (request) => request.body?.method === "CancelTask",
+      ),
+    ).toBe(true);
+  });
+});
+
 test("sends only the explicit delegation message across the A2A boundary", async ({
   makeAgent,
   makeOrganization,
@@ -240,6 +323,7 @@ type FixtureJournal = {
     path: string;
     headers: Record<string, string | string[] | undefined>;
     body?: {
+      method?: string;
       params?: {
         message?: {
           parts?: Array<Record<string, unknown>>;

@@ -210,7 +210,7 @@ function fixtureMode(params) {
   if (typeof metadataMode === "string") return metadataMode;
 
   const match = extractInputText(params?.message).match(
-    /^\[fixture:(immediate|task|working|failed|artifact|untrusted)\]/i,
+    /^\[fixture:(immediate|task|working|delayed|failed|artifact|untrusted)\]/i,
   );
   return match?.[1]?.toLowerCase() ?? "task";
 }
@@ -263,14 +263,14 @@ function buildTask(state, params, mode) {
     mode,
   );
   const taskState =
-    mode === "working"
+    mode === "working" || mode === "delayed"
       ? "TASK_STATE_WORKING"
       : mode === "failed"
         ? "TASK_STATE_FAILED"
         : "TASK_STATE_COMPLETED";
 
   const artifacts =
-    mode === "working"
+    mode === "working" || mode === "delayed"
       ? undefined
       : [
           {
@@ -301,7 +301,10 @@ function buildTask(state, params, mode) {
       timestamp: FIXED_TIMESTAMP,
     },
     ...(artifacts ? { artifacts } : {}),
-    history: [incoming, ...(mode === "working" ? [] : [agentMessage])],
+    history: [
+      incoming,
+      ...(mode === "working" || mode === "delayed" ? [] : [agentMessage]),
+    ],
     metadata: { fixtureMode: mode },
   };
 
@@ -329,6 +332,31 @@ function getTask(state, params) {
   const task = state.tasks.get(params?.id);
   if (!task) {
     throw Object.assign(new Error("Task not found"), { rpcCode: -32001 });
+  }
+  if (
+    task.metadata?.fixtureMode === "delayed" &&
+    task.status.state === "TASK_STATE_WORKING"
+  ) {
+    const incoming = task.history[0];
+    const agentMessage = buildAgentMessage(
+      state,
+      task.contextId,
+      task.id,
+      extractInputText(incoming),
+      "delayed",
+    );
+    task.status = {
+      state: "TASK_STATE_COMPLETED",
+      timestamp: FIXED_TIMESTAMP,
+    };
+    task.artifacts = [
+      {
+        artifactId: deterministicId("3", Number(task.id.slice(-12))),
+        name: "fixture-response",
+        parts: agentMessage.parts,
+      },
+    ];
+    task.history.push(agentMessage);
   }
   return task;
 }

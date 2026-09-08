@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import type { AgentCard } from "@a2a-js/sdk";
 import { DefaultAgentCardResolver } from "@a2a-js/sdk/client";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Agent as UndiciAgent } from "undici";
 import db, { schema } from "@/database";
 import { A2aConnectionModel, A2aRemoteAgentModel, ToolModel } from "@/models";
@@ -90,7 +90,9 @@ export async function createA2aRemoteAgent(params: {
       authConfig: authConfig(params.input.auth),
       secretId,
       enabled: true,
-      lastVerifiedAt: new Date(),
+      // Discovery validates the card and selected protocol metadata; it does
+      // not prove that an authenticated message can execute successfully.
+      lastVerifiedAt: null,
       lastVerificationError: null,
     });
     const tool = await ToolModel.createA2aDelegationTool(
@@ -136,63 +138,128 @@ export async function updateA2aRemoteAgent(params: {
   const inspection = inspectResolvedCard({ card, authType, apiKeyHeader });
   const nextName = params.input.name ?? existing.remoteAgent.name;
 
-  let secretId = existing.connection.secretId;
+  // Never mutate a live credential in place. A delegation must observe either
+  // the complete old endpoint/auth/secret tuple or the complete new one.
+  // Creating the replacement first and swapping its ID in the same database
+  // transaction as the endpoint prevents a new secret reaching an old URL.
+  let replacementSecretId: string | null | undefined;
   if (params.input.auth) {
     if (params.input.auth.type === "none") {
-      secretId = null;
-    } else if (secretId) {
-      await secretManager().updateSecret(secretId, {
-        credential: params.input.auth.credential,
-      });
+      replacementSecretId = null;
     } else {
       const secret = await secretManager().createSecret(
         { credential: params.input.auth.credential },
         `a2a-${params.input.name ?? existing.remoteAgent.name}`,
       );
-      secretId = secret.id;
+      replacementSecretId = secret.id;
     }
   }
+  const secretId =
+    replacementSecretId === undefined
+      ? existing.connection.secretId
+      : replacementSecretId;
+  const now = new Date();
+  let updated: {
+    remoteAgent: typeof existing.remoteAgent;
+    connection: typeof existing.connection;
+  };
+  try {
+    updated = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select({ updatedAt: schema.a2aRemoteAgentsTable.updatedAt })
+        .from(schema.a2aRemoteAgentsTable)
+        .where(
+          and(
+            eq(schema.a2aRemoteAgentsTable.id, params.id),
+            eq(
+              schema.a2aRemoteAgentsTable.organizationId,
+              params.organizationId,
+            ),
+          ),
+        )
+        .for("update");
+      if (!locked) throw new ApiError(404, "Outbound A2A agent not found");
+      if (
+        locked.updatedAt.getTime() !== existing.remoteAgent.updatedAt.getTime()
+      ) {
+        throw new ApiError(
+          409,
+          "Outbound A2A agent changed while it was being updated. Retry with the latest configuration.",
+        );
+      }
 
-  const remoteAgent = await A2aRemoteAgentModel.update(params.id, {
-    name: nextName,
-    description:
-      params.input.description === undefined
-        ? existing.remoteAgent.description
-        : params.input.description,
-    discoveryMode: source.type,
-    discoveryUrl: source.type === "inline_card" ? null : source.url,
-    agentCard: inspection.agentCard,
-    cardHash: inspection.cardHash,
-    lastDiscoveredAt: params.input.source ? new Date() : undefined,
-    discoveryError: null,
-  });
-  if (!remoteAgent) throw new ApiError(404, "Outbound A2A agent not found");
+      const [remoteAgent] = await tx
+        .update(schema.a2aRemoteAgentsTable)
+        .set({
+          name: nextName,
+          description:
+            params.input.description === undefined
+              ? existing.remoteAgent.description
+              : params.input.description,
+          discoveryMode: source.type,
+          discoveryUrl: source.type === "inline_card" ? null : source.url,
+          agentCard: inspection.agentCard,
+          cardHash: inspection.cardHash,
+          lastDiscoveredAt: params.input.source
+            ? now
+            : existing.remoteAgent.lastDiscoveredAt,
+          discoveryError: null,
+          updatedAt: now,
+        })
+        .where(eq(schema.a2aRemoteAgentsTable.id, params.id))
+        .returning();
+      if (!remoteAgent) {
+        throw new ApiError(404, "Outbound A2A agent not found");
+      }
 
-  const connection = await A2aConnectionModel.update(existing.connection.id, {
-    selectedInterface: inspection.selectedInterface,
-    securityRequirement: inspection.selectedSecurityRequirement,
-    authType,
-    authConfig:
-      params.input.auth === undefined
-        ? existing.connection.authConfig
-        : authConfig(params.input.auth),
-    secretId,
-    enabled: params.input.enabled ?? existing.connection.enabled,
-    lastVerifiedAt:
-      params.input.source || params.input.auth ? new Date() : undefined,
-    lastVerificationError: null,
-  });
-  if (!connection) throw new ApiError(404, "Outbound A2A connection not found");
+      const [connection] = await tx
+        .update(schema.a2aConnectionsTable)
+        .set({
+          selectedInterface: inspection.selectedInterface,
+          securityRequirement: inspection.selectedSecurityRequirement,
+          authType,
+          authConfig:
+            params.input.auth === undefined
+              ? existing.connection.authConfig
+              : authConfig(params.input.auth),
+          secretId,
+          enabled: params.input.enabled ?? existing.connection.enabled,
+          lastVerifiedAt:
+            params.input.source || params.input.auth
+              ? null
+              : existing.connection.lastVerifiedAt,
+          lastVerificationError: null,
+          updatedAt: now,
+        })
+        .where(eq(schema.a2aConnectionsTable.id, existing.connection.id))
+        .returning();
+      if (!connection) {
+        throw new ApiError(404, "Outbound A2A connection not found");
+      }
+      return { remoteAgent, connection };
+    });
+  } catch (error) {
+    if (replacementSecretId) {
+      await secretManager()
+        .deleteSecret(replacementSecretId)
+        .catch(() => {});
+    }
+    throw error;
+  }
 
-  if (params.input.auth?.type === "none" && existing.connection.secretId) {
+  if (
+    params.input.auth &&
+    existing.connection.secretId &&
+    existing.connection.secretId !== secretId
+  ) {
     await secretManager()
       .deleteSecret(existing.connection.secretId)
       .catch(() => {});
   }
 
   return toPublicRemoteAgent({
-    remoteAgent,
-    connection,
+    remoteAgent: updated.remoteAgent,
+    connection: updated.connection,
     toolId: existing.toolId,
   });
 }
@@ -302,6 +369,8 @@ function inspectResolvedCard(params: {
     );
   }
   assertSafeOutboundUrl(selectedInterface.url);
+  assertCompatibleMediaModes(card);
+  assertNoRequiredExtensions(card);
 
   const { supportedAuthTypes, selectedSecurityRequirement } =
     selectSecurityRequirement({
@@ -545,7 +614,11 @@ export async function safeA2aFetch(
 async function createPinnedA2aDispatcher(
   hostname: string,
 ): Promise<UndiciAgent> {
-  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  const normalizedHostname = hostname.replace(/^\[(.*)\]$/, "$1");
+  const addresses = await lookup(normalizedHostname, {
+    all: true,
+    verbatim: true,
+  });
   if (addresses.length === 0) {
     throw new Error("A2A hostname did not resolve to an address");
   }
@@ -583,4 +656,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isEmptyRecord(value: A2aSecurityRequirement): boolean {
   return Object.keys(value).length === 0;
+}
+
+function assertCompatibleMediaModes(card: Record<string, unknown>): void {
+  const inputModes = stringArray(card.defaultInputModes);
+  if (!inputModes.includes("text/plain")) {
+    throw new ApiError(400, "Agent Card must accept the text/plain input mode");
+  }
+  const outputModes = stringArray(card.defaultOutputModes);
+  if (!outputModes.some((mode) => OUTPUT_MEDIA_TYPES.has(mode))) {
+    throw new ApiError(
+      400,
+      "Agent Card must return text/plain or application/json output",
+    );
+  }
+}
+
+const OUTPUT_MEDIA_TYPES = new Set(["text/plain", "application/json"]);
+
+function assertNoRequiredExtensions(card: Record<string, unknown>): void {
+  const capabilities = isRecord(card.capabilities) ? card.capabilities : {};
+  const extensions = Array.isArray(capabilities.extensions)
+    ? capabilities.extensions
+    : [];
+  if (
+    extensions.some(
+      (extension) => isRecord(extension) && extension.required === true,
+    )
+  ) {
+    throw new ApiError(
+      400,
+      "Agent Card requires an A2A extension that Archestra does not support",
+    );
+  }
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
 }

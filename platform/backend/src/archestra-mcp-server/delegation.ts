@@ -79,10 +79,12 @@ export async function getAgentTools(context: {
   // External A2A targets are always explicit, including when local subagents
   // use Auto mode. Assigning an external credential is an egress decision and
   // must never be widened by a dynamic local-agent setting.
-  const outboundTargets = await A2aConnectionModel.findAssignedTargets(
-    agentId,
-    organizationId,
-  );
+  // External A2A currently executes from the backend process, outside the
+  // per-environment network-policy runtime. Fail closed for environment-bound
+  // agents until connections can be bound to and dialed through that runtime.
+  const outboundTargets = environmentId
+    ? []
+    : await A2aConnectionModel.findAssignedTargets(agentId, organizationId);
   const outboundTools = outboundTargets.map((target) =>
     buildDelegationToolDescriptor({
       name: target.tool.name,
@@ -183,12 +185,19 @@ export async function handleDelegation(
   const userId = context.userId ?? tokenAuth?.userId;
   const isRealUser = Boolean(userId) && userId !== "system";
 
+  const environmentId = await AgentModel.findEnvironmentId(agentId);
+
   const outboundTarget = await A2aConnectionModel.findAssignedTargetByToolName({
     agentId,
     organizationId,
     toolName,
   });
   if (outboundTarget) {
+    if (environmentId) {
+      return errorResult(
+        "Outbound A2A delegation is not available for environment-bound agents yet.",
+      );
+    }
     const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
       agentId,
       toolName,
@@ -226,8 +235,6 @@ export async function handleDelegation(
 
   // Same environment restriction as the advertised surface: delegation never
   // crosses environment boundaries, advisor excepted.
-  const environmentId = await AgentModel.findEnvironmentId(agentId);
-
   // Resolve the delegation target, mirroring getAgentTools: Auto mode resolves
   // dynamically against the caller-accessible set (minus exclusions); Custom
   // mode resolves against explicit delegation rows. Keeping resolution symmetric

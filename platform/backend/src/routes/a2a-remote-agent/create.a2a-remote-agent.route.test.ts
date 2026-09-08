@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import { secretManager } from "@/secrets-manager";
 import { describe, expect, test, useRouteTestApp } from "@/test";
@@ -121,5 +123,74 @@ describe("POST /api/a2a/remote-agents", () => {
     expect(JSON.stringify(response.json())).toContain(
       "API-key header name is reserved",
     );
+  });
+
+  test("rejects cards that cannot exchange the supported media modes", async () => {
+    for (const agentCard of [
+      makeAgentCard("none", { defaultInputModes: ["image/png"] }),
+      makeAgentCard("none", { defaultOutputModes: ["image/png"] }),
+    ]) {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/a2a/remote-agents",
+        payload: {
+          source: { type: "inline_card", agentCard },
+          auth: { type: "none" },
+        },
+      });
+      expect(response.statusCode).toBe(400);
+    }
+  });
+
+  test("rejects cards with required protocol extensions", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: {
+          type: "inline_card",
+          agentCard: makeAgentCard("none", {
+            capabilities: {
+              streaming: false,
+              extensions: [{ uri: "urn:example:required", required: true }],
+            },
+          }),
+        },
+        auth: { type: "none" },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        message:
+          "Agent Card requires an A2A extension that Archestra does not support",
+      },
+    });
+  });
+
+  test("keeps the complete generated delegation tool name within provider limits", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        name: "A very long external agent name that should never overflow a model provider tool-name limit",
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const stored = await A2aRemoteAgentModel.findByIdForOrganization({
+      id: response.json().id,
+      organizationId: ctx.organizationId,
+    });
+    expect(stored?.toolId).toBe(response.json().toolId);
+    const [tool] = await db
+      .select({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, response.json().toolId));
+    expect(tool.name).toHaveLength(64);
+    expect(tool.name).toMatch(/^agent__.+__[0-9a-f]{32}$/);
   });
 });

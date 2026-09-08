@@ -3563,7 +3563,10 @@ class ToolModel {
         // Keep the callable identity stable and globally unambiguous even when
         // two remote cards share a display name or one is renamed later. The
         // user-facing MCP title remains the current remote-agent name.
-        name: `${AGENT_TOOL_PREFIX}${slugify(target.name).slice(0, 64)}__${connectionId.replaceAll("-", "")}`,
+        name: `${AGENT_TOOL_PREFIX}${slugify(target.name).slice(
+          0,
+          64 - AGENT_TOOL_PREFIX.length - 2 - 32,
+        )}__${connectionId.replaceAll("-", "")}`,
         description: `Delegate task to external A2A agent: ${target.name}`,
         delegateToA2aConnectionId: connectionId,
         agentId: null,

@@ -12,6 +12,7 @@ export async function listA2aDelegations(
   const rows = await A2aConnectionModel.findAssignedTargets(
     agentId,
     organizationId,
+    true,
   );
   return rows.map(({ remoteAgent, connection, tool }) => ({
     remoteAgentId: remoteAgent.id,
@@ -37,6 +38,7 @@ export async function syncA2aDelegations(params: {
     A2aConnectionModel.findAssignedTargets(
       params.agentId,
       params.organizationId,
+      true,
     ),
   ]);
 

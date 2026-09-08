@@ -55,6 +55,7 @@ Choose a scenario by prefixing the first text part, or by setting
 | `[fixture:immediate]` | Direct A2A `Message` response |
 | `[fixture:task]` | Completed `Task` with a text artifact (default) |
 | `[fixture:working]` | Non-terminal task that can be fetched and canceled |
+| `[fixture:delayed]` | Working task that completes when fetched, for client polling tests |
 | `[fixture:failed]` | Failed task |
 | `[fixture:artifact]` | Completed task with text and structured-data artifact parts |
 | `[fixture:untrusted]` | Direct message containing a stable prompt-injection-shaped payload |

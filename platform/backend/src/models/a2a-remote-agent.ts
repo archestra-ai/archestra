@@ -155,6 +155,7 @@ class A2aConnectionModel {
   static async findAssignedTargets(
     agentId: string,
     organizationId: string,
+    includeDisabled = false,
   ): Promise<
     Array<{
       remoteAgent: A2aRemoteAgent;
@@ -191,7 +192,9 @@ class A2aConnectionModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.a2aRemoteAgentsTable.organizationId, organizationId),
-          eq(schema.a2aConnectionsTable.enabled, true),
+          includeDisabled
+            ? undefined
+            : eq(schema.a2aConnectionsTable.enabled, true),
           isNull(schema.toolsTable.deletedAt),
         ),
       );

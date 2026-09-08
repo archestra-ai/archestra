@@ -2,7 +2,7 @@ import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { getAgentTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
-import { A2aConnectionModel } from "@/models";
+import { A2aConnectionModel, EnvironmentModel } from "@/models";
 import AgentToolModel from "@/models/agent-tool";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test, useRouteTestApp } from "@/test";
@@ -140,6 +140,84 @@ describe("outbound A2A subagent assignments", () => {
       removed: [second.connection.id],
     });
     expect(await assignedToolIds(parent.id)).toEqual([]);
+  });
+
+  test("keeps disabled assignments visible and removable from configuration", async ({
+    makeAgent,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const parent = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const remote = await createRemoteAgent(
+      ctx.organizationId,
+      "Disabled later",
+    );
+    await AgentToolModel.createIfNotExists(parent.id, remote.toolId);
+    await A2aConnectionModel.update(remote.connection.id, { enabled: false });
+
+    const listed = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agents/${parent.id}/a2a-delegations`,
+    });
+    expect(listed.json()).toEqual([
+      expect.objectContaining({
+        connectionId: remote.connection.id,
+        enabled: false,
+      }),
+    ]);
+
+    const removed = await ctx.app.inject({
+      method: "POST",
+      url: `/api/agents/${parent.id}/a2a-delegations`,
+      payload: { connectionIds: [] },
+    });
+    expect(removed.json()).toEqual({
+      added: [],
+      removed: [remote.connection.id],
+    });
+    expect(await assignedToolIds(parent.id)).toEqual([]);
+  });
+
+  test("does not advertise outbound targets to environment-bound agents", async ({
+    makeAgent,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const environment = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Restricted outbound boundary",
+    });
+    const parent = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      agentType: "agent",
+      scope: "org",
+      environmentId: environment.id,
+    });
+    const remote = await createRemoteAgent(
+      ctx.organizationId,
+      "External target",
+    );
+    await AgentToolModel.createIfNotExists(parent.id, remote.toolId);
+
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+    });
+    expect(tools.map((tool) => tool.name)).not.toContain(
+      (
+        await db
+          .select({ name: schema.toolsTable.name })
+          .from(schema.toolsTable)
+          .where(eq(schema.toolsTable.id, remote.toolId))
+      )[0].name,
+    );
   });
 
   test("rejects missing, disabled, and cross-organization connections", async ({

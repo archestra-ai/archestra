@@ -10,7 +10,7 @@ import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
 describe("PUT /api/a2a/remote-agents/:id", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
 
-  test("updates metadata and rotates a connection credential in place", async () => {
+  test("atomically replaces a connection credential without mutating it in place", async () => {
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/a2a/remote-agents",
@@ -57,9 +57,13 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
       id: createdBody.id,
       organizationId: ctx.organizationId,
     });
-    expect(after?.connection.secretId).toBe(secretId);
-    const rotated = await secretManager().getSecret(secretId);
+    expect(after?.connection.secretId).not.toBe(secretId);
+    if (!after?.connection.secretId) {
+      throw new Error("expected a replacement connection secret");
+    }
+    const rotated = await secretManager().getSecret(after.connection.secretId);
     expect(rotated?.secret).toEqual({ credential: "credential-v2" });
+    await expect(secretManager().getSecret(secretId)).resolves.toBeNull();
   });
 
   test("returns 404 for an agent outside the current organization", async ({

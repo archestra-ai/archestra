@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   type AgentCard,
   type Message,
@@ -8,6 +9,7 @@ import {
   TaskState,
 } from "@a2a-js/sdk";
 import {
+  type Client,
   ClientFactory,
   ClientFactoryOptions,
   JsonRpcTransportFactory,
@@ -15,7 +17,7 @@ import {
 } from "@a2a-js/sdk/client";
 import type { ArchestraContext } from "@/archestra-mcp-server/types";
 import logger from "@/logging";
-import { A2aOutboundRunModel } from "@/models";
+import { A2aConnectionModel, A2aOutboundRunModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type {
   A2aConnection,
@@ -26,6 +28,8 @@ import type {
 import { safeA2aFetch } from "./a2a-outbound-registry";
 
 const OUTPUT_MODES = ["text/plain", "application/json"];
+const A2A_EXECUTION_TIMEOUT_MS = 5 * 60_000;
+const A2A_POLL_INTERVAL_MS = 250;
 
 class OutboundA2aOutcomeError extends Error {
   constructor(
@@ -79,6 +83,12 @@ export async function executeOutboundA2aDelegation(params: {
     targetNameSnapshot: target.remoteAgent.name,
     interfaceSnapshot: target.connection.selectedInterface,
   });
+  let client: Client | null = null;
+  let activeTaskId: string | null = null;
+  const executionTimeout = AbortSignal.timeout(A2A_EXECUTION_TIMEOUT_MS);
+  const executionSignal = context.abortSignal
+    ? AbortSignal.any([context.abortSignal, executionTimeout])
+    : executionTimeout;
 
   try {
     const fetchImpl = await buildAuthenticatedFetch(target.connection);
@@ -94,10 +104,10 @@ export async function executeOutboundA2aDelegation(params: {
         ],
       },
     );
-    const client = await new ClientFactory(options).createFromAgentCard(
+    client = await new ClientFactory(options).createFromAgentCard(
       cardPinnedToSelectedInterface(target),
     );
-    const result = await client.sendMessage(
+    let result = await client.sendMessage(
       {
         tenant: target.connection.selectedInterface.tenant ?? "",
         message: {
@@ -120,14 +130,32 @@ export async function executeOutboundA2aDelegation(params: {
         configuration: {
           acceptedOutputModes: OUTPUT_MODES,
           taskPushNotificationConfig: undefined,
-          returnImmediately: false,
+          // Receive and persist the remote task identity promptly, then poll
+          // through the SDK. A remote agent is allowed to outlive one HTTP
+          // request; the overall delegation still has a bounded deadline.
+          returnImmediately: true,
         },
         metadata: undefined,
       },
-      { signal: context.abortSignal },
+      { signal: executionSignal },
     );
 
-    const outcome = normalizeResult(result);
+    let outcome = normalizeResult(result);
+    if (isTask(result) && !isTerminalState(outcome.state)) {
+      activeTaskId = result.id;
+      await updateRunFromOutcome(run.id, outcome);
+      result = await pollTaskToTerminal({
+        client,
+        task: result,
+        tenant: target.connection.selectedInterface.tenant ?? "",
+        signal: executionSignal,
+        onProgress: async (task) => {
+          await updateRunFromOutcome(run.id, normalizeResult(task));
+        },
+      });
+      outcome = normalizeResult(result);
+    }
+    activeTaskId = null;
     await A2aOutboundRunModel.update(run.id, {
       remoteTaskId: outcome.remoteTaskId,
       remoteContextId: outcome.remoteContextId,
@@ -155,8 +183,24 @@ export async function executeOutboundA2aDelegation(params: {
         outcome.statusReason ?? `Outbound A2A agent returned ${outcome.state}`,
       );
     }
+    await A2aConnectionModel.update(target.connection.id, {
+      lastVerifiedAt: new Date(),
+      lastVerificationError: null,
+    }).catch(() => {});
     return outcome.text || "The external agent returned no text or data.";
   } catch (error) {
+    if (client && activeTaskId) {
+      await client
+        .cancelTask(
+          {
+            tenant: target.connection.selectedInterface.tenant ?? "",
+            id: activeTaskId,
+            metadata: undefined,
+          },
+          { signal: AbortSignal.timeout(5_000) },
+        )
+        .catch(() => {});
+    }
     // A protocol response was already persisted with its precise remote state
     // and identifiers. Transport/SDK failures have no such outcome and become
     // a local failed run instead.
@@ -181,6 +225,39 @@ export async function executeOutboundA2aDelegation(params: {
     );
     throw error;
   }
+}
+
+async function pollTaskToTerminal(params: {
+  client: Client;
+  task: Task;
+  tenant: string;
+  signal: AbortSignal;
+  onProgress: (task: Task) => Promise<void>;
+}): Promise<Task> {
+  let task = params.task;
+  while (!isTerminalState(taskState(task.status?.state))) {
+    await delay(A2A_POLL_INTERVAL_MS, undefined, { signal: params.signal });
+    task = await params.client.getTask(
+      { tenant: params.tenant, id: task.id, historyLength: 10 },
+      { signal: params.signal },
+    );
+    await params.onProgress(task);
+  }
+  return task;
+}
+
+async function updateRunFromOutcome(
+  runId: string,
+  outcome: ReturnType<typeof normalizeResult>,
+): Promise<void> {
+  await A2aOutboundRunModel.update(runId, {
+    remoteTaskId: outcome.remoteTaskId,
+    remoteContextId: outcome.remoteContextId,
+    state: outcome.state,
+    statusReason: outcome.statusReason,
+    errorCode: null,
+    completedAt: null,
+  });
 }
 
 async function buildAuthenticatedFetch(

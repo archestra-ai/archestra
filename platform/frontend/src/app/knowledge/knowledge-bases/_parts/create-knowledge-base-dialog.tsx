@@ -17,11 +17,10 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useCreateKnowledgeBase } from "@/lib/knowledge/knowledge-base.query";
-
-interface CreateKnowledgeBaseFormValues {
-  name: string;
-  description: string;
-}
+import {
+  KnowledgeBaseAccessFields,
+  type KnowledgeBaseFormValues,
+} from "./knowledge-base-access-fields";
 
 export function CreateKnowledgeBaseDialog({
   open,
@@ -34,19 +33,23 @@ export function CreateKnowledgeBaseDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
-  const form = useForm<CreateKnowledgeBaseFormValues>({
+  const form = useForm<KnowledgeBaseFormValues>({
     defaultValues: {
       name: "",
       description: "",
+      visibility: "org-wide",
+      teamIds: [],
     },
   });
 
-  const handleSubmit = async (values: CreateKnowledgeBaseFormValues) => {
+  const handleSubmit = async (values: KnowledgeBaseFormValues) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const result = await createKnowledgeBase.mutateAsync({
       name: values.name,
       ...(values.description && { description: values.description }),
       labels: finalLabels,
+      visibility: values.visibility,
+      teamIds: values.visibility === "team-scoped" ? values.teamIds : [],
     });
     if (result) {
       form.reset();
@@ -100,6 +103,8 @@ export function CreateKnowledgeBaseDialog({
                 </FormItem>
               )}
             />
+
+            <KnowledgeBaseAccessFields form={form} />
 
             <AdvancedLabelsSection
               ref={labelsRef}

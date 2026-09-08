@@ -1580,6 +1580,8 @@ Required RBAC permission: `knowledgeSource:create`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
+| `visibility` | `"private" \| "org-wide" \| "team-scoped"` | No |  |
+| `teamIds` | `string[]` | No |  |
 | `name` | `string` | Yes | Name of the knowledge base. |
 | `description` | `string \| null` | No | Description of the knowledge base. |
 
@@ -1640,6 +1642,8 @@ Required RBAC permission: `knowledgeSource:update`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
+| `visibility` | `"private" \| "org-wide" \| "team-scoped"` | No |  |
+| `teamIds` | `string[]` | No |  |
 | `id` | `string` | Yes | Knowledge base ID. |
 | `name` | `string` | No | New knowledge base name. |
 | `description` | `string \| null` | No | New knowledge base description. |

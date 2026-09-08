@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useHasPermissions,
   useMissingPermissions,
+  useSession,
 } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
@@ -63,6 +64,8 @@ vi.mock("@/lib/auth/auth.query");
 // is the shared component's contract, not this page's.
 vi.mock("@/components/resource-scope-filter", () => ({
   ResourceDeletedStatusFilter: () => <div>status filter</div>,
+  ResourceScopeFilter: () => <div>scope filter</div>,
+  useScopeFilterParams: () => ({ hasActiveScopeFilters: false }),
 }));
 
 vi.mock("@/components/delete-confirm-dialog", () => ({
@@ -140,6 +143,9 @@ beforeEach(() => {
   vi.mocked(useFeature).mockReturnValue(
     undefined as ReturnType<typeof useFeature>,
   );
+  vi.mocked(useSession).mockReturnValue({ data: null } as ReturnType<
+    typeof useSession
+  >);
   vi.mocked(useIsGlobalAdmin).mockReturnValue({
     isGlobalAdmin: true,
     isLoading: false,
@@ -171,6 +177,8 @@ beforeEach(() => {
               connectorType: "confluence",
             },
           ],
+          visibility: "org-wide",
+          teamIds: [],
           totalDocsIndexed: 12,
           assignedAgents: [{ id: "agent-1", name: "Support", agentType: "a" }],
         },
@@ -254,6 +262,8 @@ describe("KnowledgeBasesPage", () => {
             name: "Handbook",
             description: null,
             connectors: [],
+            visibility: "org-wide",
+            teamIds: [],
             totalDocsIndexed: 0,
             assignedAgents: [],
           },
@@ -331,6 +341,8 @@ describe("KnowledgeBasesPage", () => {
             name: "Trashed KB",
             description: null,
             connectors: [],
+            visibility: "org-wide",
+            teamIds: [],
             totalDocsIndexed: 0,
             assignedAgents: [],
             deletedAt,

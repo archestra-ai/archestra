@@ -27,6 +27,10 @@ import {
   TeamModel,
 } from "@/models";
 import type { KbFileViewer } from "@/models/kb-file";
+import {
+  findAccessibleKnowledgeBase,
+  findAccessibleKnowledgeBasesForFiles,
+} from "@/services/knowledge-base-access";
 import { readRowBytes } from "@/skills-sandbox/file-storage";
 import {
   ApiError,
@@ -120,7 +124,11 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const fileIds = items.map((file) => file.id);
       const [knowledgeBases, teamIds, creators, labelsByFile] =
         await Promise.all([
-          KbFileModel.findKnowledgeBasesForFiles(fileIds),
+          findAccessibleKnowledgeBasesForFiles({
+            fileIds,
+            organizationId: request.organizationId,
+            userId: request.user.id,
+          }),
           KbFileModel.findTeamIdsForFiles(fileIds),
           CreatedByModel.resolve(items.map((file) => file.uploadedBy)),
           KbFileLabelModel.getLabelsForMany(fileIds),
@@ -376,6 +384,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.knowledgeBaseId) {
         const knowledgeBaseId = await assertKnowledgeBaseInOrg({
           knowledgeBaseId: body.knowledgeBaseId,
+          userId: user.id,
           organizationId,
         });
         await indexFilesIntoKnowledgeBase({
@@ -385,9 +394,13 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           uploaderEmailById: await KbFileModel.findUploaderEmails([file.id]),
         });
         knowledgeBases.push(
-          ...((await KbFileModel.findKnowledgeBasesForFiles([file.id])).get(
-            file.id,
-          ) ?? []),
+          ...((
+            await findAccessibleKnowledgeBasesForFiles({
+              fileIds: [file.id],
+              organizationId,
+              userId: user.id,
+            })
+          ).get(file.id) ?? []),
         );
       }
 
@@ -486,7 +499,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(KbFileSchema),
       },
     },
-    async ({ params, body, organizationId }) => {
+    async ({ params, body, organizationId, user }) => {
       if (body.directoryId !== undefined) {
         await assertDirectoryInOrg({
           directoryId: body.directoryId,
@@ -525,9 +538,11 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await KbFileLabelModel.syncLabels(file.id, bodyLabels);
       }
 
-      const knowledgeBases = await KbFileModel.findKnowledgeBasesForFiles([
-        file.id,
-      ]);
+      const knowledgeBases = await findAccessibleKnowledgeBasesForFiles({
+        fileIds: [file.id],
+        organizationId,
+        userId: user.id,
+      });
       const {
         data: _data,
         objectKey: _objectKey,
@@ -736,6 +751,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ).id
         : await assertKnowledgeBaseInOrg({
             knowledgeBaseId: body.knowledgeBaseId as string,
+            userId: viewer.userId,
             organizationId,
           });
 
@@ -1085,20 +1101,11 @@ async function assertTeamsInOrg(params: {
 async function assertKnowledgeBaseInOrg(params: {
   knowledgeBaseId: string;
   organizationId: string;
+  userId: string;
 }): Promise<string> {
-  const knowledgeBase = await KnowledgeBaseModel.findById(
-    params.knowledgeBaseId,
-  );
-  // `findById` is org-agnostic, so the tenancy check is this function's job.
-  // Same 404 either way: a caller must not be able to tell a knowledge base in
-  // another organization apart from one that does not exist.
-  if (
-    !knowledgeBase ||
-    knowledgeBase.organizationId !== params.organizationId
-  ) {
-    throw new ApiError(404, "Knowledge base not found");
-  }
-  return knowledgeBase.id;
+  return (
+    await findAccessibleKnowledgeBase({ ...params, id: params.knowledgeBaseId })
+  ).id;
 }
 
 export default knowledgeFileRoutes;

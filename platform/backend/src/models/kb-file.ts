@@ -221,7 +221,10 @@ class KbFileModel {
   }
 
   /** Knowledge bases a file is currently indexed into, batched for a listing. */
-  static async findKnowledgeBasesForFiles(kbFileIds: string[]) {
+  static async findKnowledgeBasesForFiles(
+    kbFileIds: string[],
+    viewer?: KbFileViewer,
+  ) {
     if (kbFileIds.length === 0)
       return new Map<string, { id: string; name: string }[]>();
 
@@ -253,7 +256,31 @@ class KbFileModel {
           schema.kbUploadConnectorsTable.knowledgeBaseId,
         ),
       )
-      .where(inArray(schema.kbFileDocumentsTable.kbFileId, kbFileIds));
+      .where(
+        and(
+          inArray(schema.kbFileDocumentsTable.kbFileId, kbFileIds),
+          isNull(schema.knowledgeBasesTable.deletedAt),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          viewer && !viewer.canManageAll
+            ? or(
+                eq(schema.knowledgeBasesTable.visibility, "org-wide"),
+                and(
+                  eq(schema.knowledgeBasesTable.visibility, "private"),
+                  eq(schema.knowledgeBasesTable.createdBy, viewer.userId),
+                ),
+                ...viewer.teamIds.map((id) =>
+                  and(
+                    eq(schema.knowledgeBasesTable.visibility, "team-scoped"),
+                    sql`${schema.knowledgeBasesTable.teamIds} @> ${JSON.stringify([id])}::jsonb`,
+                  ),
+                ),
+              )
+            : undefined,
+          // SPDX-SnippetEnd
+        ),
+      );
 
     const byFile = new Map<string, { id: string; name: string }[]>();
     for (const row of rows) {

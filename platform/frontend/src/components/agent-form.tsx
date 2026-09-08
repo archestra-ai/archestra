@@ -164,6 +164,11 @@ import {
 type AgentVisibilityChoice = AgentScope | "user";
 
 import {
+  useA2aRemoteAgents,
+  useAgentA2aDelegations,
+  useSyncAgentA2aDelegations,
+} from "@/lib/a2a-remote-agents.query";
+import {
   useCreateProfile,
   useDelegationTargetAgents,
   useDeleteProfile,
@@ -564,6 +569,124 @@ function SubagentsEditor({
             : undefined
         }
       />
+    </div>
+  );
+}
+
+function ExternalA2aSubagentsEditor({
+  agentId,
+  readOnly,
+  selectedConnectionIds,
+  onSelectionChange,
+  assignmentsLoaded,
+  assignmentsError,
+}: {
+  agentId?: string;
+  readOnly: boolean;
+  selectedConnectionIds: string[];
+  onSelectionChange: (ids: string[]) => void;
+  assignmentsLoaded: boolean;
+  assignmentsError: boolean;
+}) {
+  const registry = useA2aRemoteAgents({ enabled: Boolean(agentId) });
+
+  if (!agentId) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Save this agent before assigning an external A2A subagent.
+      </p>
+    );
+  }
+  if (assignmentsError || registry.isError) {
+    return (
+      <p role="alert" className="text-xs text-destructive">
+        External A2A assignments could not be loaded. Reload before changing
+        them.
+      </p>
+    );
+  }
+  if (!assignmentsLoaded || registry.isPending) {
+    return (
+      <p className="text-xs text-muted-foreground">Loading external agents…</p>
+    );
+  }
+
+  const selected = (registry.data ?? []).filter((item) =>
+    selectedConnectionIds.includes(item.connection.id),
+  );
+  const items: AssignmentComboboxItem[] = (registry.data ?? []).map((item) => ({
+    id: item.connection.id,
+    name: item.name,
+    description: item.description ?? undefined,
+    badge: "External A2A",
+    disabled: readOnly || !item.connection.enabled,
+    disabledReason: !item.connection.enabled
+      ? "Connection disabled"
+      : undefined,
+  }));
+  const toggle = (connectionId: string) => {
+    if (readOnly) return;
+    onSelectionChange(
+      selectedConnectionIds.includes(connectionId)
+        ? selectedConnectionIds.filter((id) => id !== connectionId)
+        : [...selectedConnectionIds, connectionId],
+    );
+  };
+
+  return (
+    <div className="space-y-2 border-t pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">External A2A</p>
+          <p className="text-xs text-muted-foreground">
+            Always explicitly assigned, including when local subagents use All
+            mode.
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" asChild>
+          <Link href="/a2a/agents" target="_blank" rel="noopener noreferrer">
+            Manage connections
+          </Link>
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {selected.map((item) => (
+          <Badge
+            key={item.connection.id}
+            variant="secondary"
+            className="gap-1.5 py-1"
+          >
+            {item.name}
+            <span className="rounded border px-1 text-[9px] uppercase tracking-wide">
+              A2A
+            </span>
+            {!readOnly && (
+              <button
+                type="button"
+                aria-label={`Remove ${item.name}`}
+                className="rounded-sm hover:bg-muted"
+                onClick={() => toggle(item.connection.id)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </Badge>
+        ))}
+        {!readOnly && (
+          <AssignmentCombobox
+            items={items}
+            selectedIds={selectedConnectionIds}
+            onToggle={toggle}
+            label="Add external"
+            placeholder="Search external A2A agents..."
+            emptyMessage="No external A2A agents connected."
+            createAction={{
+              label: "Connect an External A2A Agent",
+              href: "/a2a/agents",
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -997,6 +1120,12 @@ export function AgentForm({
   // turns a single failed GET into a save that deletes what it could not read.
   const { data: currentDelegations = [], isSuccess: delegationsLoaded } =
     useAgentDelegations(supportsSubagents ? agent?.id : undefined);
+  const {
+    data: currentA2aDelegations = [],
+    isSuccess: a2aDelegationsLoaded,
+    isError: a2aDelegationsError,
+  } = useAgentA2aDelegations(supportsSubagents ? agent?.id : undefined);
+  const syncA2aDelegations = useSyncAgentA2aDelegations();
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
   const syncKnowledgeSourceExclusions =
     useUpdateAgentKnowledgeSourceExclusions();
@@ -1182,6 +1311,9 @@ export function AgentForm({
   const [suggestedPromptsOpen, setSuggestedPromptsOpen] = useState(false);
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
     useState<string[]>([]);
+  const [selectedA2aConnectionIds, setSelectedA2aConnectionIds] = useState<
+    string[]
+  >([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   // People the agent is shared with by name. Stored beside the `personal`
   // scope, so the control below reads (scope, userIds) as a fourth choice.
@@ -1669,6 +1801,7 @@ export function AgentForm({
         // from its own request, and clearing here would instead wipe pending
         // edits on every agent refetch.
         setSelectedDelegationTargetIds([]);
+        setSelectedA2aConnectionIds([]);
         setDisabledSubagentIds([]);
         // A new gateway publishes nothing until an admin opts in, so Custom
         // with an empty set is the default rather than Auto.
@@ -1710,6 +1843,18 @@ export function AgentForm({
       );
     }
   }, [agentId, currentDelegationIds, delegationsLoaded]);
+
+  const currentA2aConnectionIds = currentA2aDelegations
+    .map((assignment) => assignment.connectionId)
+    .join(",");
+
+  useEffect(() => {
+    if (agentId && a2aDelegationsLoaded) {
+      setSelectedA2aConnectionIds(
+        currentA2aConnectionIds.split(",").filter(Boolean),
+      );
+    }
+  }, [agentId, currentA2aConnectionIds, a2aDelegationsLoaded]);
 
   // Seed the Auto-mode disabled-subagents set once the exclusions load. Kept out
   // of the agent reset path (same reasoning as delegations above) so a refetch
@@ -2443,6 +2588,28 @@ export function AgentForm({
         });
       }
 
+      // External agents follow the same Save/Cancel lifecycle as local
+      // subagents. The successful read is required because this endpoint is a
+      // full replace; a failed GET must never turn into an empty write.
+      if (
+        agent &&
+        supportsSubagents &&
+        !isBuiltIn &&
+        savedAgentId &&
+        a2aDelegationsLoaded &&
+        hasUnsavedChanges(
+          currentA2aDelegations
+            .map((assignment) => assignment.connectionId)
+            .sort(),
+          [...selectedA2aConnectionIds].sort(),
+        )
+      ) {
+        await syncA2aDelegations.mutateAsync({
+          agentId: savedAgentId,
+          connectionIds: selectedA2aConnectionIds,
+        });
+      }
+
       // Persist the Auto-mode disabled-subagents set only when it changed (same
       // no-op-audit reasoning as delegations, and edit-mode-only for the same
       // reason). Skipped for built-ins.
@@ -2551,11 +2718,15 @@ export function AgentForm({
     deleteAgent,
     delegationTargetIdsToSave,
     currentDelegations,
+    currentA2aDelegations,
+    selectedA2aConnectionIds,
+    a2aDelegationsLoaded,
     currentSubagentExclusions,
     disabledSubagentIdsToSave,
     updateAgent,
     createAgent,
     syncDelegations,
+    syncA2aDelegations,
     syncSubagentExclusions,
     currentKnowledgeSourceExclusions,
     disabledKnowledgeSourceIds,
@@ -2691,6 +2862,13 @@ export function AgentForm({
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
         [...selectedDelegationTargetIds].sort(),
       ) ||
+      (a2aDelegationsLoaded &&
+        hasUnsavedChanges(
+          currentA2aDelegations
+            .map((assignment) => assignment.connectionId)
+            .sort(),
+          [...selectedA2aConnectionIds].sort(),
+        )) ||
       // Disabled subagents load async, so they're diffed against the fetched
       // baseline (same pattern as delegations above).
       hasUnsavedChanges(
@@ -3573,6 +3751,14 @@ export function AgentForm({
                           />
                         </div>
                       )}
+                      <ExternalA2aSubagentsEditor
+                        agentId={agent?.id}
+                        readOnly={readOnly}
+                        selectedConnectionIds={selectedA2aConnectionIds}
+                        onSelectionChange={setSelectedA2aConnectionIds}
+                        assignmentsLoaded={a2aDelegationsLoaded}
+                        assignmentsError={a2aDelegationsError}
+                      />
                     </div>
                   )}
                 </SettingsSection>

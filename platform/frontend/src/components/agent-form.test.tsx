@@ -60,6 +60,9 @@ const {
   useInternalMcpCatalogMock,
   useAgentRuntimePreflightMock,
   useOrganizationDefaultModelMock,
+  useA2aRemoteAgentsMock,
+  useAgentA2aDelegationsMock,
+  useSyncAgentA2aDelegationsMock,
   saveChannelChangesMock,
 } = vi.hoisted(() => ({
   /** Stands in for what the agent write hooks reject with once they toasted. */
@@ -148,6 +151,29 @@ const {
     }),
   ),
   useSyncAgentDelegationsMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
+  useA2aRemoteAgentsMock: vi.fn(
+    (): { data: unknown[]; isPending: boolean } => ({
+      data: [],
+      isPending: false,
+    }),
+  ),
+  useAgentA2aDelegationsMock: vi.fn(
+    (): {
+      data: unknown[];
+      isPending: boolean;
+      isSuccess: boolean;
+      isError: boolean;
+    } => ({
+      data: [],
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+    }),
+  ),
+  useSyncAgentA2aDelegationsMock: vi.fn(() => ({
     mutateAsync: vi.fn(),
     isPending: false,
   })),
@@ -252,6 +278,12 @@ vi.mock("@/lib/agent-runtime.query", () => ({
 
 vi.mock("@/lib/hooks/use-organization-default-model", () => ({
   useOrganizationDefaultModel: useOrganizationDefaultModelMock,
+}));
+
+vi.mock("@/lib/a2a-remote-agents.query", () => ({
+  useA2aRemoteAgents: useA2aRemoteAgentsMock,
+  useAgentA2aDelegations: useAgentA2aDelegationsMock,
+  useSyncAgentA2aDelegations: useSyncAgentA2aDelegationsMock,
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -819,6 +851,17 @@ vi.mock("@/components/ui/tooltip", () => ({
 
 beforeEach(() => {
   saveChannelChangesMock.mockResolvedValue(true);
+  useA2aRemoteAgentsMock.mockReturnValue({ data: [], isPending: false });
+  useAgentA2aDelegationsMock.mockReturnValue({
+    data: [],
+    isPending: false,
+    isSuccess: true,
+    isError: false,
+  });
+  useSyncAgentA2aDelegationsMock.mockReturnValue({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  });
   vi.mocked(useConnectors).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useConnectors>);
@@ -1003,6 +1046,100 @@ describe("AgentForm delegation state", () => {
     expect(syncDelegations).toHaveBeenCalledWith(
       expect.objectContaining({ targetAgentIds: [targetAgent.id] }),
     );
+  });
+
+  it("assigns an external A2A subagent explicitly even while local subagents use All mode", async () => {
+    const user = userEvent.setup();
+    const syncExternal = vi.fn();
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useA2aRemoteAgentsMock.mockReturnValue({
+      data: [
+        {
+          id: "remote-agent-1",
+          name: "External Compliance Agent",
+          description: "Checks policy requirements",
+          connection: { id: "connection-1", enabled: true },
+        },
+      ],
+      isPending: false,
+    });
+    useSyncAgentA2aDelegationsMock.mockReturnValue({
+      mutateAsync: syncExternal,
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    expect(
+      screen.getByText(
+        "Always explicitly assigned, including when local subagents use All mode.",
+      ),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Add External Compliance Agent" }),
+    );
+    expect(syncExternal).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() =>
+      expect(syncExternal).toHaveBeenCalledWith({
+        agentId: baseAgent.id,
+        connectionIds: ["connection-1"],
+      }),
+    );
+  });
+
+  it("does not offer external A2A assignment before a new agent has been saved", () => {
+    useA2aRemoteAgentsMock.mockReturnValue({
+      data: [
+        {
+          id: "remote-agent-1",
+          name: "External Compliance Agent",
+          description: null,
+          connection: { id: "connection-1", enabled: true },
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" />);
+
+    expect(
+      screen.getByText(
+        "Save this agent before assigning an external A2A subagent.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add External Compliance Agent" }),
+    ).not.toBeInTheDocument();
+    expect(useAgentA2aDelegationsMock).toHaveBeenCalledWith(undefined);
+  });
+
+  it("does not replace external assignments after their read fails", async () => {
+    const user = userEvent.setup();
+    const syncExternal = vi.fn();
+    useAgentA2aDelegationsMock.mockReturnValue({
+      data: [],
+      isPending: false,
+      isSuccess: false,
+      isError: true,
+    });
+    useSyncAgentA2aDelegationsMock.mockReturnValue({
+      mutateAsync: syncExternal,
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "External A2A assignments could not be loaded.",
+    );
+    expect(
+      screen.queryByRole("button", { name: /add external/i }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() => expect(syncExternal).not.toHaveBeenCalled());
   });
 
   it("omits Subagents on an LLM proxy, which has no MCP surface to advertise one on", () => {

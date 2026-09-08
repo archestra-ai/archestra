@@ -157,6 +157,13 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/agents"),
       },
       {
+        title: "External A2A",
+        url: "/a2a/agents",
+        icon: Network,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/a2a/agents"),
+      },
+      {
         title: "Skills",
         url: "/skills",
         icon: Sparkles,

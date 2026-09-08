@@ -18,6 +18,7 @@
     "lint:fix:unsafe": "turbo lint:fix:unsafe",
     "type-check": "turbo type-check",
     "test": "turbo test",
+    "test:release-skill": "node --test ../.agents/skills/managing-archestra-releases/test/release-harness.test.mjs",
     "knip": "turbo knip",
     "test:e2e": "turbo test:e2e",
     "test:e2e:ui": "turbo test:e2e:ui",

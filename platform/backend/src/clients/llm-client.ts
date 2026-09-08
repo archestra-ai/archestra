@@ -1080,11 +1080,23 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       (direct
         ? buildBedrockProvider({ apiKey, baseUrl: baseURL, headers, fetch })
         : createAmazonBedrock({
-            apiKey,
+            // The proxy resolves AWS credentials. Keep the SDK from trying
+            // SigV4 on the loopback hop when chat uses a secretless IAM key.
+            apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
             region: getBedrockRegion(),
             baseURL,
             headers,
-            fetch,
+            fetch: apiKey
+              ? fetch
+              : (input, init) => {
+                  const proxyHeaders = new Headers(init?.headers);
+                  // Preserve keyless auth so the proxy selects its IAM chain.
+                  proxyHeaders.delete("authorization");
+                  return (fetch ?? globalThis.fetch)(input, {
+                    ...init,
+                    headers: proxyHeaders,
+                  });
+                },
           }))(modelName),
     defaultBaseUrl: config.llm.bedrock.baseUrl,
     apiKeyRequiredMessage: isBedrockIamAuthEnabled()

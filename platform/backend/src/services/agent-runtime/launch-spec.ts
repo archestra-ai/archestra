@@ -1,11 +1,8 @@
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   isDefaultBrandedAppName,
-  MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
   RUN_ID_HEADER,
-  requiresOpenAiResponsesApi,
-  requiresResponsesApi,
   resolveClaudeContextVariant,
   SESSION_ID_HEADER,
   SUBSCRIPTION_CREDENTIALS,
@@ -33,10 +30,10 @@ import type {
 } from "@/types";
 import { AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE, ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
 import { resolveAgentRuntimeCredentials } from "./credentials";
 import { taskWithAgentRunInputs } from "./input-files";
+import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
 import {
   AGENT_RUNTIME_STEER_FIFO,
   constructStableRunName,
@@ -142,20 +139,11 @@ export async function buildAgentRunLaunchSpec(params: {
       "The Agent for this Agent Runtime run no longer exists",
     );
   }
-  const llm = await resolveConversationLlmSelectionForAgent({
+  const { llm, selectedModel } = await preflightAgentRuntimeModelCompatibility({
+    runtime: params.runtime,
     agent,
     organizationId: params.organizationId,
     userId: actorUserId ?? "system",
-    includeMemberChatDefault: false,
-  });
-  const selectedModel = llm.modelId
-    ? await ModelModel.findById(llm.modelId)
-    : null;
-  assertInferenceProtocolSupported({
-    protocol: params.runtime.inferenceProtocol,
-    provider: llm.selectedProvider,
-    model: llm.selectedModel,
-    supportedEndpoints: selectedModel?.supportedEndpoints,
   });
 
   const claudeCodeSubscriptionToken =
@@ -533,40 +521,4 @@ function withNativeClientCredentialAliases(
   return credentials.GITHUB_TOKEN && !credentials.GH_TOKEN
     ? { ...credentials, GH_TOKEN: credentials.GITHUB_TOKEN }
     : credentials;
-}
-
-function assertInferenceProtocolSupported(params: {
-  protocol: ResolvedAgentRuntime["inferenceProtocol"];
-  provider: SupportedProvider;
-  model: string;
-  supportedEndpoints: string[] | null | undefined;
-}): void {
-  if (params.protocol === "anthropic" && params.provider !== "anthropic") {
-    throw new ApiError(
-      409,
-      `This Agent Runtime image expects the Anthropic API, but the Agent's selected model uses ${providerDisplayNames[params.provider]}. Choose an Anthropic model or use an OpenAI-compatible Agent Runtime image.`,
-    );
-  }
-  if (
-    params.protocol !== "anthropic" &&
-    !new Set<SupportedProvider>(MODEL_ROUTER_SUPPORTED_PROVIDERS).has(
-      params.provider,
-    )
-  ) {
-    throw new ApiError(
-      409,
-      `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this Agent Runtime image.`,
-    );
-  }
-  if (
-    params.protocol === "openai_chat" &&
-    (requiresResponsesApi(params.supportedEndpoints) ||
-      (params.provider === "openai" &&
-        requiresOpenAiResponsesApi(params.model)))
-  ) {
-    throw new ApiError(
-      409,
-      `This Agent Runtime image uses Chat Completions, but model "${params.model}" requires the Responses API. Choose a Chat Completions model or an image that uses OpenAI Responses.`,
-    );
-  }
 }

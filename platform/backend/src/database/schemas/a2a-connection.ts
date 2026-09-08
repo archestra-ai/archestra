@@ -45,7 +45,9 @@ const a2aConnectionsTable = pgTable(
       .notNull()
       .default({}),
     secretId: uuid("secret_id").references(() => secretsTable.id, {
-      onDelete: "set null",
+      // Authenticated connections require a secret. Callers must remove or
+      // reconfigure the connection before deleting that secret.
+      onDelete: "restrict",
     }),
     enabled: boolean("enabled").notNull().default(true),
     lastVerifiedAt: timestamp("last_verified_at", { mode: "date" }),

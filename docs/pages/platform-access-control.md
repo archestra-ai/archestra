@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-07
+lastUpdated: 2026-09-08
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -126,15 +126,11 @@ Users with `ac:create` permission can create custom roles by selecting specific 
 
 ### Multiple Roles And Team Grants
 
-Users, service accounts, and invitations can have multiple organization roles.
-Their permissions combine: a grant from any assigned role allows that action.
-Teams can also hold organization roles.
-Members inherit these grants from their own teams and every ancestor team.
-Removing a grant or membership removes that source of permissions.
-Other assignments can still grant the same permission.
+Users and service accounts can have multiple organization roles. Their permissions combine: a grant from any assigned role allows that action.
 
-The account permissions page identifies every direct role and team granting each permission.
-Team membership roles remain separate from organization roles assigned to a team.
+Teams can also hold organization roles. Members inherit these grants from their own teams and every ancestor in the [team hierarchy](#team-hierarchies). Removing a role or membership removes its grants, unless another assignment provides the same permissions.
+
+The account permissions page shows each permission's sources when you hover over or focus its badge. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
 
 #### No privilege escalation
 

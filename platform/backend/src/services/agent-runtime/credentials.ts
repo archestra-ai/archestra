@@ -17,6 +17,8 @@ import type {
   ResolvedAgentRuntime,
 } from "@/types";
 import { ApiError } from "@/types";
+import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import { usesClaudeCodeBedrock } from "./model-compatibility";
 
 /**
  * Outcome of resolving one Agent Runtime run's declared credentials for one user.
@@ -39,11 +41,14 @@ type AgentRuntimeCredentialResolution = {
  * blank value — an agent handed an empty token fails far from the cause.
  */
 export async function resolveAgentRuntimeCredentials(params: {
-  runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId">;
+  runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId"> &
+    Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
-  const { shared, perUser } = splitDeclarations(params.runtime.credentials);
+  const { shared, perUser } = splitDeclarations(
+    await applicableCredentials(params),
+  );
   const env: Record<string, string> = {};
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
@@ -110,7 +115,8 @@ export async function resolveAgentRuntimeCredentials(params: {
  * rather than failing on click.
  */
 export async function preflightAgentRuntimeCredentials(params: {
-  runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId">;
+  runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId"> &
+    Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
 }): Promise<{
@@ -118,7 +124,9 @@ export async function preflightAgentRuntimeCredentials(params: {
   missing: MissingAgentRuntimeCredential[];
   misconfigured: MissingAgentRuntimeCredential[];
 }> {
-  const { shared, perUser } = splitDeclarations(params.runtime.credentials);
+  const { shared, perUser } = splitDeclarations(
+    await applicableCredentials(params),
+  );
   const configured: string[] = [];
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
@@ -409,4 +417,38 @@ async function deleteSecretQuietly(secretId: string): Promise<void> {
       "Failed to delete replaced Agent Runtime credential secret",
     );
   }
+}
+
+// Bedrock uses the selected provider credential; a saved Anthropic subscription
+// declaration must neither block the run nor inject an unrelated OAuth token.
+async function applicableCredentials(params: {
+  runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials"> &
+    Partial<Pick<ResolvedAgentRuntime, "command">>;
+  organizationId: string;
+  userId: string | null;
+}) {
+  if (
+    params.runtime.command?.[0] !== "archestra-claude-code" ||
+    !params.runtime.credentials?.some(
+      ({ key }) => key === "CLAUDE_CODE_OAUTH_TOKEN",
+    )
+  ) {
+    return params.runtime.credentials;
+  }
+  const agent = await AgentModel.findById(params.runtime.agentId);
+  if (!agent) return params.runtime.credentials;
+  const llm = await resolveConversationLlmSelectionForAgent({
+    agent,
+    organizationId: params.organizationId,
+    userId: params.userId ?? "system",
+    includeMemberChatDefault: false,
+  });
+  return usesClaudeCodeBedrock({
+    runtime: params.runtime,
+    provider: llm.selectedProvider,
+  })
+    ? params.runtime.credentials.filter(
+        ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
+      )
+    : params.runtime.credentials;
 }

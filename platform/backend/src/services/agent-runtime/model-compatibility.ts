@@ -16,7 +16,8 @@ import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution"
  * callers can use it before creating a detached task.
  */
 export async function preflightAgentRuntimeModelCompatibility(params: {
-  runtime: Pick<ResolvedAgentRuntime, "inferenceProtocol">;
+  runtime: Pick<ResolvedAgentRuntime, "inferenceProtocol"> &
+    Partial<Pick<ResolvedAgentRuntime, "command">>;
   agent: Pick<Agent, "llmApiKeyId" | "modelId">;
   organizationId: string;
   userId: string;
@@ -32,6 +33,7 @@ export async function preflightAgentRuntimeModelCompatibility(params: {
     : null;
   assertInferenceProtocolSupported({
     protocol: params.runtime.inferenceProtocol,
+    command: params.runtime.command,
     provider: llm.selectedProvider,
     model: llm.selectedModel,
     supportedEndpoints: selectedModel?.supportedEndpoints,
@@ -40,13 +42,39 @@ export async function preflightAgentRuntimeModelCompatibility(params: {
   return { llm, selectedModel };
 }
 
+/** Claude Code can speak Bedrock's native Anthropic InvokeModel transport. */
+export function usesClaudeCodeBedrock(params: {
+  runtime: Partial<Pick<ResolvedAgentRuntime, "command">>;
+  provider: SupportedProvider;
+}): boolean {
+  return (
+    params.runtime.command?.[0] === "archestra-claude-code" &&
+    params.provider === "bedrock"
+  );
+}
+
 function assertInferenceProtocolSupported(params: {
   protocol: ResolvedAgentRuntime["inferenceProtocol"];
+  command: ResolvedAgentRuntime["command"] | undefined;
   provider: SupportedProvider;
   model: string;
   supportedEndpoints: string[] | null | undefined;
 }): void {
-  if (params.protocol === "anthropic" && params.provider !== "anthropic") {
+  const claudeCodeBedrock = usesClaudeCodeBedrock({
+    runtime: { command: params.command },
+    provider: params.provider,
+  });
+  if (claudeCodeBedrock && !/(?:^|[./])anthropic\.claude-/.test(params.model)) {
+    throw new ApiError(
+      409,
+      "The Claude Code runtime requires a Claude model when using AWS Bedrock.",
+    );
+  }
+  if (
+    params.protocol === "anthropic" &&
+    params.provider !== "anthropic" &&
+    !claudeCodeBedrock
+  ) {
     throw new ApiError(
       409,
       `This Agent Runtime image expects the Anthropic API, but the Agent's selected model uses ${providerDisplayNames[params.provider]}. Choose an Anthropic model or use an OpenAI-compatible Agent Runtime image.`,

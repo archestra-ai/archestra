@@ -143,6 +143,58 @@ test("rejects a Bedrock model for an Anthropic runtime image", async ({
   });
 });
 
+test.for([
+  ["us.anthropic.claude-sonnet-4-6", true],
+  ["anthropic.claude-sonnet-4-6", true],
+  ["amazon.nova-pro-v1:0", false],
+] as const)("checks Claude Code compatibility for Bedrock model %s", async ([
+  modelId,
+  compatible,
+], {
+  makeAgent,
+  makeAdmin,
+  makeLlmProviderApiKey,
+  makeMember,
+  makeOrganization,
+  makeSecret,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeAdmin();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const { model, providerKey } = await createModelSelection({
+    organizationId: organization.id,
+    provider: "bedrock",
+    modelId,
+    makeSecret,
+    makeLlmProviderApiKey,
+  });
+  const agent = await makeAgent({
+    organizationId: organization.id,
+    authorId: user.id,
+    agentType: "agent",
+    modelId: model.id,
+    llmApiKeyId: providerKey.id,
+  });
+  const result = preflightAgentRuntimeModelCompatibility({
+    runtime: {
+      inferenceProtocol: "anthropic",
+      command: ["archestra-claude-code"],
+    },
+    agent,
+    organizationId: organization.id,
+    userId: user.id,
+  });
+  if (compatible)
+    await expect(result).resolves.toMatchObject({
+      llm: { selectedProvider: "bedrock", selectedModel: modelId },
+    });
+  else
+    await expect(result).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("requires a Claude model"),
+    });
+});
+
 test("accepts an inherited compatible organization default model", async ({
   makeAgent,
   makeAdmin,

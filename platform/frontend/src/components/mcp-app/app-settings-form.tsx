@@ -319,6 +319,18 @@ export function AppSettingsForm({
 
   const onBack = () => onOpenChange(false);
 
+  // Leaving General unmounts the labels editor, which holds any not-yet-added
+  // label draft in its own state; flush a valid draft into committed labels
+  // first so a Save from another section doesn't silently drop it. Invalid or
+  // empty drafts return null and are left untouched — the same rule Save uses.
+  const changeSection = (next: AppSettingsSection) => {
+    if (activeSection === "general") {
+      const flushed = labelsRef.current?.saveUnsavedLabel();
+      if (flushed) setLabels(flushed);
+    }
+    setActiveSection(next);
+  };
+
   const onSubmit = form.handleSubmit(
     async (values) => {
       if (submitInFlight.current) return;
@@ -442,7 +454,7 @@ export function AppSettingsForm({
       sidebarIcon={<AppWindow className="h-4 w-4 text-muted-foreground" />}
       activeSection={activeSection}
       navItems={NAV_ITEMS}
-      onActiveSectionChange={setActiveSection}
+      onActiveSectionChange={changeSection}
       onSubmit={onSubmit}
       className="max-w-5xl"
       contentClassName="px-5 py-5"

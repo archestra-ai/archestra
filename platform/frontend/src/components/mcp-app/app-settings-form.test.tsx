@@ -242,6 +242,28 @@ describe("AppSettingsForm save", () => {
     );
   });
 
+  test("flushes an in-progress label when switching away from General before Save", async () => {
+    // The labels editor lives in General and unmounts on section switch; a
+    // valid draft must survive a Save issued from another section.
+    const user = userEvent.setup();
+    const { onOpenChange } = renderForm();
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.type(screen.getByLabelText("Label key"), "region");
+    await user.type(screen.getByLabelText("Label value"), "eu");
+    goToSection("Access");
+    submitForm();
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          labels: [{ key: "region", value: "eu" }],
+        }),
+      }),
+    );
+  });
+
   test("saves trimmed identity fields and closes; unchanged tools fire no mutations", async () => {
     const { onOpenChange } = renderForm();
 

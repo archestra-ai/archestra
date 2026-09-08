@@ -80789,7 +80789,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Update an app's metadata and/or html (forks a new version).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Update an app's metadata and/or html (forks a new version).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -81631,7 +81631,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Update several apps in one request. Today the only bulk-editable surface is visibility — `scope` with the `teamIds` or `userIds` it reaches — and every app in the batch is moved to the same one. Content is deliberately not editable here: replacing html forks a version and is authorized more strictly than re-scoping. Per-app problems are reported in `failed` and leave the rest applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Update several apps in one request. Today the only bulk-editable surface is visibility — `scope` with the `teamIds` or `userIds` it reaches — and every app in the batch is moved to the same one. Content is deliberately not editable here: replacing html forks a version and is authorized more strictly than re-scoping. Per-app problems are reported in `failed` and leave the rest applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -82317,7 +82317,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Enable a disabled app, making it live at its scope.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Enable a disabled app, making it live at its scope.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -82840,7 +82840,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Disable an app, pulling it back to an author-only state.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Disable an app, pulling it back to an author-only state.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -83363,7 +83363,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Lock an app, refusing all chat-driven modification (and REST html replacement/deletion) until unlocked.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Lock an app, refusing all chat-driven modification (and REST html replacement/deletion) until unlocked.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -83886,7 +83886,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Unlock a locked app, making it editable again.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Unlock a locked app, making it editable again.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -85467,7 +85467,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Restore an immutable app version by copying its artifact forward as a new head version. History is never rewritten.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Restore an immutable app version by copying its artifact forward as a new head version. History is never rewritten.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -86966,7 +86966,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Assign an upstream tool to an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Assign an upstream tool to an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -87276,7 +87276,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Unassign a tool from an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Unassign a tool from an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {

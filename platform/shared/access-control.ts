@@ -454,9 +454,11 @@ export const permissionDescriptions: Record<string, string> = {
   "app:read":
     "View and run MCP Apps within your scope (org, your teams, your own)",
   "app:create": "Create new MCP Apps",
-  "app:update": "Modify MCP Apps, their tools, and their team assignments",
+  "app:update":
+    "Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
   "app:delete": "Delete MCP Apps",
-  "app:team-admin": "Manage team assignments for MCP Apps",
+  "app:team-admin":
+    "Manage team-scoped MCP Apps, including their team assignments, in teams you belong to",
   "app:admin":
     "Full administrative control over all MCP Apps, bypassing team restrictions",
   "app:deploy-to-restricted":

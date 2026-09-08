@@ -1460,7 +1460,7 @@ export const getApp = <ThrowOnError extends boolean = false>(options: Options<Ge
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const updateApp = <ThrowOnError extends boolean = false>(options: Options<UpdateAppData, ThrowOnError>) => (options.client ?? client).patch<UpdateAppResponses, UpdateAppErrors, ThrowOnError>({
     url: '/api/apps/{appId}',
@@ -1500,7 +1500,7 @@ export const bulkDeleteApps = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const bulkUpdateApps = <ThrowOnError extends boolean = false>(options: Options<BulkUpdateAppsData, ThrowOnError>) => (options.client ?? client).patch<BulkUpdateAppsResponses, BulkUpdateAppsErrors, ThrowOnError>({
     url: '/api/apps/bulk',
@@ -1520,7 +1520,7 @@ export const bulkUpdateApps = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const enableApp = <ThrowOnError extends boolean = false>(options: Options<EnableAppData, ThrowOnError>) => (options.client ?? client).post<EnableAppResponses, EnableAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/enable', ...options });
 
@@ -1533,7 +1533,7 @@ export const enableApp = <ThrowOnError extends boolean = false>(options: Options
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const disableApp = <ThrowOnError extends boolean = false>(options: Options<DisableAppData, ThrowOnError>) => (options.client ?? client).post<DisableAppResponses, DisableAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/disable', ...options });
 
@@ -1546,7 +1546,7 @@ export const disableApp = <ThrowOnError extends boolean = false>(options: Option
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const lockApp = <ThrowOnError extends boolean = false>(options: Options<LockAppData, ThrowOnError>) => (options.client ?? client).post<LockAppResponses, LockAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/lock', ...options });
 
@@ -1559,7 +1559,7 @@ export const lockApp = <ThrowOnError extends boolean = false>(options: Options<L
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const unlockApp = <ThrowOnError extends boolean = false>(options: Options<UnlockAppData, ThrowOnError>) => (options.client ?? client).post<UnlockAppResponses, UnlockAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/unlock', ...options });
 
@@ -1611,7 +1611,7 @@ export const getAppVersion = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const restoreAppVersion = <ThrowOnError extends boolean = false>(options: Options<RestoreAppVersionData, ThrowOnError>) => (options.client ?? client).post<RestoreAppVersionResponses, RestoreAppVersionErrors, ThrowOnError>({
     url: '/api/apps/{appId}/versions/{version}/restore',
@@ -1684,7 +1684,7 @@ export const postAppRenderScreenshot = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const unassignToolFromApp = <ThrowOnError extends boolean = false>(options: Options<UnassignToolFromAppData, ThrowOnError>) => (options.client ?? client).delete<UnassignToolFromAppResponses, UnassignToolFromAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/tools/{toolId}', ...options });
 
@@ -1697,7 +1697,7 @@ export const unassignToolFromApp = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `app:update`: Modify MCP Apps, their tools, and their team assignments
+ * `app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)
  */
 export const assignToolToApp = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAppData, ThrowOnError>) => (options.client ?? client).post<AssignToolToAppResponses, AssignToolToAppErrors, ThrowOnError>({
     url: '/api/apps/{appId}/tools/{toolId}',

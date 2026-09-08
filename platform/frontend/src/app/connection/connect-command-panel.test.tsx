@@ -210,6 +210,63 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("regenerates the setup as proxy and skills availability changes without losing the gateway", async () => {
+    const props = renderPanelProps();
+    const { rerender } = render(<ConnectCommandPanel {...props} />);
+    await screen.findByText(COMMAND);
+
+    for (const [proxyEnabled, skillsEnabled] of [
+      [false, true],
+      [true, false],
+      [false, false],
+      [true, true],
+    ]) {
+      createSetupMock.mockClear();
+      rerender(
+        <ConnectCommandPanel
+          {...props}
+          llmProxyId={proxyEnabled ? "p1" : null}
+          skillsEnabled={skillsEnabled}
+        />,
+      );
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            mcpGatewayId: "g1",
+            llmProxyId: proxyEnabled ? "p1" : undefined,
+            provider: proxyEnabled ? "anthropic" : undefined,
+            skills: skillsEnabled
+              ? { skillIds: ["s1", "s2"], ttlDays: null }
+              : undefined,
+          }),
+        ),
+      );
+      expect(await screen.findByText(COMMAND)).toBeInTheDocument();
+    }
+  });
+
+  it("generates MCP-only setup when a bookmarked provider needs credentials but the proxy is disabled", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    renderPanel({
+      client: findClient("copilot-cli"),
+      llmProxyId: null,
+      urlProvider: "github-copilot",
+      skillsEnabled: false,
+    });
+
+    expect(await screen.findByText(COMMAND)).toBeInTheDocument();
+    expect(createSetupMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mcpGatewayId: "g1",
+        llmProxyId: undefined,
+        provider: undefined,
+        skills: undefined,
+      }),
+    );
+    expect(screen.queryByText("Sign in with GitHub")).not.toBeInTheDocument();
+  });
+
   it("generates the command automatically with everything included by default", async () => {
     renderPanel();
 
@@ -243,6 +300,42 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.queryByText("http://localhost:9000/v1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("omits skills from the setup when connecting skills is disabled", async () => {
+    renderPanel({ skillsEnabled: false });
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mcpGatewayId: "g1",
+          provider: "anthropic",
+        }),
+      ),
+    );
+    expect(createSetupMock.mock.calls.at(-1)?.[0].skills).toBeUndefined();
+    expect(
+      screen.queryByTestId("connect-change-skills"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps non-plugin setup functional without querying, reviewing, or sending plugins", async () => {
+    renderPanel({ pluginsEnabled: false });
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mcpGatewayId: "g1",
+          provider: "anthropic",
+        }),
+      ),
+    );
+    expect(pluginsMock).toHaveBeenCalledWith(false);
+    expect(createSetupMock.mock.calls.at(-1)?.[0].pluginIds).toBeUndefined();
+    expect(
+      screen.queryByTestId("connect-change-plugins"),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByText(COMMAND)).toBeInTheDocument();
   });
 
   it("generates a plugin-only setup when no gateway, proxy, or skill exists", async () => {

@@ -32,6 +32,7 @@ import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -66,6 +67,10 @@ export function ConnectionSettingsForm() {
   const [defaultProviderKeys, setDefaultProviderKeys] = useState<
     Record<string, string>
   >({});
+  const [skillsEnabled, setSkillsEnabled] = useState(true);
+  const [llmProxyEnabled, setLlmProxyEnabled] = useState(true);
+  const [pluginsEnabled, setPluginsEnabled] = useState(true);
+  const pluginsFeatureEnabled = useFeature("plugins") === true;
   const { data: providerApiKeys } = useLlmProviderApiKeys();
   const providerCatalog = useModelProviderCatalog();
 
@@ -85,6 +90,9 @@ export function ConnectionSettingsForm() {
         string
       >,
     );
+    setSkillsEnabled(organization.connectionSkillsEnabled);
+    setLlmProxyEnabled(organization.connectionLlmProxyEnabled);
+    setPluginsEnabled(organization.connectionPluginsEnabled);
   }, [organization]);
 
   const updateMutation = useUpdateConnectionSettings(
@@ -124,6 +132,10 @@ export function ConnectionSettingsForm() {
       string
     >;
 
+  const serverSkillsEnabled = organization?.connectionSkillsEnabled ?? true;
+  const serverLlmProxyEnabled = organization?.connectionLlmProxyEnabled ?? true;
+  const serverPluginsEnabled = organization?.connectionPluginsEnabled ?? true;
+
   const hasChanges =
     JSON.stringify(defaultProviderKeys) !==
       JSON.stringify(serverDefaultProviderKeys) ||
@@ -131,6 +143,9 @@ export function ConnectionSettingsForm() {
     defaultClientId !== serverDefaultClientId ||
     JSON.stringify([...shownClientIds].sort()) !==
       JSON.stringify(serverShownClients) ||
+    skillsEnabled !== serverSkillsEnabled ||
+    llmProxyEnabled !== serverLlmProxyEnabled ||
+    (pluginsFeatureEnabled && pluginsEnabled !== serverPluginsEnabled) ||
     baseUrlsDirty;
 
   // Collapse "all selected" back to null so future clients/providers are
@@ -150,6 +165,15 @@ export function ConnectionSettingsForm() {
         Object.keys(defaultProviderKeys).length > 0
           ? defaultProviderKeys
           : null,
+      ...(skillsEnabled !== serverSkillsEnabled
+        ? { connectionSkillsEnabled: skillsEnabled }
+        : {}),
+      ...(llmProxyEnabled !== serverLlmProxyEnabled
+        ? { connectionLlmProxyEnabled: llmProxyEnabled }
+        : {}),
+      ...(pluginsFeatureEnabled && pluginsEnabled !== serverPluginsEnabled
+        ? { connectionPluginsEnabled: pluginsEnabled }
+        : {}),
     });
   };
 
@@ -159,6 +183,9 @@ export function ConnectionSettingsForm() {
     setShownClientIds(serverShownClients);
     setBaseUrlMeta(serverBaseUrlMeta);
     setDefaultProviderKeys(serverDefaultProviderKeys);
+    setSkillsEnabled(serverSkillsEnabled);
+    setLlmProxyEnabled(serverLlmProxyEnabled);
+    setPluginsEnabled(serverPluginsEnabled);
   };
 
   const setBaseUrlDescription = (url: string, description: string) =>
@@ -404,6 +431,44 @@ export function ConnectionSettingsForm() {
                     })}
                   </RadioGroup>
                 </SettingSection>
+              )}
+
+              <SettingRow
+                title="LLM Proxy on Connect"
+                description="Offer routing through the LLM Proxy. Existing client configs keep working."
+              >
+                <Switch
+                  checked={llmProxyEnabled}
+                  onCheckedChange={setLlmProxyEnabled}
+                  disabled={locked}
+                  aria-label="Offer the LLM Proxy on the Connect page"
+                />
+              </SettingRow>
+
+              <SettingRow
+                title="Skills on Connect"
+                description="Offer installing shared skills. Existing installs keep working."
+              >
+                <Switch
+                  checked={skillsEnabled}
+                  onCheckedChange={setSkillsEnabled}
+                  disabled={locked}
+                  aria-label="Offer skills on the Connect page"
+                />
+              </SettingRow>
+
+              {pluginsFeatureEnabled && (
+                <SettingRow
+                  title="Plugins on Connect"
+                  description="Offer installing approved plugins. Existing installs keep working."
+                >
+                  <Switch
+                    checked={pluginsEnabled}
+                    onCheckedChange={setPluginsEnabled}
+                    disabled={locked}
+                    aria-label="Offer plugins on the Connect page"
+                  />
+                </SettingRow>
               )}
 
               <SettingSection

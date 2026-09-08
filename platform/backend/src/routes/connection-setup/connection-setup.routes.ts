@@ -49,6 +49,7 @@ import {
 import { deriveMarketplaceName } from "@/skills/marketplace/marketplace-name";
 import {
   ApiError,
+  CONNECTION_SETUP_MAX_SKILLS,
   type ConnectionSetup,
   type ConnectionSetupClientId,
   ConnectionSetupClientIdSchema,
@@ -122,7 +123,10 @@ const CreateConnectionSetupBodySchema = z.object({
     .optional(),
   skills: z
     .object({
-      skillIds: z.array(z.string().uuid()).min(1).max(200),
+      skillIds: z
+        .array(z.string().uuid())
+        .min(1)
+        .max(CONNECTION_SETUP_MAX_SKILLS),
       ttlDays: z.number().int().positive().max(3650).nullable(),
     })
     .optional(),
@@ -357,6 +361,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Proxy in, and the org's single proxy is resolved server-side.
       let llmProxyId: string | null = null;
       if (provider) {
+        assertConnectLlmProxyEnabled(organization);
         llmProxyId = (
           await requireLlmProxyAccess({ organizationId, userId: user.id })
         ).id;
@@ -420,6 +425,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (skills) {
+        assertConnectSkillsEnabled(organization);
         await requireSkillRead({ userId: user.id, organizationId });
         await assertSkillsBelongToOrg({
           skillIds: skills.skillIds,
@@ -436,6 +442,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "pluginIds must be unique");
         }
         if (uniqueIds.length > 0) {
+          assertConnectPluginsEnabled(organization);
           if (!config.plugins.enabled) {
             throw new ApiError(404, "Plugins are not enabled");
           }
@@ -478,7 +485,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
-      } else if (config.plugins.enabled) {
+      } else if (
+        config.plugins.enabled &&
+        organization.connectionPluginsEnabled
+      ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
           userId: user.id,
           organizationId,
@@ -592,6 +602,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!organization) {
         throw new ApiError(404, "Organization not found");
       }
+      assertConnectLlmProxyEnabled(organization);
 
       const { virtualApiKeyId, creditWarning } =
         await ensureConnectionVirtualKey({
@@ -649,6 +660,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "You need llmVirtualKey:create permission to create a passthrough key.",
         );
       }
+
+      const organization = await OrganizationModel.getById(organizationId);
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+      assertConnectLlmProxyEnabled(organization);
 
       // We're generating a connection for the LLM Proxy, so the caller must be
       // able to reach it.
@@ -848,6 +865,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 }> {
   const organization = await OrganizationModel.getById(setup.organizationId);
   if (!organization) throw GONE();
+  if (setup.llmProxyId) assertConnectLlmProxyEnabledOrGone(organization);
+  if (setup.includeSkills) assertConnectSkillsEnabledOrGone(organization);
   const membership = await MemberModel.getByUserId(
     setup.userId,
     setup.organizationId,
@@ -961,6 +980,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   });
   let pluginNames: string[] = [];
   if (pluginIds.length > 0) {
+    assertConnectPluginsEnabledOrGone(organization);
     if (!config.plugins.enabled) throw GONE();
     const canDeliverPlugins = await userCanDeliverPlugins({
       userId: setup.userId,
@@ -1290,4 +1310,41 @@ function connectionHealthRequesterKey(request: {
     if (firstHop) return `xff-${firstHop}`;
   }
   return `ip-${request.ip}`;
+}
+
+const CONNECT_LLM_PROXY_DISABLED =
+  "Connecting the LLM Proxy is disabled for this organization";
+const CONNECT_SKILLS_DISABLED =
+  "Connecting skills is disabled for this organization";
+const CONNECT_PLUGINS_DISABLED =
+  "Connecting plugins is disabled for this organization";
+
+function assertConnectLlmProxyEnabled(organization: Organization): void {
+  if (!organization.connectionLlmProxyEnabled) {
+    throw new ApiError(403, CONNECT_LLM_PROXY_DISABLED);
+  }
+}
+
+function assertConnectSkillsEnabled(organization: Organization): void {
+  if (!organization.connectionSkillsEnabled) {
+    throw new ApiError(403, CONNECT_SKILLS_DISABLED);
+  }
+}
+
+function assertConnectPluginsEnabled(organization: Organization): void {
+  if (!organization.connectionPluginsEnabled) {
+    throw new ApiError(403, CONNECT_PLUGINS_DISABLED);
+  }
+}
+
+function assertConnectLlmProxyEnabledOrGone(organization: Organization): void {
+  if (!organization.connectionLlmProxyEnabled) throw GONE();
+}
+
+function assertConnectSkillsEnabledOrGone(organization: Organization): void {
+  if (!organization.connectionSkillsEnabled) throw GONE();
+}
+
+function assertConnectPluginsEnabledOrGone(organization: Organization): void {
+  if (!organization.connectionPluginsEnabled) throw GONE();
 }

@@ -54,7 +54,6 @@ jobs:
       version: ${{ inputs.version }}
       push_image: ${{ inputs.push_to_gcr }}
       auth_provider: gar
-      include_latest_tag: true
       checkout_ref: ${{ inputs.checkout_ref }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}

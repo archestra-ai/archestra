@@ -52,7 +52,7 @@ describe("InlineChatError", () => {
     vi.mocked(useFeature).mockReturnValue(false);
   });
 
-  it("shows only the support message and correlation IDs in slim mode", () => {
+  it("shows a useful explanation alongside support and correlation IDs in slim mode", () => {
     render(
       <InlineChatError
         error={
@@ -79,6 +79,10 @@ describe("InlineChatError", () => {
     expect(
       screen.getByText("Contact your administrator and include these IDs."),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("The AI provider is experiencing issues."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("The provider failed")).not.toBeInTheDocument();
     expect(screen.getByText("session-12345678")).toBeInTheDocument();
     expect(screen.getByText("trace-12345678")).toBeInTheDocument();
     expect(screen.getByText("span-12345678")).toBeInTheDocument();
@@ -91,7 +95,7 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
   });
 
-  it("falls back to the mapped error message in slim mode without a support message", () => {
+  it("shows curated error copy in slim mode without a support message", () => {
     render(
       <InlineChatError
         error={
@@ -114,7 +118,9 @@ describe("InlineChatError", () => {
       />,
     );
 
-    expect(screen.getByText("The provider failed")).toBeInTheDocument();
+    expect(
+      screen.getByText("The AI provider is experiencing issues."),
+    ).toBeInTheDocument();
     expect(screen.getByText("session-12345678")).toBeInTheDocument();
     expect(screen.getByText("trace-12345678")).toBeInTheDocument();
     expect(screen.getByText("span-12345678")).toBeInTheDocument();
@@ -122,6 +128,112 @@ describe("InlineChatError", () => {
     expect(
       screen.queryByText("secret provider detail"),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["rate_limit", /Too many requests/],
+    ["context_too_long", /conversation is too long/],
+    ["content_filtered", /rephrase your request/],
+    ["usage_limit_exceeded", /configured usage limit/],
+    ["unknown", /unexpected error occurred/],
+  ])("keeps %s guidance visible with support configured", (code, message) => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code,
+              message: "private upstream payload",
+              isRetryable: false,
+            }),
+          )
+        }
+        supportMessage="Ask your administrator for help."
+        slimChatErrorUi
+      />,
+    );
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(
+      screen.getByText("Ask your administrator for help."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("private upstream payload"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("copies the explanation, support, and IDs without raw details in slim mode", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "rate_limit",
+              message: "private upstream payload",
+              isRetryable: true,
+              traceId: "trace-example",
+              originalError: { provider: "openai", raw: "private debug data" },
+            }),
+          )
+        }
+        supportMessage="  Contact your administrator.  "
+        conversationId="session-example"
+        agentName="Private Agent"
+        selectedModel="private-model"
+        slimChatErrorUi
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Copy error details" }),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      "Too many requests. Please wait a moment and try again.\nContact your administrator.\nSession: session-example\nTrace: trace-example",
+    );
+  });
+
+  it("uses a safe fallback for unstructured errors even with blank support", () => {
+    vi.mocked(useAppName).mockReturnValue("Example Workspace");
+    render(
+      <InlineChatError
+        error={new Error("Error: private internal failure at service.ts:42")}
+        supportMessage="   "
+        slimChatErrorUi
+      />,
+    );
+    expect(screen.getByText(/unexpected error occurred/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/private internal failure/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("brands usage-limit guidance and never duplicates it beneath support", () => {
+    vi.mocked(useAppName).mockReturnValue("Example Workspace");
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "rate_limit",
+              message: "private limit detail",
+              usageLimitExceeded: true,
+              isRetryable: false,
+            }),
+          )
+        }
+        supportMessage="Contact your administrator."
+        slimChatErrorUi
+      />,
+    );
+    expect(
+      screen.getAllByText(/Example Workspace blocked this request/),
+    ).toHaveLength(1);
+    expect(screen.queryByText(/Too many requests/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/private limit detail/)).not.toBeInTheDocument();
   });
 
   it("still shows a copy button in slim mode when no IDs are available", () => {

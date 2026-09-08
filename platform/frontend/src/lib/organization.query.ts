@@ -307,8 +307,12 @@ export function useCreateInvitation(organizationId: string | undefined) {
 /**
  * Get organization
  */
-export function useOrganization(enabled = true) {
+export function useOrganization(
+  enabled = true,
+  options: { fresh?: boolean } = {},
+) {
   const session = useSession();
+  const { fresh = false } = options;
 
   return useQuery({
     queryKey: organizationKeys.details(),
@@ -323,8 +327,11 @@ export function useOrganization(enabled = true) {
     throwOnError: false, // Don't throw errors to prevent crashes
     // Org settings (theme, app name, etc.) change rarely and all mutations
     // imperatively setQueryData() this key, so a long stale time keeps
-    // re-mounts cheap.
-    staleTime: 5 * 60 * 1000,
+    // re-mounts cheap. Connect opts into a fresh read because these settings
+    // authorize which setup artifacts may be generated.
+    staleTime: fresh ? 0 : 5 * 60 * 1000,
+    refetchOnMount: fresh ? "always" : undefined,
+    refetchOnWindowFocus: fresh || undefined,
     // Restored on refresh: the shell reads the app name and theme from here,
     // so without it a reload repaints the branding a beat after the layout.
     meta: PERSISTED_QUERY_META,

@@ -7,6 +7,7 @@ import type { User } from "@/types";
 vi.mock("@/auth");
 
 import { hasPermission } from "@/auth";
+import { OrganizationModel } from "@/models";
 
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
@@ -175,6 +176,44 @@ describe("PATCH /api/organization/connection-settings", () => {
     });
     expect(clearResponse.statusCode).toBe(200);
     expect(clearResponse.json().connectionDefaultClientId).toBeNull();
+  });
+
+  test("persists skills, LLM proxy, and plugin availability on the connect page", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: {
+        connectionSkillsEnabled: false,
+        connectionLlmProxyEnabled: false,
+        connectionPluginsEnabled: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().connectionSkillsEnabled).toBe(false);
+    expect(response.json().connectionLlmProxyEnabled).toBe(false);
+    expect(response.json().connectionPluginsEnabled).toBe(false);
+    expect(
+      await OrganizationModel.findByIdForAudit(organizationId, organizationId),
+    ).toMatchObject({
+      connectionSkillsEnabled: false,
+      connectionLlmProxyEnabled: false,
+      connectionPluginsEnabled: false,
+    });
+
+    const restored = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: {
+        connectionSkillsEnabled: true,
+        connectionLlmProxyEnabled: true,
+        connectionPluginsEnabled: true,
+      },
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().connectionSkillsEnabled).toBe(true);
+    expect(restored.json().connectionLlmProxyEnabled).toBe(true);
+    expect(restored.json().connectionPluginsEnabled).toBe(true);
   });
 
   test("allows clearing defaults with null", async ({ makeAgent }) => {

@@ -40,6 +40,7 @@ import {
   buildClaudeDesktopConfigProfile,
   downloadClaudeDesktopConfig,
   generateConfigFilename,
+  isClaudeDesktopProfileUrlSupported,
   maskConfigSecrets,
 } from "./claude-desktop-config";
 import { FINISH_OAUTH_FLOW_TITLE } from "./clients";
@@ -54,6 +55,8 @@ import {
 } from "./platform.utils";
 import { ConnectionPlatformToggle } from "./platform-select";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
+
+const EMPTY_SKILLS: ConnectSkill[] = [];
 
 /** Clients whose setup is delivered as a downloadable Archestra config profile. */
 export function isConfigClient(clientId: string | null): boolean {
@@ -73,6 +76,13 @@ interface ConnectConfigPanelProps {
   candidateBaseUrls: readonly string[];
   baseUrlMetadata: readonly ConnectionBaseUrl[] | null | undefined;
   onBaseUrlChange: (url: string) => void;
+  /** When false, shared skills are not offered in the profile. */
+  skillsEnabled?: boolean;
+  /**
+   * When false, the profile is MCP-only (no inference keys). Distinct from
+   * `llmProxyId === null`, which still means the caller cannot read the proxy.
+   */
+  llmProxyEnabled?: boolean;
 }
 
 /**
@@ -93,8 +103,11 @@ export function ConnectConfigPanel({
   candidateBaseUrls,
   baseUrlMetadata,
   onBaseUrlChange,
+  skillsEnabled = true,
+  llmProxyEnabled = true,
 }: ConnectConfigPanelProps) {
   const providerCatalog = useModelProviderCatalog();
+  const profileBaseUrlSupported = isClaudeDesktopProfileUrlSupported(baseUrl);
   // Target OS — only used to label the downloaded file; the profile itself is
   // identical across platforms. Auto-detected after mount to avoid a hydration
   // mismatch, overridable in the review step.
@@ -109,27 +122,191 @@ export function ConnectConfigPanel({
 
   // Shared skills ride along as a git-backed plugin marketplace baked into the
   // profile, gated on the caller being a skill admin with at least one skill.
-  // Whole-org snapshot (no per-skill picker) — Claude Desktop surfaces the
-  // marketplace in its Directory, where the user installs individual skills.
+  // Whole-org snapshot (no per-skill picker) — users add the marketplace in
+  // Claude Desktop, then install its shared-skills plugin bundle.
+  const profileAvailability = useConfigProfileAvailability();
+  const canPrepareProfile =
+    profileBaseUrlSupported &&
+    (!llmProxyEnabled ||
+      (llmProxyId !== null &&
+        profileAvailability.canCreateVirtualKey === true &&
+        profileAvailability.anthropicHasKey));
   const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
-  const { data: allSkills } = useAllSkills({
-    enabled: canAdminSkills === true,
-    // Rides along with the generated config rather than gating it, so it waits
-    // for the download panel to render first. Same catalogue walk as the
-    // review step's list.
+  const {
+    data: allSkills,
+    isError: skillsLoadError,
+    refetch: refetchSkills,
+  } = useAllSkills({
+    enabled: skillsEnabled && canAdminSkills === true,
+    // The catalogue is expensive, but the profile includes a snapshot of every
+    // selected skill, so wait until the rest of the page settles before loading.
     deferMs: 750,
+    throwOnError: true,
   });
-  const skills = allSkills ?? [];
-  const skillsEligible = canAdminSkills === true && skills.length > 0;
+  const skills = allSkills ?? EMPTY_SKILLS;
+  const skillsEligible =
+    skillsEnabled &&
+    canAdminSkills === true &&
+    allSkills !== undefined &&
+    skills.length > 0;
   const skillIds = useMemo(() => skills.map((s) => s.id), [skills]);
+  const skillIdsKey = JSON.stringify(skillIds);
   const [includeSkills, setIncludeSkills] = useState(true);
+  const { mutateAsync: createSkillShareLink } = useCreateSkillShareLink();
+  const [skillMarketplace, setSkillMarketplace] =
+    useState<SkillMarketplacePreparation>({ status: "not-applicable" });
+  const skillPreparationRef = useRef<{
+    key: string;
+    request: number;
+    status: "loading" | "ready";
+  } | null>(null);
+  const skillPreparationRequestRef = useRef(0);
+  const isMountedRef = useRef(true);
 
-  // The steps after the download — importing the profile and finishing the
-  // OAuth flow — only make sense once a profile can actually be produced. When
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const prepareSkillMarketplace = useCallback(
+    (force = false) => {
+      if (!canPrepareProfile || !includeSkills || !skillsEligible) return;
+      const existing = skillPreparationRef.current;
+      if (
+        !force &&
+        existing?.key === skillIdsKey &&
+        (existing.status === "loading" || existing.status === "ready")
+      ) {
+        return;
+      }
+
+      const request = ++skillPreparationRequestRef.current;
+      skillPreparationRef.current = {
+        key: skillIdsKey,
+        request,
+        status: "loading",
+      };
+      setSkillMarketplace({ status: "loading" });
+      void createSkillShareLink({ skillIds, expiresAt: null })
+        .then((link) => {
+          if (
+            !isMountedRef.current ||
+            skillPreparationRequestRef.current !== request
+          ) {
+            return;
+          }
+          if (!link) {
+            skillPreparationRef.current = null;
+            setSkillMarketplace({ status: "error" });
+            return;
+          }
+          skillPreparationRef.current = {
+            key: skillIdsKey,
+            request,
+            status: "ready",
+          };
+          setSkillMarketplace({
+            status: "ready",
+            cloneUrl: link.cloneUrl,
+            marketplaceName: link.marketplaceName,
+          });
+        })
+        .catch(() => {
+          if (
+            !isMountedRef.current ||
+            skillPreparationRequestRef.current !== request
+          ) {
+            return;
+          }
+          skillPreparationRef.current = null;
+          setSkillMarketplace({ status: "error" });
+        });
+    },
+    [
+      createSkillShareLink,
+      canPrepareProfile,
+      includeSkills,
+      skillIds,
+      skillIdsKey,
+      skillsEligible,
+    ],
+  );
+
+  useEffect(() => {
+    if (!canPrepareProfile) {
+      skillPreparationRequestRef.current += 1;
+      skillPreparationRef.current = null;
+      setSkillMarketplace({ status: "not-applicable" });
+      return;
+    }
+    if (
+      canAdminSkills === undefined ||
+      (canAdminSkills && allSkills === undefined && !skillsLoadError)
+    ) {
+      skillPreparationRequestRef.current += 1;
+      skillPreparationRef.current = null;
+      setSkillMarketplace({ status: "loading" });
+      return;
+    }
+    if (skillsLoadError) {
+      skillPreparationRequestRef.current += 1;
+      skillPreparationRef.current = null;
+      setSkillMarketplace({ status: "error" });
+      return;
+    }
+    if (!includeSkills || !skillsEligible) {
+      skillPreparationRequestRef.current += 1;
+      skillPreparationRef.current = null;
+      setSkillMarketplace({ status: "not-applicable" });
+      return;
+    }
+    prepareSkillMarketplace();
+  }, [
+    allSkills,
+    canAdminSkills,
+    canPrepareProfile,
+    includeSkills,
+    prepareSkillMarketplace,
+    skillsEligible,
+    skillsLoadError,
+  ]);
+
+  const retrySkillMarketplace = useCallback(() => {
+    if (skillsLoadError) {
+      setSkillMarketplace({ status: "loading" });
+      void refetchSkills().then(({ error }) => {
+        if (error) setSkillMarketplace({ status: "error" });
+      });
+      return;
+    }
+    if (canPrepareProfile) prepareSkillMarketplace(true);
+  }, [
+    canPrepareProfile,
+    prepareSkillMarketplace,
+    refetchSkills,
+    skillsLoadError,
+  ]);
+
+  // The import step only makes sense once a profile can actually be produced. When
   // the download is blocked for good (no virtual-key permission, or no Anthropic
   // key to back the embedded key), they're just noise, so we hide them and let
   // step 3 carry the explanation.
-  const { unavailable: downloadBlocked } = useConfigProfileAvailability();
+  const skillMarketplaceUrlSupported =
+    skillMarketplace.status !== "ready" ||
+    isClaudeDesktopProfileUrlSupported(skillMarketplace.cloneUrl);
+  const profileUrlError = !profileBaseUrlSupported
+    ? "Claude Desktop configuration profiles require an HTTPS endpoint. Select an HTTPS endpoint in the review step, or ask an administrator to configure one for this deployment."
+    : !skillMarketplaceUrlSupported
+      ? "The shared skills marketplace needs an HTTPS URL before Claude Desktop can import the profile. Turn off shared skills, or ask an administrator to configure HTTPS."
+      : null;
+  const downloadBlocked =
+    (llmProxyEnabled && profileAvailability.unavailable) || !!profileUrlError;
+  // When shared skills ride along, give Claude Desktop users the separate
+  // marketplace setup and plugin-install path.
+  const showSkillsInstallStep =
+    !downloadBlocked && skillMarketplace.status === "ready";
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
 
@@ -137,9 +314,10 @@ export function ConnectConfigPanel({
   const canPickGateway =
     !!gateway && mcpGateways !== null && mcpGateways.length > 1;
 
-  // The profile's whole point is the inference endpoint, so the LLM Proxy is
-  // required; the MCP gateway is optional (it only adds the managed server).
-  if (!llmProxyId) {
+  // The profile's usual point is the inference endpoint. When the org has
+  // turned that off, MCP-only profiles are still useful. When the caller
+  // simply cannot read the proxy, keep the previous fail-closed copy.
+  if (llmProxyEnabled && !llmProxyId) {
     return (
       <WizardStep n={2} title="Review the setup" last>
         <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
@@ -148,6 +326,31 @@ export function ConnectConfigPanel({
             LLM Proxy
           </Link>{" "}
           is required to generate a configuration profile.
+        </div>
+      </WizardStep>
+    );
+  }
+
+  if (!llmProxyEnabled && !gateway) {
+    return (
+      <WizardStep n={2} title="Review the setup" last>
+        <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+          {(mcpGateways?.length ?? 0) === 0 ? (
+            <>
+              An{" "}
+              <Link
+                href="/mcp/gateways"
+                className="underline hover:text-foreground"
+              >
+                MCP gateway
+              </Link>{" "}
+              is required to generate a configuration profile.
+            </>
+          ) : (
+            <span>
+              Select an MCP gateway to generate a configuration profile.
+            </span>
+          )}
         </div>
       </WizardStep>
     );
@@ -183,13 +386,16 @@ export function ConnectConfigPanel({
               for tools
             </SummaryRow>
           )}
-          <SummaryRow>
-            Route{" "}
-            <span className="font-medium text-foreground">
-              {providerCatalog.label("anthropic")}
-            </span>{" "}
-            through <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>
-          </SummaryRow>
+          {llmProxyEnabled && (
+            <SummaryRow>
+              Route{" "}
+              <span className="font-medium text-foreground">
+                {providerCatalog.label("anthropic")}
+              </span>{" "}
+              through{" "}
+              <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>
+            </SummaryRow>
+          )}
           {skillsEligible && (
             <SummaryRow
               done={includeSkills}
@@ -275,24 +481,27 @@ export function ConnectConfigPanel({
         last={downloadBlocked}
       >
         <div className="flex flex-col gap-3">
-          <Alert variant="info">
-            <Info />
-            <AlertDescription>
-              Claude Desktop's third-party inference cannot reuse a Claude Pro
-              or Max subscription. To keep paying through a subscription,
-              connect Claude Code in passthrough mode instead.
-            </AlertDescription>
-          </Alert>
+          {llmProxyEnabled && (
+            <Alert variant="info">
+              <Info />
+              <AlertDescription>
+                Claude Desktop's third-party inference cannot reuse a Claude Pro
+                or Max subscription. To keep paying through a subscription,
+                connect Claude Code in passthrough mode instead.
+              </AlertDescription>
+            </Alert>
+          )}
           <ConfigDownloadStep
             baseUrl={baseUrl}
-            llmProxyId={llmProxyId}
+            llmProxyId={llmProxyEnabled ? llmProxyId : null}
             gateway={
               gateway
                 ? { slug: gatewaySlug ?? gateway.id, name: gateway.name }
                 : null
             }
-            includeSkills={skillsEligible && includeSkills}
-            skillIds={skillIds}
+            skillMarketplace={skillMarketplace}
+            onRetrySkills={retrySkillMarketplace}
+            profileUrlError={profileUrlError}
           />
         </div>
       </WizardStep>
@@ -301,7 +510,7 @@ export function ConnectConfigPanel({
         <WizardStep
           n={4}
           title="Import the profile into Claude Desktop"
-          last={!gateway}
+          last={!showSkillsInstallStep && !gateway}
         >
           <div className="space-y-4 text-sm text-muted-foreground">
             <ol className="list-decimal space-y-2 pl-5">
@@ -341,8 +550,35 @@ export function ConnectConfigPanel({
         </WizardStep>
       )}
 
+      {showSkillsInstallStep && (
+        <WizardStep n={5} title="Install shared skills" last={!gateway}>
+          <div className="space-y-4 text-sm text-muted-foreground">
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>
+                Go to{" "}
+                <strong className="font-medium text-foreground">
+                  Settings → Plugins → Browse plugins
+                </strong>
+                .
+              </li>
+              <li>
+                Install the{" "}
+                <strong className="font-medium text-foreground">
+                  {skillMarketplace.marketplaceName}
+                </strong>{" "}
+                marketplace.
+              </li>
+            </ol>
+          </div>
+        </WizardStep>
+      )}
+
       {!downloadBlocked && gateway && (
-        <WizardStep n={5} title={FINISH_OAUTH_FLOW_TITLE} last>
+        <WizardStep
+          n={showSkillsInstallStep ? 6 : 5}
+          title={FINISH_OAUTH_FLOW_TITLE}
+          last
+        >
           <p className="mb-3 text-sm text-muted-foreground">
             The profile only registers the connector — the gateway grants tool
             access per user, so its tools appear in chat only after you sign in
@@ -395,11 +631,15 @@ type ProvisionState =
   | { status: "loading" }
   | {
       status: "ready";
-      passthroughKey: string;
-      virtualKey: string;
+      passthroughKey: string | null;
+      virtualKey: string | null;
       creditWarning?: ConnectionCreditWarning | null;
     }
   | { status: "error" };
+
+type SkillMarketplacePreparation =
+  | { status: "not-applicable" | "loading" | "error" }
+  | { status: "ready"; cloneUrl: string; marketplaceName: string };
 
 /**
  * The two prerequisites for producing a configuration profile: permission to
@@ -445,27 +685,25 @@ function useConfigProfileAvailability(): {
 /**
  * The artifact step. Provisions the caller's passthrough + standard virtual
  * keys (the standard key needs a configured Anthropic provider key — mirrors
- * the command panel's handling), builds the profile, and offers the download.
- *
- * When skills are included, the token-bearing marketplace clone URL is minted
- * on the download click (not eagerly), so a visitor who only previews never
- * spawns a share link, and the "Share link created" toast stays tied to a
- * deliberate action.
+ * the command panel's handling), then downloads the prepared profile. The
+ * marketplace link is prepared by the parent so preview, instructions, and
+ * every repeated download use one real, consistent marketplace.
  */
 function ConfigDownloadStep({
   baseUrl,
   llmProxyId,
   gateway,
-  includeSkills,
-  skillIds,
+  skillMarketplace,
+  onRetrySkills,
+  profileUrlError,
 }: {
   baseUrl: string;
   /** Needed for the passthrough-key provisioning payload, not URLs. */
-  llmProxyId: string;
+  llmProxyId: string | null;
   gateway: { slug: string; name: string } | null;
-  /** Already gated on skill-admin eligibility by the parent. */
-  includeSkills: boolean;
-  skillIds: string[];
+  skillMarketplace: SkillMarketplacePreparation;
+  onRetrySkills: () => void;
+  profileUrlError: string | null;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const { canCreateVirtualKey, canCreateProviderKey, anthropicHasKey } =
@@ -474,20 +712,23 @@ function ConfigDownloadStep({
   const { mutateAsync: provisionPassthrough } =
     useCreateConnectionPassthroughKey();
   const { mutateAsync: provisionVirtual } = useCreateConnectionVirtualKey();
-  const { mutateAsync: createShareLink, isPending: mintingShareLink } =
-    useCreateSkillShareLink();
 
-  const [state, setState] = useState<ProvisionState>({ status: "loading" });
+  const [state, setState] = useState<ProvisionState>(
+    llmProxyId
+      ? { status: "loading" }
+      : { status: "ready", passthroughKey: null, virtualKey: null },
+  );
   const [showAddProviderKey, setShowAddProviderKey] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  // Set when the share-link mint fails on a download click, so the profile is
-  // never silently downloaded without the skills the user asked for.
-  const [skillMintFailed, setSkillMintFailed] = useState(false);
 
   // Both calls are idempotent server-side (they reuse an existing key), so a
   // single fire is enough; the ref survives strict-mode's double-invoke.
   const firedRef = useRef(false);
   const provision = useCallback(() => {
+    if (!llmProxyId) {
+      setState({ status: "ready", passthroughKey: null, virtualKey: null });
+      return;
+    }
     setState({ status: "loading" });
     Promise.all([
       provisionPassthrough({ llmProxyId }),
@@ -511,46 +752,25 @@ function ConfigDownloadStep({
   // Provision once the prerequisites resolve: the user can mint keys and the
   // Anthropic provider key (which the standard virtual key wraps) exists.
   useEffect(() => {
+    if (profileUrlError) return;
+    if (!llmProxyId) return;
     if (canCreateVirtualKey !== true || !anthropicHasKey) return;
     if (firedRef.current) return;
     firedRef.current = true;
     provision();
-  }, [canCreateVirtualKey, anthropicHasKey, provision]);
+  }, [
+    llmProxyId,
+    canCreateVirtualKey,
+    anthropicHasKey,
+    profileUrlError,
+    provision,
+  ]);
 
-  // Build + download on click. When skills are included, the marketplace share
-  // link is minted here (not eagerly) so previewing never spawns a link, and
-  // its failure aborts the download rather than shipping a skill-less profile.
-  const handleDownload = useCallback(async () => {
-    if (state.status !== "ready") return;
-    setSkillMintFailed(false);
-    let skillMarketplace: {
-      cloneUrl: string;
-      marketplaceName: string;
-    } | null = null;
-    if (includeSkills && skillIds.length > 0) {
-      // Never expires — the marketplace must outlive any single download;
-      // admins revoke it from the Skills page. The hook toasts on failure.
-      const link = await createShareLink({ skillIds, expiresAt: null });
-      if (!link) {
-        setSkillMintFailed(true);
-        return;
-      }
-      skillMarketplace = {
-        cloneUrl: link.cloneUrl,
-        marketplaceName: link.marketplaceName,
-      };
-    }
-    const profile = buildClaudeDesktopConfigProfile({
-      baseUrl,
-      passthroughKey: state.passthroughKey,
-      virtualKey: state.virtualKey,
-      gateway,
-      skillMarketplace,
-    });
-    downloadClaudeDesktopConfig(profile, generateConfigFilename());
-  }, [state, includeSkills, skillIds, createShareLink, baseUrl, gateway]);
+  if (profileUrlError) {
+    return <p className="text-sm text-muted-foreground">{profileUrlError}</p>;
+  }
 
-  if (canCreateVirtualKey === false) {
+  if (llmProxyId && canCreateVirtualKey === false) {
     return (
       <p className="text-sm text-muted-foreground">
         You don't have permission to create virtual keys. Ask an admin to
@@ -568,7 +788,7 @@ function ConfigDownloadStep({
 
   // No Anthropic provider key → the standard virtual key can't be minted. Offer
   // to add one inline (or point at an admin), exactly like the command panel.
-  if (canCreateVirtualKey === true && !anthropicHasKey) {
+  if (llmProxyId && canCreateVirtualKey === true && !anthropicHasKey) {
     return (
       <>
         <p className="text-sm text-muted-foreground">
@@ -627,14 +847,40 @@ function ConfigDownloadStep({
     );
   }
 
-  // Preview reflects the non-skill profile only: the marketplace clone URL is
-  // minted on download, so there's no real value to show until then. The note
-  // below the button covers the skills part.
-  const previewProfile = buildClaudeDesktopConfigProfile({
+  if (skillMarketplace.status === "loading") {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" />
+        <span>Preparing your shared skills marketplace…</span>
+      </div>
+    );
+  }
+
+  if (skillMarketplace.status === "error") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Couldn't prepare your shared skills marketplace.{" "}
+        <button
+          type="button"
+          onClick={onRetrySkills}
+          className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+        >
+          Retry
+        </button>
+        .
+      </p>
+    );
+  }
+
+  // Preview and download share this object, so the reviewed profile is exactly
+  // what the user receives. A new opaque filename is still generated per click.
+  const profile = buildClaudeDesktopConfigProfile({
     baseUrl,
     passthroughKey: state.passthroughKey,
     virtualKey: state.virtualKey,
     gateway,
+    skillMarketplace:
+      skillMarketplace.status === "ready" ? skillMarketplace : null,
   });
 
   return (
@@ -651,37 +897,15 @@ function ConfigDownloadStep({
             or the keys it embeds. A fresh file-name token is minted per click. */}
         <Button
           type="button"
-          onClick={handleDownload}
-          disabled={mintingShareLink}
+          onClick={() =>
+            downloadClaudeDesktopConfig(profile, generateConfigFilename())
+          }
           data-testid="connect-download-config"
         >
-          {mintingShareLink ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Download className="size-4" />
-          )}
-          {mintingShareLink ? "Preparing…" : "Download configuration"}
+          <Download className="size-4" />
+          <span>Download configuration</span>
         </Button>
       </div>
-      {includeSkills && (
-        <p className="text-xs text-muted-foreground">
-          The profile also registers your shared skills as a marketplace, using
-          a token-bearing git URL generated when you download.
-        </p>
-      )}
-      {skillMintFailed && (
-        <p className="text-xs text-destructive">
-          Couldn't prepare the skills marketplace.{" "}
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="font-medium underline underline-offset-2"
-          >
-            Retry
-          </button>
-          , or clear "Install shared skills" to download without it.
-        </p>
-      )}
       <button
         type="button"
         onClick={() => setShowPreview((s) => !s)}
@@ -690,9 +914,11 @@ function ConfigDownloadStep({
         {showPreview ? "Hide" : "Preview"} configuration
       </button>
       {showPreview && (
-        <pre className="m-0 overflow-x-auto rounded-lg border bg-muted/30 p-3 font-mono text-[12px] leading-relaxed text-foreground">
-          {JSON.stringify(maskConfigSecrets(previewProfile), null, 2)}
-        </pre>
+        <div className="min-w-0 space-y-2">
+          <pre className="m-0 overflow-x-auto rounded-lg border bg-muted/30 p-3 font-mono text-[12px] leading-relaxed text-foreground">
+            {JSON.stringify(maskConfigSecrets(profile), null, 2)}
+          </pre>
+        </div>
       )}
     </div>
   );

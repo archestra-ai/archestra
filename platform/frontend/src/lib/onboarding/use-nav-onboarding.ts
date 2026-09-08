@@ -28,7 +28,7 @@ export function useNavOnboarding() {
   const pathname = usePathname();
   const { data: seenData, isSuccess: seenLoaded } = useSeenNavItems();
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  // Connect is compound-gated (same as the sidebar): both reads required.
+  // Connect is gated the same way as the sidebar: either half is enough.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const { data: canReadMcpGateway } = useHasPermissions({
     mcpGateway: ["read"],
@@ -51,7 +51,7 @@ export function useNavOnboarding() {
         case "nav:apps":
           return permissionMap["/apps"] ?? true;
         case "nav:connect":
-          return canReadLlmProxy === true && canReadMcpGateway === true;
+          return canReadLlmProxy === true || canReadMcpGateway === true;
         case "nav:model-providers":
           return permissionMap["/llm/model-providers"] ?? true;
         case "nav:mcp-registry":

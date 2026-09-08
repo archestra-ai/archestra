@@ -505,14 +505,15 @@ export function AppSidebar() {
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const appIconLogo = useAppIconLogo();
-  // Connect page requires both MCP gateway and LLM proxy read permissions
+  // Connect is useful with either half: MCP-only (tools) or proxy-only
+  // (inference). Org settings can hide a section without hiding the page.
   const { data: canReadLlmProxy } = useHasPermissions({
     llmProxy: ["read"],
   });
   const { data: canReadMcpGateway } = useHasPermissions({
     mcpGateway: ["read"],
   });
-  const showConnect = canReadMcpGateway && canReadLlmProxy;
+  const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const pluginsEnabled = useFeature("plugins");
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -521,7 +522,7 @@ export function AppSidebar() {
   const { unseenKeys, showChatsDot, showStudioDot, markSeen } =
     useNavOnboarding();
 
-  // Connect requires both MCP gateway and LLM proxy read permissions.
+  // Connect is offered when either MCP gateway or LLM proxy is readable.
   const filteredChatsNavItems = React.useMemo(
     () =>
       chatsNavItems.filter((item) => {

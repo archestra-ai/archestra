@@ -57,7 +57,6 @@ jobs:
       version: ${{ inputs.version }}
       push_image: ${{ inputs.push_image }}
       auth_provider: dockerhub
-      include_latest_tag: ${{ inputs.version != 'dev' }}
       checkout_fetch_depth: 0
       checkout_ref: ${{ inputs.checkout_ref }}
       # This reusable workflow currently publishes the compile-bound Platform

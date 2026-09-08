@@ -42,11 +42,6 @@ on:
         required: false
         type: string
         default: ""
-      include_latest_tag:
-        description: "Whether to also tag the merged manifest as latest"
-        required: false
-        type: boolean
-        default: false
       checkout_fetch_depth:
         description: "Checkout fetch depth"
         required: false
@@ -234,21 +229,14 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          EXTRA_TAGS=()
-          if [ "${INCLUDE_LATEST_TAG}" = "true" ]; then
-            # supply-chain-policy: allow-latest internal release channel
-            EXTRA_TAGS+=(-t "${IMAGE_REGISTRY}/${IMAGE_NAME}:latest")
-          fi
-
+          # Stable aliases move only in the release workflow's approved publication job.
           docker buildx imagetools create \
             -t "${IMAGE_REGISTRY}/${IMAGE_NAME}:${VERSION}" \
-            "${EXTRA_TAGS[@]}" \
             $(printf "${IMAGE_REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
         env:
           IMAGE_REGISTRY: ${{ inputs.image_registry }}
           IMAGE_NAME: ${{ inputs.image_name }}
           VERSION: ${{ inputs.version }}
-          INCLUDE_LATEST_TAG: ${{ inputs.include_latest_tag }}
 
       - name: Inspect image
         run: |
@@ -257,3 +245,24 @@ jobs:
           IMAGE_REGISTRY: ${{ inputs.image_registry }}
           IMAGE_NAME: ${{ inputs.image_name }}
           VERSION: ${{ inputs.version }}
+
+      - name: Preserve release image reference
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        shell: bash
+        env:
+          IMAGE: ${{ inputs.image_registry }}/${{ inputs.image_name }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-image"
+          docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' \
+            | jq -er --arg image "$IMAGE" '.digest | select(test("^sha256:[0-9a-f]{64}$")) | $image + "@" + .' \
+            > "$RUNNER_TEMP/release-image/$IMAGE_NAME"
+
+      - name: Upload release image reference
+        if: ${{ startsWith(inputs.checkout_ref, 'platform-v') }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: release-image-${{ inputs.image_name }}
+          path: ${{ runner.temp }}/release-image/*
+          if-no-files-found: error

@@ -3,7 +3,7 @@ import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import { CONNECTION_SETUP_MAX_SKILLS, type User } from "@/types";
 
 vi.mock("@/auth");
 
@@ -719,5 +719,86 @@ describe("POST /api/connection-setups", () => {
       expect.objectContaining({ providerApiKeyId: mappedKey.id }),
     ]);
     expect(personalKey.id).not.toBe(mappedKey.id);
+  });
+
+  test("403s a proxy setup when the org has disabled connecting the LLM Proxy", async () => {
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionLlmProxyEnabled: false,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "anthropic",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("LLM Proxy");
+  });
+
+  test("403s a skills setup when the org has disabled connecting skills", async () => {
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionSkillsEnabled: false,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        skills: {
+          skillIds: ["3e0c8d4e-7a8b-4f43-9e1d-2f56a1b6c7d8"],
+          ttlDays: 30,
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("skills");
+  });
+
+  test("accepts 240 skill ids, past the old 200-id create cap", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        skills: {
+          skillIds: Array.from({ length: 240 }, () => crypto.randomUUID()),
+          ttlDays: null,
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toBe("Skill not found");
+  });
+
+  test("rejects more skills than the share-link and marketplace cap", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        skills: {
+          skillIds: Array.from(
+            { length: CONNECTION_SETUP_MAX_SKILLS + 1 },
+            () => crypto.randomUUID(),
+          ),
+          ttlDays: null,
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 });

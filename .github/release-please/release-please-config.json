@@ -89,6 +89,14 @@
         {
           "type": "generic",
           "path": "helm/archestra/values.yaml"
+        },
+        {
+          "type": "generic",
+          "path": ".env.example"
+        },
+        {
+          "type": "generic",
+          "path": "/docs/pages/platform-deployment.md"
         }
       ]
     }

@@ -4,9 +4,9 @@ import type { AgentIconPickerFallback } from "@/components/agent-icon-picker";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 
 /**
- * The block every entity form opens with: the icon picker on its own row, then
- * the labelled fields that name the thing — agents, projects, apps and MCP
- * servers all start this way.
+ * The block every entity form opens with: an icon picker beside the labelled
+ * field that names the thing — agents, projects, apps and MCP servers all
+ * start this way.
  *
  * It exists so they cannot drift apart. Choosing an emoji looked different in
  * each place (beside the name field here, above it there, labelled in one form
@@ -15,7 +15,7 @@ import { AgentIconPicker } from "@/components/agent-icon-picker";
  * they are wired to four different form libraries and abstracting that would
  * cost more than the consistency is worth.
  *
- * Pass the name/description fields as `children`, each with a real `<Label>`.
+ * Pass the name field as `children`, with a real `<Label>`.
  */
 export function IdentityFields({
   icon,
@@ -37,19 +37,20 @@ export function IdentityFields({
   showLogos?: boolean;
   /** Render the icon as orientation rather than an edit control. */
   disabled?: boolean;
-  /** The labelled fields that sit under the picker. */
+  /** The labelled name field that sits beside the picker. */
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="flex items-start gap-3">
       <AgentIconPicker
         value={icon}
         onChange={onIconChange}
         fallbackType={fallbackType}
         showLogos={showLogos}
         disabled={disabled}
+        className="mt-6 size-9 rounded-md"
       />
-      {children}
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

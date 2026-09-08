@@ -36,6 +36,19 @@ export function parseErrorResponse(error: Error): ChatErrorResponse | null {
   return null;
 }
 
+/** Simplified cards only show curated copy, never provider or raw error text. */
+export function getSimplifiedChatErrorMessage(
+  error: ChatErrorResponse,
+  appName: string,
+): string {
+  return branded(
+    ChatErrorMessages[
+      error.usageLimitExceeded ? ChatErrorCode.UsageLimitExceeded : error.code
+    ],
+    appName,
+  );
+}
+
 /**
  * Recursively parse nested JSON strings to produce a clean object
  */

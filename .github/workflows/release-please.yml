@@ -6,62 +6,18 @@ on:
       - main
       - "release/*"
   workflow_dispatch:
-    inputs:
-      publish_existing_release:
-        description: "Publish artifacts for an existing release instead of creating a new release-please release"
-        required: false
-        default: false
-        type: boolean
-      version:
-        description: "Existing platform version to publish, without the v prefix (for example, 1.2.59)"
-        required: false
-        type: string
-      tag_name:
-        description: "Existing release tag to publish (for example, platform-v1.2.59)"
-        required: false
-        type: string
-      publish_mcp_server_image:
-        description: "Publish the MCP server base image"
-        required: false
-        default: true
-        type: boolean
-      publish_agent_catalog_images:
-        description: "Publish the curated Agent catalog images"
-        required: false
-        default: true
-        type: boolean
-      publish_p4_shim_image:
-        description: "Publish the p4 shim image"
-        required: false
-        default: true
-        type: boolean
-      publish_platform_image:
-        description: "Publish the platform image to Docker Hub"
-        required: false
-        default: true
-        type: boolean
-      publish_helm_chart:
-        description: "Publish the platform Helm chart"
-        required: false
-        default: true
-        type: boolean
-      finalize_github_release:
-        description: "Un-draft the GitHub release after selected artifacts publish"
-        required: false
-        default: true
-        type: boolean
 
 permissions: {}
 
 concurrency:
   group: release-please-${{ github.ref }}
-  # Never preempt an in-flight release for the same branch. Subsequent pushes queue
-  # behind the active run so artifact publishing can complete atomically.
+  # Do not interrupt a release waiting for qualification and approval.
   cancel-in-progress: false
 
 jobs:
   release-please:
     name: Release Please
+    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to update manifests and release metadata in the repository.
@@ -87,6 +43,38 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
+      - name: Validate branch release policy
+        id: policy
+        env:
+          BRANCH: ${{ github.ref_name }}
+          RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
+        shell: bash
+        run: |
+          test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
+          CONFIG=.github/release-please/release-please-config.json
+          VERSION=$(jq -r '.platform' .github/release-please/.release-please-manifest.json)
+          OVERRIDE=$(jq -r '.packages.platform["release-as"] // empty' "$CONFIG")
+          NEXT=${OVERRIDE:-$VERSION}
+          jq -e '.packages.platform.draft == true' "$CONFIG" \
+            || { echo "::error::Config must keep draft=true; releases are published by the approval job"; exit 1; }
+          if [ "$BRANCH" = main ]; then
+            [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.0-beta\.[1-9][0-9]*$ ]] \
+              || { echo "::error::Main must release X.Y.0-beta.N"; exit 1; }
+            jq -e '.packages.platform | .prerelease == true and .versioning == "prerelease" and .["prerelease-type"] == "beta"' "$CONFIG" \
+              || { echo "::error::Main config must set prerelease=true, versioning=prerelease, and prerelease-type=beta"; exit 1; }
+          else
+            [[ "$NEXT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${NEXT%.*}" = "${BRANCH#release/}" ]] \
+              || { echo "::error::Stable version must match release/X.Y"; exit 1; }
+            jq -e '.packages.platform | .prerelease == false and .versioning == "always-bump-patch"' "$CONFIG" \
+              || { echo "::error::Stable config must set prerelease=false and versioning=always-bump-patch"; exit 1; }
+          fi
+          echo "requested=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$VERSION" = "$OVERRIDE" ]; then
+            echo "create_pr=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "create_pr=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # release-please runs in TWO invocations (releases first, then PRs) instead of one.
       # A single invocation creates the GitHub release for a just-merged release PR as a
       # DRAFT (no git tag yet) and then immediately builds the next release PR in the same
@@ -98,7 +86,6 @@ jobs:
       # the version calculation is always anchored to the real latest release.
       - name: Create releases for merged release PRs
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        if: ${{ !inputs.publish_existing_release }}
         id: release-please
         with:
           token: ${{ steps.generate-token.outputs.token }}
@@ -107,10 +94,8 @@ jobs:
           target-branch: ${{ github.ref_name }}
           skip-github-pull-request: true
 
-      # release-please creates the GitHub release as a DRAFT ("draft": true in
-      # release-please-config.json) so it stays hidden until every artifact is built and
-      # pushed. It is published (draft -> published) by the publish-github-release job
-      # once all artifacts are ready.
+      # All releases start as drafts. Betas publish after artifacts are ready;
+      # stable releases additionally require approval of the publication job.
       #
       # We do NOT toggle a published release back to draft: GitHub's immutable-releases
       # feature rejects that ("state cannot be changed when release is immutable", HTTP
@@ -120,18 +105,75 @@ jobs:
       # Draft releases don't create the underlying git tag, but downstream build jobs
       # check out the tag ref (checkout_ref) and release-please needs the tag to exist
       # when calculating the next version (otherwise it creates bogus PRs with stale
-      # versions). So we create the tag ourselves, pinned to the release commit, before
-      # the next release PR is built below.
+      # versions). Resolve a just-created release or an interrupted matching draft before
+      # creating that tag ourselves, pinned to the release commit.
+      - name: Resolve release to publish or recover
+        id: resolve-release
+        env:
+          ACTION_RELEASE_CREATED: ${{ steps.release-please.outputs['platform--release_created'] }}
+          ACTION_VERSION: ${{ steps.release-please.outputs['platform--version'] }}
+          ACTION_TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
+          ACTION_RELEASE_SHA: ${{ steps.release-please.outputs['platform--sha'] }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED_VERSION: ${{ steps.policy.outputs.requested }}
+        run: |
+          if [ "$ACTION_RELEASE_CREATED" = "true" ] && [ "$ACTION_VERSION" != "$REQUESTED_VERSION" ]; then
+            echo "::error::Release-please produced a version other than the merged manifest."
+            exit 1
+          fi
+
+          SHOULD_PUBLISH=false
+          TAG_NAME=
+          RELEASE_SHA=
+          if [ "$ACTION_RELEASE_CREATED" = "true" ]; then
+            SHOULD_PUBLISH=true
+            TAG_NAME=$ACTION_TAG_NAME
+            RELEASE_SHA=$ACTION_RELEASE_SHA
+          else
+            EXPECTED_TAG=platform-v${REQUESTED_VERSION}
+            if RELEASE=$(gh release view "$EXPECTED_TAG" --json isDraft,targetCommitish 2>/dev/null); then
+              if [ "$(jq -r .isDraft <<<"$RELEASE")" = true ]; then
+                SHOULD_PUBLISH=true
+                TAG_NAME=$EXPECTED_TAG
+                RELEASE_SHA=$(jq -r .targetCommitish <<<"$RELEASE")
+                echo "Recovering draft release ${TAG_NAME}"
+              fi
+            fi
+          fi
+
+          if [ "$SHOULD_PUBLISH" = true ]; then
+            RELEASE=$(gh release view "$TAG_NAME" --json isDraft,targetCommitish)
+            [ "$(jq -r .isDraft <<<"$RELEASE")" = true ] \
+              || { echo "::error::Release ${TAG_NAME} is already published"; exit 1; }
+            [ "$(jq -r .targetCommitish <<<"$RELEASE")" = "$RELEASE_SHA" ] \
+              || { echo "::error::Draft ${TAG_NAME} does not target the selected release commit"; exit 1; }
+            git cat-file -e "${RELEASE_SHA}^{commit}" \
+              || { echo "::error::Release commit ${RELEASE_SHA} is unavailable in this checkout"; exit 1; }
+            git merge-base --is-ancestor "$RELEASE_SHA" "$GITHUB_SHA" \
+              || { echo "::error::Release commit ${RELEASE_SHA} is not on ${GITHUB_REF_NAME}"; exit 1; }
+          fi
+
+          {
+            echo "should_publish=${SHOULD_PUBLISH}"
+            echo "version=${REQUESTED_VERSION}"
+            echo "tag_name=${TAG_NAME}"
+            echo "checkout_ref=${TAG_NAME}"
+            echo "release_sha=${RELEASE_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Create git tag for draft release
-        if: ${{ steps.release-please.outputs['platform--release_created'] == 'true' && !inputs.publish_existing_release }}
+        if: ${{ steps.resolve-release.outputs.should_publish == 'true' }}
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
-          RELEASE_SHA: ${{ github.sha }}
+          TAG_NAME: ${{ steps.resolve-release.outputs.tag_name }}
+          RELEASE_SHA: ${{ steps.resolve-release.outputs.release_sha }}
         run: |
           if gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" >/dev/null 2>&1; then
-            echo "Tag ${TAG_NAME} already exists; nothing to do."
+            EXISTING_SHA=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" --jq '.object.sha')
+            test "$EXISTING_SHA" = "$RELEASE_SHA" \
+              || { echo "::error::Tag ${TAG_NAME} exists at ${EXISTING_SHA}, expected ${RELEASE_SHA}"; exit 1; }
           else
             gh api "repos/${GH_REPO}/git/refs" \
               -f ref="refs/tags/${TAG_NAME}" \
@@ -141,7 +183,9 @@ jobs:
 
       - name: Create or update the next release PR
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        if: ${{ !inputs.publish_existing_release }}
+        # Native rolling PRs on each branch. Pause only for consumed cutover overrides,
+        # which must be cleared after the seed/final release has built successfully.
+        if: ${{ steps.policy.outputs.create_pr == 'true' }}
         id: release-please-pr
         with:
           token: ${{ steps.generate-token.outputs.token }}
@@ -160,46 +204,9 @@ jobs:
           echo "$RELEASE_OUTPUTS"
           echo "$PR_OUTPUTS"
 
-      - name: Resolve release to publish
-        id: resolve-release
-        env:
-          ACTION_RELEASE_CREATED: ${{ steps.release-please.outputs['platform--release_created'] }}
-          ACTION_VERSION: ${{ steps.release-please.outputs['platform--version'] }}
-          ACTION_TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          INPUT_PUBLISH_EXISTING_RELEASE: ${{ inputs.publish_existing_release }}
-          INPUT_TAG_NAME: ${{ inputs.tag_name }}
-          INPUT_VERSION: ${{ inputs.version }}
-        run: |
-          if [ "${INPUT_PUBLISH_EXISTING_RELEASE}" = "true" ]; then
-            if [ -z "${INPUT_VERSION}" ]; then
-              echo "::error::version is required when publish_existing_release is true"
-              exit 1
-            fi
-
-            TAG_NAME="${INPUT_TAG_NAME:-platform-v${INPUT_VERSION}}"
-            gh release view "${TAG_NAME}" --json tagName,isDraft,targetCommitish
-
-            {
-              echo "should_publish=true"
-              echo "version=${INPUT_VERSION}"
-              echo "tag_name=${TAG_NAME}"
-              echo "checkout_ref=${TAG_NAME}"
-            } >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          {
-            echo "should_publish=${ACTION_RELEASE_CREATED:-false}"
-            echo "version=${ACTION_VERSION}"
-            echo "tag_name=${ACTION_TAG_NAME}"
-            echo "checkout_ref=${ACTION_TAG_NAME}"
-          } >> "${GITHUB_OUTPUT}"
-
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_mcp_server_image) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
     needs:
       - release-please
@@ -216,7 +223,7 @@ jobs:
 
   build-and-push-agent-catalog-images:
     name: Build and push Agent Catalog images
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_agent_catalog_images) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/build-agent-catalog-images.yml
     needs:
       - release-please
@@ -235,7 +242,7 @@ jobs:
     name: Build and push p4 Shim Docker image
     # The backend defaults the Perforce permission-sync shim pod to
     # p4-shim:<appVersion>, so the image ships with every platform release.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_p4_shim_image) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/build-p4-shim-docker-image.yml
     needs:
       - release-please
@@ -276,7 +283,7 @@ jobs:
     # The tag is baked as a default value at build time, so the MCP server image doesn't need to
     # exist yet. Both images are built in parallel and the publish-github-release job gates on
     # all artifacts being ready before un-drafting the release.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_platform_image) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/build-dockerhub-image.yml
     needs:
       - release-please
@@ -301,7 +308,7 @@ jobs:
     # The Helm chart only references the version tag (not image content), so it can run
     # in parallel with Docker image builds. The publish-github-release job ensures all
     # artifacts are ready before the release is made visible.
-    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_helm_chart) }}
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     uses: ./.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
@@ -310,18 +317,23 @@ jobs:
       id-token: write # Required for Workload Identity Federation.
     with:
       version: ${{ needs.release-please.outputs.platform_version }}
-      push_chart: true
+      # Stable charts remain workflow artifacts until explicit qualification/publication.
+      push_chart: ${{ contains(needs.release-please.outputs.platform_version, '-beta.') }}
       checkout_ref: ${{ needs.release-please.outputs.platform_checkout_ref }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
   publish-github-release:
-    name: Publish GitHub Release
-    # Un-drafts the GitHub release and triggers the website deploy only after ALL artifacts
-    # (MCP server image, Agent images, p4 shim image, sandbox base image, platform Docker image, Helm chart) are published.
-    if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.finalize_github_release) && (needs.build-and-push-mcp-server-docker-image.result == 'success' || needs.build-and-push-mcp-server-docker-image.result == 'skipped') && (needs.build-and-push-agent-catalog-images.result == 'success' || needs.build-and-push-agent-catalog-images.result == 'skipped') && (needs.build-and-push-p4-shim-docker-image.result == 'success' || needs.build-and-push-p4-shim-docker-image.result == 'skipped') && (needs.build-and-push-sandbox-base-docker-image.result == 'success' || needs.build-and-push-sandbox-base-docker-image.result == 'skipped') && (needs.build-and-push-platform-docker-image-to-dockerhub.result == 'success' || needs.build-and-push-platform-docker-image-to-dockerhub.result == 'skipped') && (needs.publish-platform-helm-chart.result == 'success' || needs.publish-platform-helm-chart.result == 'skipped') }}
+    name: Publish release
+    # No skipped build is acceptable. Stable approval happens after all builds.
+    if: ${{ needs.release-please.outputs.platform_should_publish == 'true' }}
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'beta-release' || 'stable-release' }}
+    concurrency:
+      # Keep beta publishing independent of stable qualification.
+      group: release-publication-${{ github.ref_name == 'main' && 'beta' || 'stable' }}
+      cancel-in-progress: false
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
@@ -331,7 +343,13 @@ jobs:
       - build-and-push-platform-docker-image-to-dockerhub
       - publish-platform-helm-chart
     permissions:
-      contents: write # Required to publish the GitHub release draft.
+      contents: write # Attach the saved chart and publish the release.
+      id-token: write # Authenticate the existing registry publisher.
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.release-please.outputs.platform_version }}
+      TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -339,36 +357,85 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Generate a token
-        id: generate-token
-        uses: ./.github/actions/github-app-token
-        with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
-
-      # Publish the draft (draft -> published) now that all artifacts are ready. This is
-      # the one release-state transition GitHub's immutable-releases feature allows, and
-      # it is what locks the release as immutable. Guarded so re-runs / the
-      # publish_existing_release path don't 422 on an already-published release.
-      - name: Publish release
+      - name: Check publication is still allowed
+        shell: bash
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ needs.release-please.outputs.platform_tag_name }}
+          RELEASE_FREEZE: ${{ vars.RELEASE_FREEZE }}
         run: |
-          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq '.isDraft')
-          if [ "$IS_DRAFT" = "true" ]; then
-            gh release edit "$TAG_NAME" --draft=false
-            echo "Published release $TAG_NAME."
-          else
-            echo "Release $TAG_NAME is already published; skipping."
+          test "$RELEASE_FREEZE" != true || { echo "::error::Releases are frozen"; exit 1; }
+          if [[ "$VERSION" != *-beta.* ]]; then
+            # Fetch every page before comparing: process substitution hides API failures.
+            # An empty successful list permits the first stable release without a 404 exception.
+            STABLE_TAGS=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.prerelease | not) | .tag_name') \
+              || { echo "::error::Cannot verify stable release ordering; retry when the release list is available"; exit 1; }
+            while IFS= read -r RELEASE_TAG; do
+              [[ "$RELEASE_TAG" =~ ^platform-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+              RELEASE_VERSION=${RELEASE_TAG#platform-v}
+              # Ubuntu's GNU sort -V orders the numeric stable versions accepted above.
+              test "$(printf '%s\n' "$VERSION" "$RELEASE_VERSION" | sort -V | tail -1)" = "$VERSION" \
+                || { echo "::error::Newer stable release ${RELEASE_TAG} exists (published or draft); cannot publish ${TAG_NAME}"; exit 1; }
+            done <<< "$STABLE_TAGS"
           fi
 
-      # Dispatches the website repo's CLI deploy workflow. A Vercel deploy hook
-      # cannot be used: hooks create Git-integration deployments, which Vercel
-      # blocks when the website's head commit author is not a Vercel team member.
+      - name: Download saved chart
+        uses: ./.github/actions/github-download-artifact
+        with:
+          name: release-helm-chart
+
+      - name: Download saved image references
+        uses: ./.github/actions/github-download-artifact
+        with:
+          pattern: release-image-*
+          path: release-images
+          merge-multiple: true
+
+      - name: Authenticate to artifact registry
+        if: ${{ github.ref_name != 'main' }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Log in to Docker Hub
+        if: ${{ github.ref_name != 'main' }}
+        uses: ./.github/actions/docker-login
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Publish approved stable artifacts without rebuilding
+        if: ${{ github.ref_name != 'main' }}
+        shell: bash
+        run: |
+          test -s release-images/mcp-server-base
+          PLATFORM_IMAGE=$(cat release-images/platform)
+          helm push "archestra-platform-${VERSION}.tgz" oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts
+          for file in release-images/*; do
+            [ "${file##*/}" = platform ] && continue
+            IMAGE=$(cat "$file")
+            # supply-chain-policy: allow-latest approved stable release channel
+            docker buildx imagetools create --tag "${IMAGE%@*}:latest" "$IMAGE"
+          done
+          # Move platform last, after its companion images are ready.
+          # supply-chain-policy: allow-latest approved stable release channel
+          docker buildx imagetools create --tag "${PLATFORM_IMAGE%@*}:latest" "$PLATFORM_IMAGE"
+
+      - name: Publish GitHub release
+        shell: bash
+        run: |
+          # A retry may find an already published immutable release.
+          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft)
+          [ "$IS_DRAFT" = true ] || exit 0
+          gh release upload "$TAG_NAME" "archestra-platform-${VERSION}.tgz" --clobber
+          if [[ "$VERSION" == *-beta.* ]]; then
+            gh release edit "$TAG_NAME" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$TAG_NAME" --draft=false --prerelease=false --latest
+          fi
+
       - name: Generate website deployment token
-        id: generate-website-token
+        if: ${{ github.ref_name != 'main' }}
+        id: website-token
         uses: ./.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_WEBSITE_DEPLOY_GITHUB_APP_ID }}
@@ -377,13 +444,11 @@ jobs:
           repositories: website
           permission-actions: write
 
-      - name: Trigger website deploy
+      - name: Refresh release website
+        if: ${{ github.ref_name != 'main' }}
         env:
-          GH_TOKEN: ${{ steps.generate-website-token.outputs.token }}
-        run: |
-          gh workflow run deploy-to-vercel.yml \
-            --repo archestra-ai/website \
-            --ref main
+          GH_TOKEN: ${{ steps.website-token.outputs.token }}
+        run: gh workflow run deploy-to-vercel.yml --repo archestra-ai/website --ref main
 
   notify-release-failure:
     name: Notify release failure
@@ -391,7 +456,7 @@ jobs:
     # release (e.g. an image or chart that never published) is surfaced immediately
     # instead of failing silently.
     #
-    # The release-please job runs in two contexts: on every push to main it just rebuilds
+    # The release-please job runs in two contexts: on release branch pushes it rebuilds
     # the release PR (should_publish=false), and only when a release PR is merged does it
     # actually cut a release (should_publish=true). We gate on platform_should_publish so
     # transient flakes in the former context (e.g. release-please's "other side closed"
@@ -401,6 +466,7 @@ jobs:
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
+      - build-and-push-agent-catalog-images
       - build-and-push-p4-shim-docker-image
       - build-and-push-sandbox-base-docker-image
       - build-and-push-platform-docker-image-to-dockerhub
@@ -417,6 +483,7 @@ jobs:
           VERSION: ${{ needs.release-please.outputs.platform_version }}
           RP_RESULT: ${{ needs.release-please.result }}
           MCP_RESULT: ${{ needs.build-and-push-mcp-server-docker-image.result }}
+          AGENT_CATALOG_RESULT: ${{ needs.build-and-push-agent-catalog-images.result }}
           P4_SHIM_RESULT: ${{ needs.build-and-push-p4-shim-docker-image.result }}
           SANDBOX_RESULT: ${{ needs.build-and-push-sandbox-base-docker-image.result }}
           PLATFORM_RESULT: ${{ needs.build-and-push-platform-docker-image-to-dockerhub.result }}
@@ -432,6 +499,7 @@ jobs:
           • release-please: \`${RP_RESULT}\`
           • platform image (Docker Hub): \`${PLATFORM_RESULT}\`
           • MCP server image: \`${MCP_RESULT}\`
+          • agent catalog images: \`${AGENT_CATALOG_RESULT}\`
           • p4 shim image: \`${P4_SHIM_RESULT}\`
           • sandbox base image: \`${SANDBOX_RESULT}\`
           • Helm chart: \`${HELM_RESULT}\`

@@ -67,9 +67,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3.
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
+    # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
     # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for OTel/x/sys
     # transitively pull older x/net and grpc versions and would otherwise override these requirements.
-    go get golang.org/x/net@v0.56.0 google.golang.org/grpc@v1.83.1 && \
+    go get golang.org/x/net@v0.56.0 google.golang.org/grpc@v1.83.2 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -122,9 +123,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go get github.com/containerd/containerd/v2@v2.2.5 && \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
+    # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
     # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby/containerd)
     # transitively pull grpc 1.80.0 and would otherwise downgrade our explicit requirement.
-    go get google.golang.org/grpc@v1.83.1 && \
+    go get google.golang.org/grpc@v1.83.2 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \

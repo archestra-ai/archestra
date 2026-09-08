@@ -44,7 +44,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
   const remoteName = `External A2A ${suffix}`;
   const parentName = `A2A parent ${suffix}`;
   const promptMarker = `outbound-a2a-e2e-${suffix}`;
-  const delegatedMessage = `[fixture:artifact] payload-${suffix}`;
+  const delegatedMessage = `[fixture:delayed] payload-${suffix}`;
   const finalAnswer = `External A2A delegation ${suffix} completed end to end.`;
 
   let parentId: string | undefined;
@@ -69,7 +69,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
     await connectDialog.getByLabel("Agent base URL").fill(A2A_FIXTURE_BASE_URL);
     await connectDialog.getByLabel("Display name (optional)").fill(remoteName);
     await connectDialog
-      .getByRole("button", { name: "Test connection" })
+      .getByRole("button", { name: "Validate Agent Card" })
       .click();
     await expect(
       connectDialog.getByText("Deterministic A2A Test Agent"),
@@ -106,9 +106,9 @@ test("delegates from a parent agent to an external A2A agent", async ({
     // External assignments deliberately share the Agent form's Save lifecycle:
     // selecting the row only stages it; the POST must happen after Save changes.
     await goToPage(page, `/agents/${parentId}?section=tools`);
-    await expect(page.getByText("External A2A", { exact: true })).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(
+      page.locator("#main-content").getByText("External A2A", { exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Add external" }).click();
     await page
       .getByRole("menuitemcheckbox", { name: new RegExp(remoteName) })
@@ -197,8 +197,10 @@ test("delegates from a parent agent to an external A2A agent", async ({
     const rpcRequests = journal.requests.filter(
       (entry) => entry.method === "POST" && entry.path === "/a2a",
     );
-    expect(rpcRequests).toHaveLength(1);
-    expect(rpcRequests[0].body?.method).toMatch(/SendMessage|message\/send/);
+    expect(rpcRequests.map((entry) => entry.body?.method)).toEqual([
+      expect.stringMatching(/SendMessage|message\/send/),
+      "GetTask",
+    ]);
     expect(rpcRequests[0].body?.params?.message?.parts).toHaveLength(1);
     expect(rpcRequests[0].body?.params?.message?.parts?.[0]).toMatchObject({
       text: delegatedMessage,

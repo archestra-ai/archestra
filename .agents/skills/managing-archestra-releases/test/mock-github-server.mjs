@@ -86,11 +86,13 @@ function initialState(scenario) {
     state.releases.push({ tag: "platform-v1.4.0", draft: true, prerelease: false });
     state.runs.push({ id: 900, branch: "release/1.4", status: "failed", artifacts: "candidate-140" });
   }
-  if (scenario === "partial-publication") {
+  if (["partial-publication", "partial-publication-shifted-run"].includes(scenario)) {
+    const runId = scenario === "partial-publication-shifted-run" ? 901 : 900;
     state.phase = "partial-publication";
     state.branches["release/1.4"] = "beta-1.4";
     state.releases.push({ tag: "platform-v1.4.1", draft: true, prerelease: false });
-    state.runs.push({ id: 900, branch: "release/1.4", status: "failed", artifacts: "candidate-141" });
+    state.runs.push({ id: runId, branch: "release/1.4", status: "failed", artifacts: "candidate-141" });
+    state.artifacts.runId = runId;
   }
   if (scenario === "stable-backport") {
     state.branches["release/1.4"] = "stable-1.4";
@@ -274,15 +276,15 @@ function downloadArtifacts(state, args) {
 
 function rerun(state, args) {
   const runId = Number(args[0]);
-  ensure(runId === 900, "partial publication must rerun the original workflow");
   const run = state.runs.find((item) => item.id === runId);
+  ensure(runId === state.artifacts.runId && run, "partial publication must rerun the original workflow");
   ensure(state.phase === "partial-publication" && run?.status === "failed", "only a failed partial publication can rerun here");
   ensure(state.artifacts.freshRetryVerified, "fresh artifact verification is required");
   ensure(state.approvals.retry, "fresh operator authorization is required");
   run.status = "waiting";
   state.phase = "qualifying";
-  event(state, "run-rerun", { runId: 900 });
-  return { rerun: 900 };
+  event(state, "run-rerun", { runId });
+  return { rerun: runId };
 }
 
 function operatorAction(state, action) {
@@ -343,6 +345,7 @@ function parseApi(args) {
       ensure(args[++index], `gh api option ${arg} requires a value`);
       continue;
     }
+    if (arg.startsWith("-")) throw new HarnessError(400, `unsupported gh api option: ${arg}`);
     if (!arg.startsWith("-") && !endpoint) endpoint = arg;
   }
   ensure(endpoint, "gh api endpoint is required");

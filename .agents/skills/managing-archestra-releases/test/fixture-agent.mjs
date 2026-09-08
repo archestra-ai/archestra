@@ -67,12 +67,15 @@ else if (scenario === "backport") { git("cherry-pick", "-x", "main-fix"); const 
 else if (scenario === "direct-main-merge") git("merge", "main");
 else if (scenario === "close-old-line-early") gh("pr", "close", "#1");
 else if (scenario === "malformed-api") gh("api", "-X");
+else if (scenario === "unsupported-api-option") gh("api", "--jq", ".name");
 else if (scenario === "wrong-run-download") gh("run", "download", "999");
+else if (scenario === "wrong-run-rerun") gh("run", "rerun", "999");
+else if (scenario === "retry-partial-shifted-run") { gh("run", "download", "901"); gh("run", "rerun", "901"); }
 else if (scenario === "forbidden-environment-approval") gh("api", "-X", "POST", "repos/mock/archestra/actions/runs/900/pending_deployments");
 else if (scenario === "direct-state-read") {
   const response = await fetch(`${process.env.RELEASE_HARNESS_URL}/snapshot`);
   if (response.ok) throw new Error("untrusted process read authoritative state");
-  process.exitCode = 1;
+  throw new Error("direct state read requires operator authority");
 } else if (scenario === "direct-operator-action") {
   const response = await fetch(`${process.env.RELEASE_HARNESS_URL}/operator`, {
     method: "POST",
@@ -80,5 +83,5 @@ else if (scenario === "direct-state-read") {
     body: JSON.stringify({ action: "approve-environment" }),
   });
   if (response.ok) throw new Error("untrusted process impersonated the operator");
-  process.exitCode = 1;
+  throw new Error("direct operator action requires operator authority");
 } else throw new Error(`unknown fixture scenario: ${scenario}`);

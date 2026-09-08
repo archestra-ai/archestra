@@ -50,14 +50,15 @@ test("gh api parser keeps a POST endpoint separate from field values and fails c
     const queueRequest = state.events.find((event) => event.type === "api" && event.method === "POST" && event.fields.name === "release/1.4 queue");
     assert.equal(queueRequest.endpoint, "repos/mock/archestra/rulesets");
     await assertFailure(() => run("malformed-api"), "gh api option -X requires a value");
+    await assertFailure(() => run("unsupported-api-option"), "unsupported gh api option: --jq");
     await assertFailure(() => run("wrong-run-download"), "release run not found");
   });
 });
 
 test("control endpoints reject fixture calls without the operator secret", async () => {
   await withHarness("fresh", async ({ run, harness }) => {
-    await assertFailure(() => run("direct-state-read"));
-    await assertFailure(() => run("direct-operator-action"));
+    await assertFailure(() => run("direct-state-read"), "direct state read requires operator authority");
+    await assertFailure(() => run("direct-operator-action"), "direct operator action requires operator authority");
     await assertFailure(() => run("forbidden-environment-approval"), "environment approval is an operator action");
     const state = await harness.snapshot();
     assert.equal(state.approvals.environment, false);
@@ -74,18 +75,23 @@ test("previous-line PR remains open until candidate artifacts are verified", asy
 });
 
 test("permission denial, approval denial, rules drift, and busy old line fail closed", async (t) => {
-  for (const scenario of ["permission-denied", "rules-drift", "busy-old-line"]) {
+  for (const [scenario, message] of [
+    ["permission-denied", "rulesets permission denied"],
+    ["rules-drift", "ruleset drift: branch creation exemption is already enabled"],
+    ["busy-old-line", "previous stable workflow is busy"],
+  ]) {
     await t.test(scenario, async () => withHarness(scenario, async ({ run, harness }) => {
-      await assertFailure(() => run("preflight"));
+      await assertFailure(() => run("preflight"), message);
       const state = await harness.snapshot();
       assert.equal(state.events.filter((event) => event.type === "stable-branch-created").length, 0);
     }));
   }
   await t.test("approval denied", async () => withHarness("fresh", async ({ run, harness }) => {
     await harness.operator("deny-stable-cut");
-    await assertFailure(() => run("start-stable"));
+    await assertFailure(() => run("start-stable"), "stable-cut approval is required");
     const state = await harness.snapshot();
     assert.equal(state.branches["release/1.4"], undefined);
+    assert.equal(state.phase, "stable-denied");
   }));
 });
 
@@ -114,7 +120,7 @@ test("resume does not recreate existing branch, tag, or PR", async () => {
 
 test("failed initial qualification creates a next-patch candidate after recovery authorization", async () => {
   await withHarness("failed-qualification", async ({ run, harness }) => {
-    await assertFailure(() => run("recover-next-patch"));
+    await assertFailure(() => run("recover-next-patch"), "cannot create stable-config PR during qualification-failed");
     await harness.operator("authorize-recovery");
     await run("recover-next-patch");
     const state = await harness.snapshot();
@@ -134,6 +140,18 @@ test("partial publication reruns original artifacts only after fresh verificatio
     assert.equal(state.runs.length, 1);
     assert.equal(state.runs[0].id, 900);
     assert.equal(state.releases.length, 2);
+  });
+});
+
+test("partial publication reruns the recorded workflow ID rather than a fixture constant", async () => {
+  await withHarness("partial-publication-shifted-run", async ({ run, harness }) => {
+    await assertFailure(() => run("wrong-run-rerun"), "partial publication must rerun the original workflow");
+    await assertFailure(() => run("retry-partial-shifted-run"), "fresh operator authorization is required");
+    await harness.operator("approve-retry");
+    await run("retry-partial-shifted-run");
+    const state = await harness.snapshot();
+    assert.equal(state.runs[0].id, 901);
+    assert.equal(state.events.at(-1).runId, 901);
   });
 });
 
@@ -172,5 +190,5 @@ async function withHarness(scenario, callback) {
 }
 
 async function assertFailure(action, message) {
-  await assert.rejects(action(), (error) => !message || error.stderr?.includes(message));
+  await assert.rejects(action(), (error) => error.stderr?.includes(message));
 }

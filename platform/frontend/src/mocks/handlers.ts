@@ -143,6 +143,13 @@ export const handlers: HttpHandler[] = [
     role: sessionSeed.user.role,
   }),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
+  ...getJson("/api/user/permission-sources", [
+    {
+      role: sessionSeed.user.role,
+      team: null,
+      permissions: adminPermissionsSeed,
+    },
+  ]),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/health", healthSeed),

@@ -4,6 +4,7 @@ import { betterAuth, hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import OrganizationRoleModel from "@/models/organization-role";
+import TeamModel from "@/models/team";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -271,7 +272,10 @@ describe("custom role routes", () => {
     expect(deleteResponse.json()).toEqual({ success: true });
   });
 
-  test("permission edits resync holders' system-level user.role", async ({
+  test.for([
+    "direct",
+    "inherited",
+  ])("permission edits resync %s holders' system-level user.role", async (assignment, {
     makeCustomRole,
     makeUser,
     makeMember,
@@ -282,7 +286,24 @@ describe("custom role routes", () => {
       permission: { member: ["read"] },
     });
     const holder = await makeUser();
-    await makeMember(holder.id, organizationId, { role: role.role });
+    await makeMember(holder.id, organizationId, {
+      role: assignment === "direct" ? `member,${role.role}` : "member",
+    });
+    if (assignment === "inherited") {
+      const parent = await TeamModel.create({
+        name: "Security",
+        organizationId,
+        createdBy: user.id,
+        roles: [role.role],
+      });
+      const child = await TeamModel.create({
+        name: "Audit",
+        organizationId,
+        createdBy: user.id,
+        parentId: parent.id,
+      });
+      await TeamModel.addMember(child.id, holder.id);
+    }
 
     // The route delegates the write to better-auth; mirror it onto the DB row
     // so the post-update resync (which reads the row) sees the new grant.

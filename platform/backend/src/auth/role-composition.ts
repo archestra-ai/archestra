@@ -43,6 +43,10 @@ export async function withInheritedRoleAuthorization(params: {
   };
 }
 
+// Include organization endpoints that authorize the caller through a member
+// lookup. Revisit this list when enabling or upgrading Better Auth endpoints;
+// keep assignment reads (such as get-active-member-role) out so they still
+// report stored direct roles rather than effective inherited roles.
 const AUTHORIZATION_PATHS = new Set([
   "/organization/update-member-role",
   "/organization/invite-member",

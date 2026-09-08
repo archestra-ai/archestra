@@ -70,7 +70,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
     # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for OTel/x/sys
     # transitively pull older x/net and grpc versions and would otherwise override these requirements.
-    go get golang.org/x/net@v0.56.0 google.golang.org/grpc@v1.83.2 && \
+    # grpc 1.83.2 requires x/net >= 0.58.0.
+    go get golang.org/x/net@v0.58.0 google.golang.org/grpc@v1.83.2 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \

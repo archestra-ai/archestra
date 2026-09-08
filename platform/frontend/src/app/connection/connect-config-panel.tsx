@@ -297,9 +297,9 @@ export function ConnectConfigPanel({
     skillMarketplace.status !== "ready" ||
     isClaudeDesktopProfileUrlSupported(skillMarketplace.cloneUrl);
   const profileUrlError = !profileBaseUrlSupported
-    ? "Claude Desktop configuration profiles require an HTTPS endpoint. Select an HTTPS endpoint in the review step, or ask an administrator to configure one for this deployment."
+    ? "Claude Desktop configuration profiles require an HTTPS endpoint (or HTTP on localhost). Select an HTTPS endpoint in the review step, or ask an administrator to configure one for this deployment."
     : !skillMarketplaceUrlSupported
-      ? "The shared skills marketplace needs an HTTPS URL before Claude Desktop can import the profile. Turn off shared skills, or ask an administrator to configure HTTPS."
+      ? "The shared skills marketplace needs an HTTPS URL (or HTTP on localhost) before Claude Desktop can import the profile. Turn off shared skills, or ask an administrator to configure HTTPS."
       : null;
   const downloadBlocked =
     (llmProxyEnabled && profileAvailability.unavailable) || !!profileUrlError;

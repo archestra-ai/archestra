@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -7,10 +8,17 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
+import { CONNECT_CLIENTS } from "./clients";
+import { ConnectWithAi } from "./connect-with-ai";
 import { ConnectionFlow } from "./connection-flow";
 import { getConnectableProviders } from "./connection-flow.utils";
 
 export default function ConnectionPage() {
+  const searchParams = useSearchParams();
+  const isApproval = !!searchParams.get("connectRequest");
+  const requestedClient = CONNECT_CLIENTS.find(
+    (client) => client.id === searchParams.get("clientId"),
+  );
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const organizationQuery = useOrganization(true, { fresh: true });
   useEffect(() => {
@@ -50,14 +58,19 @@ export default function ConnectionPage() {
   return (
     <PageLayout
       title={
-        <>
-          Give Your AI{" "}
-          <span className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text py-1 align-baseline text-transparent">
-            secure
-          </span>{" "}
-          access to tools
-        </>
+        isApproval ? (
+          `Connect ${requestedClient?.label ?? "your client"}`
+        ) : (
+          <>
+            Give Your AI{" "}
+            <span className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text py-1 align-baseline text-transparent">
+              secure
+            </span>{" "}
+            access to tools
+          </>
+        )
       }
+      actionButton={!isApproval ? <ConnectWithAi /> : undefined}
       maxWidth="wizard"
     >
       {organizationQuery.isFetching ||

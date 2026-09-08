@@ -16,9 +16,10 @@ On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `i
 
 ## Connect From Your Coding Client
 
-![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)
+![Copy a setup prompt from Connect with your AI](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-Give your coding agent this prompt, replacing the example hostname with your deployment:
+The **Connect with your AI** button provides a prompt for your deployment.
+You can also give your coding agent this prompt, replacing the example hostname:
 
 > Read https://ai.example.com/connect.md and connect this client.
 
@@ -27,9 +28,12 @@ They support Claude Code, Cursor, Codex, and Copilot CLI.
 The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
 
 The agent downloads a public bootstrap installer and starts a connection request.
-Your browser opens the Connection page, preserving the requested client and operating system.
+Your browser opens a compact approval page for the requested client and operating system.
+The setup uses your deployment’s defaults. **Customize setup** reveals the optional settings.
 Sign in using your deployment's usual login or SSO.
 Review the configuration and confirm that the browser code matches your terminal.
+![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)
+
 Approval releases the setup script to the waiting installer.
 Denying the request prevents installation.
 
@@ -202,7 +206,12 @@ For a full walkthrough, see [Using Claude Desktop (Cowork)](/docs/platform-claud
 
 > **Note:** Claude Desktop's third-party inference cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
 
-Claude Desktop is a desktop app, so you apply every change in its UI — there is no script and nothing on disk to back up.
+Download the configuration profile from the Connection page and import it into Claude Desktop.
+Remote endpoints require HTTPS. Local development also supports HTTP on `localhost`, `127.0.0.1`, and `[::1]`.
+This applies to the gateway and shared-skills marketplace. Other HTTP hostnames remain unsupported.
+
+Import the file through **Developer → Configure Third-Party Inference → Import configuration**.
+The profile contains credentials. Keep it private and delete it after importing.
 
 - **MCP gateway** — enable Developer Mode, open Developer → Configure Third-Party Inference, add a blank managed MCP server, and paste the gateway URL. Sign in once in your browser.
 - **LLM proxy** — in the same form, paste the gateway base URL and your API key, then add the Archestra attribution headers under Custom headers.

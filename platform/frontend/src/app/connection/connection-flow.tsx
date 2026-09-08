@@ -242,13 +242,15 @@ export function ConnectionFlow({
   return (
     <div className="flex flex-col">
       {/* Step 1 — Client */}
-      <WizardStep n={1} title="Select your client" last={!client}>
-        <ClientPicker
-          clients={visibleClients}
-          selected={clientId}
-          onSelect={selectClient}
-        />
-      </WizardStep>
+      {!searchParams.get("connectRequest") && (
+        <WizardStep n={1} title="Select your client" last={!client}>
+          <ClientPicker
+            clients={visibleClients}
+            selected={clientId}
+            onSelect={selectClient}
+          />
+        </WizardStep>
+      )}
 
       {/* Steps 2-3 (script clients) — review, then run the command */}
       {client && isScriptClient(client.id) && (

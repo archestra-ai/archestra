@@ -51,16 +51,9 @@ export function ClientConnectionApproval({
     request.data.clientId === clientId && request.data.platform === platform;
   return (
     <div className="space-y-4 p-5">
-      <p>
-        <span>Your terminal requested setup for </span>
-        <strong>{request.data.clientId}</strong>
-        <span> on </span>
-        <strong>{request.data.platform}</strong>
-        <span>.</span>
-      </p>
       <p className="text-sm text-muted-foreground">
-        Approve only a request you started. Approval lets that terminal apply
-        the configuration reviewed above.
+        Confirm the code matches your terminal. Approval lets your AI apply the
+        setup above to your client.
       </p>
       <p className="font-mono text-2xl font-semibold tracking-wider">
         {request.data.userCode}

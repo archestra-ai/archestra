@@ -49,14 +49,16 @@ export interface ClaudeDesktopConfigProfile {
 }
 
 /**
- * Generated profiles use HTTPS endpoints without embedded credentials because
- * their managed MCP and marketplace sections require secure URLs.
+ * Claude Desktop accepts HTTPS and HTTP on exact loopback hosts for local setup.
+ * Keep this aligned with its MCP and marketplace URL validators.
  */
 export function isClaudeDesktopProfileUrlSupported(urlString: string): boolean {
   try {
     const url = new URL(urlString);
     return (
-      url.protocol === "https:" &&
+      (url.protocol === "https:" ||
+        (url.protocol === "http:" &&
+          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) &&
       url.username.length === 0 &&
       url.password.length === 0
     );
@@ -81,7 +83,7 @@ export function buildClaudeDesktopConfigProfile(input: {
 }): ClaudeDesktopConfigProfile {
   if (!isClaudeDesktopProfileUrlSupported(input.baseUrl)) {
     throw new Error(
-      "Claude Desktop configuration profiles require an HTTPS endpoint",
+      "Claude Desktop configuration profiles require an HTTPS endpoint (or HTTP on localhost)",
     );
   }
   if (
@@ -89,7 +91,7 @@ export function buildClaudeDesktopConfigProfile(input: {
     !isClaudeDesktopProfileUrlSupported(input.skillMarketplace.cloneUrl)
   ) {
     throw new Error(
-      "Claude Desktop configuration profiles require an HTTPS marketplace URL",
+      "Claude Desktop configuration profiles require an HTTPS marketplace URL (or HTTP on localhost)",
     );
   }
 

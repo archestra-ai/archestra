@@ -151,15 +151,25 @@ function toolsQuery(over: Record<string, unknown> = {}) {
 }
 
 function renderForm(over: Partial<Parameters<typeof AppSettingsForm>[0]> = {}) {
-  const onBack = vi.fn();
-  const utils = render(<AppSettingsForm app={APP} onBack={onBack} {...over} />);
-  return { onBack, ...utils };
+  const onOpenChange = vi.fn();
+  const utils = render(
+    <AppSettingsForm app={APP} open onOpenChange={onOpenChange} {...over} />,
+  );
+  return { onOpenChange, ...utils };
 }
 
-function submitForm(container: HTMLElement) {
-  const form = container.querySelector("form");
+// The dialog now renders through the shared left-nav shell (a Radix dialog in a
+// portal), so the form lives on document, not inside the render container.
+function submitForm() {
+  const form = document.querySelector("form");
   expect(form).not.toBeNull();
   fireEvent.submit(form as HTMLFormElement);
+}
+
+// Fields are split across General/Tools/Access sidebar sections; interacting
+// with a non-General field means clicking its nav item first.
+function goToSection(label: "General" | "Tools" | "Access") {
+  fireEvent.click(screen.getByRole("button", { name: label }));
 }
 
 beforeEach(() => {
@@ -202,6 +212,7 @@ describe("AppSettingsForm save", () => {
       },
     });
 
+    goToSection("Access");
     expect(
       screen.getByText("You are not a member of the selected teams."),
     ).toBeVisible();
@@ -212,16 +223,16 @@ describe("AppSettingsForm save", () => {
 
   test("keeps labels under Advanced and saves an in-progress label", async () => {
     const user = userEvent.setup();
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
     expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.type(screen.getByLabelText("Label key"), "region");
     await user.type(screen.getByLabelText("Label value"), "eu");
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({
@@ -232,14 +243,14 @@ describe("AppSettingsForm save", () => {
   });
 
   test("saves trimmed identity fields and closes; unchanged tools fire no mutations", async () => {
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
     fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "  Budget v2  " },
     });
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith({
       appId: "app-1",
       body: {
@@ -264,13 +275,13 @@ describe("AppSettingsForm save", () => {
 
   test("switches the app to opening fullscreen", async () => {
     const user = userEvent.setup();
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
     await user.click(screen.getByRole("combobox", { name: "Opens in" }));
     await user.click(screen.getByRole("option", { name: /fullscreen/i }));
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({ openInFullscreen: true }),
@@ -279,7 +290,7 @@ describe("AppSettingsForm save", () => {
   });
 
   test("seeds from the app's saved display default and re-sends it on an unrelated save", async () => {
-    const { container, onBack } = renderForm({
+    const { onOpenChange } = renderForm({
       app: { ...APP, openInFullscreen: true } as typeof APP,
     });
     expect(
@@ -289,9 +300,9 @@ describe("AppSettingsForm save", () => {
     fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Budget v2" },
     });
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({ openInFullscreen: true }),
@@ -300,12 +311,12 @@ describe("AppSettingsForm save", () => {
   });
 
   test("sends a picked icon", async () => {
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
     fireEvent.click(screen.getByTestId("pick-icon"));
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({ icon: "🚀" }),
@@ -314,7 +325,7 @@ describe("AppSettingsForm save", () => {
   });
 
   test("seeds from the app's icon and re-sends it on an unrelated save", async () => {
-    const { container, onBack, getByTestId } = renderForm({
+    const { onOpenChange, getByTestId } = renderForm({
       app: { ...APP, icon: "🚀" } as typeof APP,
     });
     expect(getByTestId("icon-value")).toHaveTextContent("🚀");
@@ -322,9 +333,9 @@ describe("AppSettingsForm save", () => {
     fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Budget v2" },
     });
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({ name: "Budget v2", icon: "🚀" }),
@@ -333,14 +344,14 @@ describe("AppSettingsForm save", () => {
   });
 
   test("clearing the icon sends null so it goes back to the generic glyph", async () => {
-    const { container, onBack } = renderForm({
+    const { onOpenChange } = renderForm({
       app: { ...APP, icon: "🚀" } as typeof APP,
     });
 
     fireEvent.click(screen.getByTestId("clear-icon"));
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({ icon: null }),
@@ -349,12 +360,13 @@ describe("AppSettingsForm save", () => {
   });
 
   test("assigns a staged tool with dynamic credential resolution on save", async () => {
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
+    goToSection("Tools");
     fireEvent.click(screen.getByTestId("stage-tool-t2"));
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(assignMutateAsync).toHaveBeenCalledWith({
       appId: "app-1",
       toolId: "tool-2",
@@ -365,51 +377,58 @@ describe("AppSettingsForm save", () => {
 
   test("a failed update leaves the form open", async () => {
     updateMutateAsync.mockResolvedValue(null);
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
-    submitForm(container);
+    submitForm();
 
     await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
-    expect(onBack).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
     expect(assignMutateAsync).not.toHaveBeenCalled();
   });
 
   test("a failed tool change keeps the form open with the selection staged", async () => {
     assignMutateAsync.mockResolvedValue(null);
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
+    goToSection("Tools");
     fireEvent.click(screen.getByTestId("stage-tool-t2"));
-    submitForm(container);
+    submitForm();
 
     await waitFor(() => expect(assignMutateAsync).toHaveBeenCalled());
     expect(updateMutateAsync).toHaveBeenCalled();
-    expect(onBack).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   test("a failed tools query still allows saving identity, skipping tool changes", async () => {
     useAppToolsMock.mockReturnValue(
       toolsQuery({ data: undefined, isError: true }),
     );
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
     // Save stays enabled: identity/visibility still commit even though the tool
     // diff is skipped while the assignments couldn't load.
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     // The editor is not rendered unseeded — it would show every assigned tool
-    // unchecked and let the user stage edits the save would drop.
+    // unchecked and let the user stage edits the save would drop. The Tools
+    // section shows the couldn't-load note in its place.
+    goToSection("Tools");
     expect(screen.queryByTestId("stage-tool-t2")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Tool assignments couldn't be loaded/i),
+    ).toBeInTheDocument();
 
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalled();
     expect(assignMutateAsync).not.toHaveBeenCalled();
     expect(unassignMutateAsync).not.toHaveBeenCalled();
   });
 
   test("a background refetch does not overwrite the staged selection", async () => {
-    const { container, onBack, rerender } = renderForm();
+    const { onOpenChange, rerender } = renderForm();
 
+    goToSection("Tools");
     fireEvent.click(screen.getByTestId("stage-tool-t2"));
     // Refetch lands a changed server set while tool-2 is staged.
     useAppToolsMock.mockReturnValue(
@@ -420,10 +439,10 @@ describe("AppSettingsForm save", () => {
         ],
       }),
     );
-    rerender(<AppSettingsForm app={APP} onBack={onBack} />);
-    submitForm(container);
+    rerender(<AppSettingsForm app={APP} open onOpenChange={onOpenChange} />);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     // The staged selection {tool-1, tool-2} survives the refetch: tool-2 is
     // assigned. tool-3 — assigned concurrently by someone else after this
     // dialog seeded — is untouched: the diff runs against the seeded
@@ -440,19 +459,20 @@ describe("AppSettingsForm save", () => {
     // First save carries two changes: the unassign of tool-1 succeeds, the
     // assign of tool-2 fails.
     assignMutateAsync.mockResolvedValueOnce(null);
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
+    goToSection("Tools");
     fireEvent.click(screen.getByTestId("stage-tool-t2"));
     fireEvent.click(screen.getByTestId("unstage-tool-t1"));
-    submitForm(container);
+    submitForm();
     await waitFor(() => expect(assignMutateAsync).toHaveBeenCalledTimes(1));
     expect(unassignMutateAsync).toHaveBeenCalledTimes(1);
-    expect(onBack).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
 
     // Retry: only the failed assign is left in the diff — the applied
     // unassign was folded into the snapshot and must not be re-sent.
-    submitForm(container);
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    submitForm();
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(assignMutateAsync).toHaveBeenCalledTimes(2);
     expect(assignMutateAsync).toHaveBeenLastCalledWith({
       appId: "app-1",
@@ -463,18 +483,18 @@ describe("AppSettingsForm save", () => {
   });
 
   test("an empty name blocks submit and shows a validation message", async () => {
-    const { container, onBack } = renderForm();
+    const { onOpenChange } = renderForm();
 
     fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "   " },
     });
-    submitForm(container);
+    submitForm();
 
     await waitFor(() =>
       expect(screen.getByText("Name is required.")).toBeInTheDocument(),
     );
     expect(updateMutateAsync).not.toHaveBeenCalled();
-    expect(onBack).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
 
@@ -491,14 +511,14 @@ describe("AppSettingsForm URL field", () => {
   });
 
   test("sends a changed slug", async () => {
-    const { container, onBack } = renderForm({ app: SLUGGED });
+    const { onOpenChange } = renderForm({ app: SLUGGED });
 
     fireEvent.change(screen.getByLabelText("URL"), {
       target: { value: "  team-budget  " },
     });
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({ slug: "team-budget" }),
@@ -507,14 +527,14 @@ describe("AppSettingsForm URL field", () => {
   });
 
   test("omits an unchanged slug so a save cannot 409 against its own row", async () => {
-    const { container, onBack } = renderForm({ app: SLUGGED });
+    const { onOpenChange } = renderForm({ app: SLUGGED });
 
     fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Budget v2" },
     });
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.not.objectContaining({ slug: expect.anything() }),
@@ -525,12 +545,12 @@ describe("AppSettingsForm URL field", () => {
   test("treats a cleared field as leave-alone, not as an empty slug", async () => {
     // The API has no way to unset a URL, so an empty field must not be sent —
     // it would come back a 400 rather than clearing anything.
-    const { container, onBack } = renderForm({ app: SLUGGED });
+    const { onOpenChange } = renderForm({ app: SLUGGED });
 
     fireEvent.change(screen.getByLabelText("URL"), { target: { value: "" } });
-    submitForm(container);
+    submitForm();
 
-    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.not.objectContaining({ slug: expect.anything() }),
@@ -543,10 +563,10 @@ describe("AppSettingsForm URL field", () => {
     ["an underscore", "team_budget"],
     ["a space", "team budget"],
   ])("blocks the save on %s and never calls the API", async (_label, value) => {
-    const { container, onBack } = renderForm({ app: SLUGGED });
+    const { onOpenChange } = renderForm({ app: SLUGGED });
 
     fireEvent.change(screen.getByLabelText("URL"), { target: { value } });
-    submitForm(container);
+    submitForm();
 
     await waitFor(() =>
       expect(
@@ -554,6 +574,6 @@ describe("AppSettingsForm URL field", () => {
       ).toBeInTheDocument(),
     );
     expect(updateMutateAsync).not.toHaveBeenCalled();
-    expect(onBack).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });

@@ -632,9 +632,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // A non-null default role must resolve to a real role in this org
       // (predefined or custom) — otherwise new members would be provisioned
       // with a role that grants no permissions.
-      if (body.defaultMemberRole) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      for (const roleIdentifier of body.defaultMemberRole?.split(",") ?? []) {
         const role = await OrganizationRoleModel.getByIdentifier(
-          body.defaultMemberRole,
+          roleIdentifier,
           organizationId,
         );
         if (!role) {
@@ -652,6 +655,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
       }
+      // SPDX-SnippetEnd
 
       // Requiring 2FA is enterprise-licensed enforcement (see enterprise-tier
       // for the small-team allowance). Session caps ride the same gate.

@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RoleFilterSelect } from "@/components/role-filter-select";
+import { RoleSelect } from "@/components/ui/role-select";
+
+vi.mock("@/lib/auth/auth.query");
+
+import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useRoles } from "@/lib/role.query";
 
 vi.mock("@/lib/role.query", () => ({ useRoles: vi.fn() }));
@@ -18,8 +22,11 @@ const ROLES = [
   },
 ];
 
-describe("RoleFilterSelect", () => {
+describe("RoleSelect filters", () => {
   beforeEach(() => {
+    vi.mocked(useAllPermissions).mockReturnValue({ data: {} } as ReturnType<
+      typeof useAllPermissions
+    >);
     vi.mocked(useRoles).mockReturnValue({
       data: ROLES,
       isPending: false,
@@ -30,7 +37,9 @@ describe("RoleFilterSelect", () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
 
-    render(<RoleFilterSelect value="admin" onValueChange={onValueChange} />);
+    render(
+      <RoleSelect mode="filter" value="admin" onValueChange={onValueChange} />,
+    );
 
     await user.click(screen.getByRole("combobox"));
     await user.type(screen.getByPlaceholderText("Search roles..."), "ledger");
@@ -46,7 +55,9 @@ describe("RoleFilterSelect", () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
 
-    render(<RoleFilterSelect value="all" onValueChange={onValueChange} />);
+    render(
+      <RoleSelect mode="filter" value="all" onValueChange={onValueChange} />,
+    );
 
     await user.click(screen.getByRole("combobox"));
     // The display name is "Ledger Watch"; `night_auditor` is what a service

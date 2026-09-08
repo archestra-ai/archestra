@@ -82718,6 +82718,9 @@ export type UpdateAuthSettingsData = {
         oauthAccessTokenLifetimeSeconds?: number;
         requireTwoFactor?: boolean;
         sessionMaxAgeSeconds?: number | null;
+        /**
+         * One or more organization role identifiers, separated by commas
+         */
         defaultMemberRole?: string | null;
     };
     path?: never;
@@ -97979,6 +97982,7 @@ export type GetTeamsResponses = {
             id: string;
             name: string;
             description: string | null;
+            roles: Array<string>;
             organizationId: string;
             parentId: string | null;
             createdBy: string;
@@ -98022,6 +98026,7 @@ export type CreateTeamData = {
     body: {
         name: string;
         description?: string;
+        roles?: Array<string>;
         parentId?: string | null;
         convertToolResultsToToon?: boolean;
         labels?: Array<{
@@ -98109,6 +98114,7 @@ export type CreateTeamResponses = {
         id: string;
         name: string;
         description: string | null;
+        roles: Array<string>;
         organizationId: string;
         parentId: string | null;
         createdBy: string;
@@ -98306,6 +98312,7 @@ export type GetTeamResponses = {
         id: string;
         name: string;
         description: string | null;
+        roles: Array<string>;
         organizationId: string;
         parentId: string | null;
         createdBy: string;
@@ -98340,6 +98347,7 @@ export type UpdateTeamData = {
     body: {
         name?: string;
         description?: string;
+        roles?: Array<string>;
         parentId?: string | null;
         convertToolResultsToToon?: boolean;
         labels?: Array<{
@@ -98429,6 +98437,7 @@ export type UpdateTeamResponses = {
         id: string;
         name: string;
         description: string | null;
+        roles: Array<string>;
         organizationId: string;
         parentId: string | null;
         createdBy: string;
@@ -100214,6 +100223,96 @@ export type GetToolResponses = {
 };
 
 export type GetToolResponse = GetToolResponses[keyof GetToolResponses];
+
+export type GetUserPermissionSourcesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/user/permission-sources';
+};
+
+export type GetUserPermissionSourcesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetUserPermissionSourcesError = GetUserPermissionSourcesErrors[keyof GetUserPermissionSourcesErrors];
+
+export type GetUserPermissionSourcesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        role: string;
+        team: {
+            id: string;
+            name: string;
+        } | null;
+        permissions: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+        };
+    }>;
+};
+
+export type GetUserPermissionSourcesResponse = GetUserPermissionSourcesResponses[keyof GetUserPermissionSourcesResponses];
 
 export type GetUserPermissionsData = {
     body?: never;
@@ -103124,8 +103223,14 @@ export type GetIdentityProvidersResponses = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -103255,8 +103360,14 @@ export type CreateIdentityProviderData = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -103454,8 +103565,14 @@ export type CreateIdentityProviderResponses = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -104095,8 +104212,14 @@ export type GetIdentityProviderResponses = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -104226,8 +104349,14 @@ export type UpdateIdentityProviderData = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -104426,8 +104555,14 @@ export type UpdateIdentityProviderResponses = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;

@@ -371,36 +371,38 @@ function getRoleMappingRuleRow(page: Page, index: number) {
   return page.getByTestId(getIdpRoleMappingRuleRowTestId(index));
 }
 
-/**
- * Pick a role out of the `SearchableSelect` behind `trigger`.
- *
- * Its options are plain `<button>`s in a portalled popover, and the popover
- * animates out rather than unmounting the instant a selection lands. A
- * page-wide `getByRole("button")` therefore races the *previous* picker off
- * the screen: choose a rule's role and then open the default-role picker, and
- * both popovers are briefly mounted at once, so an option name they share
- * ("Member" is listed in every role picker) resolves to two elements and
- * Playwright's strict mode fails the click instead of making it.
- *
- * Radix points a trigger at its own content through `aria-controls`, so
- * scoping the option to that id keeps each pick unambiguous no matter what is
- * still on its way off screen.
- */
+/** Replace the selected roles with one role in the canonical multi-select. */
 async function selectRoleOption(
   page: Page,
   trigger: Locator,
   roleName: string,
 ): Promise<void> {
-  await trigger.click();
+  await trigger.press("Space");
   const popoverId = await trigger.getAttribute("aria-controls");
   expect(
     popoverId,
     "role picker trigger should point at its popover via aria-controls",
   ).toBeTruthy();
-  await page
-    .locator(`[id="${popoverId}"]`)
-    .getByRole("button", { name: roleName, exact: true })
-    .click();
+  const popover = page.locator(`[id="${popoverId}"]`);
+  // Descriptions contribute to the accessible name. Match the role label at
+  // the beginning, retaining the boundary between Admin and Platform Admin.
+  const role = popover.getByRole("button", {
+    name: new RegExp(`^${roleName}\\b`),
+  });
+  if ((await role.getAttribute("aria-pressed")) !== "true") {
+    await role.click();
+  }
+  // Add the target before removing other selections to preserve minSelected=1.
+  const otherRoles = popover
+    .getByRole("button", { pressed: true })
+    .filter({ hasNot: page.getByText(roleName, { exact: true }) });
+  while (await otherRoles.count()) {
+    await otherRoles.first().click();
+  }
+  await popover
+    .getByRole("textbox", { name: "Search roles..." })
+    .press("Escape");
+  await expect(popover).not.toBeVisible();
 }
 
 async function openIdentityProviderDialogSection(

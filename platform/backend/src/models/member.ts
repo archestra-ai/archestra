@@ -313,7 +313,11 @@ class MemberModel {
 
     const filters = [
       eq(schema.membersTable.organizationId, organizationId),
-      ...(role ? [eq(schema.membersTable.role, role)] : []),
+      ...(role
+        ? [
+            sql`${role} = ANY(string_to_array(${schema.membersTable.role}, ','))`,
+          ]
+        : []),
       ...(searchFilter ? [searchFilter] : []),
     ];
 

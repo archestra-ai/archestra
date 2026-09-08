@@ -425,6 +425,14 @@ async function validateRoleOrThrow(params: {
   organizationId: string;
   userId: string;
 }) {
+  if (params.role.includes(",")) {
+    for (const role of new Set(
+      params.role.split(",").map((role) => role.trim()),
+    )) {
+      await validateRoleOrThrow({ ...params, role });
+    }
+    return;
+  }
   const resolvedRole = await OrganizationRoleModel.getByIdentifier(
     params.role,
     params.organizationId,

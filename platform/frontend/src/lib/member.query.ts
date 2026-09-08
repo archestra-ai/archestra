@@ -263,7 +263,8 @@ export function useUpdateMemberRole() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: memberKeys.all });
-      toast.success("Member role updated");
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
+      toast.success("Member roles updated");
     },
     onError: (error: Error) => {
       toast.error("Failed to update role", { description: error.message });
@@ -287,6 +288,7 @@ export function useRemoveMember() {
       return response.data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: memberKeys.lists() });
       toast.success("Member removed");
     },
@@ -309,6 +311,7 @@ export function useBulkDeleteMembers() {
       return response.data as MemberBulkOutcome;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: memberKeys.lists() });
       queryClient.invalidateQueries({
         queryKey: organizationKeys.memberSignupStatus(),

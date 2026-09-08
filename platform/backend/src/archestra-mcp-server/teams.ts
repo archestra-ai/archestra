@@ -19,6 +19,10 @@ import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
 import {
+  validateInheritedTeamRoles,
+  validateTeamRoles,
+} from "@/services/role-assignment";
+import {
   canManageTeamMembers,
   canReadTeam,
   checkLastAdminInvariant,
@@ -50,6 +54,11 @@ const TeamOutputItemSchema = z.object({
   id: z.string().describe("The team ID."),
   name: z.string().describe("The team name."),
   description: z.string().nullable().describe("The team description, if any."),
+  roles: z
+    .array(z.string())
+    .describe(
+      "Organization role identifiers assigned to the team and inherited by members of this team and its descendants.",
+    ),
   parentId: z
     .string()
     .nullable()
@@ -103,6 +112,13 @@ const CreateTeamToolArgsSchema = z
       .string()
       .optional()
       .describe("Optional human-readable description of the team."),
+    roles: z
+      .array(z.string().regex(/^[a-z0-9_]+$/))
+      .max(100)
+      .optional()
+      .describe(
+        "Organization role identifiers to assign to the team. Members of this team and its descendants inherit their permissions.",
+      ),
     parent_id: UuidIdSchema.nullable()
       .optional()
       .describe("Optional parent team ID. Omit or pass null for a root team."),
@@ -149,6 +165,13 @@ const EditTeamToolArgsSchema = z
       .optional()
       .describe(
         "Optional new team description. Pass null to clear an existing description.",
+      ),
+    roles: z
+      .array(z.string().regex(/^[a-z0-9_]+$/))
+      .max(100)
+      .optional()
+      .describe(
+        "Replace the team’s organization role identifiers. Members of this team and its descendants inherit their permissions. Pass [] to clear; omit to leave unchanged.",
       ),
     parent_id: UuidIdSchema.nullable()
       .optional()
@@ -536,6 +559,7 @@ function serializeTeam(team: Team, memberCount: number) {
     id: team.id,
     name: team.name,
     description: team.description ?? null,
+    roles: team.roles,
     parentId: team.parentId,
     organizationId: team.organizationId,
     createdBy: team.createdBy ?? null,
@@ -612,8 +636,19 @@ async function handleCreateTeam(params: {
         "You can only create a child under a team you can manage.",
       );
     }
+    await validateTeamRoles({
+      roles: args.roles,
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
+    await validateInheritedTeamRoles({
+      teamId: args.parent_id,
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
     const team = await TeamModel.create({
       name: args.name,
+      roles: args.roles,
       description: args.description,
       organizationId: context.organizationId,
       createdBy: context.userId,
@@ -774,7 +809,8 @@ async function handleEditTeam(params: {
       args.name === undefined &&
       args.description === undefined &&
       args.parent_id === undefined &&
-      args.labels === undefined
+      args.labels === undefined &&
+      args.roles === undefined
     ) {
       return errorResult("No fields provided to update.");
     }
@@ -795,7 +831,19 @@ async function handleEditTeam(params: {
       }
     }
 
+    if (!context.userId) return errorResult("User context not available.");
+    await validateTeamRoles({
+      roles: args.roles,
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
+    await validateInheritedTeamRoles({
+      teamId: args.parent_id,
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
     const updated = await TeamModel.update(args.id, {
+      ...(args.roles !== undefined ? { roles: args.roles } : {}),
       ...(args.name !== undefined ? { name: args.name } : {}),
       ...(args.description !== undefined
         ? { description: args.description }
@@ -967,6 +1015,12 @@ async function handleAddTeamMember(params: {
       return errorResult("User is already a member of this team.");
     }
 
+    if (!context.userId) return errorResult("User context not available.");
+    await validateInheritedTeamRoles({
+      teamId: args.team_id,
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
     const member = await TeamModel.addMember(
       args.team_id,
       orgUser.id,

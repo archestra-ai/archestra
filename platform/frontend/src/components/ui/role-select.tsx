@@ -1,15 +1,22 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import { findUngrantablePermissions } from "@archestra/shared/access-control";
 import { ShieldAlert } from "lucide-react";
 import type * as React from "react";
+import { filterControlClass } from "@/components/filter-bar";
 import { RoleOptionLabel } from "@/components/role-type-icon";
+import { SearchableMultiSelect } from "@/components/searchable-multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useRoles } from "@/lib/role.query";
 import { formatRoleName } from "@/lib/utils/role";
 
 interface RoleSelectProps {
+  mode?: "assignment" | "filter";
+  allOptionValue?: string;
+  multiple?: boolean;
+  allowEmpty?: boolean;
   value?: string;
   onValueChange?: (value: string) => void;
   placeholder?: string;
@@ -71,6 +78,10 @@ function UngrantableHint({ missing }: { missing: string[] }) {
  * identifier is what the API and the IdP mappings speak in.
  */
 export function RoleSelect({
+  mode = "assignment",
+  allOptionValue = "all",
+  multiple = false,
+  allowEmpty = false,
   value,
   onValueChange,
   placeholder = "Select role",
@@ -84,7 +95,9 @@ export function RoleSelect({
   restrictToGrantable = true,
 }: RoleSelectProps) {
   const { data: roles = [], isPending } = useRoles();
-  const ungrantableFor = useUngrantablePermissions(restrictToGrantable);
+  const ungrantableFor = useUngrantablePermissions(
+    mode === "assignment" && restrictToGrantable,
+  );
 
   const items = roles.map((role) => {
     const missing = ungrantableFor(role.permission);
@@ -92,10 +105,11 @@ export function RoleSelect({
     return {
       value: role.role,
       label,
+      description: role.description ?? undefined,
       // The identifier is what an admin sees in the API and in IdP mappings,
       // so a search for it should find the role even when the display name
       // has been edited away from it.
-      searchText: `${label} ${role.name} ${role.role}`,
+      searchText: `${label} ${role.name} ${role.role} ${role.description ?? ""}`,
       disabled: missing.length > 0,
       content: (
         <span className="flex flex-col items-start">
@@ -111,20 +125,54 @@ export function RoleSelect({
     };
   });
 
+  if (multiple && mode === "assignment") {
+    const selected = (value ?? "").split(",").filter(Boolean);
+    return (
+      <SearchableMultiSelect
+        value={selected}
+        onValueChange={(roles) => onValueChange?.(roles.join(","))}
+        items={items}
+        minSelected={allowEmpty ? 0 : 1}
+        id={id}
+        ariaLabel={ariaLabel ?? "Roles"}
+        data-testid={testId}
+        className={className}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
+        disabled={disabled || isPending}
+        placeholder={isPending ? "Loading roles…" : "Select roles"}
+        searchPlaceholder="Search roles..."
+        contentClassName="min-w-[min(28rem,calc(100vw-2rem))]"
+        emptyMessage="No matching roles found."
+      />
+    );
+  }
+
   return (
     <SearchableSelect
       value={value ?? ""}
       onValueChange={(role) => onValueChange?.(role)}
       id={id}
-      ariaLabel={ariaLabel}
+      ariaLabel={ariaLabel ?? (mode === "filter" ? "Filter by role" : "Role")}
       aria-describedby={ariaDescribedBy}
       aria-invalid={ariaInvalid}
       data-testid={testId}
-      className={className}
+      className={
+        className ??
+        (mode === "filter"
+          ? filterControlClass({ active: value !== allOptionValue })
+          : undefined)
+      }
       disabled={disabled || isPending}
       placeholder={isPending ? "Loading roles…" : placeholder}
       searchPlaceholder="Search roles..."
+      contentClassName="min-w-[min(28rem,calc(100vw-2rem))]"
       emptyMessage="No matching roles found."
+      pinnedItems={
+        mode === "filter"
+          ? [{ value: allOptionValue, label: "All roles" }]
+          : undefined
+      }
       items={items}
     />
   );

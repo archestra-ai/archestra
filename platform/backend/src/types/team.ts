@@ -39,6 +39,10 @@ export const CreateTeamBodySchema = z.object({
     .min(1, "Team name is required")
     .max(MAX_TEAM_NAME_LENGTH, "Team name must be at most 256 characters"),
   description: z.string().optional(),
+  roles: z
+    .array(z.string().regex(/^[a-z0-9_]+$/))
+    .max(100)
+    .optional(),
   parentId: z.string().nullable().optional(),
   convertToolResultsToToon: z.boolean().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),
@@ -51,6 +55,10 @@ export const UpdateTeamBodySchema = z.object({
     .max(MAX_TEAM_NAME_LENGTH, "Team name must be at most 256 characters")
     .optional(),
   description: z.string().optional(),
+  roles: z
+    .array(z.string().regex(/^[a-z0-9_]+$/))
+    .max(100)
+    .optional(),
   parentId: z.string().nullable().optional(),
   convertToolResultsToToon: z.boolean().optional(),
   labels: z.array(LabelWithDetailsSchema).optional(),

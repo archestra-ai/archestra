@@ -19,6 +19,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useCreateInvitation } from "@/lib/organization.query";
+import { formatRoleName } from "@/lib/utils/role";
 
 interface InviteByLinkCardProps {
   organizationId?: string;
@@ -100,8 +101,9 @@ function InviteByLinkCardContent({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
+              <Label htmlFor="role">Roles</Label>
               <RoleSelect
+                multiple
                 id="role"
                 value={role}
                 onValueChange={(value) => setRole(value as AnyRoleName)}
@@ -111,7 +113,7 @@ function InviteByLinkCardContent({
                 className="w-full"
               />
               <FieldDescription>
-                The role this person will have in your organization
+                The roles this person will have in your organization
               </FieldDescription>
             </div>
           </>
@@ -143,7 +145,8 @@ function InviteByLinkCardContent({
             </div>
             <FieldDescription>
               Share this link with <span className="font-medium">{email}</span>{" "}
-              to invite them as a <span className="font-medium">{role}</span>
+              with these roles:{" "}
+              <span className="font-medium">{formatRoleName(role)}</span>
             </FieldDescription>
           </div>
         )}

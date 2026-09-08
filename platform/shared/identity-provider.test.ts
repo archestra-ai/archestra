@@ -6,6 +6,7 @@ import {
   IdentityProviderFormSchema,
   IdentityProviderOidcConfigSchema,
   IdentityProviderSamlConfigSchema,
+  IdpRoleMappingConfigSchema,
   RedactedIdentityProviderOidcConfigSchema,
   RedactedIdentityProviderSamlConfigSchema,
 } from "./identity-provider";
@@ -247,5 +248,33 @@ describe("IDENTITY_PROVIDER_SECRET_PATHS", () => {
         idpMetadata: {},
       }),
     ).not.toThrow();
+  });
+});
+
+describe("role mapping assignments", () => {
+  it("accepts multiple roles for a rule and fallback", () => {
+    const mapping = {
+      rules: [{ expression: "true", role: "member,audit_reader" }],
+      defaultRole: "member,editor",
+    };
+    expect(IdpRoleMappingConfigSchema.parse(mapping)).toEqual(mapping);
+  });
+
+  it.each([
+    "",
+    " ",
+    ",",
+    "member,",
+    ",admin",
+    "member,,admin",
+  ])("rejects an empty role in %j", (role) => {
+    expect(
+      IdpRoleMappingConfigSchema.safeParse({
+        rules: [{ expression: "true", role }],
+      }).success,
+    ).toBe(false);
+    expect(
+      IdpRoleMappingConfigSchema.safeParse({ defaultRole: role }).success,
+    ).toBe(false);
   });
 });

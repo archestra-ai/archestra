@@ -12,6 +12,7 @@ import {
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
+  RoleAssignmentSchema,
   SESSION_MAX_AGE_MAX_SECONDS,
   SESSION_MAX_AGE_MIN_SECONDS,
   StoredKnowledgeConnectorOverridesSchema,
@@ -555,7 +556,7 @@ export const UpdateAuthSettingsSchema = z.object({
     .optional(),
   // Role slug (predefined or custom) assigned to new self-signup / ChatOps
   // members. `null` clears it back to the built-in "member" fallback.
-  defaultMemberRole: z.string().min(1).nullable().optional(),
+  defaultMemberRole: RoleAssignmentSchema.nullable().optional(),
 });
 
 export const UpdateConnectionSettingsSchema = z.object({

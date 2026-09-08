@@ -9,14 +9,13 @@ import {
   resourceLabels,
 } from "@archestra/shared";
 import { allAvailableActions } from "@archestra/shared/access-control";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
@@ -61,6 +60,8 @@ export function RolePermissionBuilder({
   readOnly = false,
   readOnlyTooltip,
 }: RolePermissionBuilderProps) {
+  const [search, setSearch] = useState("");
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(),
   );
@@ -241,184 +242,180 @@ export function RolePermissionBuilder({
     [permission, onChange, userPermissions],
   );
 
+  const query = search.trim().toLowerCase();
+  const visibleCategories = Object.entries(resourceCategories)
+    .map(([category, resources]) => ({
+      category,
+      resources: resources.filter((resource) => {
+        if (selectedOnly && !permission[resource]?.length) return false;
+        return (
+          !query ||
+          [
+            category,
+            resource,
+            resourceLabels[resource],
+            resourceDescriptions[resource],
+            ...(allAvailableActions[resource] ?? []).map(
+              (action) => actionLabels[action],
+            ),
+          ].some((text) => text?.toLowerCase().includes(query))
+        );
+      }),
+    }))
+    .filter(({ resources }) => resources.length > 0);
+
   return (
     <div className="space-y-4">
-      <Card className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Selected Permissions</p>
-            <p className="text-xs text-muted-foreground">
-              {getTotalPermissionCount()} permission
-              {getTotalPermissionCount() !== 1 ? <span>s</span> : null} across{" "}
-              {Object.keys(permission).length} resource
-              {Object.keys(permission).length !== 1 ? <span>s</span> : null}
-            </p>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onChange({})}
-                  disabled={readOnly || getTotalPermissionCount() === 0}
-                >
-                  Clear All
-                </Button>
-              </span>
-            </TooltipTrigger>
-            {readOnly && readOnlyTooltip && (
-              <TooltipContent>{readOnlyTooltip}</TooltipContent>
-            )}
-          </Tooltip>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground" aria-live="polite">
+          <span className="font-medium tabular-nums text-foreground">
+            {getTotalPermissionCount()}
+          </span>{" "}
+          <span>
+            {getTotalPermissionCount() === 1 ? "permission" : "permissions"}{" "}
+            across {Object.keys(permission).length}{" "}
+            {Object.keys(permission).length === 1 ? "resource" : "resources"}
+          </span>
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onChange({})}
+          disabled={readOnly || getTotalPermissionCount() === 0}
+          title={readOnly ? readOnlyTooltip : undefined}
+        >
+          Clear All
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-48 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="Search permissions"
+            placeholder="Search resources or actions…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="pl-9"
+          />
         </div>
-      </Card>
-
-      <div className="space-y-3">
-        {Object.entries(resourceCategories).map(([category, resources]) => {
-          const categoryCheckState = getCategoryCheckState(category);
-
+        <Button
+          type="button"
+          variant={selectedOnly ? "secondary" : "ghost"}
+          size="sm"
+          aria-pressed={selectedOnly}
+          onClick={() => setSelectedOnly(!selectedOnly)}
+        >
+          Selected only
+        </Button>
+      </div>
+      <div className="divide-y border-y">
+        {visibleCategories.map(({ category, resources }) => {
+          const expanded =
+            !!query || selectedOnly || expandedCategories.has(category);
+          const categoryCount = (resourceCategories[category] ?? []).reduce(
+            (sum, resource) => sum + (permission[resource]?.length ?? 0),
+            0,
+          );
           return (
-            <Card key={category} className="gap-0 p-3">
-              <div className="flex w-full items-center gap-2">
-                <button
-                  className="flex items-center text-left"
-                  onClick={() => toggleCategory(category)}
-                  type="button"
-                >
-                  {expandedCategories.has(category) ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </button>
+            <section key={category}>
+              <div className="flex items-center gap-3 py-3">
                 <Checkbox
                   aria-label={`${category} permissions`}
-                  id={`category-${category}`}
-                  checked={categoryCheckState}
+                  checked={getCategoryCheckState(category)}
                   disabled={readOnly}
-                  className={
-                    categoryCheckState === "indeterminate" ? "opacity-50" : ""
+                  onCheckedChange={(checked) =>
+                    checked
+                      ? selectAllForCategory(category)
+                      : deselectAllForCategory(category)
                   }
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      selectAllForCategory(category);
-                    } else {
-                      deselectAllForCategory(category);
-                    }
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
                 />
-                <button
-                  className="flex-1 text-left"
-                  onClick={() => toggleCategory(category)}
+                <Button
                   type="button"
+                  variant="ghost"
+                  aria-label={category}
+                  aria-expanded={expanded}
+                  onClick={() => toggleCategory(category)}
+                  className="h-auto flex-1 justify-between px-0 py-1 hover:bg-transparent"
                 >
-                  <span className="font-semibold text-sm">{category}</span>
-                </button>
+                  <span className="font-medium">{category}</span>
+                  <span className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
+                    <span>
+                      {categoryCount
+                        ? `${categoryCount} selected`
+                        : `${resources.length} resources`}
+                    </span>
+                    {expanded ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </span>
+                </Button>
               </div>
-
-              {expandedCategories.has(category) && (
-                <div className="mt-2 space-y-2">
+              {expanded && (
+                <div className="divide-y pl-7">
                   {resources.map((resource) => {
                     const availableActions = userPermissions[resource] || [];
-                    const allActions = allAvailableActions[resource] || [];
                     const selectedActions = permission[resource] || [];
-                    const resourceCheckState = getResourceCheckState(resource);
-                    const isPartiallySelected =
-                      resourceCheckState === "indeterminate";
-
                     return (
                       <div
                         key={resource}
-                        className="rounded-md border bg-card p-3"
+                        className="grid gap-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]"
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              aria-label={`${
-                                resourceLabels[resource] || resource
-                              } permissions`}
-                              id={`${resource}-all`}
-                              checked={resourceCheckState}
-                              disabled={readOnly}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  selectAllForResource(resource);
-                                } else {
-                                  deselectAllForResource(resource);
-                                }
-                              }}
-                              className={
-                                isPartiallySelected ? "opacity-50" : ""
-                              }
-                            />
-                            <div>
-                              <Label
-                                htmlFor={`${resource}-all`}
-                                className="font-medium cursor-pointer"
-                              >
-                                {resourceLabels[resource] || resource}
-                                {isPartiallySelected && (
-                                  <span className="text-xs text-muted-foreground ml-1">
-                                    (Partial)
-                                  </span>
-                                )}
-                              </Label>
-                              {resourceDescriptions[resource] && (
-                                <FieldDescription className="mt-1">
-                                  {resourceDescriptions[resource]}
-                                </FieldDescription>
-                              )}
-                            </div>
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            className="mt-0.5"
+                            id={`${resource}-all`}
+                            aria-label={`${resourceLabels[resource] || resource} permissions`}
+                            checked={getResourceCheckState(resource)}
+                            disabled={readOnly}
+                            onCheckedChange={(checked) =>
+                              checked
+                                ? selectAllForResource(resource)
+                                : deselectAllForResource(resource)
+                            }
+                          />
+                          <div className="min-w-0">
+                            <Label
+                              htmlFor={`${resource}-all`}
+                              className="cursor-pointer font-medium"
+                            >
+                              {resourceLabels[resource] || resource}
+                            </Label>
+                            {resourceDescriptions[resource] && (
+                              <FieldDescription className="mt-1 text-xs leading-relaxed">
+                                {resourceDescriptions[resource]}
+                              </FieldDescription>
+                            )}
                           </div>
-                          {selectedActions.length > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              {selectedActions.length}/{availableActions.length}
-                            </span>
-                          )}
                         </div>
-
-                        <Separator className="my-3" />
-
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                          {allActions.map((action) => {
-                            const isSelected = selectedActions.includes(action);
-                            const canGrantAction =
-                              availableActions.includes(action);
-                            const shouldDisableAction =
-                              readOnly || (!canGrantAction && !isSelected);
-
-                            return (
-                              <div
-                                key={action}
-                                className="flex items-center gap-2"
-                              >
-                                <Tooltip>
+                        <div className="flex flex-wrap content-start gap-x-4 gap-y-3">
+                          {(allAvailableActions[resource] || []).map(
+                            (action) => {
+                              const isSelected =
+                                selectedActions.includes(action);
+                              const canGrantAction =
+                                availableActions.includes(action);
+                              const shouldDisableAction =
+                                readOnly || (!canGrantAction && !isSelected);
+                              return (
+                                <Tooltip key={action}>
                                   <TooltipTrigger asChild>
                                     <div className="flex items-center gap-2">
                                       <Checkbox
                                         id={`${resource}-${action}`}
                                         checked={isSelected}
                                         disabled={shouldDisableAction}
-                                        onCheckedChange={() => {
-                                          toggleAction(resource, action);
-                                        }}
+                                        onCheckedChange={() =>
+                                          toggleAction(resource, action)
+                                        }
                                       />
                                       <Label
                                         htmlFor={`${resource}-${action}`}
-                                        className={`text-sm ${
-                                          shouldDisableAction
-                                            ? "cursor-not-allowed text-muted-foreground"
-                                            : "cursor-pointer"
-                                        }`}
+                                        className={`whitespace-nowrap text-sm font-normal ${shouldDisableAction ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer"}`}
                                       >
                                         {actionLabels[action]}
-                                        {isSelected && (
-                                          <Check className="ml-1 inline h-3 w-3" />
-                                        )}
                                       </Label>
                                     </div>
                                   </TooltipTrigger>
@@ -430,18 +427,25 @@ export function RolePermissionBuilder({
                                       </TooltipContent>
                                     )}
                                 </Tooltip>
-                              </div>
-                            );
-                          })}
+                              );
+                            },
+                          )}
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </Card>
+            </section>
           );
         })}
+        {visibleCategories.length === 0 && (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            {selectedOnly
+              ? "No selected permissions match your search."
+              : "No matching permissions."}
+          </p>
+        )}
       </div>
     </div>
   );

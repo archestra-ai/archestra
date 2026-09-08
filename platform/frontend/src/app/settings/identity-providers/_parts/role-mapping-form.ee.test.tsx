@@ -130,7 +130,7 @@ describe("RoleMappingForm", () => {
     render(<TestWrapper identityProviderId="idp-1" />);
 
     const note = screen
-      .getByText(/Sets the organization-wide role only/i)
+      .getByText(/Sets the organization-wide roles only/i)
       .closest("p") as HTMLElement;
     expect(note).toHaveTextContent(
       /Team membership is synced per team via each team's External Group Sync\./,
@@ -266,7 +266,7 @@ describe("RoleMappingForm", () => {
     render(<TestWrapper />);
     expect(
       screen.getByText(
-        "No mapping rules configured. All users will be assigned the default role.",
+        "No mapping rules configured. All users will be assigned the default roles.",
       ),
     ).toBeInTheDocument();
 
@@ -385,7 +385,7 @@ describe("RoleMappingForm", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "No mapping rules configured. All users will be assigned the default role.",
+        "No mapping rules configured. All users will be assigned the default roles.",
       ),
     ).toBeInTheDocument();
   });
@@ -404,6 +404,37 @@ describe("RoleMappingForm", () => {
     );
     expect(templates).toHaveLength(1);
     expect(templates[0]).toHaveValue("");
+  });
+
+  it("keeps at least one role and submits multiple rule and fallback roles", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <TestWrapper
+        defaultRules={[{ expression: "true", role: "member" }]}
+        onSubmit={onSubmit}
+      />,
+    );
+    for (const testId of [
+      E2eTestId.IdpRoleMappingRuleRole,
+      E2eTestId.IdpRoleMappingDefaultRole,
+    ]) {
+      await user.click(screen.getByTestId(testId));
+      expect(screen.getByRole("button", { name: /^Member/ })).toBeDisabled();
+      await user.click(screen.getByRole("button", { name: /^Admin/ }));
+      await user.keyboard("{Escape}");
+    }
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roleMapping: expect.objectContaining({
+            rules: [{ expression: "true", role: "member,admin" }],
+            defaultRole: "member,admin",
+          }),
+        }),
+      ),
+    );
   });
 
   it("submits form successfully with role mapping rules", async () => {

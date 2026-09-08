@@ -11,8 +11,7 @@ import logger from "@/logging";
 import type { UpdateUser } from "@/types";
 import AgentModel from "./agent";
 import McpServerModel from "./mcp-server";
-import MemberModel from "./member";
-import OrganizationRoleModel from "./organization-role";
+import RoleCompositionModel from "./role-composition";
 import SkillModel from "./skill";
 
 class UserModel {
@@ -165,30 +164,7 @@ class UserModel {
     userId: string,
     organizationId: string,
   ): Promise<Permissions> {
-    // logger.debug(
-    //   { userId, organizationId },
-    //   "UserModel.getUserPermissions: fetching permissions",
-    // );
-    // Get user's member record to find their role
-    const memberRecord = await MemberModel.getByUserId(userId, organizationId);
-
-    if (!memberRecord) {
-      logger.debug(
-        { userId, organizationId },
-        "UserModel.getUserPermissions: no member record found",
-      );
-      return {};
-    }
-
-    const permissions = await OrganizationRoleModel.getPermissions(
-      memberRecord.role,
-      organizationId,
-    );
-    // logger.debug(
-    //   { userId, organizationId, role: memberRecord.role },
-    //   "UserModel.getUserPermissions: completed",
-    // );
-    return permissions;
+    return RoleCompositionModel.getUserPermissions({ userId, organizationId });
   }
 
   /**

@@ -745,3 +745,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @guillaume-flambard
 - @SoulDev07
 - @kanqzkokelo
+- @anthonyhuynguyen

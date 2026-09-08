@@ -374,6 +374,9 @@ jobs:
           pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
 
+      - name: Release skill harness
+        run: pnpm test:release-skill
+
       # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
       # brand instead of resolving the deployment's app name. Occurrences that
       # legitimately name the vendor carry an inline `white-label-ok:` reason.

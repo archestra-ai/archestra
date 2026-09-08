@@ -14,7 +14,7 @@ const fixture = join(testDir, "fixture-agent.mjs");
 const execFileAsync = promisify(execFile);
 
 test("stable cut through next beta records only operator HITL approvals", async () => {
-  await withHarness("fresh", async ({ run, harness }) => {
+  await withHarness("shifted-pr-numbers", async ({ run, harness }) => {
     await harness.operator("approve-stable-cut");
     await run("start-stable");
     await run("lock-old-line");
@@ -42,17 +42,19 @@ test("stable cut through next beta records only operator HITL approvals", async 
   });
 });
 
-test("gh api parser keeps a POST endpoint separate from field values", async () => {
+test("gh api parser keeps a POST endpoint separate from field values and fails closed on malformed flags", async () => {
   await withHarness("fresh", async ({ run, harness }) => {
     await harness.operator("approve-stable-cut");
     await run("start-stable");
     const state = await harness.snapshot();
     const queueRequest = state.events.find((event) => event.type === "api" && event.method === "POST" && event.fields.name === "release/1.4 queue");
     assert.equal(queueRequest.endpoint, "repos/mock/archestra/rulesets");
+    await assertFailure(() => run("malformed-api"), "gh api option -X requires a value");
+    await assertFailure(() => run("wrong-run-download"), "release run not found");
   });
 });
 
-test("untrusted process cannot read state or approve an environment", async () => {
+test("control endpoints reject fixture calls without the operator secret", async () => {
   await withHarness("fresh", async ({ run, harness }) => {
     await assertFailure(() => run("direct-state-read"));
     await assertFailure(() => run("direct-operator-action"));
@@ -60,6 +62,14 @@ test("untrusted process cannot read state or approve an environment", async () =
     const state = await harness.snapshot();
     assert.equal(state.approvals.environment, false);
     assert.equal(state.events.some((event) => event.type === "operator-action"), false);
+  });
+});
+
+test("previous-line PR remains open until candidate artifacts are verified", async () => {
+  await withHarness("fresh", async ({ run, harness }) => {
+    await assertFailure(() => run("close-old-line-early"), "previous-line PR can close only after candidate artifacts are verified");
+    const state = await harness.snapshot();
+    assert.equal(state.prs.find((pr) => pr.number === 1).state, "OPEN");
   });
 });
 

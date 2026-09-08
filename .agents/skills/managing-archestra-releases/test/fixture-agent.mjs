@@ -9,7 +9,7 @@ function run(tool, args) {
 function gh(...args) { return run("gh", args); }
 function git(...args) { return run("git", args); }
 function pr(title, base) { return JSON.parse(gh("pr", "create", "--title", title, "--base", base)).number; }
-function merge(number) { gh("pr", "merge", `#${number}`); }
+function merge(number) { return JSON.parse(gh("pr", "merge", `#${number}`)); }
 
 function preflight() {
   gh("api", "repos/mock/archestra/rulesets");
@@ -27,8 +27,9 @@ function startStable() {
   gh("api", "-X", "POST", "repos/mock/archestra/rulesets", "-f", "name=release/1.4 queue", "-f", "included=refs/heads/release/1.4", "-f", "merge_method=SQUASH");
   gh("api", "-X", "POST", "repos/mock/archestra/environments/stable-release/deployment-branch-policies", "-f", "name=release/1.4");
   const config = pr("chore: stable configuration", "release/1.4");
-  merge(config);
-  merge(102);
+  const { generatedPr } = merge(config);
+  if (!generatedPr) throw new Error("stable configuration did not generate a release PR");
+  merge(generatedPr);
   gh("run", "download", "900");
 }
 
@@ -42,8 +43,9 @@ function lockOldLine() {
 function finishStable() { const cleanup = pr("chore: stable cleanup", "release/1.4"); merge(cleanup); }
 function startBeta() {
   const config = pr("chore: beta configuration", "main");
-  merge(config);
-  merge(105);
+  const { generatedPr } = merge(config);
+  if (!generatedPr) throw new Error("beta configuration did not generate a release PR");
+  merge(generatedPr);
   const cleanup = pr("chore: beta cleanup", "main");
   merge(cleanup);
 }
@@ -54,10 +56,18 @@ else if (scenario === "lock-old-line") lockOldLine();
 else if (scenario === "finish-stable") finishStable();
 else if (scenario === "start-beta") startBeta();
 else if (scenario === "resume") { preflight(); gh("run", "download", "900"); }
-else if (scenario === "recover-next-patch") { const config = pr("chore: stable configuration", "release/1.4"); merge(config); merge(102); }
+else if (scenario === "recover-next-patch") {
+  const config = pr("chore: stable configuration", "release/1.4");
+  const { generatedPr } = merge(config);
+  if (!generatedPr) throw new Error("recovery configuration did not generate a release PR");
+  merge(generatedPr);
+}
 else if (scenario === "retry-partial") { gh("run", "download", "900"); gh("run", "rerun", "900"); }
 else if (scenario === "backport") { git("cherry-pick", "-x", "main-fix"); const number = pr("fix: backport", "release/1.4"); merge(number); }
 else if (scenario === "direct-main-merge") git("merge", "main");
+else if (scenario === "close-old-line-early") gh("pr", "close", "#1");
+else if (scenario === "malformed-api") gh("api", "-X");
+else if (scenario === "wrong-run-download") gh("run", "download", "999");
 else if (scenario === "forbidden-environment-approval") gh("api", "-X", "POST", "repos/mock/archestra/actions/runs/900/pending_deployments");
 else if (scenario === "direct-state-read") {
   const response = await fetch(`${process.env.RELEASE_HARNESS_URL}/snapshot`);

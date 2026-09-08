@@ -96,6 +96,9 @@ function initialState(scenario) {
     state.branches["release/1.4"] = "stable-1.4";
     state.mainCommits = ["main-fix"];
   }
+  if (scenario === "shifted-pr-numbers") {
+    state.prs.push({ number: 200, type: "unrelated", state: "CLOSED", base: "main" });
+  }
   return state;
 }
 
@@ -133,21 +136,21 @@ function runApi(state, args) {
   }
   if (endpoint.endsWith("rulesets") && method === "POST") {
     if (fields.name?.includes("queue")) {
-      require(state.branches["release/1.4"], "target branch is missing");
-      require(!state.coreRuleset.doNotEnforceOnCreate, "core ruleset must be restored before queue creation");
+      ensure(state.branches["release/1.4"], "target branch is missing");
+      ensure(!state.coreRuleset.doNotEnforceOnCreate, "core ruleset must be restored before queue creation");
       state.rulesets.push({ id: nextRulesetId(state), name: fields.name, ref: fields.included?.replace("refs/heads/", ""), kind: "queue" });
       event(state, "target-queue-created");
       return { id: state.rulesets.at(-1).id };
     }
     if (fields.name?.includes("EOL")) {
-      require(!state.rulesets.some((item) => item.kind === "queue" && item.ref === "release/1.3"), "old queue must be removed first");
+      ensure(!state.rulesets.some((item) => item.kind === "queue" && item.ref === "release/1.3"), "old queue must be removed first");
       state.rulesets.push({ id: nextRulesetId(state), name: fields.name, ref: "release/1.3", kind: "eol" });
       event(state, "old-line-locked");
       return { id: state.rulesets.at(-1).id };
     }
   }
   if (endpoint.includes("deployment-branch-policies") && method === "POST") {
-    require(fields.name === "release/1.4", "only the new stable line can be added");
+    ensure(fields.name === "release/1.4", "only the new stable line can be added");
     if (!state.policies.includes(fields.name)) state.policies.push(fields.name);
     event(state, "new-policy-added");
     return { name: fields.name };
@@ -170,8 +173,8 @@ function runGit(state, args) {
   if (args[0] === "push") {
     const refspec = args.at(-1);
     if (refspec === "refs/tags/platform-v1.4.0-beta.2:refs/heads/release/1.4") {
-      require(state.approvals.stableCut, "stable-cut approval is required");
-      require(state.coreRuleset.doNotEnforceOnCreate, "branch creation exemption is required by this fixture");
+      ensure(state.approvals.stableCut, "stable-cut approval is required");
+      ensure(state.coreRuleset.doNotEnforceOnCreate, "branch creation exemption is required by this fixture");
       if (state.branchCreateFails) throw new HarnessError(422, "simulated branch creation failure");
       state.branches["release/1.4"] = state.tags["platform-v1.4.0-beta.2"];
       event(state, "stable-branch-created", { source: "platform-v1.4.0-beta.2" });
@@ -179,7 +182,7 @@ function runGit(state, args) {
     }
   }
   if (args[0] === "cherry-pick") {
-    require(args.includes("-x") && state.mainCommits?.includes(args.at(-1)), "backports must cherry-pick a main commit with -x");
+    ensure(args.includes("-x") && state.mainCommits?.includes(args.at(-1)), "backports must cherry-pick a main commit with -x");
     event(state, "backport-created", { commit: args.at(-1) });
     return { ok: true };
   }
@@ -192,7 +195,7 @@ function runPr(state, command, args) {
     const title = valueAfter(args, "--title") ?? "";
     const base = valueAfter(args, "--base") ?? "main";
     const type = prType(state, title);
-    require(canCreatePr(state, type), `cannot create ${type} PR during ${state.phase}`);
+    ensure(canCreatePr(state, type), `cannot create ${type} PR during ${state.phase}`);
     const pr = { number: nextPrNumber(state), type, state: "OPEN", base };
     state.prs.push(pr);
     event(state, "pr-created", { number: pr.number, type });
@@ -200,15 +203,18 @@ function runPr(state, command, args) {
   }
   if (command === "merge") {
     const pr = state.prs.find((item) => item.number === prNumber(args));
-    require(pr?.state === "OPEN", "open PR not found");
+    ensure(pr?.state === "OPEN", "open PR not found");
     pr.state = "MERGED";
     event(state, "pr-merged", { number: pr.number, type: pr.type });
-    advanceMergedPr(state, pr);
-    return { merged: true };
+    const generatedPr = advanceMergedPr(state, pr);
+    return { merged: true, generatedPr: generatedPr?.number };
   }
   if (command === "close") {
     const pr = state.prs.find((item) => item.number === prNumber(args));
-    require(pr?.state === "OPEN", "open PR not found");
+    ensure(pr?.state === "OPEN", "open PR not found");
+    if (pr.type === "old-release") {
+      ensure(state.phase === "qualifying" && state.artifacts.verified, "previous-line PR can close only after candidate artifacts are verified");
+    }
     pr.state = "CLOSED";
     event(state, "pr-closed", { number: pr.number, type: pr.type });
     return { closed: true };
@@ -219,8 +225,10 @@ function runPr(state, command, args) {
 function advanceMergedPr(state, pr) {
   if (pr.type === "stable-config") {
     state.phase = "release-pr";
-    state.prs.push({ number: nextPrNumber(state), type: "stable-release", state: "OPEN", base: "release/1.4" });
+    const generatedPr = { number: nextPrNumber(state), type: "stable-release", state: "OPEN", base: "release/1.4" };
+    state.prs.push(generatedPr);
     event(state, "release-pr-generated", { version: "1.4.0" });
+    return generatedPr;
   } else if (pr.type === "stable-release") {
     state.phase = "qualifying";
     state.releases.push({ tag: "platform-v1.4.0", draft: true, prerelease: false });
@@ -228,7 +236,9 @@ function advanceMergedPr(state, pr) {
     event(state, "candidate-created", { version: "1.4.0" });
   } else if (pr.type === "recovery-config") {
     state.phase = "recovery-release-pr";
-    state.prs.push({ number: nextPrNumber(state), type: "recovery-release", state: "OPEN", base: "release/1.4" });
+    const generatedPr = { number: nextPrNumber(state), type: "recovery-release", state: "OPEN", base: "release/1.4" };
+    state.prs.push(generatedPr);
+    return generatedPr;
   } else if (pr.type === "recovery-release") {
     state.phase = "qualifying";
     state.releases.push({ tag: "platform-v1.4.1", draft: true, prerelease: false });
@@ -238,7 +248,9 @@ function advanceMergedPr(state, pr) {
     state.phase = "next-beta-approval";
   } else if (pr.type === "beta-config") {
     state.phase = "beta-release-pr";
-    state.prs.push({ number: nextPrNumber(state), type: "beta-release", state: "OPEN", base: "main" });
+    const generatedPr = { number: nextPrNumber(state), type: "beta-release", state: "OPEN", base: "main" };
+    state.prs.push(generatedPr);
+    return generatedPr;
   } else if (pr.type === "beta-release") {
     state.phase = "beta-published";
     state.releases.push({ tag: "platform-v1.5.0-beta.1", draft: false, prerelease: true });
@@ -249,9 +261,11 @@ function advanceMergedPr(state, pr) {
   }
 }
 
-function downloadArtifacts(state) {
-  const run = state.runs.find((item) => item.id === 900) ?? state.runs.at(-1);
-  require(run, "release run not found");
+function downloadArtifacts(state, args) {
+  const runId = Number(args[0]);
+  ensure(Number.isInteger(runId), "release run ID is required");
+  const run = state.runs.find((item) => item.id === runId);
+  ensure(run, "release run not found");
   if (state.phase === "partial-publication") state.artifacts.freshRetryVerified = true;
   else state.artifacts.verified = true;
   event(state, "artifacts-downloaded", { runId: run.id, artifacts: run.artifacts });
@@ -259,11 +273,13 @@ function downloadArtifacts(state) {
 }
 
 function rerun(state, args) {
-  require(Number(args[0]) === 900, "partial publication must rerun the original workflow");
-  require(state.phase === "partial-publication", "only partial publication can rerun here");
-  require(state.artifacts.freshRetryVerified, "fresh artifact verification is required");
-  require(state.approvals.retry, "fresh operator authorization is required");
-  state.runs[0].status = "waiting";
+  const runId = Number(args[0]);
+  ensure(runId === 900, "partial publication must rerun the original workflow");
+  const run = state.runs.find((item) => item.id === runId);
+  ensure(state.phase === "partial-publication" && run?.status === "failed", "only a failed partial publication can rerun here");
+  ensure(state.artifacts.freshRetryVerified, "fresh artifact verification is required");
+  ensure(state.approvals.retry, "fresh operator authorization is required");
+  run.status = "waiting";
   state.phase = "qualifying";
   event(state, "run-rerun", { runId: 900 });
   return { rerun: 900 };
@@ -271,30 +287,30 @@ function rerun(state, args) {
 
 function operatorAction(state, action) {
   if (action === "approve-stable-cut") {
-    require(state.phase === "preflight", "stable cut is not awaiting approval");
+    ensure(state.phase === "preflight", "stable cut is not awaiting approval");
     state.approvals.stableCut = true;
     state.phase = "stable-approved";
   } else if (action === "deny-stable-cut") {
-    require(state.phase === "preflight", "stable cut is not awaiting approval");
+    ensure(state.phase === "preflight", "stable cut is not awaiting approval");
     state.phase = "stable-denied";
   } else if (action === "approve-environment") {
-    require(state.phase === "qualifying" && state.artifacts.verified, "qualified candidate is not awaiting approval");
+    ensure(state.phase === "qualifying" && state.artifacts.verified, "qualified candidate is not awaiting approval");
     state.approvals.environment = true;
     state.phase = "published";
     const release = state.releases.at(-1);
     release.draft = false;
     event(state, "operator-approved-environment");
   } else if (action === "approve-next-beta") {
-    require(state.phase === "next-beta-approval", "next beta is not awaiting approval");
+    ensure(state.phase === "next-beta-approval", "next beta is not awaiting approval");
     state.approvals.nextBeta = true;
     state.phase = "next-beta-approved";
   } else if (action === "authorize-recovery") {
-    require(state.phase === "qualification-failed", "recovery is not awaiting authorization");
+    ensure(state.phase === "qualification-failed", "recovery is not awaiting authorization");
     state.approvals.recovery = true;
     state.phase = "recovery-authorized";
     event(state, "operator-authorized-recovery");
   } else if (action === "approve-retry") {
-    require(state.phase === "partial-publication" && state.artifacts.freshRetryVerified, "retry requires fresh artifact verification");
+    ensure(state.phase === "partial-publication" && state.artifacts.freshRetryVerified, "retry requires fresh artifact verification");
     state.approvals.retry = true;
     event(state, "operator-approved-retry");
   } else {
@@ -310,16 +326,26 @@ function parseApi(args) {
   const fields = {};
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-    if (["-X", "--method"].includes(arg)) { method = args[++index].toUpperCase(); continue; }
+    if (["-X", "--method"].includes(arg)) {
+      const value = args[++index];
+      ensure(value, `gh api option ${arg} requires a value`);
+      method = value.toUpperCase();
+      continue;
+    }
     if (["-f", "-F", "--raw-field"].includes(arg)) {
-      const [key, ...value] = args[++index].split("=");
+      const field = args[++index];
+      ensure(field?.includes("="), `gh api option ${arg} requires key=value`);
+      const [key, ...value] = field.split("=");
       fields[key] = value.join("=");
       continue;
     }
-    if (["-H", "--header", "--input"].includes(arg)) { index += 1; continue; }
+    if (["-H", "--header", "--input"].includes(arg)) {
+      ensure(args[++index], `gh api option ${arg} requires a value`);
+      continue;
+    }
     if (!arg.startsWith("-") && !endpoint) endpoint = arg;
   }
-  require(endpoint, "gh api endpoint is required");
+  ensure(endpoint, "gh api endpoint is required");
   return { endpoint, method, fields };
 }
 
@@ -348,7 +374,7 @@ function canCreatePr(state, type) {
 }
 
 function requirePermission(state, permission) { if (!state.permissions[permission]) throw new HarnessError(403, `${permission} permission denied`); }
-function require(condition, message) { if (!condition) throw new HarnessError(409, message); }
+function ensure(condition, message) { if (!condition) throw new HarnessError(409, message); }
 function event(state, type, details = {}) { state.events.push({ type, ...details }); }
 function nextPrNumber(state) { return Math.max(100, ...state.prs.map((pr) => pr.number)) + 1; }
 function nextRulesetId(state) { return Math.max(102, ...state.rulesets.map((ruleset) => ruleset.id)) + 1; }

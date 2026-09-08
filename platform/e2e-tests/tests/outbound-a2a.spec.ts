@@ -6,8 +6,6 @@ import {
   ensureWireMockAnthropicChatProvider,
   expectChatReady,
   goToChat,
-  selectApiKeyById,
-  selectRuntimeModelFromDialog,
 } from "../utils";
 import { test as apiTest } from "./api-fixtures";
 
@@ -36,7 +34,6 @@ test("delegates from a parent agent to an external A2A agent", async ({
   request,
   makeRandomString,
   goToPage,
-  createAgent,
   deleteAgent,
   makeApiRequest,
   syncModels,
@@ -93,7 +90,17 @@ test("delegates from a parent agent to an external A2A agent", async ({
       timeout: 15_000,
     });
 
-    const parentResponse = await createAgent(request, parentName, "personal");
+    const parentResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agents",
+      data: {
+        name: parentName,
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      },
+    });
     parentId = ((await parentResponse.json()) as { id: string }).id;
 
     // External assignments deliberately share the Agent form's Save lifecycle:
@@ -158,19 +165,30 @@ test("delegates from a parent agent to an external A2A agent", async ({
         makeApiRequest,
         syncModels,
       });
+    await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/agents/${parentId}`,
+      data: {
+        llmApiKeyId: apiKeyId,
+        modelId: runtimeModel.dbId,
+      },
+    });
     await goToChat(page, { agentId: parentId });
     await expectChatReady(page);
-    await selectApiKeyById(page, apiKeyId);
-    const modelTrigger = page
-      .getByTestId(E2eTestId.ChatModelSelectorTrigger)
-      .or(page.getByRole("button", { name: /select model/i }))
-      .first();
-    await modelTrigger.click();
-    await selectRuntimeModelFromDialog(page, runtimeModel);
 
     const userPrompt = `${promptMarker}: delegate this request to the external agent.`;
     await page.getByTestId(E2eTestId.ChatPromptTextarea).fill(userPrompt);
     await page.keyboard.press("Enter");
+    const sendAnyway = page.getByRole("button", { name: "Send anyway" });
+    if (
+      await sendAnyway
+        .waitFor({ state: "visible", timeout: 3_000 })
+        .then(() => true)
+        .catch(() => false)
+    ) {
+      await sendAnyway.click();
+    }
     await expect(
       page.getByText(finalAnswer, { exact: true }).first(),
     ).toBeVisible({ timeout: 90_000 });

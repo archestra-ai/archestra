@@ -221,6 +221,16 @@ export async function deleteA2aRemoteAgent(params: {
         `Outbound A2A agent is assigned to ${assignments.length} agent(s). Remove those subagent assignments first.`,
       );
     }
+    // The run ledger intentionally survives target removal. Null all three
+    // references explicitly before the cascading connection/tool deletes:
+    // PostgreSQL can otherwise evaluate the overlapping SET NULL paths in an
+    // order that temporarily leaves runs pointing at an already-deleted tool.
+    await tx
+      .update(schema.a2aOutboundRunsTable)
+      .set({ remoteAgentId: null, connectionId: null, toolId: null })
+      .where(
+        eq(schema.a2aOutboundRunsTable.remoteAgentId, existing.remoteAgent.id),
+      );
     await tx
       .delete(schema.a2aRemoteAgentsTable)
       .where(eq(schema.a2aRemoteAgentsTable.id, existing.remoteAgent.id));

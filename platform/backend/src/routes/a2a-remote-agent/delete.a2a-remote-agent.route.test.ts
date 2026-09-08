@@ -1,4 +1,6 @@
-import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import { A2aOutboundRunModel, A2aRemoteAgentModel } from "@/models";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
@@ -37,6 +39,48 @@ describe("DELETE /api/a2a/remote-agents/:id", () => {
       url: "/api/a2a/remote-agents",
     });
     expect(list.json()).toEqual([]);
+  });
+
+  test("retains monitoring history after deleting a remote agent", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const remote = created.json();
+    const run = await A2aOutboundRunModel.create({
+      organizationId: ctx.organizationId,
+      remoteAgentId: remote.id,
+      connectionId: remote.connection.id,
+      toolId: remote.toolId,
+      messageId: "historical-run",
+      state: "completed",
+      targetNameSnapshot: remote.name,
+      interfaceSnapshot: remote.connection.selectedInterface,
+      completedAt: new Date(),
+    });
+
+    const response = await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/a2a/remote-agents/${remote.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [retainedRun] = await db
+      .select()
+      .from(schema.a2aOutboundRunsTable)
+      .where(eq(schema.a2aOutboundRunsTable.id, run.id));
+    expect(retainedRun).toMatchObject({
+      remoteAgentId: null,
+      connectionId: null,
+      toolId: null,
+      targetNameSnapshot: remote.name,
+      state: "completed",
+    });
   });
 
   test("returns 404 for an unknown remote agent", async () => {

@@ -567,11 +567,13 @@ class ToolModel {
    * it falls back to the safe hardcoded defaults only when no organization
    * exists.
    */
-  static async getDefaultToolPolicies(): Promise<{
+  static async getDefaultToolPolicies(organizationId?: string): Promise<{
     invocationAction: ToolInvocation.ToolInvocationPolicyAction;
     resultAction: TrustedData.TrustedDataPolicyAction;
   }> {
-    const organization = await OrganizationModel.getFirst();
+    const organization = organizationId
+      ? await OrganizationModel.getById(organizationId)
+      : await OrganizationModel.getFirst();
     return {
       invocationAction:
         organization?.defaultDiscoveredToolInvocationPolicy ??
@@ -635,6 +637,7 @@ class ToolModel {
         parameters: schema.toolsTable.parameters,
         catalogId: schema.toolsTable.catalogId,
         agentId: schema.toolsTable.agentId,
+        delegateToA2aConnectionId: schema.toolsTable.delegateToA2aConnectionId,
       })
       .from(schema.toolsTable)
       .where(
@@ -680,6 +683,24 @@ class ToolModel {
           return null;
         }
       }
+    } else if (tool.delegateToA2aConnectionId) {
+      const [owner] = await db
+        .select({ organizationId: schema.a2aRemoteAgentsTable.organizationId })
+        .from(schema.a2aConnectionsTable)
+        .innerJoin(
+          schema.a2aRemoteAgentsTable,
+          eq(
+            schema.a2aConnectionsTable.remoteAgentId,
+            schema.a2aRemoteAgentsTable.id,
+          ),
+        )
+        .where(
+          eq(schema.a2aConnectionsTable.id, tool.delegateToA2aConnectionId),
+        )
+        .limit(1);
+      if (owner?.organizationId !== params.organizationId) {
+        return null;
+      }
     } else {
       // No catalog, no agent: no org linkage to scope by.
       return null;
@@ -705,6 +726,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         agentId: schema.toolsTable.agentId,
         delegateToAgentId: schema.toolsTable.delegateToAgentId,
+        delegateToA2aConnectionId: schema.toolsTable.delegateToA2aConnectionId,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
       })
@@ -735,6 +757,7 @@ class ToolModel {
       catalogId: tool.catalogId ?? null,
       agentId: tool.agentId ?? null,
       delegateToAgentId: tool.delegateToAgentId ?? null,
+      delegateToA2aConnectionId: tool.delegateToA2aConnectionId ?? null,
       createdAt: tool.createdAt.toISOString(),
       updatedAt: tool.updatedAt.toISOString(),
     };
@@ -747,6 +770,9 @@ class ToolModel {
   }): Promise<PaginatedResult<ExtendedTool>> {
     const conditions = [
       eq(schema.toolsTable.clonedPendingDiscovery, false),
+      // Outbound A2A tools are credential-bearing tenant resources exposed
+      // only by their dedicated registry and assignment APIs.
+      isNull(schema.toolsTable.delegateToA2aConnectionId),
       ...(params.userId && !params.isAgentAdmin
         ? [isNotNull(schema.toolsTable.catalogId)]
         : []),
@@ -764,6 +790,7 @@ class ToolModel {
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         delegateToAgentId: schema.toolsTable.delegateToAgentId,
+        delegateToA2aConnectionId: schema.toolsTable.delegateToA2aConnectionId,
         meta: schema.toolsTable.meta,
         clonedPendingDiscovery: schema.toolsTable.clonedPendingDiscovery,
         policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,
@@ -3231,7 +3258,11 @@ class ToolModel {
     const result = await db
       .delete(schema.toolsTable)
       .where(
-        and(eq(schema.toolsTable.id, id), isNull(schema.toolsTable.catalogId)),
+        and(
+          eq(schema.toolsTable.id, id),
+          isNull(schema.toolsTable.catalogId),
+          isNull(schema.toolsTable.delegateToA2aConnectionId),
+        ),
       );
 
     return (result.rowCount || 0) > 0;
@@ -3497,6 +3528,64 @@ class ToolModel {
       .limit(1);
 
     return tool || null;
+  }
+
+  /**
+   * Find or create the policy-bearing delegation tool for one outbound A2A
+   * connection. The connection, rather than only the Agent Card identity, is
+   * the executable target so endpoint and credential context cannot diverge.
+   */
+  static async createA2aDelegationTool(
+    connectionId: string,
+    organizationId: string,
+  ): Promise<Tool> {
+    const [target] = await db
+      .select({
+        name: schema.a2aRemoteAgentsTable.name,
+      })
+      .from(schema.a2aConnectionsTable)
+      .innerJoin(
+        schema.a2aRemoteAgentsTable,
+        eq(
+          schema.a2aConnectionsTable.remoteAgentId,
+          schema.a2aRemoteAgentsTable.id,
+        ),
+      )
+      .where(eq(schema.a2aConnectionsTable.id, connectionId))
+      .limit(1);
+    if (!target) {
+      throw new Error(`Outbound A2A connection not found: ${connectionId}`);
+    }
+
+    const [createdTool] = await db
+      .insert(schema.toolsTable)
+      .values({
+        // Keep the callable identity stable and globally unambiguous even when
+        // two remote cards share a display name or one is renamed later. The
+        // user-facing MCP title remains the current remote-agent name.
+        name: `${AGENT_TOOL_PREFIX}${slugify(target.name).slice(0, 64)}__${connectionId.replaceAll("-", "")}`,
+        description: `Delegate task to external A2A agent: ${target.name}`,
+        delegateToA2aConnectionId: connectionId,
+        agentId: null,
+        catalogId: null,
+        parameters: {
+          type: "object",
+          properties: {
+            message: {
+              type: "string",
+              description: "The task or message to send to the agent",
+            },
+          },
+          required: ["message"],
+        },
+      })
+      .returning();
+
+    await ToolModel.createDefaultPolicies(
+      createdTool.id,
+      await ToolModel.getDefaultToolPolicies(organizationId),
+    );
+    return createdTool;
   }
 
   /**

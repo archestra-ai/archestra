@@ -21,6 +21,11 @@ describe("validateOutboundUrl in production", () => {
     // http would put the caller's own credentials on the wire in clear text.
     ["plain http", "http://hooks.example.com/a2a", "scheme_not_https"],
     ["a non-web scheme", "file:///etc/passwd", "scheme_not_https"],
+    [
+      "embedded credentials",
+      "https://user:password@hooks.example.com/a2a",
+      "userinfo_not_allowed",
+    ],
   ])("rejects %s", ([, url, reason]) => {
     expect(validateOutboundUrl(url)).toEqual({ ok: false, reason });
   });

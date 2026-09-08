@@ -674,6 +674,13 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  [RouteId.InspectA2aRemoteAgent]: { agent: ["create"] },
+  [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
+  [RouteId.CreateA2aRemoteAgent]: { agent: ["create"] },
+  [RouteId.UpdateA2aRemoteAgent]: { agent: ["update"] },
+  [RouteId.DeleteA2aRemoteAgent]: { agent: ["delete"] },
+
   /**
    * Getting basic info about the organization requires the user to be
    * authenticated but no specific permission.
@@ -1405,6 +1412,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentDelegations]: {},
   [RouteId.SyncAgentDelegations]: {},
   [RouteId.DeleteAgentDelegation]: {},
+  [RouteId.GetAgentA2aDelegations]: {},
+  [RouteId.SyncAgentA2aDelegations]: {},
   [RouteId.GetAllDelegationConnections]: {},
   [RouteId.GetLimits]: {
     llmLimit: ["read"],
@@ -2159,6 +2168,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  "/a2a/agents": { agent: ["read"] },
   "/agents/new": { agent: ["create"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },

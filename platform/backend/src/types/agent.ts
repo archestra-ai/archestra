@@ -302,6 +302,7 @@ export const AgentToolRefSchema = SelectToolSchema.pick({
   agentId: true,
   catalogId: true,
   delegateToAgentId: true,
+  delegateToA2aConnectionId: true,
   name: true,
   rawName: true,
   description: true,

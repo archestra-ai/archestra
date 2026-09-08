@@ -1,4 +1,5 @@
 import config from "@/config";
+import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
@@ -235,6 +236,24 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdParam: "agentId",
     action: "agent.updated",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+  "/api/agents/:agentId/a2a-delegations": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+
+  // External A2A identities are agent-like resources in the product model.
+  // Reuse the agent audit vocabulary while the snapshot fetcher keeps their
+  // connection metadata tenant-scoped and excludes secret identifiers.
+  "/api/a2a/remote-agents": {
+    resourceType: "agent",
+    fetchById: (id, orgId) => A2aRemoteAgentModel.findByIdForAudit(id, orgId),
+  },
+  "/api/a2a/remote-agents/:id": {
+    resourceType: "agent",
+    fetchById: (id, orgId) => A2aRemoteAgentModel.findByIdForAudit(id, orgId),
   },
 
   "/api/agent-tools/:id": {

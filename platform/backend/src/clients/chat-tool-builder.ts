@@ -441,6 +441,10 @@ export function buildAgentDelegationTool(params: {
 }): Tool {
   const { agentTool, ctx } = params;
   const normalizedSchema = normalizeJsonSchema(agentTool.inputSchema);
+  const resolvedToolId =
+    typeof agentTool._meta?.toolId === "string"
+      ? agentTool._meta.toolId
+      : undefined;
 
   const archestraContext: ArchestraContext = {
     agent: { id: ctx.agentId, name: ctx.agentName },
@@ -460,6 +464,10 @@ export function buildAgentDelegationTool(params: {
       organizationId: ctx.organizationId,
       userId: ctx.userId,
     }),
+    // In interactive chat, the AI SDK has already evaluated and presented the
+    // approval gate. Autonomous/headless contexts omit that gate and must let
+    // the execution path fail closed on require_approval policies.
+    approvalRequiredPoliciesHandled: !ctx.blockOnApprovalRequired,
   };
 
   return {
@@ -468,6 +476,7 @@ export function buildAgentDelegationTool(params: {
     ...needsApprovalProps({
       toolName: agentTool.name,
       ctx,
+      resolvedToolId,
     }),
     execute: async (args: Record<string, unknown>, options) =>
       executeWithToolSpan({
@@ -527,11 +536,27 @@ export function buildAgentDelegationTool(params: {
             isError: response.isError ?? false,
           });
 
-          return response.content
+          const content = response.content
             .map((item) =>
               item.type === "text" ? item.text : JSON.stringify(item),
             )
             .join("\n");
+          // Internal subagents retain their established trust behavior. Only
+          // an external A2A descriptor carries an exact policy-bearing tool ID
+          // and therefore introduces this explicit opaque-data boundary.
+          if (!resolvedToolId) return content;
+          const boundaryResult = await buildUnsafeContextBoundaryResult({
+            resultMeta: response._meta as Record<string, unknown> | undefined,
+            toolCallId: options.toolCallId,
+            toolName: agentTool.name,
+            toolOutput: content,
+            agentId: ctx.agentId,
+            considerContextUntrusted: ctx.considerContextUntrusted,
+            resolvedToolId,
+          });
+          return boundaryResult.unsafeContextBoundary
+            ? { content, ...boundaryResult }
+            : content;
         },
       }),
   };
@@ -881,8 +906,9 @@ function getChatExternalAgentId(): string {
 function needsApprovalProps(params: {
   toolName: string;
   ctx: ChatToolContext;
+  resolvedToolId?: string;
 }): Pick<Tool, "needsApproval"> | Record<string, never> {
-  const { toolName, ctx } = params;
+  const { toolName, ctx, resolvedToolId } = params;
   if (ctx.blockOnApprovalRequired) {
     return {};
   }
@@ -896,6 +922,7 @@ function needsApprovalProps(params: {
           teamIds: [],
           externalAgentId: getChatExternalAgentId(),
         },
+        resolvedToolId,
       );
     },
   };
@@ -1706,6 +1733,7 @@ async function buildUnsafeContextBoundaryResult(params: {
   toolOutput: unknown;
   agentId: string;
   considerContextUntrusted: boolean;
+  resolvedToolId?: string;
 }): Promise<{
   _meta?: Record<string, unknown>;
   unsafeContextBoundary?: UnsafeContextBoundary;
@@ -1750,6 +1778,7 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
   toolOutput: unknown;
   agentId: string;
   considerContextUntrusted: boolean;
+  resolvedToolId?: string;
 }): Promise<UnsafeContextBoundary | undefined> {
   if (params.considerContextUntrusted) {
     return undefined;
@@ -1769,6 +1798,9 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
       teamIds,
       externalAgentId: getChatExternalAgentId(),
     },
+    params.resolvedToolId
+      ? new Map([[params.toolName, params.resolvedToolId]])
+      : undefined,
   );
 
   const toolResultEvaluation = evaluation.get("0");

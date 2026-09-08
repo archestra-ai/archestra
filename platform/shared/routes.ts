@@ -1,4 +1,12 @@
 export const RouteId = {
+  // Outbound A2A Agent Routes
+  InspectA2aRemoteAgent: "inspectA2aRemoteAgent",
+  ListA2aRemoteAgents: "listA2aRemoteAgents",
+  ListA2aRemoteAgentRuns: "listA2aRemoteAgentRuns",
+  CreateA2aRemoteAgent: "createA2aRemoteAgent",
+  UpdateA2aRemoteAgent: "updateA2aRemoteAgent",
+  DeleteA2aRemoteAgent: "deleteA2aRemoteAgent",
+
   // Agent Routes
   GetAgents: "getAgents",
   GetAllAgents: "getAllAgents",
@@ -61,6 +69,8 @@ export const RouteId = {
   GetAgentDelegations: "getAgentDelegations",
   SyncAgentDelegations: "syncAgentDelegations",
   DeleteAgentDelegation: "deleteAgentDelegation",
+  GetAgentA2aDelegations: "getAgentA2aDelegations",
+  SyncAgentA2aDelegations: "syncAgentA2aDelegations",
   GetAllDelegationConnections: "getAllDelegationConnections",
 
   // Config Routes

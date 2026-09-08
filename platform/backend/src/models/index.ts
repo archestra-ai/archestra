@@ -5,6 +5,11 @@ export { default as A2AMessageModel } from "./a2a/message";
 export { default as A2APushNotificationConfigModel } from "./a2a/push-notification-config";
 export { default as A2ATaskModel } from "./a2a/task";
 export { default as A2ATaskApprovalRequestModel } from "./a2a/task-approval-request";
+export { default as A2aOutboundRunModel } from "./a2a-outbound-run";
+export {
+  A2aConnectionModel,
+  default as A2aRemoteAgentModel,
+} from "./a2a-remote-agent";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";

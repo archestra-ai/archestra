@@ -40,10 +40,13 @@
  *   - chat_active_runs — ephemeral run state predating this guidance
  */
 export { default as a2aArtifactsTable } from "./a2a-artifact";
+export { default as a2aConnectionsTable } from "./a2a-connection";
 export { default as a2aContextsTable } from "./a2a-context";
 export { default as a2aContextCompactionsTable } from "./a2a-context-compaction";
 export { default as a2aMessagesTable } from "./a2a-message";
+export { default as a2aOutboundRunsTable } from "./a2a-outbound-run";
 export { default as a2aPushNotificationConfigsTable } from "./a2a-push-notification-config";
+export { default as a2aRemoteAgentsTable } from "./a2a-remote-agent";
 export { default as a2aTasksTable } from "./a2a-task";
 export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-request";
 export { default as a2aTaskEventsTable } from "./a2a-task-event";

@@ -142,15 +142,15 @@ describe("TeamManagementDialog member roles", () => {
 
     await user.click(screen.getByRole("combobox", { name: "Parent Team" }));
 
-    const listbox = await screen.findByRole("listbox");
+    const listbox = screen.getAllByRole("dialog").at(-1)!;
     expect(
-      within(listbox).getByRole("option", { name: "Product" }),
+      within(listbox).getByRole("button", { name: "Product" }),
     ).toBeInTheDocument();
     expect(
-      within(listbox).getByRole("option", { name: "Operations" }),
+      within(listbox).getByRole("button", { name: "Operations" }),
     ).toBeInTheDocument();
     expect(
-      within(listbox).queryByRole("option", { name: /Runtime/ }),
+      within(listbox).queryByRole("button", { name: /Runtime/ }),
     ).not.toBeInTheDocument();
   });
 

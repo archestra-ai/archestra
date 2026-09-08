@@ -18,6 +18,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import {
   type ComponentType,
   useEffect,
@@ -36,6 +37,7 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RoleSelect } from "@/components/ui/role-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -512,41 +514,31 @@ function TeamSection(props: {
         </div>
         <div className="space-y-2">
           <Label htmlFor="team-roles">Organization Roles</Label>
+          <FieldDescription id="team-roles-description">
+            Members of this team and its descendant teams inherit these
+            permissions. Alternatively, assign roles directly to{" "}
+            <Link
+              href="/settings/users"
+              className="underline underline-offset-4"
+            >
+              users
+            </Link>
+            .
+          </FieldDescription>
           <RoleSelect
             multiple
             allowEmpty
             id="team-roles"
+            ariaLabel="Organization Roles"
+            aria-describedby="team-roles-description"
             value={props.roles}
             onValueChange={props.onRolesChange}
             disabled={props.readOnlyDetails}
           />
-          <FieldDescription>
-            Members of this team and its descendant teams inherit these
-            permissions.
-          </FieldDescription>
         </div>
         <div className="space-y-2">
           <Label htmlFor="team-parent">Parent Team</Label>
-          <Select
-            value={props.parentId ?? "root"}
-            onValueChange={(value) =>
-              props.onParentIdChange(value === "root" ? null : value)
-            }
-            disabled={props.readOnlyDetails}
-          >
-            <SelectTrigger id="team-parent" className="w-full">
-              <SelectValue placeholder="No parent team" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="root">No parent team</SelectItem>
-              {parentOptions.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {formatTeamPath(props.organizationTeams, candidate.id)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldDescription>
+          <FieldDescription id="team-parent-description">
             Nest this team in your organization hierarchy. Resource access is
             inherited through the hierarchy; team administration is not.{" "}
             <ExternalDocsLink
@@ -559,6 +551,26 @@ function TeamSection(props: {
             </ExternalDocsLink>
             .
           </FieldDescription>
+          <SearchableSelect
+            id="team-parent"
+            ariaLabel="Parent Team"
+            aria-describedby="team-parent-description"
+            value={props.parentId ?? "root"}
+            onValueChange={(value) =>
+              props.onParentIdChange(value === "root" ? null : value)
+            }
+            disabled={props.readOnlyDetails}
+            className="w-full"
+            placeholder="No parent team"
+            searchPlaceholder="Search teams..."
+            emptyMessage="No matching teams found."
+            pinnedItems={[{ value: "root", label: "No parent team" }]}
+            items={parentOptions.map((candidate) => ({
+              value: candidate.id,
+              label: formatTeamPath(props.organizationTeams, candidate.id),
+              description: candidate.description ?? undefined,
+            }))}
+          />
         </div>
         {props.readOnlyDetails ? (
           <ReadOnlyAdvancedLabels labels={props.labels} />

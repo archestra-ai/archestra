@@ -1,11 +1,8 @@
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   isDefaultBrandedAppName,
-  MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
   RUN_ID_HEADER,
-  requiresOpenAiResponsesApi,
-  requiresResponsesApi,
   resolveClaudeContextVariant,
   SESSION_ID_HEADER,
   SUBSCRIPTION_CREDENTIALS,
@@ -14,6 +11,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import {
@@ -33,10 +31,13 @@ import type {
 } from "@/types";
 import { AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE, ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
 import { resolveAgentRuntimeCredentials } from "./credentials";
 import { taskWithAgentRunInputs } from "./input-files";
+import {
+  preflightAgentRuntimeModelCompatibility,
+  usesClaudeCodeBedrock,
+} from "./model-compatibility";
 import {
   AGENT_RUNTIME_STEER_FIFO,
   constructStableRunName,
@@ -142,29 +143,28 @@ export async function buildAgentRunLaunchSpec(params: {
       "The Agent for this Agent Runtime run no longer exists",
     );
   }
-  const llm = await resolveConversationLlmSelectionForAgent({
+  const { llm, selectedModel } = await preflightAgentRuntimeModelCompatibility({
+    runtime: params.runtime,
     agent,
     organizationId: params.organizationId,
     userId: actorUserId ?? "system",
-    includeMemberChatDefault: false,
-  });
-  const selectedModel = llm.modelId
-    ? await ModelModel.findById(llm.modelId)
-    : null;
-  assertInferenceProtocolSupported({
-    protocol: params.runtime.inferenceProtocol,
-    provider: llm.selectedProvider,
-    model: llm.selectedModel,
-    supportedEndpoints: selectedModel?.supportedEndpoints,
   });
 
+  const isClaudeCodeBedrock = usesClaudeCodeBedrock({
+    runtime: params.runtime,
+    provider: llm.selectedProvider,
+  });
   const claudeCodeSubscriptionToken =
     credentials.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
   const usesClaudeCodeSubscription = Boolean(claudeCodeSubscriptionToken);
   const isClaudeCodeRuntime =
     params.runtime.command?.[0] === "archestra-claude-code";
   const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
-  if (isClaudeCodeRuntime && !usesClaudeCodeSubscription) {
+  if (
+    isClaudeCodeRuntime &&
+    !isClaudeCodeBedrock &&
+    !usesClaudeCodeSubscription
+  ) {
     throw new ApiError(
       409,
       "Connect your Claude Code subscription before starting this Agent. The maintained Claude Code runtime never falls back to usage-based API billing.",
@@ -226,22 +226,25 @@ export async function buildAgentRunLaunchSpec(params: {
 
   const modelRouterUrl = `${platformBaseUrl}/v1/model-router/${params.agentId}`;
   const anthropicUrl = `${platformBaseUrl}/v1/anthropic/${params.agentId}`;
-  const proxyUrl =
-    params.runtime.inferenceProtocol === "anthropic"
+  const bedrockUrl = `${platformBaseUrl}/v1/bedrock/${params.agentId}`;
+  const proxyUrl = isClaudeCodeBedrock
+    ? bedrockUrl
+    : params.runtime.inferenceProtocol === "anthropic"
       ? anthropicUrl
       : modelRouterUrl;
   const runtimeModel =
     params.runtime.inferenceProtocol !== "anthropic"
       ? `${llm.selectedProvider}:${llm.selectedModel}`
       : llm.selectedModel;
-  const nativeModel = isClaudeCodeRuntime
-    ? resolveClaudeContextVariant({
-        modelId: llm.selectedModel,
-        contextLength: selectedModel
-          ? ModelModel.resolveArchitecturalContextLength(selectedModel)
-          : null,
-      })
-    : llm.selectedModel;
+  const nativeModel =
+    isClaudeCodeRuntime && !isClaudeCodeBedrock
+      ? resolveClaudeContextVariant({
+          modelId: llm.selectedModel,
+          contextLength: selectedModel
+            ? ModelModel.resolveArchitecturalContextLength(selectedModel)
+            : null,
+        })
+      : llm.selectedModel;
   const modelContextLength = selectedModel
     ? ModelModel.resolveEffectiveContextLength(selectedModel)
     : null;
@@ -293,6 +296,13 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
     OPENAI_BASE_URL: modelRouterUrl,
     ANTHROPIC_BASE_URL: anthropicUrl,
+    ...(isClaudeCodeBedrock
+      ? {
+          CLAUDE_CODE_USE_BEDROCK: "1",
+          ANTHROPIC_BEDROCK_BASE_URL: bedrockUrl,
+          AWS_REGION: getBedrockRegion(),
+        }
+      : {}),
     ARCHESTRA_MCP_GATEWAY_URL: `${platformBaseUrl}/v1/mcp/${params.agentId}`,
   };
 
@@ -303,7 +313,7 @@ export async function buildAgentRunLaunchSpec(params: {
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
     ARCHESTRA_VIRTUAL_KEY: virtualKey.value,
-    ...(!usesClaudeCodeSubscription
+    ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {
           // Both the Archestra runtime-agent and bring-your-own CLIs read the
           // provider variables, so the standard virtual key is presented in
@@ -320,6 +330,9 @@ export async function buildAgentRunLaunchSpec(params: {
       : {}),
     ...(task ? { ARCHESTRA_AGENT_RUNTIME_TASK: task } : {}),
     ...withNativeClientCredentialAliases(credentials.env),
+    ...(isClaudeCodeBedrock
+      ? { AWS_BEARER_TOKEN_BEDROCK: virtualKey.value }
+      : {}),
     ...(params.runtime.command?.[0] === "archestra-claude-code"
       ? {
           // Claude Code accepts only one custom-header variable. Keep run
@@ -383,6 +396,10 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_BEDROCK_BASE_URL",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
   "CLAUDE_CODE_OAUTH_TOKEN",
   "OPENAI_API_KEY",
   "OPENAI_BASE_URL",
@@ -533,40 +550,4 @@ function withNativeClientCredentialAliases(
   return credentials.GITHUB_TOKEN && !credentials.GH_TOKEN
     ? { ...credentials, GH_TOKEN: credentials.GITHUB_TOKEN }
     : credentials;
-}
-
-function assertInferenceProtocolSupported(params: {
-  protocol: ResolvedAgentRuntime["inferenceProtocol"];
-  provider: SupportedProvider;
-  model: string;
-  supportedEndpoints: string[] | null | undefined;
-}): void {
-  if (params.protocol === "anthropic" && params.provider !== "anthropic") {
-    throw new ApiError(
-      409,
-      `This Agent Runtime image expects the Anthropic API, but the Agent's selected model uses ${providerDisplayNames[params.provider]}. Choose an Anthropic model or use an OpenAI-compatible Agent Runtime image.`,
-    );
-  }
-  if (
-    params.protocol !== "anthropic" &&
-    !new Set<SupportedProvider>(MODEL_ROUTER_SUPPORTED_PROVIDERS).has(
-      params.provider,
-    )
-  ) {
-    throw new ApiError(
-      409,
-      `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this Agent Runtime image.`,
-    );
-  }
-  if (
-    params.protocol === "openai_chat" &&
-    (requiresResponsesApi(params.supportedEndpoints) ||
-      (params.provider === "openai" &&
-        requiresOpenAiResponsesApi(params.model)))
-  ) {
-    throw new ApiError(
-      409,
-      `This Agent Runtime image uses Chat Completions, but model "${params.model}" requires the Responses API. Choose a Chat Completions model or an image that uses OpenAI Responses.`,
-    );
-  }
 }

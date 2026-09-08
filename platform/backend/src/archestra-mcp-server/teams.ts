@@ -54,7 +54,11 @@ const TeamOutputItemSchema = z.object({
   id: z.string().describe("The team ID."),
   name: z.string().describe("The team name."),
   description: z.string().nullable().describe("The team description, if any."),
-  roles: z.array(z.string()),
+  roles: z
+    .array(z.string())
+    .describe(
+      "Organization role identifiers assigned to the team and inherited by members of this team and its descendants.",
+    ),
   parentId: z
     .string()
     .nullable()
@@ -111,7 +115,10 @@ const CreateTeamToolArgsSchema = z
     roles: z
       .array(z.string().regex(/^[a-z0-9_]+$/))
       .max(100)
-      .optional(),
+      .optional()
+      .describe(
+        "Organization role identifiers to assign to the team. Members of this team and its descendants inherit their permissions.",
+      ),
     parent_id: UuidIdSchema.nullable()
       .optional()
       .describe("Optional parent team ID. Omit or pass null for a root team."),
@@ -162,7 +169,10 @@ const EditTeamToolArgsSchema = z
     roles: z
       .array(z.string().regex(/^[a-z0-9_]+$/))
       .max(100)
-      .optional(),
+      .optional()
+      .describe(
+        "Replace the team’s organization role identifiers. Members of this team and its descendants inherit their permissions. Pass [] to clear; omit to leave unchanged.",
+      ),
     parent_id: UuidIdSchema.nullable()
       .optional()
       .describe(

@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { KeyRound, RotateCcw } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AgentSelector,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils";
+import { ClientConnectionApproval } from "./client-connection-approval";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
 import {
   type ConnectionBaseUrl,
@@ -182,6 +184,9 @@ export function ConnectCommandPanel({
   skillsEnabled = true,
   pluginsEnabled = true,
 }: ConnectCommandPanelProps) {
+  const searchParams = useSearchParams();
+  const connectRequest = searchParams.get("connectRequest");
+  const requestedPlatform = searchParams.get("platform");
   const { eligible: skillsEligible, skills: allSkills } = useConnectSkills(
     llmProxyId,
     skillsEnabled,
@@ -251,8 +256,14 @@ export function ConnectCommandPanel({
   // user can override it in the review step.
   const [platform, setPlatform] = useState<ConnectPlatformOption>("macos");
   useEffect(() => {
-    setPlatform(toPlatformOption(detectPlatform()));
-  }, []);
+    setPlatform(
+      requestedPlatform === "windows" ||
+        requestedPlatform === "linux" ||
+        requestedPlatform === "macos"
+        ? toPlatformOption(requestedPlatform)
+        : toPlatformOption(detectPlatform()),
+    );
+  }, [requestedPlatform]);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -435,12 +446,17 @@ export function ConnectCommandPanel({
   );
   const [failed, setFailed] = useState(false);
 
+  const setupPlatform =
+    connectRequest && requestedPlatform === "linux" && platform === "macos"
+      ? "linux"
+      : platform;
+
   // One key per distinct setup payload. The effect below regenerates when it
   // changes; the ref guards against an older in-flight response overwriting a
   // newer one.
   const inputsKey = JSON.stringify({
     clientId: client.id,
-    platform,
+    platform: setupPlatform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
     proxyId: proxyActive ? llmProxyId : null,
@@ -460,7 +476,7 @@ export function ConnectCommandPanel({
     async (key: string) => {
       const inputs = JSON.parse(key) as {
         clientId: ScriptClientId;
-        platform: ConnectPlatformOption;
+        platform: NonNullable<CreateConnectionSetupBody["platform"]>;
         baseUrl: string;
         gatewayId: string | null;
         proxyId: string | null;
@@ -1020,7 +1036,13 @@ export function ConnectCommandPanel({
         </ul>
       </WizardStep>
 
-      <WizardStep n={3} title="Run the setup script" last={!showOAuthStep}>
+      <WizardStep
+        n={3}
+        title={
+          connectRequest ? "Approve the connection" : "Run the setup script"
+        }
+        last={!showOAuthStep}
+      >
         <div className="flex flex-col gap-3">
           <output
             className="sr-only"
@@ -1082,6 +1104,14 @@ export function ConnectCommandPanel({
                 canAddKey={canCreateProviderKey === true}
                 onAddKey={() => setShowAddProviderKey(true)}
               />
+            ) : connectRequest ? (
+              <ClientConnectionApproval
+                key={connectRequest}
+                requestId={connectRequest}
+                setupId={result?.id}
+                clientId={client.id}
+                platform={setupPlatform}
+              />
             ) : (
               <SetupCommandLine
                 command={result?.command ?? null}
@@ -1094,8 +1124,9 @@ export function ConnectCommandPanel({
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
             <span className="max-w-2xl">
-              The command downloads a one-time setup script (expires in 15
-              minutes) and pipes it straight to{" "}
+              {connectRequest
+                ? "The installer downloads the approved setup before the ten-minute request expires and runs it with "
+                : "The command downloads a one-time setup script (expires in 15 minutes) and pipes it straight to "}
               {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
               {platformLabels[platform]}. The script applies the setup reviewed
               above by editing your client config in place — it isn&apos;t

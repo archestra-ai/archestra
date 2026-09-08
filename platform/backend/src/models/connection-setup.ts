@@ -68,6 +68,40 @@ class ConnectionSetupModel {
     return { setup: setup as ConnectionSetup, rawToken };
   }
 
+  /** Transfers an owned, unused render ticket to a browser-approved installer. */
+  static async bindClientConnection(params: {
+    setupId: string;
+    userId: string;
+    organizationId: string;
+    clientId: ConnectionSetup["clientId"];
+    platform: ConnectionSetup["platform"];
+    tokenHash: string;
+    tokenStart: string;
+    expiresAt: Date;
+  }): Promise<boolean> {
+    const table = schema.connectionSetupsTable;
+    const [row] = await db
+      .update(table)
+      .set({
+        tokenHash: params.tokenHash,
+        tokenStart: params.tokenStart,
+        expiresAt: params.expiresAt,
+      })
+      .where(
+        and(
+          eq(table.id, params.setupId),
+          eq(table.userId, params.userId),
+          eq(table.organizationId, params.organizationId),
+          eq(table.clientId, params.clientId),
+          eq(table.platform, params.platform),
+          isNull(table.consumedAt),
+          gt(table.expiresAt, sql`now()`),
+        ),
+      )
+      .returning({ id: table.id });
+    return Boolean(row);
+  }
+
   /**
    * Atomically claims an unconsumed, unexpired setup by raw token: sets
    * `consumedAt` and returns the row, or returns null if the token is

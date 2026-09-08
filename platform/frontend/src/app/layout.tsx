@@ -229,6 +229,7 @@ export default async function RootLayout({
       className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable}`}
     >
       <head>
+        <link rel="describedby" href="/llms.txt" type="text/plain" />
         <PublicEnvScript />
         {favicon.version && (
           <link

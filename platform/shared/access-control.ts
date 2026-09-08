@@ -714,6 +714,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // Connection setup: resource-level checks (mcpGateway/llmProxy read access,
   // skill admin) are conditional on what the setup includes and enforced in
   // the route handler. The script GET is public (token-authenticated).
+  [RouteId.GetClientConnectionInstaller]: {},
+  [RouteId.StartClientConnection]: {},
+  [RouteId.PollClientConnection]: {},
+  [RouteId.GetClientConnection]: {},
+  [RouteId.DecideClientConnection]: {},
   [RouteId.CreateConnectionSetup]: {},
   // Reports whether a pre-built VAF Add On package exists for this
   // installation, so the connector form can offer a download link that is

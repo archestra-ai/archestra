@@ -66,6 +66,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "plugin.deleted": "Plugin deleted",
   "plugin.syncTriggered": "Plugin sync check triggered",
   // Connector
+  "clientConnection.updated": "Client Connection Reviewed",
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
@@ -345,6 +346,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "auth",
   "chatOpsBinding",
   "chatOpsConfig",
+  "clientConnection",
   "plugin",
   "connector",
   "defaultUserLimit",

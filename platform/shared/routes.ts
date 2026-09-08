@@ -866,6 +866,11 @@ export const RouteId = {
   RotateSkillShareLink: "rotateSkillShareLink",
 
   // Connection Setup Routes
+  GetClientConnectionInstaller: "getClientConnectionInstaller",
+  StartClientConnection: "startClientConnection",
+  PollClientConnection: "pollClientConnection",
+  GetClientConnection: "getClientConnection",
+  DecideClientConnection: "decideClientConnection",
   CreateConnectionSetup: "createConnectionSetup",
   GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",
   GetMfilesVafAddOnPackage: "getMfilesVafAddOnPackage",

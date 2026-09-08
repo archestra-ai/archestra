@@ -186,6 +186,11 @@ export class Authnz {
       // validated in-route (HTTP Basic), or the org publishes it anonymously
       url === SKILL_MARKETPLACE_STATIC_PATH ||
       url.startsWith(`${SKILL_MARKETPLACE_STATIC_PATH}/`) ||
+      // Public bootstrap endpoints have their own rate limits and polling proof.
+      (method === "GET" && url === "/api/client-connections/installer") ||
+      (method === "POST" &&
+        (url === "/api/client-connections" ||
+          url === "/api/client-connections/poll")) ||
       // Public connection-setup script endpoint: one-time token in URL, no session
       (method === "GET" &&
         url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||

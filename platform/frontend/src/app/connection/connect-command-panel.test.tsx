@@ -6,6 +6,10 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useSearchParams } from "next/navigation";
+
+vi.mock("next/navigation");
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useConfig, useFeature } from "@/lib/config/config.query";
@@ -139,6 +143,9 @@ function renderPanel(
 }
 
 beforeEach(() => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
   vi.clearAllMocks();
   vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(useConfig).mockReturnValue({

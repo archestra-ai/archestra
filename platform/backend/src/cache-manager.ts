@@ -14,6 +14,8 @@ import logger from "@/logging";
  * of related entries using deleteByPrefix().
  */
 export const CacheKey = {
+  ClientConnection: "client-connection",
+  ClientConnectionRateLimit: "client-connection-rate-limit",
   /** models.dev sync tracking */
   ModelsDevSync: "models-dev-sync",
   /** MCP tools for chat feature */

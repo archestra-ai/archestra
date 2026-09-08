@@ -322309,7 +322309,8 @@
                   "defaultMemberRole": {
                     "nullable": true,
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                    "description": "One or more organization role identifiers, separated by commas"
                   }
                 }
               }
@@ -397492,7 +397493,8 @@
                                 },
                                 "role": {
                                   "type": "string",
-                                  "minLength": 1
+                                  "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                                  "description": "One or more organization role identifiers, separated by commas"
                                 }
                               },
                               "required": [
@@ -397503,7 +397505,9 @@
                             }
                           },
                           "defaultRole": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                            "description": "One or more organization role identifiers, separated by commas"
                           },
                           "strictMode": {
                             "type": "boolean"
@@ -398154,7 +398158,8 @@
                             },
                             "role": {
                               "type": "string",
-                              "minLength": 1
+                              "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                              "description": "One or more organization role identifiers, separated by commas"
                             }
                           },
                           "required": [
@@ -398164,7 +398169,9 @@
                         }
                       },
                       "defaultRole": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                        "description": "One or more organization role identifiers, separated by commas"
                       },
                       "strictMode": {
                         "type": "boolean"
@@ -398549,7 +398556,8 @@
                               },
                               "role": {
                                 "type": "string",
-                                "minLength": 1
+                                "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                                "description": "One or more organization role identifiers, separated by commas"
                               }
                             },
                             "required": [
@@ -398560,7 +398568,9 @@
                           }
                         },
                         "defaultRole": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                          "description": "One or more organization role identifiers, separated by commas"
                         },
                         "strictMode": {
                           "type": "boolean"
@@ -400349,7 +400359,8 @@
                               },
                               "role": {
                                 "type": "string",
-                                "minLength": 1
+                                "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                                "description": "One or more organization role identifiers, separated by commas"
                               }
                             },
                             "required": [
@@ -400360,7 +400371,9 @@
                           }
                         },
                         "defaultRole": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                          "description": "One or more organization role identifiers, separated by commas"
                         },
                         "strictMode": {
                           "type": "boolean"
@@ -401009,7 +401022,8 @@
                             },
                             "role": {
                               "type": "string",
-                              "minLength": 1
+                              "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                              "description": "One or more organization role identifiers, separated by commas"
                             }
                           },
                           "required": [
@@ -401019,7 +401033,9 @@
                         }
                       },
                       "defaultRole": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                        "description": "One or more organization role identifiers, separated by commas"
                       },
                       "strictMode": {
                         "type": "boolean"
@@ -401405,7 +401421,8 @@
                               },
                               "role": {
                                 "type": "string",
-                                "minLength": 1
+                                "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                                "description": "One or more organization role identifiers, separated by commas"
                               }
                             },
                             "required": [
@@ -401416,7 +401433,9 @@
                           }
                         },
                         "defaultRole": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                          "description": "One or more organization role identifiers, separated by commas"
                         },
                         "strictMode": {
                           "type": "boolean"

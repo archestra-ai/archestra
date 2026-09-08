@@ -82718,6 +82718,9 @@ export type UpdateAuthSettingsData = {
         oauthAccessTokenLifetimeSeconds?: number;
         requireTwoFactor?: boolean;
         sessionMaxAgeSeconds?: number | null;
+        /**
+         * One or more organization role identifiers, separated by commas
+         */
         defaultMemberRole?: string | null;
     };
     path?: never;
@@ -103350,8 +103353,14 @@ export type GetIdentityProvidersResponses = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -103481,8 +103490,14 @@ export type CreateIdentityProviderData = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -103680,8 +103695,14 @@ export type CreateIdentityProviderResponses = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -104321,8 +104342,14 @@ export type GetIdentityProviderResponses = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -104452,8 +104479,14 @@ export type UpdateIdentityProviderData = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;
@@ -104652,8 +104685,14 @@ export type UpdateIdentityProviderResponses = {
         roleMapping?: {
             rules?: Array<{
                 expression: string;
+                /**
+                 * One or more organization role identifiers, separated by commas
+                 */
                 role: string;
             }>;
+            /**
+             * One or more organization role identifiers, separated by commas
+             */
             defaultRole?: string;
             strictMode?: boolean;
             skipRoleSync?: boolean;

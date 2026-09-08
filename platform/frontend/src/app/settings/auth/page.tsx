@@ -193,8 +193,8 @@ export default function AuthSettingsPage() {
           )}
 
           <SettingsBlock
-            title="Default Role for New Users"
-            description="Role assigned to users who join via email/password self-signup or ChatOps auto-provisioning. SSO users are governed by their identity provider's role mapping."
+            title="Default Roles for New Users"
+            description="Roles assigned to users who join via email/password self-signup or ChatOps auto-provisioning. SSO users are governed by their identity provider's role mapping."
             control={
               <FormField
                 control={form.control}
@@ -206,9 +206,10 @@ export default function AuthSettingsPage() {
                     onValueChange={field.onChange}
                     // The block's title is a heading, not a label, so the
                     // combobox has no name of its own to announce.
-                    ariaLabel="Default role for new users"
+                    ariaLabel="Default roles for new users"
                     data-testid="default-member-role-select"
-                    className="w-40"
+                    className="w-full sm:w-80"
+                    multiple
                   />
                 )}
               />

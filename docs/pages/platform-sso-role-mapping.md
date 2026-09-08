@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Map SSO claims to Archestra roles using Handlebars templates"
 order: 6
-lastUpdated: 2026-05-05
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,8 +23,12 @@ Archestra supports automatic role assignment based on user attributes from your 
 
 1. When a user authenticates via SSO, Archestra receives user attributes from the identity provider's ID token (for OIDC) or SAML assertions
 2. These attributes are evaluated against your configured mapping rules in order
-3. The first rule that matches determines the user's Archestra role
-4. If no rules match, the user is assigned the configured default role (or **Member** if not specified)
+3. The first matching rule assigns all its selected organization roles
+4. New users without a matching rule receive the provider’s default roles, then organization defaults if unset
+
+Existing users keep their direct roles when no rule matches. A matching rule replaces their direct roles; team-inherited grants remain. Permissions from multiple roles [combine](/docs/platform-access-control#multiple-roles-and-team-grants).
+
+Organization defaults also apply to email/password signup and ChatOps provisioning. An unset organization default grants **Member**.
 
 ## Configuring role mapping
 
@@ -32,13 +36,13 @@ When creating or editing an SSO provider, select the **Role Mapping** section:
 
 1. **Mapping Rules** — add one or more rules. Each rule has:
    - **Handlebars Template:** a template that renders to a non-empty string when the rule should match
-   - **Archestra Role:** the role to assign when the template matches
+   - **Archestra Roles:** one or more roles to assign when the template matches
 
-2. **Default Role** — the role assigned when no rules match (defaults to "member")
+2. **Default Roles** — one or more roles assigned to new users when no rules match
 
-3. **Strict Mode** — when enabled, denies user login if no mapping rules match. Useful when you want to ensure that only users with specific IdP attributes can access Archestra. Without strict mode, users who don't match any rule are simply assigned the default role.
+3. **Strict Mode** — when enabled, denies user login if no mapping rules match. Useful when you want to ensure that only users with specific IdP attributes can access Archestra. Without strict mode, users who don't match any rule are simply assigned the default roles.
 
-4. **Skip Role Sync** — when enabled, the user's role is only determined on their first login. Subsequent logins will not update their role, even if their IdP attributes change. This allows administrators to manually adjust roles after initial provisioning without those changes being overwritten on next login.
+4. **Skip Role Sync** — when enabled, the user's roles are only determined on their first login. Subsequent logins will not update their roles, even if their IdP attributes change. This allows administrators to manually adjust roles after initial provisioning without those changes being overwritten on next login.
 
 ## Handlebars template examples
 

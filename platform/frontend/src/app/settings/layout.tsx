@@ -85,7 +85,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/auth": {
     title: "Auth",
     description:
-      "Authentication policies — token and session lifetimes, two-factor enforcement, and the default role for new users.",
+      "Authentication policies — token and session lifetimes, two-factor enforcement, and the default roles for new users.",
   },
   "/settings/roles": {
     title: "Roles",

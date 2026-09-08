@@ -19,6 +19,15 @@ export const PredefinedRoleNameSchema = z.enum([
 
 export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+export const RoleAssignmentSchema = z
+  .string()
+  .regex(/^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$/, "Select at least one role")
+  .describe("One or more organization role identifiers, separated by commas");
+// SPDX-SnippetEnd
+
 /**
  * Display names for the predefined roles. The identifiers are snake_case for
  * better-auth, but CSS `capitalize` only touches the first letter — which

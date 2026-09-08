@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { Bot, CheckCircle2, Plus, Radio, Trash2 } from "lucide-react";
+import { Activity, Bot, CheckCircle2, Plus, Radio, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  useA2aRemoteAgentRuns,
   useA2aRemoteAgents,
   useCreateA2aRemoteAgent,
   useDeleteA2aRemoteAgent,
@@ -47,8 +48,9 @@ type RemoteAgent =
 
 export default function OutboundA2aAgentsPage() {
   const query = useA2aRemoteAgents();
-  const { data: canCreate } = useHasPermissions({ agent: ["create"] });
-  const { data: canDelete } = useHasPermissions({ agent: ["delete"] });
+  const { data: canManage } = useHasPermissions({
+    agentSettings: ["update"],
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RemoteAgent | null>(null);
   const deleteMutation = useDeleteA2aRemoteAgent();
@@ -58,7 +60,7 @@ export default function OutboundA2aAgentsPage() {
       title="External A2A agents"
       description="Connect Agent2Agent-compatible systems, then assign them from an agent's Subagents section."
       actionButton={
-        canCreate ? (
+        canManage ? (
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
             Connect agent
@@ -94,7 +96,7 @@ export default function OutboundA2aAgentsPage() {
                 <CardDescription>
                   {agent.description || "External A2A agent"}
                 </CardDescription>
-                {canDelete && (
+                {canManage && (
                   <CardAction>
                     <Button
                       variant="ghost"
@@ -134,6 +136,7 @@ export default function OutboundA2aAgentsPage() {
                     {agent.connection.selectedInterface.url}
                   </dd>
                 </dl>
+                {canManage && <RecentRun remoteAgentId={agent.id} />}
               </CardContent>
             </Card>
           ))}
@@ -159,6 +162,31 @@ export default function OutboundA2aAgentsPage() {
         }}
       />
     </PageLayout>
+  );
+}
+
+function RecentRun({ remoteAgentId }: { remoteAgentId: string }) {
+  const query = useA2aRemoteAgentRuns(remoteAgentId);
+  const run = query.data?.[0];
+  return (
+    <div className="flex items-center justify-between gap-3 border-t pt-3 text-xs">
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        <Activity className="h-3.5 w-3.5" />
+        Recent activity
+      </span>
+      {query.isPending ? (
+        <span className="text-muted-foreground">Loading…</span>
+      ) : query.isError ? (
+        <span className="text-destructive">Unavailable</span>
+      ) : run ? (
+        <span title={new Date(run.startedAt).toLocaleString()}>
+          {run.state.replaceAll("_", " ")} ·{" "}
+          {new Date(run.startedAt).toLocaleDateString()}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">No runs yet</span>
+      )}
+    </div>
   );
 }
 
@@ -396,7 +424,7 @@ function ConnectA2aAgentDialog({
               if (body) inspectMutation.mutate(body);
             }}
           >
-            {inspectMutation.isPending ? "Checking…" : "Test connection"}
+            {inspectMutation.isPending ? "Checking…" : "Validate Agent Card"}
           </Button>
           <Button type="submit" disabled={createMutation.isPending}>
             {createMutation.isPending ? "Connecting…" : "Connect agent"}

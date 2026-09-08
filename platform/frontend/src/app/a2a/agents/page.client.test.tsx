@@ -90,6 +90,7 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
+  server.use(http.get(`${REGISTRY_URL}/:id/runs`, () => HttpResponse.json([])));
 });
 
 afterEach(() => server.resetHandlers());
@@ -138,7 +139,7 @@ describe("OutboundA2aAgentsPage", () => {
       "Payments Agent",
     );
     await user.click(
-      within(dialog).getByRole("button", { name: "Test connection" }),
+      within(dialog).getByRole("button", { name: "Validate Agent Card" }),
     );
 
     expect(
@@ -214,7 +215,7 @@ describe("OutboundA2aAgentsPage", () => {
     const urlInput = within(dialog).getByLabelText("Agent base URL");
     await user.type(urlInput, "https://agent.example.com");
     await user.click(
-      within(dialog).getByRole("button", { name: "Test connection" }),
+      within(dialog).getByRole("button", { name: "Validate Agent Card" }),
     );
     expect(
       await within(dialog).findByText("Fixture Agent"),
@@ -245,12 +246,46 @@ describe("OutboundA2aAgentsPage", () => {
       "https://invalid.example.com",
     );
     await user.click(
-      within(dialog).getByRole("button", { name: "Test connection" }),
+      within(dialog).getByRole("button", { name: "Validate Agent Card" }),
     );
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
       "The Agent Card could not be reached or validated.",
     );
+  });
+
+  it("shows the latest monitored outbound run to administrators", async () => {
+    server.use(
+      http.get(REGISTRY_URL, () => HttpResponse.json([remoteAgent])),
+      http.get(`${REGISTRY_URL}/:id/runs`, () =>
+        HttpResponse.json([
+          {
+            id: "run-1",
+            parentAgentId: "parent-1",
+            connectionId: remoteAgent.connection.id,
+            toolId: remoteAgent.toolId,
+            userId: "user-1",
+            conversationId: "conversation-1",
+            toolCallId: "call-1",
+            messageId: "message-1",
+            remoteTaskId: "task-1",
+            remoteContextId: "context-1",
+            state: "completed",
+            targetNameSnapshot: remoteAgent.name,
+            interfaceSnapshot: remoteAgent.connection.selectedInterface,
+            errorCode: null,
+            statusReason: null,
+            startedAt: "2026-09-08T12:00:00.000Z",
+            completedAt: "2026-09-08T12:00:01.000Z",
+          },
+        ]),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Recent activity")).toBeInTheDocument();
+    expect(await screen.findByText(/completed ·/)).toBeInTheDocument();
   });
 });
 

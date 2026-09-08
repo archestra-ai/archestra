@@ -8,6 +8,7 @@ const {
   deleteA2aRemoteAgent,
   getAgentA2aDelegations,
   inspectA2aRemoteAgent,
+  listA2aRemoteAgentRuns,
   listA2aRemoteAgents,
   syncAgentA2aDelegations,
 } = archestraApiSdk;
@@ -16,6 +17,8 @@ export const a2aRemoteAgentQueryKeys = {
   all: ["a2a-remote-agents"] as const,
   assignments: (agentId: string) =>
     ["a2a-remote-agents", "assignments", agentId] as const,
+  runs: (remoteAgentId: string) =>
+    ["a2a-remote-agents", "runs", remoteAgentId] as const,
 };
 
 export function useA2aRemoteAgents(options?: { enabled?: boolean }) {
@@ -23,6 +26,24 @@ export function useA2aRemoteAgents(options?: { enabled?: boolean }) {
     queryKey: a2aRemoteAgentQueryKeys.all,
     queryFn: async () => {
       const response = await listA2aRemoteAgents();
+      throwOnApiError(response.error);
+      return response.data ?? [];
+    },
+    enabled: options?.enabled,
+  });
+}
+
+export function useA2aRemoteAgentRuns(
+  remoteAgentId: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: a2aRemoteAgentQueryKeys.runs(remoteAgentId),
+    queryFn: async () => {
+      const response = await listA2aRemoteAgentRuns({
+        path: { id: remoteAgentId },
+        query: { limit: 10 },
+      });
       throwOnApiError(response.error);
       return response.data ?? [];
     },

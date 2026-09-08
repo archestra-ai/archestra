@@ -155,9 +155,9 @@ Hierarchy expands resource visibility and inherits organization roles assigned t
 
 External group sync continues to create direct memberships on the mapped team. Those members receive inherited resource access from its ancestors; see [SSO Team Sync](/docs/platform-sso-team-sync).
 
-### Agents and MCP Gateways
+### Agents, MCP Gateways, and Apps
 
-\`agent\` and \`mcpGateway\` share the same scope model:
+\`agent\`, \`mcpGateway\`, and \`app\` share the same scope model:
 
 - \`personal\`: the author can manage their own records
 - \`team\`: requires \`<resource>:team-admin\` and membership in at least one assigned team
@@ -168,6 +168,7 @@ Examples:
 - \`agent:delete\` alone does **not** allow deleting every agent
 - \`agent:team-admin\` allows managing team-scoped agents only in teams the user belongs to
 - \`agent:admin\` bypasses those scope restrictions
+- sharing an MCP App with named users grants use only; the app stays personal and only its author can edit it
 
 ### Visibility-Scoped Credentials
 

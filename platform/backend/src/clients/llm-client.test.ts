@@ -1208,6 +1208,41 @@ describe("createDirectLLMModel", () => {
 });
 
 describe("createLLMModel", () => {
+  test("sends keyless Bedrock chat to the proxy without signing or a placeholder credential", async () => {
+    vi.stubEnv("AWS_ACCESS_KEY_ID", undefined);
+    vi.stubEnv("AWS_SECRET_ACCESS_KEY", undefined);
+    vi.stubEnv("AWS_BEARER_TOKEN_BEDROCK", undefined);
+    const mockFetch = vi.fn().mockResolvedValue(
+      Response.json({
+        output: {
+          message: { role: "assistant", content: [{ text: "Hello" }] },
+        },
+        stopReason: "end_turn",
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        metrics: { latencyMs: 1 },
+      }),
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const model = createLLMModel({
+      provider: "bedrock",
+      apiKey: undefined,
+      agentId: "agent-1",
+      modelName: "amazon.nova-lite-v1:0",
+      baseUrl: null,
+      chatApiKeyId: "keyless-bedrock-key",
+    });
+    const result = await generateText({ model, prompt: "Hi", maxRetries: 0 });
+
+    expect(result.text).toBe("Hello");
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(String(url)).toContain("/v1/bedrock/agent-1/model/");
+    const headers = new Headers(init.headers);
+    expect(headers.has("authorization")).toBe(false);
+    expect(headers.has("x-amz-date")).toBe(false);
+    expect(headers.get(CHAT_API_KEY_ID_HEADER)).toBe("keyless-bedrock-key");
+  });
+
   test("forwards Bedrock SigV4 credentials through the local proxy as a bearer marker", () => {
     const marker = encodeBedrockSigV4Marker({
       accessKeyId: "test-access-key",

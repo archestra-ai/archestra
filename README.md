@@ -83,15 +83,22 @@ docker pull archestra/platform:latest
 docker run \
   -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
   -e ARCHESTRA_QUICKSTART=true \
-  -e ARCHESTRA_BETA=true \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v archestra-postgres-data:/var/lib/postgresql/data \
   -v archestra-app-data:/app/data \
-  archestra/platform
+  archestra/platform:latest
 ```
 
 Open <http://localhost:3000>. Full Docker / Helm / Kubernetes instructions
 live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
+
+### Release channels
+
+Archestra maintains two active release tracks:
+- **Stable releases** (e.g. `1.3.51`): Qualified, tested releases for production deployments. Archestra maintains one active stable release line at a time with security patches and bug fixes. The Docker tag `latest` points to the most recent stable release.
+- **Beta releases** (e.g. `1.4.0-beta.1`): Previews of upcoming features built directly from the `main` branch. Beta releases let you test new capabilities and provide feedback before they land in a stable release.
+
+New features and bug fixes land on `main` first and ship in rolling beta releases. Fixes are then selectively backported to the supported stable branch. For production environments, pin an exact version tag or Helm chart version rather than tracking `latest`. See our [Release guide](platform/dev/RELEASE.md) for full release lifecycle details.
 
 ## Ready for production
 
@@ -112,6 +119,8 @@ live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
 - 🛡️ [**Security & bug bounty**](https://archestra.ai/docs/security)
 - 🤝 [**Contributing**](https://archestra.ai/docs/contributing) —
   set up the dev env, run e2e tests, open a PR.
+- [**Release guide**](platform/dev/RELEASE.md) —
+  beta releases, stable patches, cutovers, and qualification.
 
 Thank you for continuously making **Archestra** better — you're awesome 🫶
 

@@ -2,12 +2,32 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-06
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 The Archestra Platform can be deployed using Docker for development and testing, or Helm for production environments. Both deployment methods provide access to the Admin UI on port 3000 and the API on port 9000.
+
+## Release Channels And Upgrades
+
+Pin an exact chart version or image tag in production.
+Select a published release from [GitHub Releases](https://github.com/archestra-ai/archestra/releases).
+
+### Release Channels
+
+- **Stable:** Docker tag `latest` and default Helm charts track the current stable release.
+- **Beta:** Version tags ending in `-beta.N` preview upcoming features from the main branch.
+
+Archestra maintains one active stable release line at a time. Bug fixes and security patches publish to the active stable line and the next beta release.
+
+### Upgrade Safety
+
+1. Back up your PostgreSQL database before every upgrade.
+2. Read the release notes for migration notices.
+3. Apply the upgrade to a staging environment first.
+
+Rolling back the platform container does not revert database migrations.
 
 ## Docker Deployment
 
@@ -99,8 +119,10 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
+export ARCHESTRA_VERSION="1.3.51" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --version "$ARCHESTRA_VERSION" \
   --install \
   --namespace archestra \
   --create-namespace \
@@ -115,14 +137,20 @@ This command will:
 
 ### Configuration
 
-The Helm chart provides extensive configuration options through values. For the complete configuration reference, see the [values.yaml file](https://github.com/archestra-ai/archestra/blob/main/platform/helm/archestra/values.yaml).
+View the configuration defaults for the exact chart version you selected:
+
+```bash
+helm show values \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --version "$ARCHESTRA_VERSION"
+```
 
 #### Core Configuration
 
 **Archestra Platform Settings**:
 
 - `archestra.image` - Docker image repository for the Archestra Platform (default: `archestra/platform`). See [available tags](https://hub.docker.com/r/archestra/platform/tags)
-- `archestra.imageTag` - Image tag for the Archestra Platform. New Helm releases update this value to latest available image tag.
+- `archestra.imageTag` - Platform image tag pinned by the selected chart version. Keep the default to match the chart's release.
 - `archestra.imagePullPolicy` - Image pull policy for the Archestra container (default: IfNotPresent). Options: Always, IfNotPresent, Never
 - `archestra.replicaCount` - Number of pod replicas (default: 1). Ignored when HPA is enabled
 - `archestra.env` - Environment variables to pass to the container (see Environment Variables section for available options). Supports Kubernetes `$(VAR_NAME)` expansion syntax.
@@ -892,8 +920,8 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop; custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest`
+- **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.3.51` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`

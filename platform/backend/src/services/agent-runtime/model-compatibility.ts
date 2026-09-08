@@ -5,6 +5,7 @@ import {
   requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
+import config from "@/config";
 import { ModelModel } from "@/models";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { ApiError } from "@/types";
@@ -16,7 +17,8 @@ import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution"
  * callers can use it before creating a detached task.
  */
 export async function preflightAgentRuntimeModelCompatibility(params: {
-  runtime: Pick<ResolvedAgentRuntime, "inferenceProtocol">;
+  runtime: Pick<ResolvedAgentRuntime, "inferenceProtocol"> &
+    Partial<Pick<ResolvedAgentRuntime, "command">>;
   agent: Pick<Agent, "llmApiKeyId" | "modelId">;
   organizationId: string;
   userId: string;
@@ -32,6 +34,7 @@ export async function preflightAgentRuntimeModelCompatibility(params: {
     : null;
   assertInferenceProtocolSupported({
     protocol: params.runtime.inferenceProtocol,
+    command: params.runtime.command,
     provider: llm.selectedProvider,
     model: llm.selectedModel,
     supportedEndpoints: selectedModel?.supportedEndpoints,
@@ -40,13 +43,45 @@ export async function preflightAgentRuntimeModelCompatibility(params: {
   return { llm, selectedModel };
 }
 
+/** Cloud-hosted Claude uses provider billing instead of a Claude subscription. */
+export function getClaudeCodeCloudProvider(params: {
+  runtime: Partial<Pick<ResolvedAgentRuntime, "command">>;
+  provider: SupportedProvider;
+}): "bedrock" | "vertex" | null {
+  if (params.runtime.command?.[0] !== "archestra-claude-code") return null;
+  if (params.provider === "bedrock") return "bedrock";
+  if (
+    params.provider === "anthropic" &&
+    config.llm.anthropic.vertexAi.enabled
+  ) {
+    return "vertex";
+  }
+  return null;
+}
+
 function assertInferenceProtocolSupported(params: {
   protocol: ResolvedAgentRuntime["inferenceProtocol"];
+  command: ResolvedAgentRuntime["command"] | undefined;
   provider: SupportedProvider;
   model: string;
   supportedEndpoints: string[] | null | undefined;
 }): void {
-  if (params.protocol === "anthropic" && params.provider !== "anthropic") {
+  const claudeCodeBedrock =
+    getClaudeCodeCloudProvider({
+      runtime: { command: params.command },
+      provider: params.provider,
+    }) === "bedrock";
+  if (claudeCodeBedrock && !/(?:^|[./])anthropic\.claude-/.test(params.model)) {
+    throw new ApiError(
+      409,
+      "The Claude Code runtime requires a Claude model when using AWS Bedrock.",
+    );
+  }
+  if (
+    params.protocol === "anthropic" &&
+    params.provider !== "anthropic" &&
+    !claudeCodeBedrock
+  ) {
     throw new ApiError(
       409,
       `This Agent Runtime image expects the Anthropic API, but the Agent's selected model uses ${providerDisplayNames[params.provider]}. Choose an Anthropic model or use an OpenAI-compatible Agent Runtime image.`,

@@ -79,7 +79,6 @@ function buildVertexHeaders(
   headers.delete("authorization");
   headers.delete("x-api-key");
   headers.delete("anthropic-version");
-  headers.delete("anthropic-beta");
   headers.delete("content-length");
 
   new Headers(authHeaders).forEach((value, name) => {

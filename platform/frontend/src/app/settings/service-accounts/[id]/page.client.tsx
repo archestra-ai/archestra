@@ -601,7 +601,7 @@ export default function ServiceAccountDetailPage({
 
           <SettingsBlock
             title="Account settings"
-            description="The display name shown across the platform, and the role every request made with this account's keys is authorized against."
+            description="The display name shown across the platform, and the roles every request made with this account's keys is authorized against."
             contentClassName="space-y-6"
           >
             <div className="grid gap-4 md:grid-cols-2">
@@ -614,9 +614,9 @@ export default function ServiceAccountDetailPage({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="service-account-role">Role</Label>
+                <Label htmlFor="service-account-role">Roles</Label>
                 <RoleSelect
-                  key={selectedRole}
+                  multiple
                   id="service-account-role"
                   value={selectedRole}
                   onValueChange={setSelectedRole}

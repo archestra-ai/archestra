@@ -1,4 +1,6 @@
 import { ADMIN_ROLE_NAME, ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
 import ServiceAccountModel from "@/models/service-account";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -29,11 +31,66 @@ describe("service account routes", () => {
     });
 
     const { default: serviceAccountRoutes } = await import("./service-account");
+    registerAuditLogHook(app);
     await app.register(serviceAccountRoutes);
   });
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("persists and audits multiple roles and rejects an unknown component", async ({
+    makeCustomRole,
+  }) => {
+    const reader = await makeCustomRole(organizationId, {
+      role: "log_reader",
+      permission: { log: ["read"] },
+    });
+    const editor = await makeCustomRole(organizationId, {
+      role: "agent_editor",
+      permission: { agent: ["update"] },
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: {
+        name: "Combined automation",
+        role: `${reader.role},${editor.role}`,
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().role).toBe(`${reader.role},${editor.role}`);
+    const changed = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${created.json().id}`,
+      payload: { role: reader.role },
+    });
+    expect(changed.statusCode).toBe(200);
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: created.json().id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          before: expect.objectContaining({
+            role: `${reader.role},${editor.role}`,
+          }),
+          after: expect.objectContaining({ role: reader.role }),
+        }),
+      ]),
+    );
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: {
+        name: "Invalid automation",
+        role: `${reader.role},unknown_role`,
+      },
+    });
+    expect(invalid.statusCode).toBe(400);
   });
 
   test("stamps the acting user as creator and returns them resolved", async () => {
@@ -237,6 +294,7 @@ describe("service account API authentication", () => {
     const { fastifyAuthPlugin } = await import("@/auth");
     const { default: serviceAccountRoutes } = await import("./service-account");
     await app.register(fastifyAuthPlugin);
+    registerAuditLogHook(app);
     await app.register(serviceAccountRoutes);
   });
 

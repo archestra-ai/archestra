@@ -7,7 +7,6 @@ import {
   Copy,
   Eye,
   Plus,
-  Shield,
   ShieldAlert,
   ShieldCheck,
   Trash2,
@@ -22,13 +21,11 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
   FilterBar,
-  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingWrapper } from "@/components/loading";
-import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -42,13 +39,6 @@ import { DataTable } from "@/components/ui/data-table";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { type BulkOutcome, reportBulkOutcome } from "@/lib/bulk-action";
@@ -77,7 +67,6 @@ import {
   useMemberSignupStatus,
   useOrganization,
 } from "@/lib/organization.query";
-import { useRoles } from "@/lib/role.query";
 import { cn } from "@/lib/utils";
 import { useSetSettingsAction } from "../layout";
 
@@ -767,10 +756,8 @@ function RoleFilterDropdown() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { data: roles = [] } = useRoles();
 
   const currentRole = searchParams.get("role") || "all";
-  const selectedRole = roles.find((role) => role.role === currentRole);
 
   const handleChange = useCallback(
     (value: string) => {
@@ -787,46 +774,12 @@ function RoleFilterDropdown() {
   );
 
   return (
-    <Select value={currentRole} onValueChange={handleChange}>
-      <SelectTrigger
-        size="sm"
-        className={filterControlClass({ active: currentRole !== "all" })}
-        data-testid={E2eTestId.UsersRoleFilter}
-      >
-        {/*
-         * SelectValue must stay mounted in every state. Radix positions the
-         * item-aligned dropdown only once it has all of trigger, value node,
-         * content, viewport and selected item; with the value node missing it
-         * silently skips positioning and the list renders unstyled off-screen
-         * while `pointer-events: none` stays on <body> — so the filter looks
-         * dead. Rendering the custom label as SelectValue's children keeps the
-         * node mounted, which is the same shape the other custom-label selects
-         * here use.
-         */}
-        <SelectValue placeholder="Filter by role">
-          {selectedRole ? (
-            <RoleOptionLabel
-              predefined={selectedRole.predefined}
-              label={selectedRole.name}
-              className="pr-6"
-            />
-          ) : (
-            <span className="flex items-center gap-2 text-muted-foreground">
-              <Shield className="h-4 w-4" />
-              Filter by role
-            </span>
-          )}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All Roles</SelectItem>
-        {roles.map((role) => (
-          <SelectItem key={role.id} value={role.role}>
-            <RoleOptionLabel predefined={role.predefined} label={role.name} />
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <RoleSelect
+      mode="filter"
+      value={currentRole}
+      onValueChange={handleChange}
+      data-testid={E2eTestId.UsersRoleFilter}
+    />
   );
 }
 
@@ -853,10 +806,10 @@ function ChangeRoleDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Change Role"
+      title="Change Roles"
       description={
         <>
-          Update the role for{" "}
+          Update the roles for{" "}
           <span className="font-medium text-foreground">
             {member.name || member.email}
           </span>
@@ -866,9 +819,10 @@ function ChangeRoleDialog({
     >
       <DialogBody className="space-y-4">
         <RoleSelect
+          multiple
           value={selectedRole}
           onValueChange={setSelectedRole}
-          ariaLabel="Role"
+          ariaLabel="Roles"
           className="w-full"
         />
       </DialogBody>
@@ -880,7 +834,7 @@ function ChangeRoleDialog({
           onClick={() => onConfirm(selectedRole)}
           disabled={isPending || selectedRole === member.role}
         >
-          {isPending ? "Updating..." : "Update Role"}
+          {isPending ? "Updating..." : "Update Roles"}
         </Button>
       </DialogStickyFooter>
     </FormDialog>

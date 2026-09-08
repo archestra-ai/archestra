@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { Permissions } from "@archestra/shared";
-import { MemberModel, OrganizationRoleModel } from "@/models";
+import { MemberModel, UserModel } from "@/models";
 import { ApiError } from "@/types";
 
 export async function getUserPermissions(params: {
@@ -17,10 +18,7 @@ export async function getUserPermissions(params: {
     throw new ApiError(404, "User is not a member of any organization");
   }
 
-  return OrganizationRoleModel.getPermissions(
-    member.role,
-    params.organizationId,
-  );
+  return UserModel.getUserPermissions(params.userId, params.organizationId);
 }
 
 // listImpersonableUsers list users which could be impersonated by the current user

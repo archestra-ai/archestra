@@ -127,7 +127,7 @@ describe("syncSsoRole", () => {
     expect(member?.role).toBe(ADMIN_ROLE_NAME);
   });
 
-  test("applies the resolved role when a mapping rule explicitly matches", async ({
+  test("applies all resolved roles when a mapping rule explicitly matches", async ({
     makeIdentityProvider,
     makeMember,
     makeOrganization,
@@ -143,7 +143,7 @@ describe("syncSsoRole", () => {
         rules: [
           {
             expression: '{{#equals groups "members-only"}}true{{/equals}}',
-            role: MEMBER_ROLE_NAME,
+            role: "member,editor",
           },
         ],
       },
@@ -158,6 +158,6 @@ describe("syncSsoRole", () => {
     await syncSsoRole(user.id, user.email, provider.providerId);
 
     const member = await MemberModel.getByUserId(user.id, org.id);
-    expect(member?.role).toBe(MEMBER_ROLE_NAME);
+    expect(member?.role).toBe("member,editor");
   });
 });

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-04
+lastUpdated: 2026-09-08
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -124,6 +124,14 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 
 Users with `ac:create` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs.
 
+### Multiple Roles And Team Grants
+
+Users and service accounts can have multiple organization roles. Their permissions combine: a grant from any assigned role allows that action.
+
+Teams can also hold organization roles. Members inherit these grants from their own teams and every ancestor in the [team hierarchy](#team-hierarchies). Removing a role or membership removes its grants, unless another assignment provides the same permissions.
+
+The account permissions page shows each permission's sources when you hover over or focus its badge. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
+
 #### No privilege escalation
 
 A role can only be granted by someone who already holds every permission it carries. This single rule is enforced server-side on **every** grant path:
@@ -132,7 +140,8 @@ A role can only be granted by someone who already holds every permission it carr
 - changing a member's role,
 - inviting a user with a role,
 - setting the organization's default member role,
-- creating or updating a service account.
+- creating or updating a service account,
+- assigning roles to teams, adding team members, or changing team parents.
 
 The role pickers in the UI disable roles you cannot grant and explain which permissions you are missing. The rule is what makes deliberately-restricted admin roles trustworthy: an admin role created without, say, `log:read`, `auditLog:read`, and `member:impersonate` cannot be escaped by its holders — with `member:update` they can still manage users freely inside their own permission set, but any attempt to hand out (to themselves or anyone else) a role carrying the withheld permissions is rejected. Roles applied by an identity provider through [SSO role mapping](/docs/platform-sso-role-mapping) are the deliberate exception: they are granted by the IdP configuration, not by a platform user.
 
@@ -368,7 +377,7 @@ Team roles are also separate from resource actions named `:team-admin`. For exam
 
 Teams can be nested to match an organization structure. A resource assigned to a team is available to direct members of that team and members of every descendant team, at any depth. Access does not flow upward from a child to its parent or sideways to sibling teams.
 
-Hierarchy expands resource visibility only. A user still needs the resource's matching RBAC action, and team membership roles are never inherited: an admin of a child team cannot manage its parent team's members or settings. Deleting a parent team moves its direct children to the root without deleting them.
+Hierarchy expands resource visibility and inherits organization roles assigned to ancestor teams. Team membership roles are not inherited. Being a child team admin does not make you its parent's team admin. Deleting a parent moves its direct children to the root.
 
 External group sync continues to create direct memberships on the mapped team. Those members receive inherited resource access from its ancestors; see [SSO Team Sync](/docs/platform-sso-team-sync).
 

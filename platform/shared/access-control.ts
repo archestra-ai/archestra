@@ -1612,6 +1612,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganizationMembers]: {},
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
+  [RouteId.GetUserPermissionSources]: {},
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
   [RouteId.GetImpersonableUsers]: { member: ["impersonate"] }, // Role debugger picker (the impersonate-user call itself is also gated on member:impersonate in the auth before-hook)
 

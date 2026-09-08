@@ -472,3 +472,22 @@ describe("SearchableMultiSelect", () => {
     expect(screen.queryByText("Item Three")).not.toBeInTheDocument();
   });
 });
+
+it("keeps a disabled selection unchanged through mouse and keyboard interactions", async () => {
+  const user = userEvent.setup();
+  const onValueChange = vi.fn();
+  render(
+    <SearchableMultiSelect
+      value={["item-1"]}
+      items={mockItems}
+      onValueChange={onValueChange}
+      disabled
+    />,
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Remove selected item" }),
+  );
+  await user.click(screen.getByRole("combobox"));
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(onValueChange).not.toHaveBeenCalled();
+});

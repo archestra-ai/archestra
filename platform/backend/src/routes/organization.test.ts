@@ -141,16 +141,31 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/auth-settings - default member role", () => {
-    test("persists a valid custom default role", async ({ makeCustomRole }) => {
+    test("persists multiple default roles and records the audit change", async ({
+      makeCustomRole,
+    }) => {
       const role = await makeCustomRole(organizationId);
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/auth-settings",
-        payload: { defaultMemberRole: role.role },
+        payload: { defaultMemberRole: `member,${role.role}` },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().defaultMemberRole).toBe(role.role);
+      expect(response.json().defaultMemberRole).toBe(`member,${role.role}`);
+      expect(await OrganizationModel.getDefaultMemberRole(organizationId)).toBe(
+        `member,${role.role}`,
+      );
+      await vi.waitFor(async () => {
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.action, "organization.updated"));
+        expect(audit?.before).toMatchObject({ defaultMemberRole: null });
+        expect(audit?.after).toMatchObject({
+          defaultMemberRole: `member,${role.role}`,
+        });
+      });
     });
 
     test("accepts a predefined role", async () => {
@@ -168,7 +183,7 @@ describe("organization routes", () => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/auth-settings",
-        payload: { defaultMemberRole: "nonexistent-role" },
+        payload: { defaultMemberRole: "member,nonexistent-role" },
       });
 
       expect(response.statusCode).toBe(400);
@@ -177,19 +192,22 @@ describe("organization routes", () => {
     test("rejects a default role more privileged than the caller", async ({
       makeUser,
       makeMember,
+      makeCustomRole,
     }) => {
-      // An editor holds organizationSettings:update, which is what gates this
-      // route — but not the member/invitation/access-control permissions that
-      // make up admin. Naming admin here would provision every future account
-      // as an administrator, so it has to be refused.
+      const provisionerRole = await makeCustomRole(organizationId, {
+        role: "member_provisioner",
+        permission: { member: ["create"], organizationSettings: ["update"] },
+      });
       const editor = await makeUser();
-      await makeMember(editor.id, organizationId, { role: "editor" });
+      await makeMember(editor.id, organizationId, {
+        role: `member,${provisionerRole.role}`,
+      });
       user = editor;
 
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/auth-settings",
-        payload: { defaultMemberRole: "admin" },
+        payload: { defaultMemberRole: "member,admin" },
       });
 
       expect(response.statusCode).toBe(403);

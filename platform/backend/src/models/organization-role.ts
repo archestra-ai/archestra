@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   type Action,
   ADMIN_ROLE_NAME,
@@ -18,11 +19,12 @@ import {
   findUngrantablePermissions,
   predefinedPermissionsMap,
 } from "@archestra/shared/access-control";
-import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, ilike, inArray, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { OrganizationRole } from "@/types";
+import RoleCompositionModel from "./role-composition";
 
 const ROLE_PERMISSIONS_CACHE_TTL_MS = 5 * TimeInMs.Minute;
 const rolePermissionsCache = new LRUCacheManager<Permissions>({
@@ -47,6 +49,59 @@ const generatePredefinedRole = (
 });
 
 class OrganizationRoleModel {
+  static async getPermissionsBatch(params: {
+    identifiers: string[];
+    organizationId: string;
+  }): Promise<Record<string, Permissions>> {
+    const permissions: Record<string, Permissions> = Object.create(null);
+    const missing: string[] = [];
+    for (const identifier of new Set(params.identifiers)) {
+      if (identifier === OWNER_ROLE_NAME) {
+        permissions[identifier] =
+          OrganizationRoleModel.getPredefinedRolePermissions(ADMIN_ROLE_NAME);
+      } else if (OrganizationRoleModel.isPredefinedRole(identifier)) {
+        permissions[identifier] =
+          OrganizationRoleModel.getPredefinedRolePermissions(identifier);
+      } else {
+        const cached = rolePermissionsCache.get(
+          OrganizationRoleModel.getPermissionsCacheKey(
+            params.organizationId,
+            identifier,
+          ),
+        );
+        if (cached) permissions[identifier] = cached;
+        else missing.push(identifier);
+      }
+    }
+    if (missing.length) {
+      const roles = await db
+        .select()
+        .from(schema.organizationRolesTable)
+        .where(
+          and(
+            eq(
+              schema.organizationRolesTable.organizationId,
+              params.organizationId,
+            ),
+            inArray(schema.organizationRolesTable.role, missing),
+          ),
+        );
+      for (const role of roles) {
+        permissions[role.role] = OrganizationRoleModel.sanitizePermissions(
+          role.permission,
+        );
+        rolePermissionsCache.set(
+          OrganizationRoleModel.getPermissionsCacheKey(
+            params.organizationId,
+            role.role,
+          ),
+          permissions[role.role],
+        );
+      }
+    }
+    return permissions;
+  }
+
   static sanitizePermissions(value: unknown): Permissions {
     const parsedPermissions = parseRolePermissionsValue(value);
     if (!parsedPermissions) {
@@ -186,7 +241,7 @@ class OrganizationRoleModel {
       .where(
         and(
           eq(schema.membersTable.organizationId, organizationId),
-          eq(schema.membersTable.role, role.role),
+          sql`${role.role} = ANY(string_to_array(${schema.membersTable.role}, ','))`,
         ),
       )
       .limit(1);
@@ -209,7 +264,7 @@ class OrganizationRoleModel {
       .where(
         and(
           eq(schema.invitationsTable.organizationId, organizationId),
-          eq(schema.invitationsTable.role, role.role),
+          sql`${role.role} = ANY(string_to_array(${schema.invitationsTable.role}, ','))`,
           eq(schema.invitationsTable.status, "pending"),
         ),
       )
@@ -225,6 +280,32 @@ class OrganizationRoleModel {
         reason: "Cannot delete role that is used in pending invitations",
       };
     }
+
+    const [teamAssignment] = await db
+      .select({ id: schema.teamsTable.id })
+      .from(schema.teamsTable)
+      .where(
+        and(
+          eq(schema.teamsTable.organizationId, organizationId),
+          sql`${role.role} = ANY(${schema.teamsTable.roles})`,
+        ),
+      )
+      .limit(1);
+    const [accountAssignment] = await db
+      .select({ id: schema.serviceAccountsTable.id })
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+          sql`${role.role} = ANY(string_to_array(${schema.serviceAccountsTable.role}, ','))`,
+        ),
+      )
+      .limit(1);
+    if (teamAssignment || accountAssignment)
+      return {
+        canDelete: false,
+        reason: "Cannot delete role assigned to teams or service accounts",
+      };
 
     logger.debug({ roleId }, "OrganizationRoleModel.canDelete: can delete");
     return { canDelete: true };
@@ -336,10 +417,27 @@ class OrganizationRoleModel {
     identifier: string,
     organizationId: string,
   ): Promise<Permissions> {
-    // logger.debug(
-    //   { identifier, organizationId },
-    //   "OrganizationRoleModel.getPermissions: fetching",
-    // );
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    if (identifier.includes(",")) {
+      const roles = [
+        ...new Set(
+          identifier
+            .split(",")
+            .map((role) => role.trim())
+            .filter(Boolean),
+        ),
+      ];
+      return RoleCompositionModel.mergePermissions(
+        await Promise.all(
+          roles.map((role) =>
+            OrganizationRoleModel.getPermissions(role, organizationId),
+          ),
+        ),
+      );
+    }
+    // SPDX-SnippetEnd
     if (OrganizationRoleModel.isPredefinedRole(identifier)) {
       return OrganizationRoleModel.getPredefinedRolePermissions(identifier);
     }

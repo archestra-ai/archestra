@@ -143,8 +143,8 @@ export function RoleMappingForm({
   const content = (
     <>
       <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-md">
-        Sets the organization-wide role only. Team membership is synced per team
-        via each team&apos;s{" "}
+        Sets the organization-wide roles only. Team membership is synced per
+        team via each team&apos;s{" "}
         <span className="font-medium">External Group Sync</span>.
       </p>
 
@@ -176,7 +176,7 @@ export function RoleMappingForm({
           <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
             <span className="font-medium">Note:</span>
             {` `}Rules are evaluated in order from top to bottom. The first
-            matching rule determines the user&apos;s role. Order your most
+            matching rule determines the user&apos;s roles. Order your most
             specific rules first.
           </p>
         )}
@@ -184,7 +184,7 @@ export function RoleMappingForm({
         {fields.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No mapping rules configured. All users will be assigned the default
-            role.
+            roles.
           </p>
         ) : (
           <DndContext
@@ -229,15 +229,17 @@ export function RoleMappingForm({
         name="roleMapping.defaultRole"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Default Role</FormLabel>
+            <FormLabel>Default Roles</FormLabel>
             <FormDescription>
-              Role assigned when no mapping rules match.
+              Roles assigned when no mapping rules match.
             </FormDescription>
             <FormControl>
               <RoleSelect
+                multiple
+                ariaLabel="Default Roles"
                 value={field.value || "member"}
                 onValueChange={field.onChange}
-                placeholder="Select default role"
+                placeholder="Select default roles"
                 data-testid={E2eTestId.IdpRoleMappingDefaultRole}
                 className="w-full"
                 restrictToGrantable={false}
@@ -266,7 +268,7 @@ export function RoleMappingForm({
               <FormDescription>
                 If enabled, denies user login when no role mapping rules match.
                 Without strict mode, users who don&apos;t match any rule are
-                assigned the default role.
+                assigned the default roles.
               </FormDescription>
             </div>
           </FormItem>
@@ -288,7 +290,7 @@ export function RoleMappingForm({
               <FormLabel>Skip Role Sync</FormLabel>
               <FormDescription>
                 Prevent synchronizing users&apos; roles on subsequent logins.
-                When enabled, the role is only set on first login, allowing
+                When enabled, the roles are only set on first login, allowing
                 manual role management afterward.
               </FormDescription>
             </div>
@@ -418,13 +420,15 @@ function RoleMappingRuleRow({
           render={({ field }) => (
             <FormItem className="flex-1 min-w-[220px] max-w-[360px]">
               <div className="flex min-h-5 items-center">
-                <FormLabel className="text-xs">{appName} Role</FormLabel>
+                <FormLabel className="text-xs">{appName} Roles</FormLabel>
               </div>
               <FormControl>
                 <RoleSelect
+                  multiple
+                  ariaLabel={`${appName} roles for rule ${index + 1}`}
                   value={field.value}
                   onValueChange={field.onChange}
-                  placeholder="Select role"
+                  placeholder="Select roles"
                   data-testid={E2eTestId.IdpRoleMappingRuleRole}
                   className="w-full"
                   restrictToGrantable={false}

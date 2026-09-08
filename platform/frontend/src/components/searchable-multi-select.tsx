@@ -42,6 +42,12 @@ interface SearchableMultiSelectProps {
   listClassName?: string;
   maxBadgeDisplay?: number;
   maxSelected?: number;
+  minSelected?: number;
+  id?: string;
+  ariaLabel?: string;
+  "data-testid"?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   showSelectedBadges?: boolean;
   selectedSuffix?: string | ((count: number) => string);
 }
@@ -64,6 +70,12 @@ export function SearchableMultiSelect({
   listClassName,
   maxBadgeDisplay = 3,
   maxSelected,
+  minSelected = 0,
+  id,
+  ariaLabel,
+  "data-testid": testId,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
   showSelectedBadges = true,
   selectedSuffix = "selected",
 }: SearchableMultiSelectProps) {
@@ -81,7 +93,9 @@ export function SearchableMultiSelect({
   const selectedItems = items.filter((item) => value.includes(item.value));
 
   const handleToggleItem = (itemValue: string) => {
+    if (disabled) return;
     if (value.includes(itemValue)) {
+      if (value.length <= minSelected) return;
       onValueChange(value.filter((v) => v !== itemValue));
     } else if (maxSelected === undefined || value.length < maxSelected) {
       onValueChange([...value, itemValue]);
@@ -93,6 +107,7 @@ export function SearchableMultiSelect({
     e: React.MouseEvent | React.KeyboardEvent,
   ) => {
     e.stopPropagation();
+    if (disabled || value.length <= minSelected) return;
     onValueChange(value.filter((v) => v !== itemValue));
   };
 
@@ -100,14 +115,23 @@ export function SearchableMultiSelect({
   const hiddenCount = selectedItems.length - maxBadgeDisplay;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={!disabled && open}
+      onOpenChange={(next) => !disabled && setOpen(next)}
+    >
       <PopoverTrigger asChild>
         <div
           role="combobox"
+          id={id}
+          aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+          data-testid={testId}
           aria-expanded={open}
           aria-disabled={disabled}
           tabIndex={disabled ? -1 : 0}
           onKeyDown={(e) => {
+            if (disabled) return;
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               setOpen(!open);
@@ -135,6 +159,7 @@ export function SearchableMultiSelect({
                     <button
                       type="button"
                       aria-label="Remove selected item"
+                      disabled={disabled || value.length <= minSelected}
                       className="ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -211,8 +236,12 @@ export function SearchableMultiSelect({
                 <button
                   type="button"
                   key={item.value}
-                  disabled={item.disabled}
-                  aria-disabled={item.disabled}
+                  disabled={
+                    item.disabled || (isSelected && value.length <= minSelected)
+                  }
+                  aria-disabled={
+                    item.disabled || (isSelected && value.length <= minSelected)
+                  }
                   aria-pressed={isSelected}
                   onClick={() => {
                     if (item.disabled) return;

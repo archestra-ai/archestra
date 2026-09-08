@@ -30,6 +30,7 @@ import { admin, jwt, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
+import { withInheritedRoleAuthorization } from "@/auth/role-composition";
 import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
@@ -570,7 +571,19 @@ export const auth = betterAuth({
   },
 
   hooks: {
-    before: createAuthMiddleware(async (ctx) => handleBeforeHook(ctx)),
+    before: createAuthMiddleware(async (ctx) => {
+      await handleBeforeHook(ctx);
+      const adapter = await withInheritedRoleAuthorization({
+        ctx,
+        getUserId: async () => {
+          const session = await auth.api.getSession({
+            headers: ctx.headers ?? new Headers(ctx.request?.headers),
+          });
+          return session?.user.id;
+        },
+      });
+      if (adapter) return { context: { context: { ...ctx.context, adapter } } };
+    }),
     after: createAuthMiddleware(async (ctx) => handleAfterHook(ctx)),
   },
 });
@@ -934,8 +947,17 @@ async function assertCallerCanUseAdminEndpoints(
  */
 async function assertCallerCanGrantMemberRole(
   ctx: HookEndpointContext,
-  roleName: string,
+  roleName: string | string[],
 ): Promise<void> {
+  if (Array.isArray(roleName) || roleName.includes(",")) {
+    const roles = (Array.isArray(roleName) ? roleName : [roleName])
+      .flatMap((role) => role.split(","))
+      .map((role) => role.trim())
+      .filter(Boolean);
+    for (const role of new Set(roles))
+      await assertCallerCanGrantMemberRole(ctx, role);
+    return;
+  }
   const { request, context } = ctx;
 
   type SessionUser = { id: string };
@@ -1087,6 +1109,29 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   }
 
   logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
+  if (
+    (path === "/organization/update-member-role" ||
+      path === "/organization/invite-member") &&
+    (typeof body.role === "string" || Array.isArray(body.role))
+  ) {
+    const rawRoles = Array.isArray(body.role) ? body.role : [body.role];
+    if (!rawRoles.every((role: unknown) => typeof role === "string")) {
+      throw new APIError("BAD_REQUEST", { message: "Roles must be strings" });
+    }
+    body.role = [
+      ...new Set(
+        (rawRoles as string[])
+          .flatMap((role) => role.split(","))
+          .map((role) => role.trim())
+          .filter(Boolean),
+      ),
+    ].join(",");
+    if (!body.role) {
+      throw new APIError("BAD_REQUEST", {
+        message: "At least one role is required",
+      });
+    }
+  }
 
   if (isAuthSignOutPath(path)) {
     await stashSignOutSessionForAudit(ctx);
@@ -1159,7 +1204,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   // /organization/update-member path 404s).
   if (path === "/organization/update-member-role" && method === "POST") {
     const role = body.role;
-    if (typeof role === "string" && role.length > 0) {
+    if ((typeof role === "string" || Array.isArray(role)) && role.length > 0) {
       await assertCallerCanGrantMemberRole(ctx, role);
     }
   }
@@ -1325,7 +1370,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     // applied verbatim on acceptance, so inviting (even yourself, via another
     // address) into a stronger role is the same escalation.
     const invitedRole = body.role;
-    if (typeof invitedRole === "string" && invitedRole.length > 0) {
+    if (
+      (typeof invitedRole === "string" || Array.isArray(invitedRole)) &&
+      invitedRole.length > 0
+    ) {
       await assertCallerCanGrantMemberRole(ctx, invitedRole);
     }
 

@@ -1004,6 +1004,40 @@ describe("handleBeforeHook", () => {
       });
     });
 
+    test("rejects empty role assignments", async () => {
+      for (const role of ["", " , ", [], [" "]]) {
+        await expect(
+          handleBeforeHook(
+            createMockContext({
+              path: "/organization/update-member-role",
+              method: "POST",
+              body: { memberId: "test-member", role },
+            }),
+          ),
+        ).rejects.toMatchObject({
+          body: { message: "At least one role is required" },
+        });
+      }
+    });
+
+    test("checks every role in both string and array assignments", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+      for (const role of ["member,admin", ["member", "admin"]]) {
+        const ctx = updateMemberCtx(user, "member");
+        ctx.body.role = role;
+        await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+        ctx.path = "/organization/invite-member";
+        ctx.body.email = "invited@example.com";
+        await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      }
+    });
+
     test("blocks assigning a custom role that carries withheld permissions", async ({
       makeOrganization,
       makeUser,

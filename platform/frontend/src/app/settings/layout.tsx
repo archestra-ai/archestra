@@ -13,7 +13,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/service-accounts": {
     title: "Service Accounts",
     description:
-      "Organization-owned identities for automation. Each service account has a role and its own API keys for the platform API.",
+      "Organization-owned identities for automation. Each service account has roles and its own API keys for the platform API.",
   },
   "/settings/oauth-clients": {
     title: "OAuth Clients",
@@ -85,7 +85,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/auth": {
     title: "Auth",
     description:
-      "Authentication policies — token and session lifetimes, two-factor enforcement, and the default role for new users.",
+      "Authentication policies — token and session lifetimes, two-factor enforcement, and the default roles for new users.",
   },
   "/settings/roles": {
     title: "Roles",

@@ -17,6 +17,11 @@ export const team = pgTable(
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     description: text("description"),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    roles: text("roles").array().notNull().default([]),
+    // SPDX-SnippetEnd
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),

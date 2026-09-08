@@ -2,7 +2,7 @@
 title: Observability
 category: Archestra Platform
 order: 4
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,7 +26,7 @@ Combined, these endpoints expose metrics including:
 - `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, source, and status code
 - `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, source, and type (input/output)
 - `llm_cache_tokens_total` - Prompt-cache tokens by provider, model, agent_id, agent_name, agent_type, source, and cache_type (read/write). Read is a reused prefix, write is a newly cached prefix; both are separate from `llm_tokens_total` so existing input/output aggregates are unaffected.
-- `llm_cost_total` - Estimated list-price cost in USD by provider, model, agent_id, agent_name, agent_type, source, and billing_mode. `billing_mode` is `metered` (billed per token) or `subscription` (flat-rate, not billed per token), so real billed spend is `sum(llm_cost_total{billing_mode="metered"})`. Requires token pricing to be configured in Archestra.
+- `llm_cost_total` - Estimated list-price cost in USD by provider, model, agent_id, agent_name, agent_type, source, auth_method, and billing_mode. `auth_method` records the authentication method. Credential IDs stay on traces to avoid unbounded metric cardinality. `billing_mode` is `metered` (billed per token) or `subscription` (flat-rate, not billed per token), so real billed spend is `sum(llm_cost_total{billing_mode="metered"})`. Requires token pricing to be configured in Archestra.
 - `llm_cache_cost_total` - Estimated cost in USD attributable to prompt-cache tokens (reads plus writes, including the higher 1-hour-TTL write surcharge), by provider, model, agent_id, agent_name, agent_type, and source. Lets you chart caching spend separately from total cost.
 - `llm_cache_savings_total` - Gross estimated USD saved by cache reads being billed at a discount versus the full input price, by provider, model, agent_id, agent_name, agent_type, and source. Read-side only (always non-negative); the signed net-of-write-surcharge savings is persisted per interaction rather than as a counter.
 - `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and source
@@ -203,6 +203,8 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `archestra.agent.type` - Agent type (`agent`, `llm_proxy`, `mcp_gateway`, `profile`)
 - `archestra.run.id` - Run ID (from the [`X-Archestra-Run-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
+- `archestra.virtual_key.id` - Standard virtual-key UUID, when present.
+- `archestra.passthrough_virtual_key.id` - Secondary passthrough-key UUID, when present.
 - `archestra.auth.method` - How the request authenticated: `provider_key`, `virtual_key`, `passthrough_virtual_key`, `jwks`, `oauth_client_credentials`, `oauth_user`, or `internal`
 - `archestra.app.id` - ID of the [app](platform-apps) that made the call, when an app authenticated the request
 - `archestra.app.name` - Name of that app. With `archestra.external_agent_id`, these are the attributes that tell LLM Proxy callers apart.
@@ -229,6 +231,7 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.usage.cache_read.input_tokens` - Prompt-cache tokens served from a provider cache, a subset of `input_tokens` (set only when the response read from cache)
 - `gen_ai.usage.cache_creation.input_tokens` - Prompt-cache tokens written to a provider cache, a subset of `input_tokens` (set only when the response cached a prefix)
 - `archestra.usage.cache_creation.1h_input_tokens` - Portion of cache-creation tokens written at the 1-hour TTL (Anthropic/Bedrock), billed at a higher surcharge than the 5-minute default. Uses the `archestra.*` namespace because the GenAI semantic conventions have no per-TTL breakdown. The remainder of `gen_ai.usage.cache_creation.input_tokens` is the 5-minute portion.
+- `archestra.billing.mode` - `metered` or `subscription`, recorded with the request cost.
 - `archestra.cost` - Estimated cost in USD (requires [model pricing](/docs/platform-costs-and-limits#model-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 

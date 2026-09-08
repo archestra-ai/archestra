@@ -1,4 +1,42 @@
 import { z } from "zod";
+import { InteractionAuthMethodSchema } from "./interaction";
+
+export const ProxyCostQuerySchema = z.object({
+  authMethod: InteractionAuthMethodSchema.optional(),
+  credentialId: z.string().min(1).max(256).optional(),
+});
+
+export const ProxyCostTotalsSchema = z.object({
+  requests: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  billedCost: z.number(),
+  subscriptionCost: z.number(),
+});
+
+export const ProxyCostStatisticsSchema = z.object({
+  totals: ProxyCostTotalsSchema,
+  timeSeries: z.array(ProxyCostTotalsSchema.extend({ timestamp: z.string() })),
+  methods: z.array(
+    ProxyCostTotalsSchema.extend({ authMethod: InteractionAuthMethodSchema }),
+  ),
+  credentials: z.array(
+    ProxyCostTotalsSchema.extend({
+      authMethod: InteractionAuthMethodSchema,
+      credentialId: z.string().nullable(),
+      credentialName: z.string().nullable(),
+    }),
+  ),
+  pagination: z.object({
+    limit: z.number(),
+    offset: z.number(),
+    total: z.number(),
+  }),
+});
+
+export type ProxyCostStatistics = z.infer<typeof ProxyCostStatisticsSchema>;
+export type ProxyCostQuery = z.infer<typeof ProxyCostQuerySchema>;
 
 export const StatisticsTimeSeriesPointSchema = z.object({
   timestamp: z.string(),

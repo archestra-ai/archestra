@@ -1660,9 +1660,15 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
     // handler stamps on the interaction decides whether a call is charged.
     // It is classified from the credential format alone.
     test.for([
-      ["sk-ant-oat-token", "subscription"],
-      ["sk-ant-api-token", "metered"],
-    ])("a %s credential persists billing_mode %s", async ([key, expected]) => {
+      ["sk-ant-oat-token", "subscription", false],
+      ["sk-ant-oat-token", "subscription", true],
+      ["sk-ant-api-token", "metered", false],
+      ["sk-ant-api-token", "metered", true],
+    ] as const)("a %s credential persists and exports billing_mode %s (stream=%s)", async ([
+      key,
+      expected,
+      stream,
+    ]) => {
       mockEvaluatePolicies.mockResolvedValue(null);
 
       await app.inject({
@@ -1676,6 +1682,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         payload: {
           model: "claude-3-5-sonnet-20241022",
           max_tokens: 1024,
+          stream,
           messages: [{ role: "user", content: "Hello" }],
         },
       });
@@ -1685,6 +1692,15 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
       );
       expect(interactions).toHaveLength(1);
       expect(interactions[0].billingMode).toBe(expected);
+      expect(counterInc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            billing_mode: expected,
+            auth_method: interactions[0].authMethod,
+          }),
+          value: expect.closeTo(Number(interactions[0].cost), 10),
+        }),
+      );
     });
 
     test("persists OAuth traffic fulfilled from usage credits as metered", async () => {

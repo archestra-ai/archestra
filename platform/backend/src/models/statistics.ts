@@ -33,12 +33,15 @@ import type {
   AppStatisticsSortBy,
   ChatCostBaseline,
   CostSavingsStatistics,
+  InteractionAuthMethod,
   ModelStatistics,
   MyClientUsage,
   MyContextBucketId,
   MyStatistics,
   MyUsageBreakdown,
   OverviewStatistics,
+  ProxyCostQuery,
+  ProxyCostStatistics,
   SkillStatistics,
   SkillStatisticsSortBy,
   SortDirection,
@@ -55,6 +58,132 @@ import AgentModel from "./agent";
 import { interactionBelongsToOrganization } from "./log-organization";
 
 class StatisticsModel {
+  static async getProxyCostStatistics(
+    params: ProxyCostQuery & {
+      timeframe: StatisticsTimeFrame;
+      organizationId: string;
+      limit: number;
+      offset: number;
+    },
+  ): Promise<ProxyCostStatistics> {
+    const { timeframe, organizationId, limit, offset } = params;
+    const i = schema.interactionsTable;
+    const a = schema.agentsTable;
+    // One identity per request: the credential for the recorded auth method.
+    // A secondary passthrough key must not duplicate a standard-key request.
+    const method = sql<InteractionAuthMethod>`COALESCE(${i.authMethod}, 'unknown')`;
+    const credential = sql<string | null>`CASE
+      WHEN ${method} = 'virtual_key' THEN ${i.virtualKeyId}::text
+      WHEN ${method} = 'passthrough_virtual_key' THEN ${i.passthroughVirtualKeyId}::text
+      WHEN ${method} = 'oauth_client_credentials' THEN ${i.authenticatedAppId}
+      ELSE NULL END`;
+    const conditions = and(
+      ...StatisticsModel.timeframeConditions(timeframe),
+      eq(a.organizationId, organizationId),
+      inArray(a.agentType, ["llm_proxy", "profile"]),
+      params.authMethod ? eq(method, params.authMethod) : undefined,
+      params.credentialId ? eq(credential, params.credentialId) : undefined,
+    );
+    const aggregates = {
+      requests: sql<number>`COUNT(*)::double precision`,
+      inputTokens: tokenSum(i.inputTokens),
+      outputTokens: tokenSum(i.outputTokens),
+      cacheReadTokens: tokenSum(i.cacheReadTokens),
+      billedCost: billedSum(i.cost, "DOUBLE PRECISION"),
+      subscriptionCost: sql<number>`COALESCE(SUM(${i.cost}) FILTER (WHERE ${i.billingMode} = 'subscription'), 0)::double precision`,
+    };
+    const bucketMinutes = getStatisticsBucketIntervalMinutes(timeframe);
+    const bucketSeconds = sql.raw(String(bucketMinutes * 60));
+    const bucket = sql<string>`to_timestamp(floor(extract(epoch from ${i.createdAt}) / ${bucketSeconds}) * ${bucketSeconds})`;
+    // Aggregate in SQL before paging; no team joins or per-credential queries.
+    const [methods, timeSeries, credentials] = await Promise.all([
+      db
+        .select({ authMethod: method, ...aggregates })
+        .from(i)
+        .innerJoin(a, eq(a.id, i.profileId))
+        .where(conditions)
+        .groupBy(method)
+        .orderBy(desc(aggregates.billedCost), method),
+      db
+        .select({ timestamp: bucket, ...aggregates })
+        .from(i)
+        .innerJoin(a, eq(a.id, i.profileId))
+        .where(conditions)
+        .groupBy(bucket)
+        .orderBy(bucket),
+      db
+        .select({
+          authMethod: method,
+          credentialId: credential,
+          credentialName: sql<string | null>`CASE
+          WHEN ${method} IN ('virtual_key', 'passthrough_virtual_key') THEN MAX(${schema.virtualApiKeysTable.name})
+          WHEN ${method} = 'oauth_client_credentials' THEN MAX(${i.authenticatedAppName})
+          ELSE NULL END`,
+          ...aggregates,
+          total: sql<number>`COUNT(*) OVER ()::double precision`,
+        })
+        .from(i)
+        .innerJoin(a, eq(a.id, i.profileId))
+        .leftJoin(
+          schema.virtualApiKeysTable,
+          and(
+            eq(sql`${schema.virtualApiKeysTable.id}::text`, credential),
+            eq(schema.virtualApiKeysTable.organizationId, organizationId),
+            inArray(method, ["virtual_key", "passthrough_virtual_key"]),
+          ),
+        )
+        .where(conditions)
+        .groupBy(method, credential)
+        .orderBy(
+          desc(aggregates.billedCost),
+          desc(aggregates.requests),
+          method,
+          credential,
+        )
+        .limit(limit)
+        .offset(offset),
+    ]);
+    const totals = {
+      requests: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      billedCost: 0,
+      subscriptionCost: 0,
+    };
+    for (const row of methods) {
+      for (const key of Object.keys(totals) as (keyof typeof totals)[]) {
+        totals[key] += Number(row[key]);
+      }
+    }
+    // Window count is absent on an out-of-range page. Count grouped identities
+    // only in that uncommon case, keeping normal requests to three queries.
+    let total = Number(credentials[0]?.total ?? 0);
+    if (!credentials.length && offset > 0) {
+      const groups = db
+        .select({ credential })
+        .from(i)
+        .innerJoin(a, eq(a.id, i.profileId))
+        .where(conditions)
+        .groupBy(method, credential)
+        .as("credential_groups");
+      const [count] = await db
+        .select({ total: sql<number>`COUNT(*)::double precision` })
+        .from(groups);
+      total = Number(count.total);
+    }
+    return {
+      totals,
+      methods,
+      timeSeries: timeSeries.map((row) => ({
+        ...row,
+        timestamp: new Date(row.timestamp).toISOString(),
+      })),
+      credentials: credentials.map(({ total: _total, ...row }) => row),
+      pagination: { limit, offset, total },
+    };
+  }
+
   /**
    * Convert timeframe to SQL interval or return null for custom timeframes
    */

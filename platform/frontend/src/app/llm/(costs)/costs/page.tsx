@@ -63,6 +63,7 @@ import {
   useUserStatistics,
 } from "@/lib/statistics.query";
 import { formatStatisticsAxisLabel } from "./format-axis-label";
+import { ProxyCostPanel } from "./proxy-cost-panel";
 
 /**
  * Reusable tooltip component for cost charts.
@@ -131,43 +132,6 @@ const ChartContainerWrapper = ({
 
 /** Kept identical between the chart and its loading placeholder. */
 const STATISTICS_CHART_HEIGHT_CLASS = "h-80";
-
-/**
- * The LLM Proxy is a single entity, so its chart is a single series — the key
- * is the data field rather than an agent id.
- */
-const LLM_PROXY_CHART_CONFIG: ChartConfig = {
-  cost: {
-    label: "LLM Proxy",
-    color: "var(--chart-1)",
-  },
-};
-
-/**
- * One headline number in a card's summary row, for entities that are a total
- * rather than a list. A single-row table with a name and a team column reads
- * as a ranking of one, which is what it stops being here.
- */
-function StatisticsFigure({
-  label,
-  value,
-  isPending,
-}: {
-  label: string;
-  value: string;
-  isPending: boolean;
-}) {
-  return (
-    <div className="rounded-md border p-4">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      {isPending ? (
-        <Skeleton className="h-8 w-24 mt-1" />
-      ) : (
-        <p className="text-2xl tabular-nums mt-1">{value}</p>
-      )}
-    </div>
-  );
-}
 
 /**
  * Placeholder rows that keep a statistics table at a plausible height while
@@ -413,10 +377,6 @@ export default function StatisticsPage() {
     () => agentStatistics.filter((stat) => stat.agentType === "agent"),
     [agentStatistics],
   );
-  const llmProxyStatistics = useMemo(
-    () => agentStatistics.filter((stat) => stat.agentType === "llm_proxy"),
-    [agentStatistics],
-  );
 
   // The API returns entities in first-seen order, not by cost. Both the
   // tables and the "top 5 by cost" charts below need the cost order.
@@ -427,22 +387,6 @@ export default function StatisticsPage() {
   const sortedChatAgentStatistics = useMemo(
     () => [...chatAgentStatistics].sort((a, b) => b.cost - a.cost),
     [chatAgentStatistics],
-  );
-  // The organization has one LLM Proxy, so its usage is a single total rather
-  // than a leaderboard. Summed over the returned rows instead of read off the
-  // first: a deployment can hold more than one organization, and each has its
-  // own proxy.
-  const llmProxyTotals = useMemo(
-    () =>
-      llmProxyStatistics.reduce(
-        (totals, proxy) => ({
-          requests: totals.requests + proxy.requests,
-          tokens: totals.tokens + proxy.inputTokens + proxy.outputTokens,
-          cost: totals.cost + proxy.cost,
-        }),
-        { requests: 0, tokens: 0, cost: 0 },
-      ),
-    [llmProxyStatistics],
   );
   const sortedModelStatistics = useMemo(
     () => [...modelStatistics].sort((a, b) => b.cost - a.cost),
@@ -536,27 +480,6 @@ export default function StatisticsPage() {
     });
     return config;
   }, [sortedChatAgentStatistics]);
-
-  // Convert LLM proxy statistics to recharts format
-  const llmProxyChartData = useMemo(() => {
-    const costByTimestamp = new Map<string, number>();
-    for (const proxy of llmProxyStatistics) {
-      for (const point of proxy.timeSeries) {
-        costByTimestamp.set(
-          point.timestamp,
-          (costByTimestamp.get(point.timestamp) ?? 0) + point.value,
-        );
-      }
-    }
-
-    return [...costByTimestamp.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([timestamp, cost]) => ({
-        timestamp,
-        label: formatTimestamp(timestamp),
-        cost,
-      }));
-  }, [llmProxyStatistics, formatTimestamp]);
 
   // Convert model statistics to recharts format
   const modelChartData = useMemo(() => {
@@ -868,6 +791,12 @@ export default function StatisticsPage() {
         </Card>
       </div>
 
+      <ProxyCostPanel
+        key={timeframe}
+        timeframe={timeframe}
+        enabled={organizationStatisticsEnabled}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Teams</CardTitle>
@@ -1135,69 +1064,6 @@ export default function StatisticsPage() {
                 </TableBody>
               </Table>
             </StatisticsTablePanel>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>LLM Proxy</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <ChartContainerWrapper
-              config={LLM_PROXY_CHART_CONFIG}
-              data={llmProxyChartData}
-              emptyMessage="No LLM proxy data available"
-              isPending={isAgentStatisticsPending}
-            >
-              <LineChart
-                accessibilityLayer
-                data={llmProxyChartData}
-                margin={{ top: 12, left: 12, right: 12 }}
-              >
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <ChartTooltip content={CostChartTooltip} />
-                <Line
-                  dataKey="cost"
-                  type="monotone"
-                  stroke="var(--color-cost)"
-                  strokeWidth={2}
-                  dot={{ strokeWidth: 0, r: 3, fill: "var(--color-cost)" }}
-                  activeDot={{ strokeWidth: 0, r: 5 }}
-                />
-              </LineChart>
-            </ChartContainerWrapper>
-
-            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
-              <StatisticsFigure
-                label="Requests"
-                value={llmProxyTotals.requests.toLocaleString()}
-                isPending={isAgentStatisticsPending}
-              />
-              <StatisticsFigure
-                label="Tokens"
-                value={llmProxyTotals.tokens.toLocaleString()}
-                isPending={isAgentStatisticsPending}
-              />
-              <StatisticsFigure
-                label="Cost"
-                value={`$${llmProxyTotals.cost.toFixed(2)}`}
-                isPending={isAgentStatisticsPending}
-              />
-            </div>
           </div>
         </CardContent>
       </Card>

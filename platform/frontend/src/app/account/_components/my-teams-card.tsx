@@ -31,6 +31,9 @@ export function MyTeamsCard() {
       title="My Teams"
       description="Teams you belong to. Membership controls which agents and MCP servers you can use."
       control={null}
+      // Kept to the same column width as the profile fields above it, so the
+      // two sections read as one stacked list rather than a full-width table.
+      contentClassName="max-w-xl"
     >
       {isLoadingError ? (
         <QueryLoadError

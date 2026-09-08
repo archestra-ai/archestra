@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.52](https://github.com/archestra-ai/archestra/compare/platform-v1.3.51...platform-v1.3.52) (2026-09-08)
+
+
+### Features
+
+* **connection:** let admins disable plugins on Connect ([#7722](https://github.com/archestra-ai/archestra/issues/7722)) ([213a60d](https://github.com/archestra-ai/archestra/commit/213a60d7b198c9edd25138e6011b85db7dc4a1ed))
+* **connection:** let admins disable skills and LLM proxy on Connect ([#7717](https://github.com/archestra-ai/archestra/issues/7717)) ([00e0226](https://github.com/archestra-ai/archestra/commit/00e0226e0960176903eac3f6f3ee7bcbb2b2619f))
+* **connection:** raise Connect skill cap and prepare Desktop marketplace ([#7719](https://github.com/archestra-ai/archestra/issues/7719)) ([dbf4cb2](https://github.com/archestra-ai/archestra/commit/dbf4cb2f39aa76b0fe19eb072d74cd8e077ea047))
+* **releases:** backport requested 1.3.52 changelog entries ([#7726](https://github.com/archestra-ai/archestra/issues/7726)) ([9e865c1](https://github.com/archestra-ai/archestra/commit/9e865c1a506534005bb586269bd720e911b1bfd3))
+* **releases:** isolate qualified stable releases from development ([#7709](https://github.com/archestra-ai/archestra/issues/7709)) ([7bd8e81](https://github.com/archestra-ai/archestra/commit/7bd8e810440259b6319edd68f4fa3d6fc567d1ff))
+
+
+### Bug Fixes
+
+* **chatops:** reply consistently to bare bot mentions ([#7720](https://github.com/archestra-ai/archestra/issues/7720)) ([6a2e249](https://github.com/archestra-ai/archestra/commit/6a2e249b59791f774a1e966c5b57c7b012bf8e38))
+* **chat:** show useful explanations in simplified error cards ([#7721](https://github.com/archestra-ai/archestra/issues/7721)) ([bad5579](https://github.com/archestra-ai/archestra/commit/bad5579c0450d442edc88220773a44d70c4f8771))
+* **frontend:** align identity icons with name inputs ([#7718](https://github.com/archestra-ai/archestra/issues/7718)) ([22e8210](https://github.com/archestra-ai/archestra/commit/22e8210385b3c1c79e7eb36deebc2ed20a128f92))
+* **frontend:** stop dialog footer lift from glowing in dark mode ([#7715](https://github.com/archestra-ai/archestra/issues/7715)) ([6135c48](https://github.com/archestra-ai/archestra/commit/6135c48e0de3d02f4b17b9bce8e07d9c9ff9bef3))
+
 ## [1.3.51](https://github.com/archestra-ai/archestra/compare/platform-v1.3.50...platform-v1.3.51) (2026-09-07)
 
 

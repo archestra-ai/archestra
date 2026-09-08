@@ -35,8 +35,8 @@ import type { AgentRunLaunchSpec } from "./backends";
 import { resolveAgentRuntimeCredentials } from "./credentials";
 import { taskWithAgentRunInputs } from "./input-files";
 import {
+  getClaudeCodeCloudProvider,
   preflightAgentRuntimeModelCompatibility,
-  usesClaudeCodeBedrock,
 } from "./model-compatibility";
 import {
   AGENT_RUNTIME_STEER_FIFO,
@@ -150,10 +150,11 @@ export async function buildAgentRunLaunchSpec(params: {
     userId: actorUserId ?? "system",
   });
 
-  const isClaudeCodeBedrock = usesClaudeCodeBedrock({
+  const claudeCodeCloudProvider = getClaudeCodeCloudProvider({
     runtime: params.runtime,
     provider: llm.selectedProvider,
   });
+  const isClaudeCodeBedrock = claudeCodeCloudProvider === "bedrock";
   const claudeCodeSubscriptionToken =
     credentials.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
   const usesClaudeCodeSubscription = Boolean(claudeCodeSubscriptionToken);
@@ -162,7 +163,7 @@ export async function buildAgentRunLaunchSpec(params: {
   const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
   if (
     isClaudeCodeRuntime &&
-    !isClaudeCodeBedrock &&
+    !claudeCodeCloudProvider &&
     !usesClaudeCodeSubscription
   ) {
     throw new ApiError(
@@ -237,7 +238,7 @@ export async function buildAgentRunLaunchSpec(params: {
       ? `${llm.selectedProvider}:${llm.selectedModel}`
       : llm.selectedModel;
   const nativeModel =
-    isClaudeCodeRuntime && !isClaudeCodeBedrock
+    isClaudeCodeRuntime && !claudeCodeCloudProvider
       ? resolveClaudeContextVariant({
           modelId: llm.selectedModel,
           contextLength: selectedModel

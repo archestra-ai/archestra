@@ -591,6 +591,103 @@ describe("buildAgentRunLaunchSpec", () => {
     ]);
   });
 
+  test.for([
+    false,
+    true,
+  ])("runs Claude Code on Vertex without a subscription (connected: %s)", async (connected, {
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    config.llm.anthropic.vertexAi.enabled = true;
+    config.llm.anthropic.vertexAi.project = "test-project";
+    const setup = await makeConfiguredAgent({
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      contextLength: 1_000_000,
+      apiKey: "",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const configuredRuntime = runtime(setup.agent, "anthropic");
+    configuredRuntime.command = ["archestra-claude-code"];
+    configuredRuntime.credentials = [
+      {
+        key: "CLAUDE_CODE_OAUTH_TOKEN",
+        scope: "per_user",
+        label: "Claude subscription",
+        required: true,
+      },
+    ];
+    if (connected)
+      await UserCredentialModel.upsert({
+        organizationId: setup.agent.organizationId,
+        userId: setup.user.id,
+        agentId: setup.agent.id,
+        key: "CLAUDE_CODE_OAUTH_TOKEN",
+        value: "unused-subscription-token",
+      });
+    await expect(
+      preflightAgentRuntimeCredentials({
+        runtime: configuredRuntime,
+        organizationId: setup.agent.organizationId,
+        userId: setup.user.id,
+      }),
+    ).resolves.toEqual({ configured: [], missing: [], misconfigured: [] });
+    const taskId = crypto.randomUUID();
+    const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
+      runtime: configuredRuntime,
+      taskId,
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+    });
+    expect(spec.env).toMatchObject({
+      ANTHROPIC_BASE_URL: `https://platform.example.test/v1/anthropic/${setup.agent.id}`,
+      ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/anthropic/${setup.agent.id}`,
+      ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "claude-sonnet-4-6",
+    });
+    expect(spec.env).not.toHaveProperty("CLAUDE_CODE_USE_BEDROCK");
+    expect(spec.env).not.toHaveProperty("GOOGLE_APPLICATION_CREDENTIALS");
+    expect(spec.secretEnv.ANTHROPIC_AUTH_TOKEN).toBe(
+      spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(spec.secretEnv.ANTHROPIC_AUTH_TOKEN).toMatch(/^arch_/);
+    expect(spec.secretEnv).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
+      `X-Archestra-Run-Id: ${taskId}`,
+    );
+    expect(await VirtualApiKeyModel.findById(virtualApiKeyId)).toMatchObject({
+      keyType: "standard",
+      scope: "personal",
+      authorId: setup.user.id,
+    });
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
+    ).toEqual([
+      expect.objectContaining({
+        provider: "anthropic",
+        providerApiKeyId: setup.agent.llmApiKeyId,
+      }),
+    ]);
+  });
+
   test("never falls back to Anthropic API billing for Claude Code", async ({
     makeOrganization,
     makeAdmin,
@@ -793,6 +890,7 @@ describe("buildAgentRunLaunchSpec", () => {
 });
 
 async function makeConfiguredAgent(params: {
+  apiKey?: string;
   provider: SupportedProvider;
   modelId?: string;
   contextLength?: number;
@@ -823,7 +921,7 @@ async function makeConfiguredAgent(params: {
   const user = await params.makeAdmin();
   await params.makeMember(user.id, organization.id, { role: "admin" });
   const secret = await params.makeSecret({
-    secret: { apiKey: "upstream-secret" },
+    secret: { apiKey: params.apiKey ?? "upstream-secret" },
   });
   const providerKey = await params.makeLlmProviderApiKey(
     organization.id,

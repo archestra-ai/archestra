@@ -5,6 +5,7 @@ import {
   requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
+import config from "@/config";
 import { ModelModel } from "@/models";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { ApiError } from "@/types";
@@ -42,15 +43,20 @@ export async function preflightAgentRuntimeModelCompatibility(params: {
   return { llm, selectedModel };
 }
 
-/** Claude Code can speak Bedrock's native Anthropic InvokeModel transport. */
-export function usesClaudeCodeBedrock(params: {
+/** Cloud-hosted Claude uses provider billing instead of a Claude subscription. */
+export function getClaudeCodeCloudProvider(params: {
   runtime: Partial<Pick<ResolvedAgentRuntime, "command">>;
   provider: SupportedProvider;
-}): boolean {
-  return (
-    params.runtime.command?.[0] === "archestra-claude-code" &&
-    params.provider === "bedrock"
-  );
+}): "bedrock" | "vertex" | null {
+  if (params.runtime.command?.[0] !== "archestra-claude-code") return null;
+  if (params.provider === "bedrock") return "bedrock";
+  if (
+    params.provider === "anthropic" &&
+    config.llm.anthropic.vertexAi.enabled
+  ) {
+    return "vertex";
+  }
+  return null;
 }
 
 function assertInferenceProtocolSupported(params: {
@@ -60,10 +66,11 @@ function assertInferenceProtocolSupported(params: {
   model: string;
   supportedEndpoints: string[] | null | undefined;
 }): void {
-  const claudeCodeBedrock = usesClaudeCodeBedrock({
-    runtime: { command: params.command },
-    provider: params.provider,
-  });
+  const claudeCodeBedrock =
+    getClaudeCodeCloudProvider({
+      runtime: { command: params.command },
+      provider: params.provider,
+    }) === "bedrock";
   if (claudeCodeBedrock && !/(?:^|[./])anthropic\.claude-/.test(params.model)) {
     throw new ApiError(
       409,

@@ -266,6 +266,8 @@ accept useful follow-up instructions.
 
 ### Runtime environment
 
+Archestra supplies the applicable variables below when launching a run. You do not need to set them manually for the maintained runtime images. For Claude Code with Bedrock or Vertex AI, configure the platform provider and select a supported Claude model. Archestra handles the runtime connection and authentication automatically.
+
 | Variable | Purpose |
 | --- | --- |
 | `ARCHESTRA_AGENT_RUNTIME_AGENT_ID`, `ARCHESTRA_AGENT_RUNTIME_AGENT_NAME` | Durable Agent identity. |

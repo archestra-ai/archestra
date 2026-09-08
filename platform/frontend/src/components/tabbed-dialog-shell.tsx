@@ -33,6 +33,7 @@ interface TabbedDialogShellProps<TSection extends string> {
   children: ReactNode;
   footer: ReactNode;
   sidebarFooter?: ReactNode;
+  headerExtra?: ReactNode;
   className?: string;
   contentClassName?: string;
   sidebarClassName?: string;
@@ -55,6 +56,7 @@ export function TabbedDialogShell<TSection extends string>({
   children,
   footer,
   sidebarFooter,
+  headerExtra,
   className,
   contentClassName,
   sidebarClassName,
@@ -110,20 +112,23 @@ export function TabbedDialogShell<TSection extends string>({
       </nav>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="flex min-h-[72px] shrink-0 items-center justify-between border-b px-4 py-4">
+        <div className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b px-4 py-4">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold truncate">{title}</h2>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-xs opacity-70 hover:opacity-100"
-            onClick={() => onOpenChange(false)}
-          >
-            <XIcon className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </Button>
+          <div className="flex min-w-0 items-center justify-end gap-3">
+            {headerExtra}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 rounded-xs opacity-70 hover:opacity-100"
+              onClick={() => onOpenChange(false)}
+            >
+              <XIcon className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">

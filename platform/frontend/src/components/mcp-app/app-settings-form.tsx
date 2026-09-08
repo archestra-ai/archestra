@@ -459,6 +459,14 @@ export function AppSettingsForm({
       className="max-w-5xl"
       contentClassName="px-5 py-5"
       sidebarClassName="w-[220px]"
+      headerExtra={
+        app.createdBy ? (
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="shrink-0">Created by</span>
+            <CreatedByCell createdBy={app.createdBy} className="max-w-48" />
+          </div>
+        ) : null
+      }
       footer={
         <>
           <Button type="button" variant="outline" onClick={onBack}>
@@ -473,15 +481,6 @@ export function AppSettingsForm({
       }
     >
       <div className="space-y-4">
-        {app.createdBy ? (
-          <div className="flex justify-end">
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span>Created by</span>
-              <CreatedByCell createdBy={app.createdBy} />
-            </span>
-          </div>
-        ) : null}
-
         {!isAccessPending && !canEdit ? (
           <Alert variant="info">
             <AlertTriangle />

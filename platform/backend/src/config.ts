@@ -2286,7 +2286,7 @@ const config = {
     /** Built-in agent loop used when an Agent enables a dedicated runtime. */
     defaultImage:
       process.env.ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE?.trim() ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",
+      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:${appVersion}`,
     /** Fallback lifetime cap for Agent Runtime runs whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_DEFAULT_TTL_HOURS,

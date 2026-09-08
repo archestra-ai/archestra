@@ -1502,6 +1502,38 @@ describe("chat active run config", () => {
   });
 });
 
+describe("Agent Runtime image version", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE", "");
+    vi.stubEnv(
+      "ARCHESTRA_DATABASE_URL",
+      "postgresql://archestra:pass@localhost:5432/archestra",
+    );
+  });
+
+  test.each([
+    "1.3.52",
+    "1.4.0-beta.2",
+  ])("matches platform version %s instead of the stable latest alias", async (version) => {
+    vi.stubEnv("ARCHESTRA_VERSION", version);
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.agentRuntime.defaultImage).toBe(
+      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:${version}`,
+    );
+  });
+
+  test("preserves an explicit image override on a beta platform", async () => {
+    vi.stubEnv("ARCHESTRA_VERSION", "1.4.0-beta.2");
+    const image = `registry.example.com/custom-agent@sha256:${"a".repeat(64)}`;
+    vi.stubEnv("ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE", ` ${image} `);
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.agentRuntime.defaultImage).toBe(image);
+  });
+});
+
 describe("mcp gateway config", () => {
   const originalEnv = process.env;
 

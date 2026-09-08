@@ -18,7 +18,7 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
-import { usesClaudeCodeBedrock } from "./model-compatibility";
+import { getClaudeCodeCloudProvider } from "./model-compatibility";
 
 /**
  * Outcome of resolving one Agent Runtime run's declared credentials for one user.
@@ -419,7 +419,7 @@ async function deleteSecretQuietly(secretId: string): Promise<void> {
   }
 }
 
-// Bedrock uses the selected provider credential; a saved Anthropic subscription
+// Cloud-hosted Claude uses the selected provider credential; a saved subscription
 // declaration must neither block the run nor inject an unrelated OAuth token.
 async function applicableCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials"> &
@@ -443,7 +443,7 @@ async function applicableCredentials(params: {
     userId: params.userId ?? "system",
     includeMemberChatDefault: false,
   });
-  return usesClaudeCodeBedrock({
+  return getClaudeCodeCloudProvider({
     runtime: params.runtime,
     provider: llm.selectedProvider,
   })

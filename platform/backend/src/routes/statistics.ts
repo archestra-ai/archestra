@@ -22,6 +22,8 @@ import {
   MyStatisticsSchema,
   MyUsageBreakdownSchema,
   OverviewStatisticsSchema,
+  ProxyCostQuerySchema,
+  ProxyCostStatisticsSchema,
   SKILL_STATISTICS_SORT_BY,
   SkillStatisticsSchema,
   TeamStatisticsSchema,
@@ -70,6 +72,24 @@ const UserStatisticsQuerySchema = StatisticsQuerySchema.extend({
 const TOP_SESSION_LIMIT = 8;
 
 const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    "/api/statistics/llm-proxy",
+    {
+      schema: {
+        operationId: RouteId.GetProxyCostStatistics,
+        description:
+          "LLM Proxy usage by authentication method and credential, including legacy proxy profiles. Each request is counted once. Billed spend excludes subscription-covered list-price estimates. Credential details are paginated; totals and time series cover the entire filtered result. Null credential IDs mean unavailable or not applicable; provider secrets are never returned.",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema.merge(ProxyCostQuerySchema).merge(
+          PaginationQuerySchema,
+        ),
+        response: constructResponseSchema(ProxyCostStatisticsSchema),
+      },
+    },
+    async ({ query, organizationId }) =>
+      StatisticsModel.getProxyCostStatistics({ ...query, organizationId }),
+  );
+
   fastify.get(
     "/api/statistics/teams",
     {

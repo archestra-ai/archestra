@@ -29,13 +29,10 @@ describe("PermissionsCard", () => {
     });
   });
 
-  it("tells the reader which role the grants come from", () => {
+  it("summarizes the granted resources", () => {
     renderCard();
 
     fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
-    expect(
-      screen.getAllByText("Admin · Direct assignment").length,
-    ).toBeGreaterThan(0);
     // Two granted resources, in the Agents and MCP categories.
     expect(screen.getByText(/2 resources across 2 categories/)).toBeVisible();
   });

@@ -80717,6 +80717,7 @@ export type GetOrganizationResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81037,6 +81038,7 @@ export type UpdateAppearanceSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81240,6 +81242,7 @@ export type UpdateSecuritySettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81438,6 +81441,7 @@ export type UpdateLlmSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81636,6 +81640,7 @@ export type UpdateMcpSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -81834,6 +81839,7 @@ export type UpdateSkillsSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82033,6 +82039,7 @@ export type UpdateAgentSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82082,6 +82089,7 @@ export type UpdateConnectionSettingsData = {
         connectionShownProviders?: unknown;
         connectionSkillsEnabled?: boolean;
         connectionLlmProxyEnabled?: boolean;
+        connectionPluginsEnabled?: boolean;
         connectionBaseUrls?: Array<{
             url: string;
             description?: string;
@@ -82244,6 +82252,7 @@ export type UpdateConnectionSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82456,6 +82465,7 @@ export type UpdateIntegrationSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82664,6 +82674,7 @@ export type UpdateDefaultEnvironmentResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -82864,6 +82875,7 @@ export type UpdateAuthSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -83069,6 +83081,7 @@ export type UpdateKnowledgeSettingsResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -83264,6 +83277,7 @@ export type DropEmbeddingConfigResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -83809,6 +83823,7 @@ export type CompleteOnboardingResponses = {
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
+        connectionPluginsEnabled: boolean;
         modelProviderOverrides: {
             [key: string]: {
                 hidden?: boolean;
@@ -96808,6 +96823,136 @@ export type RevokeSkillShareLinkResponses = {
 };
 
 export type RevokeSkillShareLinkResponse = RevokeSkillShareLinkResponses[keyof RevokeSkillShareLinkResponses];
+
+export type GetProxyCostStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        credentialId?: string;
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/statistics/llm-proxy';
+};
+
+export type GetProxyCostStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetProxyCostStatisticsError = GetProxyCostStatisticsErrors[keyof GetProxyCostStatisticsErrors];
+
+export type GetProxyCostStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totals: {
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+        };
+        timeSeries: Array<{
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            timestamp: string;
+        }>;
+        methods: Array<{
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        }>;
+        credentials: Array<{
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            authMethod: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            credentialId: string | null;
+            credentialName: string | null;
+        }>;
+        pagination: {
+            limit: number;
+            offset: number;
+            total: number;
+        };
+    };
+};
+
+export type GetProxyCostStatisticsResponse = GetProxyCostStatisticsResponses[keyof GetProxyCostStatisticsResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;

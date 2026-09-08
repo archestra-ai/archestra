@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "connection_plugins_enabled" boolean DEFAULT true NOT NULL;

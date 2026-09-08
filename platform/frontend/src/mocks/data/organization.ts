@@ -83,6 +83,7 @@ export function makeOrganization(
     connectionDefaultProviderKeys: null,
     connectionSkillsEnabled: true,
     connectionLlmProxyEnabled: true,
+    connectionPluginsEnabled: true,
     modelProviderOverrides: null,
     messagingChannelOverrides: null,
     knowledgeConnectorOverrides: null,

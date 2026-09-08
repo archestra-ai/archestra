@@ -358,14 +358,30 @@ describe("SlackProvider.parseWebhookNotification", () => {
     expect(result).toBeNull();
   });
 
-  test("empty text after cleaning bot mention for app_mention is still processed", async () => {
+  test.each([
+    "app_mention",
+    "message",
+  ])("bare mention delivered as %s is still processed", async (type) => {
     const provider = createProvider();
-    const payload = makeEventPayload({}, { text: "<@UBOT123>" });
+    const payload = makeEventPayload({}, { type, text: "<@UBOT123>" });
 
     const result = await provider.parseWebhookNotification(payload, {});
 
     expect(result).not.toBeNull();
     expect(result?.text).toBe("");
+  });
+
+  test("empty direct message without a mention is ignored", async () => {
+    const provider = createProvider();
+    const payload = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel_type: "im",
+        text: "   ",
+      },
+    );
+    expect(await provider.parseWebhookNotification(payload, {})).toBeNull();
   });
 
   test("whitespace-only text after app_mention is still processed", async () => {

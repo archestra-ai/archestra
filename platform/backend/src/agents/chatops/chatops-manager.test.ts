@@ -2308,7 +2308,10 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
 });
 
 describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
-  test("replies once for empty app_mention and skips processMessage on retries", async ({
+  test.for([
+    "app_mention",
+    "message",
+  ])("replies once for empty %s and skips processMessage on retries", async (eventType, {
     makeUser,
     makeOrganization,
     makeInternalAgent,
@@ -2372,7 +2375,8 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
       timestamp: new Date(),
       isThreadReply: false,
       metadata: {
-        eventType: "app_mention",
+        eventType,
+        botMentioned: true,
         channelType: "channel",
       },
     };

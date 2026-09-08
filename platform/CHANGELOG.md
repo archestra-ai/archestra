@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.0-beta.1](https://github.com/archestra-ai/archestra/compare/platform-v1.3.51...platform-v1.4.0-beta.1) (2026-09-08)
+
+
+### Features
+
+* **connection:** let admins disable plugins on Connect ([#7722](https://github.com/archestra-ai/archestra/issues/7722)) ([5631fc9](https://github.com/archestra-ai/archestra/commit/5631fc9bf663fd1c6f9baab7c095588f44d36045))
+* **connection:** let admins disable skills and LLM proxy on Connect ([#7717](https://github.com/archestra-ai/archestra/issues/7717)) ([bce9ea6](https://github.com/archestra-ai/archestra/commit/bce9ea6d7f70188cd659ef305590ac971fe826f5))
+* **connection:** raise Connect skill cap and prepare Desktop marketplace ([#7719](https://github.com/archestra-ai/archestra/issues/7719)) ([977baba](https://github.com/archestra-ai/archestra/commit/977babaee99866844e65127af1ee35f0c951c99d))
+* **releases:** isolate qualified stable releases from development ([#7709](https://github.com/archestra-ai/archestra/issues/7709)) ([13f91f2](https://github.com/archestra-ai/archestra/commit/13f91f2bc013cdc9b4c62e0cfcec82be6dfe409a))
+
+
+### Bug Fixes
+
+* **chatops:** reply consistently to bare bot mentions ([#7720](https://github.com/archestra-ai/archestra/issues/7720)) ([6eed90c](https://github.com/archestra-ai/archestra/commit/6eed90c6e88cb4204ed32f5dff9c94d9783a3b0b))
+* **chat:** show useful explanations in simplified error cards ([#7721](https://github.com/archestra-ai/archestra/issues/7721)) ([4de1278](https://github.com/archestra-ai/archestra/commit/4de12784f470476ae042bea52570b155f76a4006))
+* **frontend:** align identity icons with name inputs ([#7718](https://github.com/archestra-ai/archestra/issues/7718)) ([e7b1d3d](https://github.com/archestra-ai/archestra/commit/e7b1d3dcb6612e180ad62a9c5234cb1f9dba6497))
+* **frontend:** stop dialog footer lift from glowing in dark mode ([#7715](https://github.com/archestra-ai/archestra/issues/7715)) ([90bd8eb](https://github.com/archestra-ai/archestra/commit/90bd8eb20bde4d29ec5ac00fce24ce935a5f0434))
+
 ## [1.3.51](https://github.com/archestra-ai/archestra/compare/platform-v1.3.50...platform-v1.3.51) (2026-09-07)
 
 

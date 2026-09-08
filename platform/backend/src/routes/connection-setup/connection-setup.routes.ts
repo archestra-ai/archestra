@@ -442,6 +442,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "pluginIds must be unique");
         }
         if (uniqueIds.length > 0) {
+          assertConnectPluginsEnabled(organization);
           if (!config.plugins.enabled) {
             throw new ApiError(404, "Plugins are not enabled");
           }
@@ -484,7 +485,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         }
-      } else if (config.plugins.enabled) {
+      } else if (
+        config.plugins.enabled &&
+        organization.connectionPluginsEnabled
+      ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
           userId: user.id,
           organizationId,
@@ -976,6 +980,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   });
   let pluginNames: string[] = [];
   if (pluginIds.length > 0) {
+    assertConnectPluginsEnabledOrGone(organization);
     if (!config.plugins.enabled) throw GONE();
     const canDeliverPlugins = await userCanDeliverPlugins({
       userId: setup.userId,
@@ -1311,6 +1316,8 @@ const CONNECT_LLM_PROXY_DISABLED =
   "Connecting the LLM Proxy is disabled for this organization";
 const CONNECT_SKILLS_DISABLED =
   "Connecting skills is disabled for this organization";
+const CONNECT_PLUGINS_DISABLED =
+  "Connecting plugins is disabled for this organization";
 
 function assertConnectLlmProxyEnabled(organization: Organization): void {
   if (!organization.connectionLlmProxyEnabled) {
@@ -1324,10 +1331,20 @@ function assertConnectSkillsEnabled(organization: Organization): void {
   }
 }
 
+function assertConnectPluginsEnabled(organization: Organization): void {
+  if (!organization.connectionPluginsEnabled) {
+    throw new ApiError(403, CONNECT_PLUGINS_DISABLED);
+  }
+}
+
 function assertConnectLlmProxyEnabledOrGone(organization: Organization): void {
   if (!organization.connectionLlmProxyEnabled) throw GONE();
 }
 
 function assertConnectSkillsEnabledOrGone(organization: Organization): void {
   if (!organization.connectionSkillsEnabled) throw GONE();
+}
+
+function assertConnectPluginsEnabledOrGone(organization: Organization): void {
+  if (!organization.connectionPluginsEnabled) throw GONE();
 }

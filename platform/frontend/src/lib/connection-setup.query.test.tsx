@@ -99,7 +99,7 @@ describe("connection setup mutations", () => {
   }) => {
     sdkMock.mockResolvedValue(
       apiError(
-        "Connecting the LLM Proxy is disabled for this organization",
+        "Connecting plugins is disabled for this organization",
         "api_authorization_error",
         403,
       ),

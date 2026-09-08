@@ -1,5 +1,5 @@
 {
-  "id": "e1b126c3-0051-4da4-a7ce-2dab34a9fa68",
+  "id": "ee8f1071-ab56-4aa3-9e1e-e63ed4bdc12c",
   "prevId": "3495d25f-4ef2-460a-ad7b-2e3ecff8897f",
   "version": "7",
   "dialect": "postgresql",
@@ -16924,6 +16924,13 @@
           "notNull": true,
           "default": true
         },
+        "connection_plugins_enabled": {
+          "name": "connection_plugins_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "model_provider_overrides": {
           "name": "model_provider_overrides",
           "type": "jsonb",
@@ -23110,13 +23117,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "roles": {
-          "name": "roles",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'"
         },
         "organization_id": {
           "name": "organization_id",

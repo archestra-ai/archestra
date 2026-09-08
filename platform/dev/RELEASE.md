@@ -1,160 +1,99 @@
-# Release Process
+# Release Checklist
 
-This document explains how releases work in Archestra.
+Archestra uses two release pipelines:
+- **Beta:** Automatic releases from `main` (for example, `1.4.0-beta.2`).
+- **Stable:** Tested and approved releases from `release/X.Y` (for example, `1.3.52` or `1.4.0`).
 
-## Overview
+[Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
 
-Archestra uses [Release Please](https://github.com/googleapis/release-please) to automate versioning and releases. The process is:
+## Release A Beta
 
-1. Merge changes to `main`
-2. Release Please automatically creates/updates a release PR
-3. When the release PR is merged, a new version is published
+1. [ ] Open the release-please PR on `main` (for example, `1.4.0-beta.2`).
+2. [ ] Review the changelog and confirm checks pass.
+3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the beta release.
 
-## Standard Release Flow
+## Ship A Stable Fix
 
-### 1. Merge PR to `main`
+1. [ ] Land the fix on `main` first. The fix ships automatically in the next beta.
+2. [ ] Create a backport branch from the active stable branch (`release/X.Y`):
+   ```bash
+   git checkout -b backport/fix-name origin/release/X.Y
+   git cherry-pick -x <main-commit-sha>
+   ```
+3. [ ] Open a PR targeting `release/X.Y`. Confirm tests pass and merge.
+   - Only include necessary bug fixes. Do not include new features, refactors, or schema migrations.
+   - If an unreleased candidate branch (such as `release/1.4`) also needs the fix, repeat step 2 for that candidate branch.
+   - Never merge `main` into a release branch.
+4. [ ] Merge the generated release-please patch PR on `release/X.Y` (for example, `1.3.52`).
+5. [ ] Complete **Test And Approve Stable** below.
 
-Create a PR targeting `main` with your changes. Title of PR should follow [Conventional Commits](https://www.conventionalcommits.org/). Once you are ready, click Merge. You don't need to wait for all the checks to complete, they are optional on PR. Your PR will be put on Merge Queue where the same checks must pass in order for your PR to be merged.
+## Cut A New Stable Feature Line
 
-When your PR is merged to `main`:
-- A Docker image is built and pushed to Google Artifact Registry
-- The image is automatically deployed to the staging environment
-- You can verify your changes at `https://frontend.archestra.dev`
+1. [ ] Choose a tested beta tag (for example, `platform-v1.4.0-beta.2`).
+2. [ ] Create `release/1.4` from that tag (not from `main`):
+   ```bash
+   git checkout -b release/1.4 platform-v1.4.0-beta.2
+   git push origin release/1.4
+   ```
+3. [ ] Open a PR to `release/1.4` configuring `.github/release-please/release-please-config.json` with the **Stable cut** settings below. Merge it.
+4. [ ] Merge the generated `1.4.0` release PR on `release/1.4`, then complete **Test And Approve Stable**.
+5. [ ] After `1.4.0` publishes, remove `release-as` from `release/1.4`. Future patches become `1.4.1`, `1.4.2`, etc.
+6. [ ] On `main`, open a PR setting the **Next beta** configuration below. Merge it.
+7. [ ] After `1.5.0-beta.1` publishes, remove `release-as` from `main`.
 
-### 2. Merge Release Please PR
+### Release Please Configuration
 
-After merging to `main`, Release Please will create a new PR (or update an existing one) titled "chore(main): release platform vX.Y.Z". It will commit the following additional changes:
-- Update version numbers in `package.json` files
-- Bump version in `openapi.json`
-- Generate/update `CHANGELOG.md`
+Edit `packages.platform` in `.github/release-please/release-please-config.json`:
 
-[Example of PR](https://github.com/archestra-ai/archestra/pull/2143)
+| Field | Stable cut (`release/1.4`) | Next beta (`main`) |
+| --- | --- | --- |
+| `versioning` | `always-bump-patch` | `prerelease` |
+| `prerelease` | `false` | `true` |
+| `prerelease-type` | Remove field | `beta` |
+| `release-as` (temporary) | `1.4.0` | `1.5.0-beta.1` |
+| `draft` | `true` | `true` |
 
-Merge it.
+`draft: true` creates a draft GitHub release. It does not make the pull request a draft.
 
-### 3. Done 🎉
+## Test And Approve Stable
 
-This triggers:
-- GitHub Release creation with the new tag
-- Multi-arch Docker image build and push to Docker Hub
-- Helm chart publication
+Merging a release PR on `release/X.Y` builds the artifacts and waits for `stable-release` environment approval. Test these exact artifacts before approving:
 
-## Hotfix Flow
-
-Use this when you need to patch an already-released version without including unreleased changes from `main`.
-
-### 1. Create a Release Branch
-
-Create a branch from the tag you want to patch, so we can merge hotfix into it later and make a hotfix release:
-
-```bash
-# Example: patching platform-v1.0.22
-git fetch --tags
-git checkout -b release/v1.0.22 platform-v1.0.22
-git push origin release/v1.0.22
-```
-
-### 2. Apply the Fix
-
-Create a PR targeting your `release/v1.0.22` branch:
-
-```bash
-git checkout -b hotfix/fix-critical-bug release/v1.0.22
-```
-```
-# make your fix
-git commit -m "fix: resolve critical authentication issue"
-```
-```
-# Alternatively cherry-pick commits from main or from PR
-# NOTE: Make sure that the PR's branch is not deleted, copy commit SHA
-git cherry-pick <commit-sha>
-```
-```
-git push origin hotfix/fix-critical-bug
-# create PR targeting release/v1.0.22, get review, merge
-```
-
-### 3. Release the Hotfix
-
-When you merge to `release/v1.0.22`:
-- Release Please creates a PR for `v1.0.23` targeting the release branch
-- Merge this PR to create the hotfix release
-
-### 4. Backport to Main
-
-After releasing the hotfix, apply the fix to `main`:
-
-```bash
-# Checkout and pull latest `main`
-git checkout main
-git pull origin main
-
-# Cherry-pick specific commits
-git cherry-pick <commit-sha>
-
-# Push to `main`
-git push origin main
-```
-
-### 5. IMPORTANT! Bump the version on `main` using the `release-as` directive:
-
-```bash
-git checkout main
-git pull origin main
-git commit -m "chore(release): bump version" -m "release-as: X.Y.Z" --allow-empty
-git push origin main
-```
-(alternatively create PR with this empty commit and merge to `main`)
-Replace X.Y.Z with a version higher than the hotfix you just released (e.g., if hotfix was v1.0.23, use v1.0.24)
-
-Also REMOVE THE BANNER THAT AUTO-ADDED TO THIS PR.
-
-Now the version of existing release-please PR for `main` will be bumped
-
-## Quick Reference
-
-### Release a New Version
-
-1. Merge your feature PRs to main
-2. Review and merge the Release Please PR
-
-
-### Release a Hotfix
-
-1. Create release branch from tag
-```bash
-git checkout -b release/v1.0.22 v1.0.22
-git push origin release/v1.0.22
-```
-2. Create PR targeting `release/v1.0.22` branch
-3. Merge the PR
-4. Find the Release Please PR that appears and merge it
-5. Backport to main
-```bash
-git checkout main && git cherry-pick <sha> && git push
-```
-
-## Release Freeze
-
-To temporarily prevent releases (e.g., during a critical period):
-
-1. Go to Actions > "Toggle Release Freeze" workflow
-2. Run the workflow to toggle the freeze on/off
-
-When frozen, Release Please PRs cannot be merged.
+1. [ ] Confirm all build jobs in the workflow run completed successfully.
+2. [ ] Download the `release-helm-chart` and `release-image-*` workflow artifacts.
+3. [ ] Install the saved chart in a test environment with `ARCHESTRA_BETA=false`. Confirm image digests match the build.
+4. [ ] Test a clean install and an upgrade from the previous stable version:
+   - Verify database migrations, sign-in, chat, MCP tools, LLM proxy, and background workers.
+   - Confirm existing data remains intact after upgrade.
+5. [ ] Have a second maintainer approve the `stable-release` environment in GitHub Actions.
+   - Add a brief, sanitized test summary in the approval comment. Never include sensitive data.
+   - A rerun or new candidate requires a fresh approval after its artifacts are verified.
+6. [ ] Confirm the workflow publishes the GitHub release, updates Helm charts, and points Docker `latest` to the new version.
 
 ## Troubleshooting
 
-### Release Please PR not appearing
+- **Build failure:** Inspect the failure and re-run failed jobs in the same workflow run.
+- **Testing fails before approval:**
+  1. Cancel the workflow run.
+  2. Delete the GitHub draft release. Keep the git tag. (Unapproved draft releases block other releases).
+  3. Fix the issue on `main`, backport to the release branch, and cut a new version. Never reuse an existing version number.
+- **Partial publication:**
+  1. Do not publish artifacts or move `latest` manually.
+  2. Inspect GitHub releases and container registries.
+   3. Keep the existing draft release and git tag. Re-run failed jobs in the original workflow run using the saved artifacts.
+   4. Obtain explicit authorization before approving a retry that waits for `stable-release`.
+   5. If the retry fails or state remains inconsistent, stop and investigate.
 
-- Ensure your commits use conventional commit format
-- Check the "Release Please" workflow run for errors
-- Commits with `chore:`, `ci:`, `docs:`, `test:` prefixes don't trigger releases
+<details>
+<summary>One-time setup — initial rollout</summary>
 
-### Staging deployment failed
+1. [ ] Freeze existing release automation and close obsolete release PRs.
+2. [ ] Create GitHub environment `beta-release` without required approvals.
+3. [ ] Create GitHub environment `stable-release` with required reviewers, self-review prevention, and deployment restricted to `release/*`.
+4. [ ] Add branch protection rules for `release/*`.
+5. [ ] Create `release/1.3` from the latest stable tag (`platform-v1.3.51`). In its release-tooling-only PR, keep the manifest at that tag's version; set `versioning: always-bump-patch`, `prerelease: false`, and `draft: true`; remove `release-as` and `prerelease-type`.
+6. [ ] On `main`, configure beta settings with temporary `release-as: 1.4.0-beta.1`.
+7. [ ] Confirm registry credentials work for release branches.
+8. [ ] Unfreeze releases once branches and environments are ready.
 
-Check the "On commits to main" workflow for errors. Common issues:
-- Docker build failures
-- Kubernetes deployment issues
-- Secret configuration problems
+</details>

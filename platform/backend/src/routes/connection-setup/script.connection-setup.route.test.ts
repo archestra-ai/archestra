@@ -572,6 +572,15 @@ describe("GET /api/connection-setups/script/:token", () => {
       expect((await fetchScript(rawToken)).statusCode).toBe(410);
 
       config.plugins.enabled = true;
+      const { OrganizationModel } = await import("@/models");
+      await OrganizationModel.patch(organizationId, {
+        connectionPluginsEnabled: false,
+      });
+      expect((await fetchScript(rawToken)).statusCode).toBe(410);
+
+      await OrganizationModel.patch(organizationId, {
+        connectionPluginsEnabled: true,
+      });
       const allowed = await fetchScript(rawToken);
       expect(allowed.statusCode).toBe(200);
       expect(allowed.body).toContain(plugin.pluginSlug);

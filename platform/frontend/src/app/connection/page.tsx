@@ -40,6 +40,7 @@ export default function ConnectionPage() {
   // an admin's disable setting.
   const skillsEnabled = organization?.connectionSkillsEnabled === true;
   const llmProxyEnabled = organization?.connectionLlmProxyEnabled === true;
+  const pluginsEnabled = organization?.connectionPluginsEnabled === true;
   const { data: llmProxy } = useLlmProxy({ enabled: llmProxyEnabled });
 
   const adminDefaultMcpGatewayId =
@@ -80,6 +81,7 @@ export default function ConnectionPage() {
             connectionBaseUrls={organization.connectionBaseUrls ?? null}
             skillsEnabled={skillsEnabled}
             llmProxyEnabled={llmProxyEnabled}
+            pluginsEnabled={pluginsEnabled}
           />
         </div>
       )}

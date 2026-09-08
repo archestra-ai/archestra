@@ -23,6 +23,11 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { formatRoleName } from "@/lib/utils/role";
@@ -172,106 +177,69 @@ function CategorySection({
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="divide-y pb-2 sm:pl-6">
-          {resources.map((resource) => (
-            <section
-              key={resource}
-              aria-label={resourceLabels[resource] || resource}
-              className="grid gap-4 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-8"
-            >
-              <div className="min-w-0">
-                <h3 className="text-sm font-medium">
-                  {resourceLabels[resource] || resource}
-                </h3>
-                {resourceDescriptions[resource] && (
-                  <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
-                    {resourceDescriptions[resource]}
+        <div className="divide-y pb-2 pl-6">
+          {resources.map((resource) => {
+            const actions = permissions[resource] || [];
+            return (
+              <div
+                key={resource}
+                className="grid gap-2 py-3 sm:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)] sm:items-center sm:gap-4"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-tight">
+                    {resourceLabels[resource] || resource}
                   </p>
-                )}
-              </div>
-              <div className="min-w-0">
-                <div
-                  className="mb-2 hidden grid-cols-2 gap-6 text-xs text-muted-foreground sm:grid"
-                  aria-hidden="true"
-                >
-                  <span>Permissions</span>
-                  <span>Granted by</span>
+                  {resourceDescriptions[resource] && (
+                    <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+                      {resourceDescriptions[resource]}
+                    </p>
+                  )}
                 </div>
-                <div className="divide-y divide-border/50">
-                  {groupActionsBySources({
-                    resource,
-                    actions: permissions[resource] ?? [],
-                    sources,
-                  }).map((group) => (
-                    <div
-                      key={group.actions.join(",")}
-                      className="grid gap-2 py-3 first:pt-0 sm:grid-cols-2 sm:gap-6"
-                    >
-                      <div className="flex flex-wrap content-start items-start gap-1.5">
-                        {group.actions.map((action) => (
-                          <Badge
-                            key={action}
-                            variant="secondary"
-                            className="rounded-md font-normal"
-                          >
-                            {actionLabels[action] || action}
-                          </Badge>
-                        ))}
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        {group.sources.map((source) => (
-                          <p
-                            key={`${source.team?.id ?? "direct"}:${source.role}`}
-                            className="break-words text-xs leading-relaxed text-muted-foreground"
-                          >
-                            {formatRoleName(source.role)} ·{" "}
-                            {source.team
-                              ? `Team: ${source.team.name}`
-                              : "Direct assignment"}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
+                <div className="flex flex-wrap gap-1.5 sm:justify-end">
+                  {actions.map((action) => (
+                    <Tooltip key={action}>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          tabIndex={0}
+                          className="cursor-help text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {actionLabels[action] || action}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm space-y-1">
+                        <p className="font-medium">Granted by</p>
+                        {sources
+                          .filter((source) =>
+                            isPermissionActionGranted({
+                              resource,
+                              grantedActions:
+                                source.permissions[resource] ?? [],
+                              requiredAction: action,
+                            }),
+                          )
+                          .map((source) => (
+                            <p
+                              key={`${source.team?.id ?? "direct"}:${source.role}`}
+                              className="text-xs"
+                            >
+                              {formatRoleName(source.role)} ·{" "}
+                              {source.team
+                                ? `Team: ${source.team.name}`
+                                : "Direct assignment"}
+                            </p>
+                          ))}
+                      </TooltipContent>
+                    </Tooltip>
                   ))}
                 </div>
               </div>
-            </section>
-          ))}
+            );
+          })}
         </div>
       </CollapsibleContent>
     </Collapsible>
   );
-}
-
-function groupActionsBySources({
-  resource,
-  actions,
-  sources,
-}: {
-  resource: Resource;
-  actions: Action[];
-  sources: archestraApiTypes.GetUserPermissionSourcesResponses["200"];
-}) {
-  const groups = new Map<
-    string,
-    { actions: Action[]; sources: typeof sources }
-  >();
-  for (const action of actions) {
-    const grantingSources = sources.filter((source) =>
-      isPermissionActionGranted({
-        resource,
-        grantedActions: source.permissions[resource] ?? [],
-        requiredAction: action,
-      }),
-    );
-    const key = JSON.stringify(
-      grantingSources.map((source) => [source.team?.id, source.role]),
-    );
-    const group = groups.get(key);
-    if (group) group.actions.push(action);
-    else groups.set(key, { actions: [action], sources: grantingSources });
-  }
-  return [...groups.values()];
 }
 
 type PermissionGroup = { category: string; resources: Resource[] };

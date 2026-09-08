@@ -27,7 +27,7 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
 });
 afterAll(() => server.close());
-it("shows every direct and team source for a permission", async () => {
+it("reveals direct and team sources when a permission badge is focused", async () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -43,8 +43,13 @@ it("shows every direct and team source for a permission", async () => {
   );
   await user.click(await screen.findByRole("button", { name: "Expand all" }));
   expect(
-    await screen.findByText("Log Reader · Direct assignment"),
-  ).toBeVisible();
-  expect(await screen.findByText("Operations · Team: Support")).toBeVisible();
+    screen.queryByText("Log Reader · Direct assignment"),
+  ).not.toBeInTheDocument();
+  await user.tab();
+  // Focus the badge with the keyboard; its provenance is available without a pointer.
+  screen.getByText("Read").focus();
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip).toHaveTextContent("Log Reader · Direct assignment");
+  expect(tooltip).toHaveTextContent("Operations · Team: Support");
   client.clear();
 });

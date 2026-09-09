@@ -34,6 +34,7 @@ class AgentWorkspaceModel {
     return row ?? null;
   }
 
+  // A new turn refreshes activity, never the workspace's original hard deadline.
   static async claim(params: {
     id: string;
     organizationId: string;

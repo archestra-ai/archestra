@@ -54,6 +54,8 @@ export async function accessAgentWorkspaceFile(params: {
     await resolveAgentRuntimeBackendDriver(session.backend).resumeWorkspace(
       session,
     );
+    // Another caller may already have finished this resume. The activity CAS
+    // below revalidates the current state and deadline before any file access.
     await AgentWorkspaceModel.finishResume(workspace.id);
   }
   if (!(await AgentWorkspaceModel.recordActivity(workspace.id))) {

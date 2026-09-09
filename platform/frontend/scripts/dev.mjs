@@ -25,6 +25,14 @@ export function pickBundler({ override, platform, arch }) {
   return platform === "darwin" && arch === "arm64" ? "webpack" : "turbopack";
 }
 
+/** Keep each worktree below Next's default of half the machine's RAM.
+ * Use the underscore spelling for the default: Next prefers an explicit
+ * hyphenated setting, and Node uses the last value for repeated settings.
+ */
+export function getDevNodeOptions(nodeOptions = "") {
+  return `--max_old_space_size=4096 ${nodeOptions}`.trim();
+}
+
 function main() {
   let bundler;
   try {
@@ -45,10 +53,27 @@ function main() {
     typeof nextPkg.bin === "string" ? nextPkg.bin : nextPkg.bin.next,
   );
 
+  const args = process.argv.slice(2);
+  const hasBundlerFlag = args.some((arg) =>
+    ["--webpack", "--turbopack", "--turbo"].includes(arg),
+  );
   const child = spawn(
     process.execPath,
-    [nextBin, "dev", `--${bundler}`, "-H", "127.0.0.1", ...process.argv.slice(2)],
-    { stdio: "inherit" },
+    [
+      nextBin,
+      "dev",
+      ...(hasBundlerFlag ? [] : [`--${bundler}`]),
+      "-H",
+      "127.0.0.1",
+      ...args,
+    ],
+    {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        NODE_OPTIONS: getDevNodeOptions(process.env.NODE_OPTIONS),
+      },
+    },
   );
 
   const forward = (signal) => {

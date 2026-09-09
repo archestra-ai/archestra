@@ -97,6 +97,7 @@ const PLUGIN = vi.hoisted(() => ({
 
 describe("PluginsPage", () => {
   beforeEach(() => {
+    localStorage.removeItem("archestra-plugins-view");
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
@@ -131,6 +132,29 @@ describe("PluginsPage", () => {
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent("13 files");
     expect(tooltip).toHaveTextContent(/Last updated: Aug 23, 2026/);
+  });
+
+  it("shows source details in cards without navigating when the icon is clicked", async () => {
+    const user = userEvent.setup();
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+    } as unknown as ReturnType<typeof useRouter>);
+    render(<PluginsPage />);
+
+    await user.click(screen.getByRole("button", { name: "View as cards" }));
+    const source = screen.getByRole("button", {
+      name: "GitHub source details",
+    });
+    await user.hover(source);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Synced every hour from GitHub");
+    expect(tooltip).toHaveTextContent("13 files");
+    expect(tooltip).toHaveTextContent(/Last updated: Aug 23, 2026/);
+
+    await user.click(source);
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("attributes the vendor's own plugin to its author, not the deployment", () => {

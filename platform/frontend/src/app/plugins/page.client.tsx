@@ -834,6 +834,7 @@ function PluginsList() {
                           {!plugin.enabled ? (
                             <Badge variant="outline">Disabled</Badge>
                           ) : null}
+                          <PluginSourceInfo plugin={plugin} />
                         </div>
                       </TableCard>
                     ))}

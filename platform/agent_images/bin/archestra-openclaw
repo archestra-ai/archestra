@@ -30,7 +30,7 @@ resolve_docker_desktop_url() {
     return
   fi
 
-  printf '%s\n' "${url/\/\/${hostname}/\/\/\[${ipv6}\]}"
+  printf 'http://[%s]%s\n' "${ipv6}" "${url#http://${hostname}}"
 }
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"

@@ -236,9 +236,8 @@ common_args=(
   --model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL}"
   --config model_provider='"archestra"'
 )
-resume_args=()
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
-  resume_args=(resume --last)
+  common_args=(resume --last "${common_args[@]}")
 fi
 
 case "${runtime_mode}" in
@@ -246,13 +245,12 @@ case "${runtime_mode}" in
     # No subcommand means Codex's native full-screen TUI. The positional prompt
     # starts the first turn; subsequent terminal input stays in the same Codex
     # conversation until the person exits or stops the execution.
-    exec codex "${resume_args[@]}" "${common_args[@]}" -- "$(cat "${task_file}")"
+    exec codex "${common_args[@]}" -- "$(cat "${task_file}")"
     ;;
   one_shot)
     if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
       exec codex exec \
         --color always \
-        "${resume_args[@]}" \
         "${common_args[@]}" \
         --skip-git-repo-check \
         -- "$(cat "${task_file}")"
@@ -262,7 +260,7 @@ case "${runtime_mode}" in
     exec "${script_dir}/archestra-tui-run" \
       "${runtime_dir}/turn-complete" \
       "${runtime_dir}/final-answer.txt" \
-      codex "${resume_args[@]}" "${common_args[@]}" -- "$(cat "${task_file}")"
+      codex "${common_args[@]}" -- "$(cat "${task_file}")"
     ;;
   *)
     echo "archestra: unknown Agent Runtime mode" >&2

@@ -3,6 +3,55 @@ import { AgentWorkspaceModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
 describe("Agent workspace ownership", () => {
+  test("honors the Agent idle window and falls back when no Agent remains", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      runtime: {
+        image: "test:local",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: 24,
+        idleTimeoutMinutes: 5,
+      },
+    });
+    const stale = new Date(Date.now() - 10 * 60_000);
+    const rows = [];
+    for (const agentId of [agent.id, randomUUID()]) {
+      rows.push(
+        await AgentWorkspaceModel.create({
+          organizationId: org.id,
+          agentId,
+          actorKind: "system",
+          actorId: "test",
+          backend: "kubernetes",
+          runtimeScope: "test",
+          workloadName: `idle-${agentId}`,
+          state: "idle",
+          lastTaskId: randomUUID(),
+          lastActivityAt: stale,
+          idleAt: stale,
+          expiresAt: new Date(Date.now() + 3600_000),
+        }),
+      );
+    }
+    expect(
+      (await AgentWorkspaceModel.listForReaping(180)).map((row) => row.id),
+    ).toEqual([rows[0].id]);
+    expect(
+      (await AgentWorkspaceModel.listForReaping(1)).map((row) => row.id),
+    ).toEqual(expect.arrayContaining(rows.map((row) => row.id)));
+  });
+
   test("new activity defeats a stale suspension decision without extending the deadline", async () => {
     const taskId = randomUUID();
     const stale = new Date(Date.now() - 3600_000);
@@ -21,9 +70,7 @@ describe("Agent workspace ownership", () => {
       lastActivityAt: stale,
       expiresAt,
     });
-    expect(
-      await AgentWorkspaceModel.listForReaping(new Date(Date.now() - 60_000)),
-    ).toEqual(
+    expect(await AgentWorkspaceModel.listForReaping(1)).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: workspace.id })]),
     );
     expect(await AgentWorkspaceModel.recordActivity(workspace.id)).toBe(true);
@@ -35,9 +82,7 @@ describe("Agent workspace ownership", () => {
         expectedLastActivityAt: stale,
       }),
     ).toBe(false);
-    expect(
-      await AgentWorkspaceModel.listForReaping(new Date(Date.now() - 60_000)),
-    ).not.toEqual(
+    expect(await AgentWorkspaceModel.listForReaping(1)).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: workspace.id })]),
     );
     expect(
@@ -131,7 +176,7 @@ describe("Agent workspace ownership", () => {
       to: "suspended",
     });
     expect(await AgentWorkspaceModel.claim(request)).toBeNull();
-    expect(await AgentWorkspaceModel.listForReaping(new Date())).toEqual(
+    expect(await AgentWorkspaceModel.listForReaping(1)).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: workspace.id })]),
     );
   });

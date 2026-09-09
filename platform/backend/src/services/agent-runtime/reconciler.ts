@@ -48,9 +48,7 @@ class AgentRunReconciler {
     this.isReconciling = true;
     try {
       const workspaces = await AgentWorkspaceModel.listForReaping(
-        new Date(
-          Date.now() - config.agentRuntime.defaultIdleTimeoutMinutes * 60_000,
-        ),
+        config.agentRuntime.defaultIdleTimeoutMinutes,
       );
       for (const workspace of workspaces)
         await this.reconcileWorkspace(workspace);

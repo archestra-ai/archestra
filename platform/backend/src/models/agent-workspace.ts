@@ -1,4 +1,14 @@
-import { and, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
+import {
+  and,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AgentWorkspace,
@@ -81,11 +91,22 @@ class AgentWorkspaceModel {
       );
   }
 
-  static async listForReaping(idleBefore: Date): Promise<AgentWorkspace[]> {
+  static async listForReaping(
+    defaultIdleTimeoutMinutes: number,
+  ): Promise<AgentWorkspace[]> {
     const table = schema.agentWorkspacesTable;
+    const agents = schema.agentsTable;
+    const now = new Date();
     return db
-      .select()
+      .select(getTableColumns(table))
       .from(table)
+      .leftJoin(
+        agents,
+        and(
+          eq(agents.id, table.agentId),
+          eq(agents.organizationId, table.organizationId),
+        ),
+      )
       .where(
         and(
           inArray(table.state, [
@@ -97,8 +118,11 @@ class AgentWorkspaceModel {
             "deleting",
           ]),
           or(
-            lte(table.expiresAt, new Date()),
-            and(eq(table.state, "idle"), lte(table.lastActivityAt, idleBefore)),
+            lte(table.expiresAt, now),
+            and(
+              eq(table.state, "idle"),
+              sql`${table.lastActivityAt} <= ${now.toISOString()}::timestamp - coalesce((${agents.runtime}->>'idleTimeoutMinutes')::integer, ${defaultIdleTimeoutMinutes}::integer) * interval '1 minute'`,
+            ),
             inArray(table.state, ["deleting", "suspending", "resuming"]),
           ),
         ),

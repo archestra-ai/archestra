@@ -1,5 +1,4 @@
 import { RefreshCw } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -27,10 +26,10 @@ export function PluginGithubSyncBadge({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge variant="outline" className="shrink-0 gap-1">
+        <span className="inline-flex shrink-0 items-center gap-1 text-muted-foreground">
           <RefreshCw className="h-3 w-3" />
           synced
-        </Badge>
+        </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs">
         {plugin.githubSyncInterval

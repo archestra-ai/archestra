@@ -1,3 +1,4 @@
+import type { Writable } from "node:stream";
 import { describe, expect, test, vi } from "@/test";
 import type { AgentRunRecord } from "@/types";
 import type { AgentRuntimeBackendDriver } from "./backends";
@@ -11,6 +12,31 @@ import {
 } from "./runtime-contract";
 
 describe("AgentRuntimeOutputCapture", () => {
+  test("a late live-stream close cannot overwrite the final readable snapshot", async () => {
+    const readable = JSON.stringify({
+      version: 1,
+      provider: "archestra-agent",
+      entries: [
+        { type: "message", role: "assistant", text: "Retained answer" },
+      ],
+    });
+    let live: Writable | undefined;
+    const backend = outputBackend({
+      snapshot: `complete${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START}${Buffer.from(readable).toString("base64")}${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_END}`,
+    });
+    backend.streamOutput = async ({ destination }) => {
+      live = destination;
+      destination.write("partial");
+    };
+    const capture = new AgentRuntimeOutputCapture({ backend, session });
+    const following = capture.follow();
+    await capture.recoverSnapshot();
+    live?.end("late bytes");
+    await following;
+    expect(capture.completeTranscript).toBe("complete");
+    expect(capture.readableTranscript).toBe(readable);
+  });
+
   test("recovers the complete transcript after the live stream ends early", async () => {
     const onTextDelta = vi.fn();
     const backend = outputBackend({

@@ -48,6 +48,59 @@ class AgentRunModel {
     return run ?? null;
   }
 
+  /** A new protocol task in an existing context continues its owner's latest
+   * workspace for this Agent; a context shared across Agents is not a shell grant. */
+  static async findLatestInContext(params: {
+    contextId: string;
+    agentId: string;
+    organizationId: string;
+    actorKind: AgentRunRecord["actorKind"];
+    actorId: string;
+  }): Promise<AgentRunRecord | null> {
+    const [result] = await db
+      .select({
+        run: getTableColumns(schema.agentRunsTable),
+        workspace: {
+          state: schema.agentWorkspacesTable.state,
+          expiresAt: schema.agentWorkspacesTable.expiresAt,
+        },
+      })
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.a2aTasksTable,
+        eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentRunsTable.workloadName,
+          schema.agentWorkspacesTable.workloadName,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.a2aTasksTable.contextId, params.contextId),
+          eq(schema.agentRunsTable.agentId, params.agentId),
+          eq(schema.agentRunsTable.organizationId, params.organizationId),
+          eq(schema.agentRunsTable.actorKind, params.actorKind),
+          eq(schema.agentRunsTable.actorId, params.actorId),
+        ),
+      )
+      .orderBy(
+        desc(schema.agentRunsTable.startedAt),
+        desc(schema.agentRunsTable.id),
+      )
+      .limit(1);
+    // Only implicit context continuation falls back to a fresh workspace.
+    // Keep active/transitional workspaces so the claim still prevents overlap,
+    // and never search backwards into an older workspace after the latest expires.
+    return result?.workspace &&
+      !["deleted", "deleting"].includes(result.workspace.state) &&
+      result.workspace.expiresAt.getTime() > Date.now()
+      ? result.run
+      : null;
+  }
+
   static async updateAttentionState(params: {
     taskId: string;
     attentionState: AgentRunRecord["attentionState"];

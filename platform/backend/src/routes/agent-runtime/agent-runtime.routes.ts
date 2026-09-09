@@ -17,6 +17,7 @@ import {
   AgentModel,
   AgentRunModel,
   AgentRunShareModel,
+  AgentWorkspaceModel,
   MemberModel,
   ProjectModel,
   ProjectShareModel,
@@ -37,6 +38,8 @@ import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
+import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
+import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
   type Agent,
   type AgentRunSession,
@@ -53,12 +56,115 @@ import {
   StartAgentRunResponseSchema,
   UpdateAgentRunSchema,
 } from "@/types";
+import {
+  AgentWorkspaceFileRequestSchema,
+  AgentWorkspaceFileResultSchema,
+} from "@/types/agent-workspace-file";
 
 const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.addHook("preHandler", async () => {
     if (!isAnyAgentRuntimeBackendDriverEnabled())
       throw new ApiError(404, "Not found");
   });
+
+  fastify.get(
+    "/api/agent-runs/:taskId/workspace/files",
+    {
+      schema: {
+        operationId: RouteId.ReadAgentWorkspaceFile,
+        tags: ["Agents"],
+        description:
+          "Read a bounded file from the caller's retained runtime workspace",
+        params: z.object({ taskId: z.string().uuid() }),
+        querystring: AgentWorkspaceFileRequestSchema.options[0].omit({
+          operation: true,
+        }),
+        response: constructResponseSchema(AgentWorkspaceFileResultSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await accessAgentWorkspaceFile({
+          actor: {
+            kind: "user",
+            id: request.user.id,
+            organizationId: request.organizationId,
+          },
+          taskId: request.params.taskId,
+          request: { operation: "read", path: request.query.path },
+        }),
+      ),
+  );
+
+  fastify.delete(
+    "/api/agent-runs/:taskId/workspace",
+    {
+      schema: {
+        operationId: RouteId.DeleteAgentWorkspace,
+        tags: ["Agents"],
+        description:
+          "Permanently delete an owned idle workspace and its files; saved transcripts remain available",
+        params: z.object({ taskId: z.string().uuid() }),
+        response: constructResponseSchema(
+          z.object({ state: z.literal("deleted") }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const result = await deleteAgentWorkspace({
+        actor: {
+          kind: "user",
+          id: request.user.id,
+          organizationId: request.organizationId,
+        },
+        taskId: request.params.taskId,
+      });
+      request.auditBefore = { workspaceState: result.previousState };
+      request.auditAfter = { workspaceState: result.state };
+      return reply.send({ state: result.state });
+    },
+  );
+
+  fastify.put(
+    "/api/agent-runs/:taskId/workspace/files",
+    {
+      bodyLimit: 6 * 1024 * 1024,
+      schema: {
+        operationId: RouteId.WriteAgentWorkspaceFile,
+        tags: ["Agents"],
+        description:
+          "Write a bounded file in the caller's retained runtime workspace",
+        params: z.object({ taskId: z.string().uuid() }),
+        body: AgentWorkspaceFileRequestSchema.options[1].omit({
+          operation: true,
+        }),
+        response: constructResponseSchema(AgentWorkspaceFileResultSchema),
+      },
+    },
+    async (request, reply) => {
+      const result = await accessAgentWorkspaceFile({
+        actor: {
+          kind: "user",
+          id: request.user.id,
+          organizationId: request.organizationId,
+        },
+        taskId: request.params.taskId,
+        request: { operation: "write", ...request.body },
+      });
+      request.auditBefore = {
+        workspaceFile: { path: request.body.path, writeApplied: false },
+      };
+      request.auditAfter = {
+        workspaceFile: {
+          path: result.path,
+          writeApplied: true,
+          size: result.size,
+          sha256: result.sha256,
+        },
+      };
+      return reply.send(result);
+    },
+  );
 
   fastify.get(
     "/api/agents/:id/runtime/preflight",
@@ -257,40 +363,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           message: z.string().trim().min(1).max(100_000),
           projectId: z.string().uuid().optional(),
-          attachments: z
-            .array(
-              z
-                .object({
-                  name: z.string().trim().min(1).max(255),
-                  contentType: z.string().trim().min(1).max(255),
-                  contentBase64: z
-                    .string()
-                    .min(1)
-                    .refine(
-                      isCanonicalBase64,
-                      "Attachment content is not valid base64",
-                    ),
-                })
-                .superRefine((attachment, context) => {
-                  const bytes = Buffer.from(attachment.contentBase64, "base64");
-                  if (bytes.byteLength === 0) {
-                    context.addIssue({
-                      code: "custom",
-                      message: "Attachment content is not valid base64",
-                    });
-                  }
-                  if (
-                    bytes.byteLength > config.chat.attachmentStorageBytesLimit
-                  ) {
-                    context.addIssue({
-                      code: "custom",
-                      message: `Attachments may not exceed ${config.chat.attachmentStorageBytesLimit} bytes`,
-                    });
-                  }
-                }),
-            )
-            .max(20)
-            .optional(),
+          attachments: agentRunAttachmentsSchema(),
         }),
         response: constructResponseSchema(StartAgentRunResponseSchema),
       },
@@ -405,8 +478,31 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
       });
       if (owned) {
+        const workspace = await AgentWorkspaceModel.findByWorkloadName(
+          owned.workloadName,
+        );
         return reply.send({
           ...owned,
+          workspace: workspace
+            ? {
+                state: workspace.state,
+                expiresAt: workspace.expiresAt,
+                idleAt: workspace.idleAt,
+                terminalAvailable:
+                  workspace.state === "idle" &&
+                  workspace.lastTaskId === owned.taskId &&
+                  workspace.expiresAt.getTime() > Date.now()
+                    ? await resolveAgentRuntimeBackendDriver(
+                        owned.backend,
+                      ).hasRetainedTerminal(owned)
+                    : false,
+                connection: ["active", "idle"].includes(workspace.state)
+                  ? resolveAgentRuntimeBackendDriver(
+                      owned.backend,
+                    ).getWorkspaceConnection(owned)
+                  : null,
+              }
+            : null,
           viewerRole: "owner" as const,
           startupProgress: await inspectStartupProgress(owned),
         });
@@ -444,6 +540,74 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       throw new ApiError(404, "Run not found");
+    },
+  );
+
+  fastify.post(
+    "/api/agent-runs/:taskId/continue",
+    {
+      schema: {
+        operationId: RouteId.ContinueAgentRun,
+        description: "Start a new Agent turn in an owned, retained workspace",
+        tags: ["Agents"],
+        params: z.object({ taskId: z.string().uuid() }),
+        body: z.object({
+          message: z.string().trim().min(1).max(100_000),
+          attachments: agentRunAttachmentsSchema(),
+        }),
+        response: constructResponseSchema(StartAgentRunResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const run = await requireOwnedRun(request);
+      const workspace = await AgentWorkspaceModel.findByWorkloadName(
+        run.workloadName,
+      );
+      if (
+        !run.endedAt ||
+        !workspace ||
+        !["idle", "suspended"].includes(workspace.state) ||
+        workspace.expiresAt.getTime() <= Date.now()
+      ) {
+        throw new ApiError(
+          409,
+          "This workspace is busy or is no longer retained",
+        );
+      }
+      const session = await AgentRunModel.findByTaskId(run.taskId);
+      request.auditBefore = { taskId: run.taskId, state: run.state };
+      const task = await startDetachedAgentTask({
+        actor: {
+          kind: "user",
+          id: request.user.id,
+          organizationId: request.organizationId,
+        },
+        agentId: run.agentId,
+        message: request.body.message,
+        attachments: request.body.attachments,
+        systemParams: {
+          resumeFromTaskId: run.taskId,
+          runtimeMode: "interactive",
+          completionTarget: session?.completionTarget ?? undefined,
+          projectId: run.projectId ?? undefined,
+        },
+      });
+      request.auditResourceId = { value: task.id };
+      request.auditAfter = {
+        taskId: task.id,
+        state: task.state,
+        previousTaskId: run.taskId,
+        attachmentCount: request.body.attachments?.length ?? 0,
+      };
+      return reply.send({
+        taskId: task.id,
+        state: task.state,
+        agentId: run.agentId,
+        agentName: run.agent.name,
+        prompt: request.body.message,
+        projectId: run.projectId,
+        createdAt: task.createdAt,
+      });
     },
   );
 
@@ -921,4 +1085,39 @@ function isCanonicalBase64(value: string): boolean {
   if (value.length === 0 || value.length % 4 !== 0) return false;
   if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return false;
   return Buffer.from(value, "base64").toString("base64") === value;
+}
+
+function agentRunAttachmentsSchema() {
+  return z
+    .array(
+      z
+        .object({
+          name: z.string().trim().min(1).max(255),
+          contentType: z.string().trim().min(1).max(255),
+          contentBase64: z
+            .string()
+            .min(1)
+            .refine(
+              isCanonicalBase64,
+              "Attachment content is not valid base64",
+            ),
+        })
+        .superRefine((attachment, context) => {
+          const bytes = Buffer.from(attachment.contentBase64, "base64");
+          if (bytes.byteLength === 0) {
+            context.addIssue({
+              code: "custom",
+              message: "Attachment content is not valid base64",
+            });
+          }
+          if (bytes.byteLength > config.chat.attachmentStorageBytesLimit) {
+            context.addIssue({
+              code: "custom",
+              message: `Attachments may not exceed ${config.chat.attachmentStorageBytesLimit} bytes`,
+            });
+          }
+        }),
+    )
+    .max(20)
+    .optional();
 }

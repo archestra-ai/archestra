@@ -18,7 +18,6 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
   env: {},
   secretEnv: {},
   activeDeadlineSeconds: 3600,
-  ephemeralStorageLimit: "10Gi",
   imagePullSecrets: [],
   ownerReferences: undefined,
   effectiveNetworkPolicy: { source: "built_in", policy: null },

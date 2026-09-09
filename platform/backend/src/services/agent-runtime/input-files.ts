@@ -28,7 +28,7 @@ export async function persistAgentRunInputs(params: {
         taskId: params.taskId,
         uploadedByUserId: params.uploadedByUserId,
         originalName,
-        runtimePath: `${AGENT_RUNTIME_ATTACHMENTS_DIR}/${safeName}`,
+        runtimePath: `${AGENT_RUNTIME_ATTACHMENTS_DIR}/${params.taskId}/${safeName}`,
         mimeType: attachment.contentType,
         fileSize: fileData.byteLength,
         fileData,

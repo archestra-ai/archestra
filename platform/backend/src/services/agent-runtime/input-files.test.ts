@@ -45,16 +45,36 @@ describe("Agent run input files", () => {
     });
 
     expect(inputs.map((input) => input.runtimePath)).toEqual([
-      "/var/run/archestra/attachments/notes.txt",
-      "/var/run/archestra/attachments/notes (1).txt",
+      `/var/run/archestra/attachments/${task.id}/notes.txt`,
+      `/var/run/archestra/attachments/${task.id}/notes (1).txt`,
     ]);
     expect(inputs.map((input) => input.fileData.toString("utf8"))).toEqual([
       "first",
       "second",
     ]);
     expect(taskWithAgentRunInputs({ task: "Read both.", inputs })).toBe(
-      "Read both.\n\nAttached files are available in the run workspace:\n- /var/run/archestra/attachments/notes.txt\n- /var/run/archestra/attachments/notes (1).txt",
+      `Read both.\n\nAttached files are available in the run workspace:\n- /var/run/archestra/attachments/${task.id}/notes.txt\n- /var/run/archestra/attachments/${task.id}/notes (1).txt`,
     );
+    const followUp = await A2ATaskModel.createForRun({
+      contextId: context.id,
+      agentId: agent.id,
+    });
+    const [followUpInput] = await persistAgentRunInputs({
+      taskId: followUp.id,
+      organizationId: organization.id,
+      uploadedByUserId: user.id,
+      attachments: [
+        {
+          name: "notes.txt",
+          contentType: "text/plain",
+          contentBase64: Buffer.from("follow-up").toString("base64"),
+        },
+      ],
+    });
+    expect(inputs.map((input) => input.runtimePath)).not.toContain(
+      followUpInput.runtimePath,
+    );
+    expect(followUpInput.fileData.toString("utf8")).toBe("follow-up");
   });
 
   test("stores inputs from a system-originated task without a user owner", async ({

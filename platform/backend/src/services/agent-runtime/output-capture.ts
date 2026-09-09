@@ -21,6 +21,7 @@ export class AgentRuntimeOutputCapture {
   private liveProtocol: AgentRuntimeOutputProtocolParser;
   private retainedLogsValue = "";
   private readableTranscriptValue: string | null = null;
+  private recoveredSnapshot = false;
 
   constructor(
     private readonly params: {
@@ -32,6 +33,7 @@ export class AgentRuntimeOutputCapture {
       onTextDelta?: (delta: string) => void;
       maxTranscriptBytes?: number;
       throwOnStreamError?: boolean;
+      throwOnSnapshotError?: boolean;
     },
   ) {
     this.fullTranscript = new FullTranscriptCapture(
@@ -128,6 +130,7 @@ export class AgentRuntimeOutputCapture {
         abortSignal,
       });
     } catch (error) {
+      if (this.params.throwOnSnapshotError) throw error;
       logger.warn(
         { error, sessionId: this.params.session.id },
         "Could not recover the final Agent Runtime output snapshot; retaining streamed output",
@@ -136,12 +139,14 @@ export class AgentRuntimeOutputCapture {
     }
 
     if (!receivedSnapshot) return;
+    this.recoveredSnapshot = true;
     this.fullTranscript = snapshot;
     this.retainedLogsValue = snapshotLogs;
     this.readableTranscriptValue = protocol.readableTranscript;
   }
 
   private appendLiveChunk(chunk: string): void {
+    if (this.recoveredSnapshot) return;
     this.appendLiveTerminalChunk(this.liveProtocol.append(chunk));
     this.readableTranscriptValue = this.liveProtocol.readableTranscript;
   }
@@ -178,6 +183,7 @@ export class AgentRuntimeOutputCapture {
   }
 
   private finishLiveProtocol(): void {
+    if (this.recoveredSnapshot) return;
     this.appendLiveTerminalChunk(this.liveProtocol.finish());
     this.readableTranscriptValue = this.liveProtocol.readableTranscript;
   }

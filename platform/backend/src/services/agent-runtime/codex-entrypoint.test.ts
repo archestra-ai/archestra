@@ -27,7 +27,7 @@ describe("Codex image entrypoint", () => {
     try {
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
-      const workspace = path.join(root, "workspace");
+      const workspace = path.join(root, 'workspace "quoted" \\ folder');
       await Promise.all([
         mkdir(bin, { recursive: true }),
         mkdir(workspace, { recursive: true }),
@@ -73,7 +73,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         PATH: `${bin}:${process.env.PATH}`,
         ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
         ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
-        ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
+        ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: 'test-model"\\\n[unexpected]',
         ARCHESTRA_AGENT_RUNTIME_TASK_ID: "12345678-abcd-4000-8000-123456789abc",
         ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
         ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
@@ -96,6 +96,23 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         "utf8",
       );
       expect(config).toContain('wire_api = "responses"');
+      const parsedConfig = JSON.parse(
+        (
+          await execFileAsync("python3", [
+            "-c",
+            "import json, sys, tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], 'rb'))))",
+            path.join(runtime, "codex", "config.toml"),
+          ])
+        ).stdout,
+      );
+      expect(parsedConfig.model).toBe(env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL);
+      expect(parsedConfig.unexpected).toBeUndefined();
+      expect(parsedConfig.model_providers.archestra.base_url).toBe(
+        env.OPENAI_BASE_URL,
+      );
+      expect(Object.keys(parsedConfig.projects)[0]).toContain(
+        path.basename(workspace),
+      );
       expect(config).toContain(
         '"X-Archestra-Run-Id" = "12345678-abcd-4000-8000-123456789abc"',
       );

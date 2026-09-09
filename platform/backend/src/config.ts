@@ -2315,12 +2315,15 @@ const config = {
       memoryLimit:
         process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT?.trim() || "4Gi",
     },
-    ephemeralStorageLimit: parseK8sResourceQuantity({
-      envName: "ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT",
-      value: process.env.ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT,
+    workspaceStorageSize: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
+      value: process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,
       validator: isValidK8sMemoryQuantity,
-      defaultValue: "10Gi",
+      defaultValue: "20Gi",
     }),
+    workspaceStorageClass:
+      process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS?.trim() ||
+      undefined,
     /**
      * Base URL an Agent Runtime pod uses to reach this deployment's LLM
      * proxy and MCP gateway. Must be reachable from inside the cluster, so it

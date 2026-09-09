@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { describe, expect, it, vi } from "vitest";
 import {
-  buildAgentRuntimeJob,
   buildAgentRuntimePlatformEgressPolicy,
+  buildAgentRuntimeSandbox,
   buildAgentRuntimeSecret,
+  buildAgentRuntimeTurnScript,
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
-import { AGENT_RUNTIME_TASK_LABEL } from "./naming";
+import {
+  AGENT_RUNTIME_TASK_LABEL,
+  AGENT_RUNTIME_WORKSPACE_LABEL,
+} from "./naming";
 
 const SPEC: KubernetesAgentRunLaunchSpec = {
   taskId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
@@ -22,34 +27,68 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
   },
   secretEnv: { ARCHESTRA_MCP_GATEWAY_TOKEN: "arch_secret" },
   activeDeadlineSeconds: 3600,
-  ephemeralStorageLimit: "10Gi",
+  workspaceStorageSize: "10Gi",
   imagePullSecrets: [],
   ownerReferences: undefined,
   effectiveNetworkPolicy: { source: "built_in", policy: null },
   inputFileCount: 0,
 };
 
-describe("buildAgentRuntimeJob", () => {
+describe("buildAgentRuntimeSandbox", () => {
+  it("does not inherit removed credentials or settings in a subsequent turn", () => {
+    const script = buildAgentRuntimeTurnScript(
+      {
+        ...SPEC,
+        runtimeScope: SPEC.namespace,
+        env: { CURRENT_SETTING: "new-value" },
+        secretEnv: { CLAUDE_CODE_OAUTH_TOKEN: "new-test-token" },
+        command: [
+          "/bin/sh",
+          "-c",
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion
+          'printf "%s|%s|%s|%s|%s" "${OPENAI_API_KEY-unset}" "${REMOVED_SETTING-unset}" "$CLAUDE_CODE_OAUTH_TOKEN" "$CURRENT_SETTING" "$IMAGE_SETTING"',
+        ],
+      },
+      ["OPENAI_API_KEY", "REMOVED_SETTING", "CURRENT_SETTING"],
+    );
+    expect(
+      execFileSync("/bin/sh", ["-c", script], {
+        encoding: "utf8",
+        env: {
+          PATH: "/usr/bin:/bin",
+          OPENAI_API_KEY: "revoked-test-key",
+          REMOVED_SETTING: "old",
+          CURRENT_SETTING: "old",
+          IMAGE_SETTING: "preserved",
+        },
+      }),
+    ).toBe("unset|unset|new-test-token|new-value|preserved");
+  });
+
   it("runs to completion instead of restarting a finished session", () => {
-    const job = buildAgentRuntimeJob(SPEC);
+    const job = buildAgentRuntimeSandbox(SPEC);
 
     // A restarting workload would re-run an agent's side effects behind the
     // user's back, so both of these are load-bearing.
-    expect(job.spec?.backoffLimit).toBe(0);
-    expect(job.spec?.template.spec?.restartPolicy).toBe("Never");
+    expect(job.spec?.podTemplate.spec?.restartPolicy).toBe("Never");
   });
 
   it("passes the lifetime cap to Kubernetes as well as the reaper", () => {
-    expect(buildAgentRuntimeJob(SPEC).spec?.activeDeadlineSeconds).toBe(3600);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-08T12:00:00Z"));
+    expect(buildAgentRuntimeSandbox(SPEC).spec.shutdownTime).toBe(
+      "2026-09-08T13:00:00.000Z",
+    );
     expect(
-      buildAgentRuntimeJob({ ...SPEC, activeDeadlineSeconds: null }).spec
-        ?.activeDeadlineSeconds,
+      buildAgentRuntimeSandbox({ ...SPEC, activeDeadlineSeconds: null }).spec
+        .shutdownTime,
     ).toBeUndefined();
+    vi.useRealTimers();
   });
 
   it("keeps secret values out of the pod spec", () => {
-    const job = buildAgentRuntimeJob(SPEC);
-    const container = job.spec?.template.spec?.containers[0];
+    const job = buildAgentRuntimeSandbox(SPEC);
+    const container = job.spec?.podTemplate.spec?.containers[0];
 
     expect(JSON.stringify(job)).not.toContain("arch_secret");
     expect(container?.envFrom?.[0]?.secretRef?.name).toBe(
@@ -59,7 +98,7 @@ describe("buildAgentRuntimeJob", () => {
 
   it("gives terminal clients a UTF-8 locale with explicit override support", () => {
     const env =
-      buildAgentRuntimeJob(SPEC).spec?.template.spec?.containers[0]?.env;
+      buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]?.env;
 
     expect(env).toEqual(
       expect.arrayContaining([
@@ -69,10 +108,10 @@ describe("buildAgentRuntimeJob", () => {
       ]),
     );
     expect(
-      buildAgentRuntimeJob({
+      buildAgentRuntimeSandbox({
         ...SPEC,
         env: { ...SPEC.env, TERM: "custom-terminal" },
-      }).spec?.template.spec?.containers[0]?.env,
+      }).spec?.podTemplate.spec?.containers[0]?.env,
     ).toEqual(
       expect.arrayContaining([{ name: "TERM", value: "custom-terminal" }]),
     );
@@ -80,7 +119,7 @@ describe("buildAgentRuntimeJob", () => {
 
   it("makes direct interactive shells join the agent session", () => {
     const env =
-      buildAgentRuntimeJob(SPEC).spec?.template.spec?.containers[0]?.env;
+      buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]?.env;
 
     expect(env).toEqual(
       expect.arrayContaining([
@@ -96,13 +135,13 @@ describe("buildAgentRuntimeJob", () => {
       ]),
     );
     expect(
-      buildAgentRuntimeJob({
+      buildAgentRuntimeSandbox({
         ...SPEC,
         env: {
           ...SPEC.env,
           ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "0",
         },
-      }).spec?.template.spec?.containers[0]?.env,
+      }).spec?.podTemplate.spec?.containers[0]?.env,
     ).toEqual(
       expect.arrayContaining([
         {
@@ -114,8 +153,8 @@ describe("buildAgentRuntimeJob", () => {
   });
 
   it("holds the entrypoint until declared input files are staged", () => {
-    const container = buildAgentRuntimeJob({ ...SPEC, inputFileCount: 2 }).spec
-      ?.template.spec?.containers[0];
+    const container = buildAgentRuntimeSandbox({ ...SPEC, inputFileCount: 2 })
+      .spec?.podTemplate.spec?.containers[0];
     expect(container?.env).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -134,53 +173,51 @@ describe("buildAgentRuntimeJob", () => {
   });
 
   it("omits envFrom entirely when there are no secrets to mount", () => {
-    const job = buildAgentRuntimeJob({ ...SPEC, secretEnv: {} });
-    expect(job.spec?.template.spec?.containers[0]?.envFrom).toBeUndefined();
+    const job = buildAgentRuntimeSandbox({ ...SPEC, secretEnv: {} });
+    expect(job.spec?.podTemplate.spec?.containers[0]?.envFrom).toBeUndefined();
   });
 
-  it("selects pods by the task they carry, never by a mutable name", () => {
+  it("keeps the initial task label and the frozen workspace selector", () => {
     const labels =
-      buildAgentRuntimeJob(SPEC).spec?.template.metadata?.labels ?? {};
+      buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.metadata?.labels ?? {};
     expect(labels[AGENT_RUNTIME_TASK_LABEL]).toBe(SPEC.taskId);
-    expect(Object.values(labels)).not.toContain(
-      "agent-run-deploy-app-11111111",
-    );
+    expect(labels[AGENT_RUNTIME_WORKSPACE_LABEL]).toBe(SPEC.frozenName);
   });
 
   it("does not mount a service account token", () => {
     expect(
-      buildAgentRuntimeJob(SPEC).spec?.template.spec
+      buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec
         ?.automountServiceAccountToken,
     ).toBe(false);
   });
 
   it("only grants privilege when the agent explicitly asked for it", () => {
     expect(
-      buildAgentRuntimeJob(SPEC).spec?.template.spec?.containers[0]
+      buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]
         ?.securityContext,
     ).toEqual({ allowPrivilegeEscalation: false });
     expect(
-      buildAgentRuntimeJob({ ...SPEC, privileged: true }).spec?.template.spec
-        ?.containers[0]?.securityContext?.privileged,
+      buildAgentRuntimeSandbox({ ...SPEC, privileged: true }).spec?.podTemplate
+        .spec?.containers[0]?.securityContext?.privileged,
     ).toBe(true);
   });
 
-  it("bounds writable run scratch space", () => {
+  it("requests durable storage for the workspace", () => {
     expect(
-      buildAgentRuntimeJob(SPEC).spec?.template.spec?.volumes?.[0]?.emptyDir
-        ?.sizeLimit,
+      buildAgentRuntimeSandbox(SPEC).spec.volumeClaimTemplates[0].spec.resources
+        ?.requests?.storage,
     ).toBe("10Gi");
   });
 
   it("steers pods onto a dedicated pool only when a selector is configured", () => {
-    const plain = buildAgentRuntimeJob(SPEC).spec?.template.spec;
+    const plain = buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec;
     expect(plain?.nodeSelector).toBeUndefined();
     expect(plain?.tolerations).toBeUndefined();
 
-    const steered = buildAgentRuntimeJob({
+    const steered = buildAgentRuntimeSandbox({
       ...SPEC,
       nodeSelector: { "archestra-agent-runtime": "true" },
-    }).spec?.template.spec;
+    }).spec?.podTemplate.spec;
     expect(steered?.nodeSelector).toEqual({
       "archestra-agent-runtime": "true",
     });
@@ -194,30 +231,25 @@ describe("buildAgentRuntimeJob", () => {
     ]);
   });
 
-  it("gives a privileged Agent Runtime run a real filesystem for /var/lib/docker", () => {
-    const unprivileged = buildAgentRuntimeJob(SPEC).spec?.template.spec;
-    expect(unprivileged?.volumes?.map((volume) => volume.name)).toEqual([
-      "archestra-run",
-    ]);
+  it("retains privileged development storage on the workspace volume", () => {
+    const unprivileged = buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec;
+    expect(unprivileged?.volumes).toEqual([]);
 
-    const privileged = buildAgentRuntimeJob({ ...SPEC, privileged: true }).spec
-      ?.template.spec;
-    expect(privileged?.volumes).toContainEqual({
-      name: "docker-lib",
-      emptyDir: { sizeLimit: "10Gi" },
-    });
+    const privileged = buildAgentRuntimeSandbox({ ...SPEC, privileged: true })
+      .spec?.podTemplate.spec;
     expect(privileged?.containers[0]?.volumeMounts).toContainEqual({
-      name: "docker-lib",
+      name: "workspace",
       mountPath: "/var/lib/docker",
+      subPath: "docker",
     });
   });
 
   it("quotes a configured command so arguments cannot break out", () => {
-    const job = buildAgentRuntimeJob({
+    const job = buildAgentRuntimeSandbox({
       ...SPEC,
       command: ["claude", "--task", "it's a 'quoted' task; rm -rf /"],
     });
-    const entrypoint = job.spec?.template.spec?.containers[0]?.env?.find(
+    const entrypoint = job.spec?.podTemplate.spec?.containers[0]?.env?.find(
       (entry) => entry.name === "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
     );
 
@@ -230,9 +262,9 @@ describe("buildAgentRuntimeJob", () => {
   });
 
   it("falls back to the runtime-agent entrypoint when no command is set", () => {
-    const entrypoint = buildAgentRuntimeJob(
+    const entrypoint = buildAgentRuntimeSandbox(
       SPEC,
-    ).spec?.template.spec?.containers[0]?.env?.find(
+    ).spec?.podTemplate.spec?.containers[0]?.env?.find(
       (entry) => entry.name === "ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT",
     );
     expect(entrypoint?.value).toBe(
@@ -243,7 +275,8 @@ describe("buildAgentRuntimeJob", () => {
 
   it("applies resource requests and limits as configured", () => {
     const resources =
-      buildAgentRuntimeJob(SPEC).spec?.template.spec?.containers[0]?.resources;
+      buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]
+        ?.resources;
     expect(resources?.requests).toEqual({ cpu: "500m", memory: "1Gi" });
     // No CPU limit by default: throttling an agent mid-turn reads as a hang.
     expect(resources?.limits).toEqual({ memory: "4Gi" });
@@ -252,7 +285,7 @@ describe("buildAgentRuntimeJob", () => {
 
 describe("the container bootstrap", () => {
   const script = () =>
-    buildAgentRuntimeJob(SPEC).spec?.template.spec?.containers[0]
+    buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]
       ?.command?.[2] ?? "";
 
   it("fails with a distinct code when the image cannot host a session", () => {
@@ -262,28 +295,16 @@ describe("the container bootstrap", () => {
     expect(script()).toContain("exit 78");
   });
 
-  it("creates the steer FIFO and holds PID 1 for the session's lifetime", () => {
+  it("creates the steer FIFO and retains the workspace supervisor", () => {
     expect(script()).toContain("mkfifo -m 600");
-    expect(script()).toContain("tmux has-session -t agent");
-  });
-
-  it("propagates the Agent process exit code to the Job", () => {
-    expect(script()).toContain('status=$?; printf "%s\\n" "$status"');
-    expect(script()).toContain('exit "$(cat /var/run/archestra/exit-code)"');
-  });
-
-  it("connects stdout capture before the Agent process can emit output", () => {
-    expect(script().indexOf("tmux pipe-pane")).toBeLessThan(
-      script().indexOf("tmux respawn-pane"),
-    );
-    expect(script()).not.toContain("sleep 10");
+    expect(script()).toContain("remain-on-exit on");
   });
 
   it("drains the stdout mirror before the pane exits", () => {
     // A one-shot agent writes its whole answer in its final instant; without
     // the drain the pane exit tears down pipe-pane first and the transcript
     // ends up empty.
-    expect(script()).toContain("exit-code; sleep 2; exit");
+    expect(script()).toContain("sleep 2; printf");
   });
 
   it("frames a bounded readable transcript after terminal capture ends", () => {
@@ -294,7 +315,7 @@ describe("the container bootstrap", () => {
     );
     expect(bootstrap).toContain("archestra-readable-transcript=base64");
     expect(bootstrap).toContain("archestra-readable-transcript=end");
-    expect(bootstrap.indexOf("while tmux has-session")).toBeLessThan(
+    expect(bootstrap.indexOf('while [ ! -f "$turn.result" ]')).toBeLessThan(
       bootstrap.indexOf("archestra-readable-transcript=base64"),
     );
   });

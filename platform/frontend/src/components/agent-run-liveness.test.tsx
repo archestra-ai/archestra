@@ -8,6 +8,23 @@ describe("AgentRunLiveness", () => {
     vi.useRealTimers();
   });
 
+  it("preserves the run status when its deadline is malformed", () => {
+    render(
+      <AgentRunLiveness
+        run={activeRun({
+          hardDeadlineAt: "invalid",
+          state: "TASK_STATE_INPUT_REQUIRED",
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for input");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Hard deadline unavailable",
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent("NaN");
+  });
+
   it("keeps the hard-stop countdown visible while model activity is recent", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-09-03T12:00:00.000Z");

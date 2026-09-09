@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Bounded file operations for the runtime workspace; one JSON request on stdin."""
+
+import base64
+import hashlib
+import json
+import os
+import stat
+import sys
+import uuid
+
+MAX_BYTES = 4 * 1024 * 1024
+
+
+def operate(request):
+    if not isinstance(request, dict):
+        raise ValueError("Request must be an object")
+    root = os.environ.get("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ROOT", "/home/node/workspace")
+    path = request.get("path", "")
+    parts = path.split("/")
+    if not path or any(part in ("", ".", "..") for part in parts) or "\0" in path:
+        raise ValueError("Use a non-empty workspace-relative path without traversal")
+    operation = request.get("operation")
+    if operation not in ("read", "write"):
+        raise ValueError("Unsupported file operation")
+    # Open each directory relative to an already-open directory descriptor.
+    # Refusing symlinks at every component prevents ancestor substitution races.
+    directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in parts[:-1]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        name = parts[-1]
+        if operation == "read":
+            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+            with os.fdopen(fd, "rb") as source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode):
+                    raise ValueError("Only regular files can be read")
+                data = source.read(MAX_BYTES + 1)
+                if len(data) > MAX_BYTES:
+                    raise ValueError("File exceeds the 4 MiB transfer limit")
+            return {"path": path, "content_base64": base64.b64encode(data).decode(),
+                    "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        data = base64.b64decode(request.get("content_base64", ""), validate=True)
+        if len(data) > MAX_BYTES:
+            raise ValueError("File exceeds the 4 MiB transfer limit")
+        mode = 0o600
+        if request.get("overwrite") is True:
+            try:
+                existing = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                if not stat.S_ISREG(existing.st_mode):
+                    raise ValueError("Only regular files can be overwritten")
+                # Preserve ordinary permissions, never privilege-bearing mode bits.
+                mode = stat.S_IMODE(existing.st_mode) & 0o777
+        temporary = ".archestra-upload-" + uuid.uuid4().hex
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=directory)
+        try:
+            with os.fdopen(fd, "wb") as destination:
+                destination.write(data)
+                os.fchmod(destination.fileno(), mode)
+                destination.flush()
+                os.fsync(destination.fileno())
+            if request.get("overwrite") is True:
+                # Rename replaces the directory entry, never follows its target.
+                os.rename(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
+            else:
+                os.link(temporary, name, src_dir_fd=directory, dst_dir_fd=directory,
+                        follow_symlinks=False)
+            return {"path": path, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        finally:
+            try:
+                os.unlink(temporary, dir_fd=directory)
+            except FileNotFoundError:
+                pass
+    finally:
+        os.close(directory)
+
+
+try:
+    raw = sys.stdin.buffer.read(6 * 1024 * 1024 + 1)
+    if len(raw) > 6 * 1024 * 1024:
+        raise ValueError("Request exceeds the transfer limit")
+    print(json.dumps({"ok": True, **operate(json.loads(raw))}))
+except (OSError, ValueError, TypeError) as error:
+    # No file contents or credential values are included in failures.
+    print(json.dumps({"ok": False, "error": str(error)}))

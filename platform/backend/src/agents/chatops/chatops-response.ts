@@ -1,10 +1,12 @@
-const TASK_ID_PATTERN =
-  /\bTask\s+`?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`?\s+(?:has\s+)?started\b/i;
+// Accepts both "Run <id> started" (the start_run tool's own narration) and the
+// legacy "Task <id> started" phrasing a model may still produce.
+const RUN_ID_PATTERN =
+  /\b(?:Run|Task)\s+`?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`?\s+(?:has\s+)?started\b/i;
 
 export function compactChatOpsResponse(text: string): string {
-  const taskStart = text.match(TASK_ID_PATTERN);
-  if (taskStart) {
-    return `Task ${taskStart[1]} started — I’ll post the result here when it’s ready.`;
+  const runStart = text.match(RUN_ID_PATTERN);
+  if (runStart) {
+    return `Run ${runStart[1]} started — I’ll post the result here when it’s ready.`;
   }
 
   const structuredLaunch = extractStructuredRunLaunch(text);

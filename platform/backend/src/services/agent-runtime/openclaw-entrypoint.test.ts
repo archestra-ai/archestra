@@ -25,12 +25,14 @@ describe("OpenClaw image entrypoint", () => {
       expectedApi: "openai-completions",
       baseUrl: "http://host.orb.internal:9000/v1/model-router/test",
       expectedBaseUrl: "http://[fd00::123]:9000/v1/model-router/test",
+      workspaceId: "retained-workspace",
     },
     {
       protocol: "openai_responses",
       expectedApi: "openai-responses",
       baseUrl: "http://localhost:9000/v1/model-router/test",
       expectedBaseUrl: "http://localhost:9000/v1/model-router/test",
+      workspaceId: undefined,
     },
   ])("configures the $protocol transport as $expectedApi", async (testCase) => {
     const { protocol, expectedApi, baseUrl, expectedBaseUrl } = testCase;
@@ -88,7 +90,7 @@ await agentEnd(
       { role: "assistant", content: [{ type: "text", text: "OpenClaw finished the task." }], timestamp: "2026-09-04T10:00:03Z" },
     ],
   },
-  { sessionKey: "agent:main:12345678-abcd-4000-8000-123456789abc" },
+  { sessionKey: "agent:main:" + (process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID ?? process.env.ARCHESTRA_AGENT_RUNTIME_TASK_ID) },
 );
 JS
 trap 'exit 0' TERM
@@ -118,6 +120,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
         ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
         ARCHESTRA_AGENT_RUNTIME_TASK_ID: "12345678-abcd-4000-8000-123456789abc",
+        ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: testCase.workspaceId,
         ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
         ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
           "Follow the configured Agent instructions.",

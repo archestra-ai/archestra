@@ -13,6 +13,7 @@ import {
 import { loadGatewayTools } from "./gateway-tools.js";
 import { loadLocalWorkspaceTools } from "./local-tools.js";
 import { writeReadableTranscript } from "./readable-transcript.js";
+import { loadSessionHistory, saveSessionHistory } from "./session-history.js";
 import { SteerQueue } from "./steer-queue.js";
 
 /**
@@ -54,12 +55,17 @@ async function main(): Promise<number> {
   terminalInput?.on("line", (line) => steerQueue.enqueue(line));
   const shutdown = new AbortController();
   const stop = () => {
+    if (shutdown.signal.aborted) return;
     shutdown.abort();
     steerQueue.stop();
     terminalInput?.close();
   };
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
+  // Readline owns terminal-mode Ctrl-C; it emits SIGINT on the interface
+  // instead of the process. EOF must also release the idle steering wait.
+  terminalInput?.once("SIGINT", stop);
+  terminalInput?.once("close", stop);
 
   const model = createModel(config);
 
@@ -77,8 +83,10 @@ async function main(): Promise<number> {
   write(`${Object.keys(tools).length} tools available.`);
   write("");
 
-  let messages: ModelMessage[] = [];
-  const transcriptMessages: ModelMessage[] = [];
+  let messages: ModelMessage[] = config.continuePreviousSession
+    ? await loadSessionHistory(config.runtimeDir)
+    : [];
+  const transcriptMessages: ModelMessage[] = [...messages];
   if (config.task) {
     renderTurn("You", config.task);
     const taskMessage = { role: "user", content: config.task } as const;
@@ -146,6 +154,7 @@ async function main(): Promise<number> {
       transcriptMessages.push(...responseMessages);
       await persistReadableTranscript({ config, messages: transcriptMessages });
       messages = trimHistory(messages);
+      await saveSessionHistory({ runtimeDir: config.runtimeDir, messages });
 
       if (config.runMode === "one_shot") break;
 

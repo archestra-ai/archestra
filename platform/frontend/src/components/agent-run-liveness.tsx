@@ -1,8 +1,11 @@
 "use client";
 
 import { AlertTriangle, Clock3, MessageCircleQuestion } from "lucide-react";
-import { useEffect, useState } from "react";
 import type { AgentRun } from "@/lib/agent-runtime.query";
+import {
+  formatRuntimeDuration as formatDuration,
+  useRuntimeClock as useCurrentTime,
+} from "@/lib/agent-runtime-time";
 import { cn } from "@/lib/utils";
 
 export function AgentRunLiveness({
@@ -25,6 +28,7 @@ export function AgentRunLiveness({
 
   const presentation = getLivenessPresentation(run, now);
   const Icon = presentation.icon;
+  const deadline = new Date(run.hardDeadlineAt);
 
   return (
     <output
@@ -53,13 +57,17 @@ export function AgentRunLiveness({
           {presentation.detail}
         </span>
       </div>
-      <time
-        dateTime={new Date(run.hardDeadlineAt).toISOString()}
-        title={`Hard deadline: ${new Date(run.hardDeadlineAt).toLocaleString()}`}
-        className="shrink-0 tabular-nums"
-      >
-        {presentation.deadlineLabel}
-      </time>
+      {Number.isNaN(deadline.getTime()) ? (
+        <span>{presentation.deadlineLabel}</span>
+      ) : (
+        <time
+          dateTime={deadline.toISOString()}
+          title={`Hard deadline: ${deadline.toLocaleString()}`}
+          className="shrink-0 tabular-nums"
+        >
+          {presentation.deadlineLabel}
+        </time>
+      )}
     </output>
   );
 }
@@ -108,7 +116,9 @@ function getLivenessPresentation(
     };
   }
 
-  const deadlineLabel = `Hard stop in ${formatDuration(deadlineAt - now)}`;
+  const deadlineLabel = Number.isNaN(deadlineAt)
+    ? "Hard deadline unavailable"
+    : `Hard stop in ${formatDuration(deadlineAt - now)}`;
   if (
     run.attentionState === "input_required" ||
     run.state === "TASK_STATE_INPUT_REQUIRED"
@@ -170,28 +180,4 @@ function modelActivityBaseline(
   return new Date(run.lastModelActivityAt ?? run.startedAt);
 }
 
-function useCurrentTime(active: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!active) return;
-    const interval = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
-    return () => clearInterval(interval);
-  }, [active]);
-
-  return now;
-}
-
-function formatDuration(durationMs: number): string {
-  const totalMinutes = Math.max(0, Math.floor(durationMs / 60_000));
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = totalMinutes % 60;
-
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  return `${minutes}m`;
-}
-
 const NO_MODEL_ACTIVITY_WARNING_MS = 15 * 60_000;
-const CLOCK_TICK_MS = 30_000;

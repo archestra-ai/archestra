@@ -75,6 +75,7 @@ export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as agentUsersTable } from "./agent-user";
 export { default as agentVersionsTable } from "./agent-version";
+export { default as agentWorkspacesTable } from "./agent-workspace";
 export { default as apikeysTable } from "./api-key";
 export { default as appsTable } from "./app";
 export { default as appDataTable } from "./app-data";

@@ -10,6 +10,7 @@ import {
   A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
+  AgentWorkspaceModel,
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -1139,6 +1140,280 @@ describe("Agent Runtime routes", () => {
       before: expect.objectContaining({ visibility: "organization" }),
       after: { success: true },
     });
+  });
+
+  test("continues only an owned retained workspace and audits the new turn", async ({
+    makeAdmin,
+  }) => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentRunModel.close({ id: run.id });
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const next = await createTask(agent.id);
+    vi.mocked(startDetachedAgentTask).mockResolvedValue(next);
+    const attachments = [
+      {
+        name: "follow-up.txt",
+        contentType: "text/plain",
+        contentBase64: Buffer.from("follow-up input").toString("base64"),
+      },
+    ];
+    const invalid = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/continue`,
+      payload: {
+        message: "Read this",
+        attachments: [{ ...attachments[0], contentBase64: "invalid" }],
+      },
+    });
+    expect(invalid.statusCode).toBe(400);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/continue`,
+      payload: { message: "Check the saved change", attachments },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().taskId).toBe(next.id);
+    expect(startDetachedAgentTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments,
+        systemParams: expect.objectContaining({
+          runtimeMode: "interactive",
+          resumeFromTaskId: task.id,
+        }),
+      }),
+    );
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.resourceId, next.id),
+          eq(schema.auditLogsTable.action, "agentRun.created"),
+        ),
+      );
+    expect(audits[0]).toMatchObject({
+      before: { taskId: task.id },
+      after: { taskId: next.id, previousTaskId: task.id, attachmentCount: 1 },
+    });
+    await AgentWorkspaceModel.transition({
+      id: workspace.id,
+      from: "idle",
+      to: "deleted",
+    });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/agent-runs/${task.id}/continue`,
+          payload: { message: "Try again" },
+        })
+      ).statusCode,
+    ).toBe(409);
+    user = await makeAdmin();
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/agent-runs/${task.id}/continue`,
+          payload: { message: "Try again" },
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
+  test("workspace files use owner-only access and audit writes without content", async ({
+    makeAdmin,
+  }) => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const fileAccess = vi
+      .spyOn(agentRuntimeManager, "accessWorkspaceFile")
+      .mockResolvedValue({ path: "notes.txt", size: 5, sha256: "test-digest" });
+    const payload = {
+      path: "notes.txt",
+      content_base64: Buffer.from("hello").toString("base64"),
+    };
+    for (const path of ["../outside", "/absolute", "nested/../outside"]) {
+      const read = await app.inject({
+        method: "GET",
+        url: `/api/agent-runs/${task.id}/workspace/files?path=${encodeURIComponent(path)}`,
+      });
+      expect(read.statusCode, read.body).toBe(400);
+      const write = await app.inject({
+        method: "PUT",
+        url: `/api/agent-runs/${task.id}/workspace/files`,
+        payload: { ...payload, path },
+      });
+      expect(write.statusCode, write.body).toBe(400);
+    }
+    expect(fileAccess).not.toHaveBeenCalled();
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/agent-runs/${task.id}/workspace/files`,
+      payload,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ path: "notes.txt", size: 5 });
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceId, task.id));
+    expect(audits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "agentRun.updated",
+          before: { workspaceFile: { path: "notes.txt", writeApplied: false } },
+          after: {
+            workspaceFile: {
+              path: "notes.txt",
+              writeApplied: true,
+              size: 5,
+              sha256: "test-digest",
+            },
+          },
+        }),
+      ]),
+    );
+    expect(JSON.stringify(audits)).not.toContain(payload.content_base64);
+    user = await makeAdmin();
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agent-runs/${task.id}/workspace/files?path=notes.txt`,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url: `/api/agent-runs/${task.id}/workspace/files`,
+          payload,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(fileAccess).toHaveBeenCalledTimes(1);
+  });
+
+  test("workspace deletion is owner-only, retries failures, preserves transcripts, and audits the state change", async ({
+    makeAdmin,
+  }) => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentRunModel.close({ id: run.id, logs: "retained transcript" });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "suspended",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const remove = vi
+      .spyOn(agentRuntimeManager, "deleteWorkspace")
+      .mockRejectedValueOnce(new Error("temporary cluster failure"))
+      .mockResolvedValue(undefined);
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const owner = user;
+    user = await makeAdmin();
+    const url = `/api/agent-runs/${task.id}/workspace`;
+    expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(404);
+    expect(remove).not.toHaveBeenCalled();
+    user = owner;
+    const failedDeletion = await app.inject({ method: "DELETE", url });
+    expect(failedDeletion.statusCode).toBe(500);
+    expect(failedDeletion.json().error.message).toContain(
+      "retrying this request is safe",
+    );
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
+    ).toBe("deleting");
+    expect((await app.inject({ method: "DELETE", url })).json()).toEqual({
+      state: "deleted",
+    });
+    expect((await AgentRunModel.findByTaskId(task.id))?.logs).toBe(
+      "retained transcript",
+    );
+    expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(200);
+    expect(remove).toHaveBeenCalledTimes(2);
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.resourceId, task.id),
+          eq(schema.auditLogsTable.action, "agentRun.updated"),
+        ),
+      );
+    expect(audits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          before: { workspaceState: "deleting" },
+          after: { workspaceState: "deleted" },
+        }),
+      ]),
+    );
+  });
+
+  test("an old run cannot delete a workspace claimed by a newer turn", async () => {
+    const task = await createTask(agent.id);
+    const run = await createRun({ taskId: task.id, actorUserId: user.id });
+    await AgentRunModel.close({ id: run.id });
+    const next = await createTask(agent.id);
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "active",
+      activeTaskId: next.id,
+      lastTaskId: next.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const remove = vi
+      .spyOn(agentRuntimeManager, "deleteWorkspace")
+      .mockResolvedValue(undefined);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/agent-runs/${task.id}/workspace`,
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(remove).not.toHaveBeenCalled();
   });
 
   async function createTask(agentId: string) {

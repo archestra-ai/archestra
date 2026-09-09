@@ -2,12 +2,20 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
+} from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
-import { beforeEach, describe, expect, test } from "@/test";
+import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { captureToolAuditBefore, recordToolAudit } from "./audit";
 
 const toolName = (shortName: string) =>
   `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
@@ -29,6 +37,7 @@ const MANIFEST = [
  * trail for chat/gateway-driven admin mutations.
  */
 describe("archestra tool audit records", () => {
+  afterEach(() => vi.restoreAllMocks());
   let testAgent: Agent;
   let organizationId: string;
   let adminUserId: string;
@@ -62,6 +71,170 @@ describe("archestra tool audit records", () => {
     });
     return data;
   }
+
+  test("MCP workspace writes and deletion record changes without file contents", async () => {
+    vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+    vi.spyOn(backend, "accessWorkspaceFile").mockResolvedValue({
+      path: "notes.txt",
+      size: 7,
+      sha256: "file-digest",
+    });
+    vi.spyOn(backend, "releaseRun").mockResolvedValue(undefined);
+    vi.spyOn(backend, "deleteWorkspace").mockResolvedValue(undefined);
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: adminUserId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: testAgent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId,
+      agentId: testAgent.id,
+      taskId: task.id,
+      actorKind: "user",
+      actorId: adminUserId,
+      actorUserId: adminUserId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: `audit-${task.id}`,
+    });
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: testAgent.id,
+      actorKind: "user",
+      actorId: adminUserId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const write = await executeArchestraTool(
+      toolName("write_workspace_file"),
+      {
+        task_id: task.id,
+        path: "notes.txt",
+        content: "private workspace content",
+        encoding: "utf8",
+        overwrite: false,
+      },
+      mockContext,
+    );
+    expect(write.isError).toBe(false);
+    const writtenRows = await findRows("agentRun");
+    expect(writtenRows).toHaveLength(1);
+    expect(writtenRows[0]).toMatchObject({
+      action: "agentRun.updated",
+      actorId: adminUserId,
+      resourceId: task.id,
+      before: { workspaceFile: { path: "notes.txt", writeApplied: false } },
+      after: {
+        workspaceFile: {
+          path: "notes.txt",
+          writeApplied: true,
+          size: 7,
+          sha256: "file-digest",
+        },
+      },
+    });
+    expect(JSON.stringify(writtenRows)).not.toContain(
+      "private workspace content",
+    );
+    const deleted = await executeArchestraTool(
+      toolName("delete_workspace"),
+      {
+        task_id: task.id,
+        confirm_delete: true,
+      },
+      mockContext,
+    );
+    expect(deleted.isError).toBe(false);
+    const rows = await findRows("agentRun");
+    expect(rows).toHaveLength(2);
+    expect(
+      rows.find(
+        (row) => row.httpPath === "mcp-tool:archestra__delete_workspace",
+      ),
+    ).toMatchObject({
+      action: "agentRun.updated",
+      actorId: adminUserId,
+      resourceId: task.id,
+      before: { workspaceState: "idle" },
+      after: { workspaceState: "deleted" },
+    });
+  });
+
+  test("audits an MCP continuation's new task without retaining its message", async () => {
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: adminUserId,
+    });
+    const previous = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: testAgent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const args = {
+      task_id: previous.id,
+      message: "Private follow-up instructions",
+    };
+    const capture = await captureToolAuditBefore({
+      toolName: toolName("steer_run"),
+      args,
+      organizationId,
+      userId: adminUserId,
+    });
+    expect(capture).not.toBeNull();
+    if (!capture) throw new Error("Missing continuation audit registration");
+    const continuation = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: testAgent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    await recordToolAudit({
+      capture,
+      toolName: toolName("steer_run"),
+      args,
+      result: {
+        content: [],
+        structuredContent: {
+          success: true,
+          task_id: continuation.id,
+          previous_task_id: previous.id,
+        },
+      },
+    });
+    const rows = await findRows("agentRun");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      action: "agentRun.created",
+      actorId: adminUserId,
+      resourceId: continuation.id,
+      before: null,
+      after: {
+        taskId: continuation.id,
+        agentId: testAgent.id,
+        state: "TASK_STATE_SUBMITTED",
+      },
+    });
+    expect(JSON.stringify(rows)).not.toContain(args.message);
+
+    // A live steer produces no new run and must not claim one was created.
+    await recordToolAudit({
+      capture,
+      toolName: toolName("steer_run"),
+      args,
+      result: {
+        content: [],
+        structuredContent: { success: true, task_id: previous.id },
+      },
+    });
+    expect(await findRows("agentRun")).toHaveLength(1);
+  });
 
   test("create_team writes team.created with the created id and after-state", async () => {
     const result = await executeArchestraTool(

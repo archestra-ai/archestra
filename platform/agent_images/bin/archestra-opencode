@@ -85,6 +85,7 @@ PLUGIN
 chmod 0600 "${attention_plugin}"
 
 cat > "${transcript_plugin}" <<'PLUGIN'
+import { writeFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 
 function timestamp(info) {
@@ -189,8 +190,10 @@ export const ArchestraTranscript = async ({ client, directory }) => ({
       .trim();
     if (!answer) return;
 
-    await writeFile(`${runtimeDir}/final-answer.txt`, `${answer}\n`, "utf8");
-    await writeFile(`${runtimeDir}/turn-complete`, "", "utf8");
+    // Native run can exit immediately after its idle event. Publish the answer
+    // and completion marker in the same callback tick, without an async gap.
+    writeFileSync(`${runtimeDir}/final-answer.txt`, `${answer}\n`, "utf8");
+    writeFileSync(`${runtimeDir}/turn-complete`, "", "utf8");
   },
 });
 PLUGIN
@@ -249,17 +252,26 @@ jq -n \
   }' > "${config_file}"
 chmod 0600 "${config_file}" "${instructions_file}" "${task_file}"
 
+resume_args=()
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  resume_args=(--continue)
+fi
+terminal_command=(opencode --auto --model "archestra/${model}" --prompt "$(cat "${task_file}")")
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  # The full-screen TUI drops --prompt when restoring an existing session.
+  # The native interactive run command both restores it and submits the new
+  # instruction, while keeping terminal input available for live steering.
+  terminal_command=(opencode run --interactive --continue --auto --model "archestra/${model}" -- "$(cat "${task_file}")")
+fi
 case "${runtime_mode}" in
   interactive)
-    exec opencode \
-      --auto \
-      --model "archestra/${model}" \
-      --prompt "$(cat "${task_file}")"
+    exec "${terminal_command[@]}"
     ;;
   one_shot)
     if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
       export OPENCODE_PURE=1
       exec opencode run \
+        "${resume_args[@]}" \
         --pure \
         --auto \
         --model "archestra/${model}" \
@@ -270,10 +282,7 @@ case "${runtime_mode}" in
     exec "${script_dir}/archestra-tui-run" \
       "${runtime_dir}/turn-complete" \
       "${runtime_dir}/final-answer.txt" \
-      opencode \
-        --auto \
-        --model "archestra/${model}" \
-        --prompt "$(cat "${task_file}")"
+      "${terminal_command[@]}"
     ;;
   *)
     echo "archestra: unknown Agent Runtime mode" >&2

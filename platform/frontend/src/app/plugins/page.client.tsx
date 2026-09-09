@@ -61,11 +61,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -88,7 +83,6 @@ import {
   pluginActionHref,
 } from "./_parts/plugin-actions-model";
 import { PluginClientIcon } from "./_parts/plugin-client-icon";
-import { PluginGithubSyncBadge } from "./_parts/plugin-github-sync-badge";
 import { PluginInstallDialog } from "./_parts/plugin-install-dialog";
 import {
   ARCHESTRA_PLUGIN_AUTHOR_LABEL,
@@ -101,6 +95,7 @@ import {
   resolvePluginInstallSelection,
 } from "./_parts/plugin-page-config";
 import { PluginSourceIcon } from "./_parts/plugin-source-icon";
+import { PluginSourceInfo } from "./_parts/plugin-source-info";
 
 const PLUGINS_DESCRIPTION =
   "Plugins install client-native files on developer machines.";
@@ -307,7 +302,7 @@ function PluginsList() {
   }, [pathname, router, searchParams]);
 
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "updatedAt", desc: true },
+    { id: "details", desc: true },
   ]);
   const [deletingPlugin, setDeletingPlugin] = useState<PluginListItem | null>(
     null,
@@ -410,7 +405,7 @@ function PluginsList() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      size: 420,
+      size: 320,
       cell: ({ row }) => {
         const plugin = row.original;
         return (
@@ -444,12 +439,24 @@ function PluginsList() {
       },
     },
     {
-      id: "compatibility",
-      size: 190,
-      header: "Compatibility",
+      id: "details",
+      accessorFn: (plugin) => plugin.updatedAt,
+      sortingFn: (left, right, columnId) =>
+        comparePinnedPluginTableOrder({
+          left: left.original,
+          right: right.original,
+          descending:
+            sorting.find((item) => item.id === columnId)?.desc ?? false,
+          fallbackResult:
+            new Date(left.original.updatedAt).getTime() -
+            new Date(right.original.updatedAt).getTime(),
+        }),
+      size: 380,
+      header: "Details",
       cell: ({ row }) => {
         const plugin = row.original;
         const platforms = plugin.supportedPlatforms;
+        const repo = plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
         const platformLabel = [
           platforms.includes("posix") ? "macOS and Linux" : null,
           platforms.includes("windows") ? "Windows" : null,
@@ -457,32 +464,37 @@ function PluginsList() {
           .filter(Boolean)
           .join(", ");
         return (
-          <div className="flex min-w-0 items-center gap-2">
-            <Badge
-              variant="secondary"
-              className="min-w-0 gap-1.5 font-normal [&_img]:size-3.5"
-            >
+          <div className="min-w-0 space-y-1.5 text-sm">
+            <div className="flex min-w-0 items-center gap-2">
               {clientFilterIcon(plugin.clientType)}
-              <span className="truncate">
+              <span className="truncate text-muted-foreground">
                 {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
               </span>
-            </Badge>
-            <span
-              className="flex shrink-0 items-center gap-1.5"
-              role="img"
-              aria-label={`Supported platforms: ${platformLabel}`}
-              title={platformLabel}
-            >
-              {platforms.includes("posix") && <OsLogos platform="macos" />}
-              {platforms.includes("windows") && <OsLogos platform="windows" />}
-            </span>
+              <span
+                className="flex shrink-0 items-center gap-1.5"
+                role="img"
+                aria-label={`Supported platforms: ${platformLabel}`}
+                title={platformLabel}
+              >
+                {platforms.includes("posix") && <OsLogos platform="macos" />}
+                {platforms.includes("windows") && (
+                  <OsLogos platform="windows" />
+                )}
+              </span>
+            </div>
+            <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <PluginSourceInfo plugin={plugin} />
+              <span className="truncate">
+                {plugin.sourceKind === "github" ? repo : "Manual"}
+              </span>
+            </div>
           </div>
         );
       },
     },
     {
       id: "visibility",
-      size: 130,
+      size: 190,
       header: "Visibility",
       cell: ({ row }) => (
         <ResourceVisibilityBadge
@@ -494,90 +506,6 @@ function PluginsList() {
           currentUserId={currentUserId}
           showSelfAsMe
         />
-      ),
-    },
-    {
-      id: "source",
-      size: 180,
-      header: "Source",
-      cell: ({ row }) => {
-        const plugin = row.original;
-        const repo = plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
-        if (plugin.sourceKind !== "github") {
-          return (
-            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Pencil className="size-3.5" />
-              Manual
-            </span>
-          );
-        }
-        return (
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-1.5">
-              <PluginGithubSyncBadge plugin={plugin} />
-              {plugin.pendingSourceSha && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400"
-                    >
-                      <Github className="h-3 w-3" />
-                      Update
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    A new source commit is waiting for review on the plugin
-                    page.
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-            {repo ? (
-              <div className="truncate font-mono text-xs text-muted-foreground">
-                {repo}
-              </div>
-            ) : null}
-          </div>
-        );
-      },
-    },
-    {
-      id: "updatedAt",
-      accessorKey: "updatedAt",
-      sortingFn: (left, right, columnId) =>
-        comparePinnedPluginTableOrder({
-          left: left.original,
-          right: right.original,
-          descending:
-            sorting.find((item) => item.id === columnId)?.desc ?? false,
-          fallbackResult:
-            new Date(left.original.updatedAt).getTime() -
-            new Date(right.original.updatedAt).getTime(),
-        }),
-      size: 160,
-      header: ({ column }) => (
-        <div className="flex justify-end pr-4">
-          <Button
-            variant="ghost"
-            className="h-auto !p-0 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Activity
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        </div>
-      ),
-      cell: ({ row }) => (
-        <div className="space-y-0.5 pr-4 text-right text-sm">
-          <div>
-            {row.original.fileCount}{" "}
-            {row.original.fileCount === 1 ? "file" : "files"}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Updated {formatRelativeTimeFromNow(row.original.updatedAt)}
-          </div>
-        </div>
       ),
     },
     {
@@ -906,6 +834,7 @@ function PluginsList() {
                           {!plugin.enabled ? (
                             <Badge variant="outline">Disabled</Badge>
                           ) : null}
+                          <PluginSourceInfo plugin={plugin} />
                         </div>
                       </TableCard>
                     ))}
@@ -934,12 +863,7 @@ function PluginsList() {
                     onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
                     rangeSelection={rangeSelection}
                     isLoading={isFetching}
-                    fixedWidthColumnIds={[
-                      "compatibility",
-                      "visibility",
-                      "source",
-                      "updatedAt",
-                    ]}
+                    fixedWidthColumnIds={["details", "visibility"]}
                     flexibleColumnIds={["displayName"]}
                   />
                 }

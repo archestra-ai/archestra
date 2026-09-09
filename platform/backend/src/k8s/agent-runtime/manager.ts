@@ -503,6 +503,26 @@ class AgentRuntimeManager {
     );
   }
 
+  async getLastWorkspaceActivity(
+    session: AgentRunRecord,
+  ): Promise<Date | null> {
+    const podName = await this.findPodName(session);
+    if (!podName) return null;
+    const output = await this.execInPod({
+      session,
+      podName,
+      command: [
+        "/bin/sh",
+        "-c",
+        "{ cat /var/run/archestra/development-activity 2>/dev/null; tmux list-clients -F '#{client_activity}' 2>/dev/null; } | sort -nr | head -1",
+      ],
+    });
+    if (!/^\d+$/.test(output.trim())) return null;
+    const timestamp = Number(output.trim()) * 1000;
+    if (!Number.isSafeInteger(timestamp) || timestamp <= 0) return null;
+    return new Date(Math.min(timestamp, Date.now()));
+  }
+
   getWorkspaceConnection(
     session: Pick<AgentRunRecord, "workloadName" | "runtimeScope">,
   ) {
@@ -731,7 +751,10 @@ class AgentRuntimeManager {
       labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
     });
     const running = pods.items.find(
-      (pod) => pod.status?.phase === "Running" && pod.metadata?.name,
+      (pod) =>
+        pod.status?.phase === "Running" &&
+        pod.metadata?.name &&
+        !pod.metadata.deletionTimestamp,
     );
     return running?.metadata?.name ?? null;
   }
@@ -777,7 +800,12 @@ class AgentRuntimeManager {
       namespace: session.runtimeScope,
       labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
     });
-    return pods.items.find((candidate) => candidate.metadata?.name) ?? null;
+    return (
+      pods.items.find(
+        (candidate) =>
+          candidate.metadata?.name && !candidate.metadata.deletionTimestamp,
+      ) ?? null
+    );
   }
 
   /**

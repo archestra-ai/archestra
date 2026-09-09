@@ -81,6 +81,24 @@ class AgentRunReconciler {
   private async reconcileWorkspace(workspace: AgentWorkspace): Promise<void> {
     const backend = resolveAgentRuntimeBackendDriver(workspace.backend);
     const expired = workspace.expiresAt.getTime() <= Date.now();
+    if (workspace.state === "idle" && !expired) {
+      try {
+        const run = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+        const activityAt = run
+          ? await backend.getLastWorkspaceActivity(run)
+          : null;
+        if (activityAt && activityAt > workspace.lastActivityAt) {
+          await AgentWorkspaceModel.recordActivity(workspace.id, activityAt);
+          return;
+        }
+      } catch (error) {
+        logger.warn(
+          { error, workspaceId: workspace.id },
+          "Could not verify workspace activity; idle suspension will retry",
+        );
+        return;
+      }
+    }
     if (workspace.state === "resuming" && !expired) {
       try {
         const run = await AgentRunModel.findByTaskId(workspace.lastTaskId);

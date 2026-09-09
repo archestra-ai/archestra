@@ -119,6 +119,10 @@ Docker-in-Docker and nested Kubernetes development clusters may require it.
 For example, a development image can run Docker, kind, and Tilt inside its Pod.
 Remote builders or other supported build configurations may avoid this requirement.
 
+On cgroup v2 nodes, the image must delegate cgroup controllers before starting Docker.
+See the [Docker nesting bootstrap](https://github.com/moby/moby/blob/master/hack/dind) for the required setup.
+After workspace resumption, restart Docker and any retained development containers.
+
 Privilege requires all three approvals:
 
 1. The deployment sets `ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`.
@@ -284,6 +288,10 @@ The supervisor keeps the Pod available after a successful turn. After the idle
 timeout, Archestra suspends the Sandbox to release compute while retaining its
 PVC. The hard deadline removes the workspace, including its volume. Run history
 remains available after workspace removal.
+
+Terminal input and interactive shell commands refresh the workspace activity timer.
+Detached terminal sessions retain their last activity time. Background output does not reset idle retention.
+The hard deadline still applies during active development.
 
 Canceling a run stops its Agent process without deleting the workspace.
 Deleting a workspace removes its files permanently. Saved run transcripts remain available.

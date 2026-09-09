@@ -87,6 +87,12 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     await agentRuntimeManager.resumeWorkspace(session);
   }
 
+  async getLastWorkspaceActivity(
+    session: AgentRunRecord,
+  ): Promise<Date | null> {
+    return agentRuntimeManager.getLastWorkspaceActivity(session);
+  }
+
   async deleteWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void> {

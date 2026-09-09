@@ -7,6 +7,44 @@ import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
   "sandbox supervisor",
   () => {
+    it("records terminal input and detachment without treating daemon output as activity", () => {
+      const result = runInContainer(`
+python3 - <<'PY'
+import os, pty, subprocess, time
+pid, terminal = pty.fork()
+if pid == 0:
+    os.environ["TERM"] = "xterm-256color"
+    os.execvp("tmux", ["tmux", "attach", "-t", "agent"])
+def activity():
+    try:
+        return int(open("/var/run/archestra/development-activity").read())
+    except (FileNotFoundError, ValueError):
+        return 0
+def until(check):
+    for _ in range(50):
+        if check(): return
+        time.sleep(.1)
+    raise AssertionError("development activity was not recorded")
+until(lambda: activity() > 0)
+initial = activity()
+subprocess.run(["tmux", "respawn-pane", "-k", "-t", "agent", "while :; do echo daemon-output; sleep 1; done"], check=True)
+time.sleep(2)
+assert activity() == initial, "daemon output refreshed idle retention"
+os.write(terminal, b"hello")
+until(lambda: activity() > initial)
+typed = activity()
+time.sleep(1.1)
+os.write(terminal, bytes([2]) + b"d")
+until(lambda: activity() > typed)
+os.waitpid(pid, 0)
+os.close(terminal)
+PY
+echo VERIFIED
+`);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
     it("stops a turn without removing saved work and accepts a follow-up", () => {
       const result = runInContainer(`
 mkdir -p /var/run/archestra/turns

@@ -1,3 +1,4 @@
+import config from "@/config";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -11,6 +12,98 @@ import { agentRunReconciler } from "./reconciler";
 import { agentRunTranscriptStore } from "./transcript-store";
 
 afterEach(() => vi.restoreAllMocks());
+
+test("development input delays idle suspension but never extends the hard deadline", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  config.agentRuntime.defaultIdleTimeoutMinutes = 1;
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: user.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_COMPLETED",
+  });
+  const run = await AgentRunModel.create({
+    organizationId: organization.id,
+    agentId: agent.id,
+    taskId: task.id,
+    actorKind: "user",
+    actorId: user.id,
+    actorUserId: user.id,
+    backend: "kubernetes",
+    runtimeScope: "local",
+    workloadName: `activity-${task.id}`,
+  });
+  await AgentRunModel.close({ id: run.id, logs: "complete" });
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 3_600_000);
+  const workspace = await AgentWorkspaceModel.create({
+    organizationId: organization.id,
+    agentId: agent.id,
+    actorKind: "user",
+    actorId: user.id,
+    backend: "kubernetes",
+    runtimeScope: "local",
+    workloadName: run.workloadName,
+    state: "idle",
+    lastTaskId: task.id,
+    lastActivityAt: new Date(now.getTime() - 120_000),
+    expiresAt,
+  });
+  const activity = vi
+    .spyOn(backend, "getLastWorkspaceActivity")
+    .mockResolvedValue(now);
+  const suspend = vi.spyOn(backend, "suspendWorkspace").mockResolvedValue();
+  vi.spyOn(backend, "releaseRun").mockResolvedValue();
+  const deletion = vi.spyOn(backend, "deleteWorkspace").mockResolvedValue();
+  await agentRunReconciler.reconcile();
+  expect(suspend).not.toHaveBeenCalled();
+  expect(
+    (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))
+      ?.lastActivityAt,
+  ).toEqual(now);
+  // An older delayed observation cannot move activity backwards.
+  await AgentWorkspaceModel.recordActivity(
+    workspace.id,
+    new Date(now.getTime() - 60_000),
+  );
+  expect(
+    (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))
+      ?.lastActivityAt,
+  ).toEqual(now);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(new Date(now.getTime() + 120_000));
+    await agentRunReconciler.reconcile();
+    expect(suspend).toHaveBeenCalledOnce();
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
+    ).toBe("suspended");
+    activity.mockClear();
+    activity.mockResolvedValue(new Date(expiresAt.getTime() + 1000));
+    vi.setSystemTime(new Date(expiresAt.getTime() + 1000));
+    await agentRunReconciler.reconcile();
+    expect(activity).not.toHaveBeenCalled();
+    expect(deletion).toHaveBeenCalledOnce();
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
+    ).toBe("deleted");
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))
+        ?.expiresAt,
+    ).toEqual(expiresAt);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 test("expiry retains the workspace until final transcript capture succeeds", async ({
   makeOrganization,

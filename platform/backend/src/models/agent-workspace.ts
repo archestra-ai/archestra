@@ -152,11 +152,16 @@ class AgentWorkspaceModel {
     return rows.length === 1;
   }
 
-  static async recordActivity(id: string): Promise<boolean> {
+  static async recordActivity(
+    id: string,
+    activityAt = new Date(),
+  ): Promise<boolean> {
     const table = schema.agentWorkspacesTable;
     const rows = await db
       .update(table)
-      .set({ lastActivityAt: new Date() })
+      .set({
+        lastActivityAt: sql`greatest(${table.lastActivityAt}, ${activityAt.toISOString()}::timestamp)`,
+      })
       .where(
         and(
           eq(table.id, id),

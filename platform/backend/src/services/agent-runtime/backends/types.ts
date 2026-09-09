@@ -114,6 +114,8 @@ export interface AgentRuntimeBackendDriver {
   ): Promise<void>;
   /** Wake compute without launching another Agent turn. */
   resumeWorkspace(session: AgentRunRecord): Promise<void>;
+  /** Last observed deliberate development activity; process output does not count. */
+  getLastWorkspaceActivity(session: AgentRunRecord): Promise<Date | null>;
   deleteWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void>;

@@ -298,6 +298,56 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       expect(JSON.stringify(resumedPolicy.spec.egress)).not.toContain(
         '"cidr":"0.0.0.0/0"',
       );
+      // A continuation can arrive while suspension is still deleting the old
+      // Pod. Hold deletion to ensure its terminal phase cannot fail the wake.
+      const retiringUid = JSON.parse(
+        kubectl(["get", "pod", name, "-o", "json"]),
+      ).metadata.uid;
+      kubectl([
+        "patch",
+        "pod",
+        name,
+        "--type=merge",
+        "-p",
+        JSON.stringify({
+          metadata: { finalizers: ["archestra.io/test-hold-deletion"] },
+        }),
+      ]);
+      await manager.suspendWorkspace(run);
+      await until(() =>
+        Boolean(
+          JSON.parse(kubectl(["get", "pod", name, "-o", "json"])).metadata
+            .deletionTimestamp,
+        ),
+      );
+      let wakeSettled = false;
+      let wakeError: unknown;
+      const resumeAttempt = manager
+        .resumeWorkspace(run)
+        .catch((error) => {
+          wakeError = error;
+        })
+        .finally(() => {
+          wakeSettled = true;
+        });
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        expect(wakeSettled).toBe(false);
+      } finally {
+        kubectl([
+          "patch",
+          "pod",
+          name,
+          "--type=merge",
+          "-p",
+          JSON.stringify({ metadata: { finalizers: [] } }),
+        ]);
+        await resumeAttempt;
+      }
+      expect(wakeError).toBeUndefined();
+      expect(
+        JSON.parse(kubectl(["get", "pod", name, "-o", "json"])).metadata.uid,
+      ).not.toBe(retiringUid);
       expect(exec("cat /home/node/recovery-result")).toBe("initialcontinued");
       expect(exec(`cat /var/run/archestra/turns/${task.id}.exit`).trim()).toBe(
         "0",

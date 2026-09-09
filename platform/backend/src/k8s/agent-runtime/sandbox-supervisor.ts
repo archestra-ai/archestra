@@ -21,8 +21,19 @@ tmux set-option -t agent mouse on
 tmux set-option -t agent remain-on-exit on
 tmux set-option -t agent @archestra_attention 0
 tmux set-option -t agent status-left '#{?#{==:#{@archestra_attention},1},#[fg=yellow,bold]#{@archestra_attention_label}#[default] ,}[#S] '
+tmux set-hook -g client-detached 'run-shell "date +%s > /var/run/archestra/development-activity"'
 
 while :; do
+  # Record human input, not pane output: a logging daemon must not keep an idle
+  # workspace alive. Persist it so detached clients still count at reaping time.
+  activity="$(tmux list-clients -F '#{client_activity}' 2>/dev/null | sort -nr | head -1)"
+  case "$activity" in
+    ''|*[!0-9]*) ;;
+    *)
+      previous="$(cat "$root/development-activity" 2>/dev/null || echo 0)"
+      if [ "$activity" -gt "$previous" ]; then printf '%s\n' "$activity" > "$root/development-activity"; fi
+      ;;
+  esac
   for request in "$root"/turns/*.request; do
     [ -f "$request" ] || continue
     turn="$(printf '%s' "$request" | sed 's/\.request$//')"

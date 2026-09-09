@@ -1,25 +1,27 @@
 "use client";
 
+import {
+  getRoleDisplayName,
+  PredefinedRoleNameSchema,
+} from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { RoleOptionLabel } from "@/components/role-type-icon";
 import {
   SettingsBlock,
   SettingsSaveBar,
 } from "@/components/settings/settings-block";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FieldDescription } from "@/components/ui/field-description";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
 import { useSession } from "@/lib/auth/auth.query";
@@ -48,10 +50,7 @@ export function ProfileCard() {
   const image = session?.user?.image ?? null;
 
   return (
-    <SettingsBlock
-      title="Profile"
-      description="Your personal details and organization role."
-    >
+    <SettingsBlock title="Profile">
       <div className="max-w-xl">
         <ProfileForm
           name={name}
@@ -92,19 +91,11 @@ function ProfileForm({
 
   return (
     <Form {...form}>
-      {/* Enter in the name field still submits; the visible save control is the
-          sticky footer bar shared with the /settings/* pages, which floats up
-          only once the name is dirty. */}
-      <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
-        {/* The avatar takes the gutter beside the first field only; the name
-            input flexes into what is left, so every input in the form still
-            ends on the same right edge. Display-only — there is no
-            self-service upload endpoint — and the name is not printed beside
-            it, since this field already holds it. */}
-        <div className="flex items-start gap-4">
-          <Avatar className="size-16 shrink-0">
+      <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
+        <div className="flex items-center gap-3">
+          <Avatar className="size-12 shrink-0">
             {image && <AvatarImage src={image} alt="" />}
-            <AvatarFallback className="text-base">
+            <AvatarFallback>
               {(name || email).slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
@@ -114,9 +105,6 @@ function ProfileForm({
             render={({ field }) => (
               <FormItem className="min-w-0 flex-1 gap-2">
                 <FormLabel>Name</FormLabel>
-                <FormDescription className="text-pretty">
-                  Shown next to you across the app.
-                </FormDescription>
                 <FormControl>
                   <Input
                     {...field}
@@ -130,24 +118,39 @@ function ProfileForm({
           />
         </div>
 
-        <ReadOnlyField
-          id="account-email"
-          label="Email"
-          value={email}
-          note="The address you sign in with. It can't be changed."
-        />
-
-        <ReadOnlyField
-          id="account-role"
-          label="Role"
-          value={role}
-          valueClassName="capitalize"
-          note="Set by an organization admin. You can't change your own role."
-        />
+        <dl className="divide-y text-sm">
+          <div className="grid gap-2 py-3 sm:grid-cols-[6rem_minmax(0,1fr)]">
+            <dt className="text-muted-foreground">Email</dt>
+            <dd className="min-w-0 break-all select-text">{email || "—"}</dd>
+          </div>
+          <div className="grid gap-2 py-3 sm:grid-cols-[6rem_minmax(0,1fr)]">
+            <dt className="text-muted-foreground">Roles</dt>
+            <dd className="space-y-2">
+              <ul aria-label="Assigned roles" className="flex flex-wrap gap-2">
+                {role
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+                  .map((value) => (
+                    <li key={value} className="rounded-md border px-2.5 py-1.5">
+                      <RoleOptionLabel
+                        predefined={
+                          PredefinedRoleNameSchema.safeParse(value).success
+                        }
+                        label={getRoleDisplayName(value)}
+                      />
+                    </li>
+                  ))}
+                {!role.trim() && <li>—</li>}
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                Managed by your organization admin.
+              </p>
+            </dd>
+          </div>
+        </dl>
       </form>
 
-      {/* Self-service edit: no RBAC gate, so the bar's permission set is empty
-          and it always renders as enabled once there are changes. */}
       <SettingsSaveBar
         hasChanges={form.formState.isDirty}
         isSaving={updateName.isPending}
@@ -159,65 +162,19 @@ function ProfileForm({
   );
 }
 
-/**
- * A value with no self-service endpoint behind it. It stays a real input so
- * the block matches the editable fields around it and the value can still be
- * selected and copied, but it keeps full-contrast text — muted text on a
- * muted fill drops under the contrast floor (WCAG AA 4.5:1) — and says why it
- * is locked.
- */
-function ReadOnlyField({
-  id,
-  label,
-  value,
-  note,
-  valueClassName,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  note: string;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
-      <FieldDescription className="text-pretty">{note}</FieldDescription>
-      <Input
-        id={id}
-        value={value || "—"}
-        readOnly
-        aria-readonly
-        className={`cursor-default bg-muted ${valueClassName ?? ""}`}
-      />
-    </div>
-  );
-}
-
 function ProfileSkeleton() {
   return (
-    <SettingsBlock
-      title="Profile"
-      description="Your personal details and organization role."
-    >
-      <div className="max-w-xl space-y-6">
-        <div className="flex items-start gap-4">
-          <Skeleton className="size-16 shrink-0 rounded-full" />
+    <SettingsBlock title="Profile">
+      <div className="max-w-xl space-y-5">
+        <div className="flex items-center gap-3">
+          <Skeleton className="size-12 shrink-0 rounded-full" />
           <div className="grid min-w-0 flex-1 gap-2">
             <Skeleton className="h-4 w-16" />
             <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-4 w-2/3" />
           </div>
         </div>
-        {["email", "role"].map((field) => (
-          <div key={field} className="grid gap-2">
-            <Skeleton className="h-4 w-16" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-        ))}
-        {/* No trailing button skeleton: the save control is a footer bar that
-            appears only once the name is edited, never on first paint. */}
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-16 w-full" />
       </div>
     </SettingsBlock>
   );

@@ -106,31 +106,23 @@ describe("ProfileCard", () => {
     expect(screen.queryByText("Original Name")).toBeNull();
   });
 
-  it("keeps email and role as read-only fields", () => {
+  it("shows email and individual assigned roles without editable controls", () => {
+    vi.mocked(useActiveMemberRole).mockReturnValue({
+      data: "admin, platform_admin,custom_reviewer",
+      isPending: false,
+    } as unknown as ReturnType<typeof useActiveMemberRole>);
+
     render(<ProfileCard />);
 
-    const email = screen.getByLabelText("Email");
-    expect(email).toHaveValue("admin@example.com");
-    expect(email).toHaveAttribute("readonly");
-
-    const role = screen.getByLabelText("Role");
-    expect(role).toHaveValue("admin");
-    expect(role).toHaveAttribute("readonly");
-
+    expect(screen.getByText("admin@example.com")).toBeVisible();
+    const roles = screen.getByRole("list", { name: "Assigned roles" });
+    expect(roles).toHaveTextContent("Admin");
+    expect(roles).toHaveTextContent("Platform Admin");
+    expect(roles).toHaveTextContent("custom reviewer");
+    expect(roles.querySelectorAll("li")).toHaveLength(3);
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
     expect(screen.getByLabelText("Name")).not.toHaveAttribute("readonly");
-  });
-
-  it("says why each locked field is locked", () => {
-    render(<ProfileCard />);
-
-    expect(
-      screen.getByText("The address you sign in with. It can't be changed."),
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        "Set by an organization admin. You can't change your own role.",
-      ),
-    ).toBeVisible();
   });
 
   it("hides the save bar until the name changes, then saves through it", async () => {

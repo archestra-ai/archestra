@@ -1,6 +1,5 @@
 "use client";
 
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { Users } from "lucide-react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsBlock } from "@/components/settings/settings-block";
@@ -29,7 +28,7 @@ export function MyTeamsCard() {
   return (
     <SettingsBlock
       title="My Teams"
-      description="Teams you belong to. Membership controls which agents and MCP servers you can use."
+      description="Teams you belong to. Membership controls which resources you can access."
       control={null}
       // Kept to the same column width as the profile fields above it, so the
       // two sections read as one stacked list rather than a full-width table.
@@ -72,7 +71,6 @@ export function MyTeamsCard() {
 
 function TeamRow({ team }: { team: Team }) {
   const memberCount = team.members?.length ?? 0;
-  const isAdmin = team.myRole === ADMIN_ROLE_NAME;
 
   return (
     <li className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -81,8 +79,8 @@ function TeamRow({ team }: { team: Team }) {
           <span className="truncate text-sm font-medium">{team.name}</span>
           {team.myRole && (
             <Badge
-              variant={isAdmin ? "secondary" : "outline"}
-              className="capitalize"
+              variant="outline"
+              className="rounded-md px-1.5 py-0 text-[10px] font-normal leading-4 text-muted-foreground capitalize"
             >
               {team.myRole}
             </Badge>

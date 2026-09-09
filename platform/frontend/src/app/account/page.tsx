@@ -3,12 +3,18 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { resolveLegacyAccountHref } from "@/app/account/_components/account-sections";
+import { MyTeamsCard } from "@/app/account/_components/my-teams-card";
 import { ProfileCard } from "@/components/settings/profile-card";
+import { SettingsSectionStack } from "@/components/settings/settings-block";
 
 /**
  * The Profile section, and the landing spot for the `/account?section=…` URLs
  * that predate these routes. Those are bookmarked and printed in docs, so they
  * are redirected rather than broken; anything else just renders Profile.
+ *
+ * My Teams sits directly below the profile fields here rather than in its own
+ * route: it is a short, read-only list every user wants beside the rest of
+ * their personal details, not a section worth a separate page.
  */
 export default function AccountProfilePage() {
   const router = useRouter();
@@ -27,5 +33,10 @@ export default function AccountProfilePage() {
 
   if (legacyHref && legacyHref !== "/account") return null;
 
-  return <ProfileCard />;
+  return (
+    <SettingsSectionStack className="space-y-5">
+      <ProfileCard />
+      <MyTeamsCard />
+    </SettingsSectionStack>
+  );
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.55](https://github.com/archestra-ai/archestra/compare/platform-v1.3.54...platform-v1.3.55) (2026-09-09)
+
+
+### Features
+
+* **frontend:** backport model table and URL filters to release/1.3 ([#7763](https://github.com/archestra-ai/archestra/issues/7763)) ([628bc74](https://github.com/archestra-ai/archestra/commit/628bc74fc1de7e889ce9299489a400f4f2ab3d00))
+* **frontend:** backport responsive table filters and model spacing to release/1.3 ([#7767](https://github.com/archestra-ai/archestra/issues/7767)) ([07e7ad7](https://github.com/archestra-ai/archestra/commit/07e7ad7889bad9178ef1fd06523408b9b24a74df))
+
+
+### Bug Fixes
+
+* **mcp:** align registry view toggle order on release/1.3 ([#7772](https://github.com/archestra-ai/archestra/issues/7772)) ([1566edb](https://github.com/archestra-ai/archestra/commit/1566edbd39b9a0bd5d37d96be8e130a5af18dea8))
+
 ## [1.3.54](https://github.com/archestra-ai/archestra/compare/platform-v1.3.53...platform-v1.3.54) (2026-09-09)
 
 

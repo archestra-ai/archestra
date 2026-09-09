@@ -179,7 +179,7 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
   {
     type: "web_crawler",
     label: CONNECTOR_DISPLAY_LABELS.web_crawler,
-    description: "Crawl and sync static HTML pages",
+    description: "Crawl and sync website content",
   },
   {
     type: "perforce",
@@ -261,7 +261,8 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       fieldName: "config.startUrl",
       label: "Start URL",
       placeholder: "https://docs.example.com/",
-      description: "First page to crawl. Crawling stays on the same host.",
+      description:
+        "First page to crawl. Add more starting URLs and allowed origins in Advanced.",
     },
     perforce: {
       fieldName: "config.serverUrl",

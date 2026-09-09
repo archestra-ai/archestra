@@ -503,6 +503,38 @@ export const WebCrawlerConfigSchema = z.object({
     .transform(ensureProtocol)
     .refine(isValidUrl, { message: "startUrl must be a valid URL" })
     .refine(isHttpUrl, { message: "startUrl must use HTTP or HTTPS" }),
+  renderJavaScript: z.boolean().optional(),
+  renderWaitMs: z.number().int().min(0).max(10_000).optional(),
+  additionalStartUrls: z
+    .array(
+      z.url().refine(isHttpUrl, {
+        message: "Start URLs must use HTTP or HTTPS",
+      }),
+    )
+    .max(100)
+    .optional(),
+  allowedOrigins: z
+    .array(
+      z.url().refine(
+        (value) => {
+          const url = new URL(value);
+          return (
+            isHttpUrl(value) &&
+            url.pathname === "/" &&
+            !url.search &&
+            !url.hash &&
+            !url.username &&
+            !url.password
+          );
+        },
+        {
+          message:
+            "Use an HTTP(S) origin without a path, query, or credentials",
+        },
+      ),
+    )
+    .max(100)
+    .optional(),
   includePathPrefixes: z.array(z.string().min(1)).optional(),
   excludePathPatterns: z.array(z.string().min(1)).optional(),
   contentSelector: z.string().min(1).max(500).optional(),

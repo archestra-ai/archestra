@@ -184,7 +184,7 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
     });
 
-    it("renders the Advanced section collapsed by default", async () => {
+    it("opens on General with advanced fields hidden", async () => {
       await renderConfigureStep();
 
       expect(
@@ -193,7 +193,7 @@ describe("CreateConnectorDialog", () => {
       // Cloud Instance is now in the main form, not Advanced
       expect(screen.getByText("Cloud Instance")).toBeInTheDocument();
       // Advanced-only fields should not be visible when collapsed
-      expect(screen.queryByText(/Project Keys/)).not.toBeInTheDocument();
+      expect(screen.getByText(/Project Keys/)).not.toBeVisible();
     });
   });
 
@@ -209,7 +209,7 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByText(/JQL Query/)).toBeInTheDocument();
     });
 
-    it("hides advanced fields when collapsed", async () => {
+    it("preserves inputs when switching between General and Advanced", async () => {
       const { user } = await renderConfigureStep();
 
       // Expand
@@ -218,11 +218,13 @@ describe("CreateConnectorDialog", () => {
         expect(screen.getByText(/Project Keys/)).toBeInTheDocument();
       });
 
-      // Collapse
-      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await user.type(screen.getByLabelText(/Project Keys/), "DOCS");
+      await user.click(screen.getByRole("button", { name: "General" }));
       await waitFor(() => {
-        expect(screen.queryByText(/Project Keys/)).not.toBeInTheDocument();
+        expect(screen.getByText(/Project Keys/)).not.toBeVisible();
       });
+      await user.click(screen.getByRole("button", { name: "Advanced" }));
+      expect(screen.getByLabelText(/Project Keys/)).toHaveValue("DOCS");
     });
 
     it("does not duplicate the URL field inside Advanced section", async () => {
@@ -243,9 +245,7 @@ describe("CreateConnectorDialog", () => {
 
       expect(screen.getByText("Owner")).toBeInTheDocument();
       expect(screen.getByText("Authentication Method")).toBeInTheDocument();
-      expect(
-        screen.queryByText("Labels to Skip (optional)"),
-      ).not.toBeInTheDocument();
+      expect(screen.getByText("Labels to Skip (optional)")).not.toBeVisible();
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
 
@@ -284,6 +284,17 @@ describe("CreateConnectorDialog", () => {
   });
 
   describe("form validation", () => {
+    it("returns to General when required fields are missing on submit from Advanced", async () => {
+      const { user } = await renderConfigureStep();
+      await user.click(screen.getByRole("button", { name: "Advanced" }));
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+      expect(await screen.findByText("Name is required")).toBeVisible();
+      expect(screen.getByLabelText(/^Name$/)).toBeVisible();
+      expect(mockMutateAsync).not.toHaveBeenCalled();
+    });
+
     it("shows validation error when name is empty", async () => {
       const { user } = await renderConfigureStep();
 
@@ -552,6 +563,18 @@ describe("CreateConnectorDialog", () => {
           screen.getByLabelText(/Include Path Prefixes/),
         ).toBeInTheDocument();
       });
+      fireEvent.change(screen.getByLabelText(/Additional Start URLs/), {
+        target: { value: "https://news.example.org/" },
+      });
+      fireEvent.change(screen.getByLabelText(/Additional Allowed Origins/), {
+        target: { value: "https://blog.example.org" },
+      });
+      await user.click(
+        screen.getByRole("switch", { name: "Render JavaScript" }),
+      );
+      fireEvent.change(screen.getByLabelText(/Render Wait/), {
+        target: { value: "2000" },
+      });
       fireEvent.change(screen.getByLabelText(/Include Path Prefixes/), {
         target: { value: "/docs/, /guides/" },
       });
@@ -579,6 +602,10 @@ describe("CreateConnectorDialog", () => {
       expect(call[0].config).toMatchObject({
         type: "web_crawler",
         startUrl: "https://docs.example.com/docs/",
+        additionalStartUrls: ["https://news.example.org/"],
+        allowedOrigins: ["https://blog.example.org"],
+        renderJavaScript: true,
+        renderWaitMs: 2000,
         includePathPrefixes: ["/docs/", "/guides/"],
         excludeSelectors: [".sidebar", ".toc"],
         maxPages: 100,
@@ -1166,8 +1193,7 @@ describe("CreateConnectorDialog", () => {
         ).toBeInTheDocument();
       });
 
-      // The authentication method lives on the main form: switching it must
-      // not require opening Advanced.
+      await user.click(screen.getByRole("button", { name: "General" }));
       await user.click(
         screen.getByRole("combobox", { name: "Authentication Method" }),
       );

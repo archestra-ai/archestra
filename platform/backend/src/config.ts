@@ -3390,6 +3390,9 @@ const config = {
       : undefined,
   },
   kb: {
+    crawlerChromiumPath:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CRAWLER_CHROMIUM_PATH?.trim() ||
+      undefined,
     // BETA gate for the auto-sync-permissions connector visibility: the
     // permission-sync passes, the connector Permissions tab APIs, and manual
     // member overrides. Off by default; a blank value falls back to the

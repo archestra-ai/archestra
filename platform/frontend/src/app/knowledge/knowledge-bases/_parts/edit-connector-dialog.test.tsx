@@ -291,7 +291,7 @@ describe("EditConnectorDialog - Jira admin API key", () => {
 
     // Correcting a typo'd credential email must not be silently dropped just
     // because the token field is left empty to keep the existing token.
-    fireEvent.change(screen.getByLabelText(/Email/), {
+    fireEvent.change(screen.getByRole("textbox", { name: /^Email/ }), {
       target: { value: "correct@example.com" },
     });
 

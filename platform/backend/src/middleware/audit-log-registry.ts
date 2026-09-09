@@ -438,6 +438,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       KnowledgeBaseModel.findIdentityForAudit(id, orgId),
   },
 
+  "/api/knowledge-files/:fileId/content": {
+    resourceType: "knowledgeFile",
+    action: "knowledgeFile.content_upserted",
+    resourceIdParam: "fileId",
+    fetchById: (id, orgId) => KbFileModel.findByIdForAudit(id, orgId),
+  },
   // Knowledge file repository
   "/api/knowledge-files": {
     resourceType: "knowledgeFile",

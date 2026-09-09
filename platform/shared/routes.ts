@@ -747,6 +747,7 @@ export const RouteId = {
   GetKnowledgeFiles: "getKnowledgeFiles",
   GetKnowledgeFileLabelValues: "knowledgeFileLabelValues",
   GetKnowledgeFileLabelKeys: "knowledgeFileLabelKeys",
+  UpsertKnowledgeFile: "upsertKnowledgeFile",
   UploadKnowledgeFile: "uploadKnowledgeFile",
   GetKnowledgeFileContent: "getKnowledgeFileContent",
   DeleteKnowledgeFile: "deleteKnowledgeFile",

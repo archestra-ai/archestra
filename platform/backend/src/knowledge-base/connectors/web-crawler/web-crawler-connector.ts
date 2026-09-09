@@ -5,9 +5,11 @@ import {
   type CheerioCrawlingContext,
   Configuration,
 } from "@crawlee/cheerio";
+import { load } from "cheerio";
 import ipaddr from "ipaddr.js";
 import safeRegex from "safe-regex2";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -60,7 +62,7 @@ type ExtractedPage = {
   content: string;
   canonicalUrl: string;
 };
-type CrawlerCheerioApi = CheerioCrawlingContext["$"];
+type CrawlerCheerioApi = ReturnType<typeof load>;
 type CrawlerCheerioSelection = ReturnType<CrawlerCheerioApi>;
 
 export class WebCrawlerConnector extends BaseConnector {
@@ -108,17 +110,24 @@ export class WebCrawlerConnector extends BaseConnector {
       label: "web crawler",
       probe: async () => {
         let sawPage = false;
+        let failure: string | undefined;
         const crawler = this.createCrawler({
           config: { ...parsed, maxPages: 1, maxDepth: 0 },
           onDocument: () => {
             sawPage = true;
           },
-          onSkipped: () => {},
+          onSkipped: (item) => {
+            failure = item.reason;
+          },
         });
 
-        await crawler.run([normalizeCrawlUrl(parsed.startUrl)]);
+        await crawler.run(getStartUrls(parsed));
         if (!sawPage) {
-          throw new Error("Start URL did not return indexable HTML content");
+          throw new Error(
+            parsed.renderJavaScript && failure
+              ? failure
+              : "Start URL did not return indexable HTML content",
+          );
         }
       },
     });
@@ -157,7 +166,7 @@ export class WebCrawlerConnector extends BaseConnector {
     });
 
     const crawl = crawler
-      .run([normalizeCrawlUrl(parsed.startUrl)])
+      .run(getStartUrls(parsed))
       .then(() => batcher.finish())
       .catch((error: unknown) => batcher.fail(error));
 
@@ -178,15 +187,10 @@ export class WebCrawlerConnector extends BaseConnector {
       item: NonNullable<ConnectorSyncBatch["skipped"]>[number],
     ) => void;
   }): CheerioCrawler {
-    const startUrl = normalizeCrawlUrl(params.config.startUrl);
-    const allowedPathPrefixes = buildAllowedPathPrefixes(
-      params.config,
-      startUrl,
-    );
+    const allowedOrigins = getAllowedOrigins(params.config);
     const excludePathPatterns = compileExcludePathPatterns(
       params.config.excludePathPatterns,
     );
-    const startOrigin = new URL(startUrl).origin;
     let previousRequestCompletedAt = 0;
 
     return new CheerioCrawler(
@@ -213,15 +217,8 @@ export class WebCrawlerConnector extends BaseConnector {
               "User-Agent": params.config.userAgent ?? getDefaultUserAgent(),
             };
 
-            // got follows redirects internally, bypassing the per-request SSRF
-            // and scope checks above. Reject cross-origin and out-of-scope
-            // redirects without dialing the target (so an unreachable external
-            // host can't hang the crawl, and a redirect can't pull in a path or
-            // origin the crawl was scoped to exclude), and re-run the SSRF check
-            // on the remaining same-origin, in-scope redirects. Origin — not
-            // just hostname — matches the same-origin invariant enforced on
-            // discovered links, so a redirect to another port or scheme is
-            // refused too.
+            // Redirects bypass preNavigationHooks. Enforce the configured
+            // origins, paths, and network checks before dialing each target.
             gotOptions.hooks = {
               ...gotOptions.hooks,
               beforeRedirect: [
@@ -229,7 +226,7 @@ export class WebCrawlerConnector extends BaseConnector {
                 async (redirectOptions) => {
                   if (!redirectOptions.url) return;
                   const target = new URL(redirectOptions.url);
-                  if (target.origin !== startOrigin) {
+                  if (!allowedOrigins.has(target.origin)) {
                     throw new Error(
                       `Refusing to follow cross-origin redirect to ${target.href}`,
                     );
@@ -238,7 +235,10 @@ export class WebCrawlerConnector extends BaseConnector {
                     !isPathInScope({
                       pathname: target.pathname,
                       search: target.search,
-                      allowedPathPrefixes,
+                      allowedPathPrefixes: getPathPrefixes(
+                        params.config,
+                        target.href,
+                      ),
                       excludePathPatterns,
                     })
                   ) {
@@ -259,8 +259,17 @@ export class WebCrawlerConnector extends BaseConnector {
         requestHandler: async (context) => {
           try {
             const depth = getRequestDepth(context.request.userData);
+            let $ = load(context.$?.html() ?? "");
+            if (params.config.renderJavaScript) {
+              const rendered = await renderPage({
+                url: context.request.loadedUrl ?? context.request.url,
+                config: params.config,
+              });
+              $ = load(rendered.html);
+              context.request.loadedUrl = rendered.url;
+            }
             const extracted = extractPage({
-              $: context.$,
+              $,
               requestUrl: context.request.loadedUrl ?? context.request.url,
               config: params.config,
             });
@@ -287,9 +296,9 @@ export class WebCrawlerConnector extends BaseConnector {
 
             await enqueueAllowedLinks({
               context,
-              startUrl,
+              $,
+              config: params.config,
               currentDepth: depth,
-              allowedPathPrefixes,
               excludePathPatterns,
             });
           } finally {
@@ -330,31 +339,33 @@ async function validateParsedConfig(params: {
   }
 
   try {
-    await assertPublicCrawlUrl({
-      url: params.config.startUrl,
-      allowPrivateNetwork: params.allowPrivateNetwork,
-    });
+    for (const url of [
+      ...getStartUrls(params.config),
+      ...(params.config.allowedOrigins ?? []),
+    ]) {
+      await assertPublicCrawlUrl({
+        url,
+        allowPrivateNetwork: params.allowPrivateNetwork,
+      });
+    }
     validateIncludePathPrefixOrigins(params.config);
     compileExcludePathPatterns(params.config.excludePathPatterns);
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
 
-  const normalizedStartUrl = normalizeCrawlUrl(params.config.startUrl);
-  if (
-    !isAllowedUrl({
-      url: normalizedStartUrl,
-      startUrl: normalizedStartUrl,
-      allowedPathPrefixes: buildAllowedPathPrefixes(
-        params.config,
-        normalizedStartUrl,
-      ),
-      excludePathPatterns: compileExcludePathPatterns(
-        params.config.excludePathPatterns,
-      ),
-    })
-  ) {
-    return "Start URL is excluded by the configured crawl scope";
+  for (const url of getStartUrls(params.config)) {
+    if (
+      !isAllowedUrl({
+        url,
+        config: params.config,
+        excludePathPatterns: compileExcludePathPatterns(
+          params.config.excludePathPatterns,
+        ),
+      })
+    ) {
+      return "Start URL is excluded by the configured crawl scope";
+    }
   }
 
   return null;
@@ -392,28 +403,33 @@ function extractPage(params: {
 
 async function enqueueAllowedLinks(params: {
   context: CheerioCrawlingContext;
-  startUrl: string;
+  $: CrawlerCheerioApi;
+  config: WebCrawlerConfig;
   currentDepth: number;
-  allowedPathPrefixes: string[];
   excludePathPatterns: RegExp[];
 }): Promise<void> {
-  const urls = params.context
+  const urls = params
     .$("a[href]")
-    .map((_idx, el) => params.context.$(el).attr("href"))
+    .map((_idx, el) => params.$(el).attr("href"))
     .get()
-    .map((href) => normalizeDiscoveredUrl(href, params.context.request.url))
+    .map((href) =>
+      normalizeDiscoveredUrl(
+        href,
+        params.context.request.loadedUrl ?? params.context.request.url,
+      ),
+    )
     .filter((url): url is string => Boolean(url))
     .filter((url) =>
       isAllowedUrl({
         url,
-        startUrl: params.startUrl,
-        allowedPathPrefixes: params.allowedPathPrefixes,
+        config: params.config,
         excludePathPatterns: params.excludePathPatterns,
       }),
     );
 
   await params.context.enqueueLinks({
     urls,
+    strategy: "all",
     userData: { depth: params.currentDepth + 1 },
   });
 }
@@ -473,16 +489,14 @@ function buildAllowedPathPrefixes(
 }
 
 function validateIncludePathPrefixOrigins(config: WebCrawlerConfig): void {
-  const startOrigin = new URL(config.startUrl).origin;
+  const allowedOrigins = getAllowedOrigins(config);
 
   for (const prefix of config.includePathPrefixes ?? []) {
     if (!/^https?:\/\//i.test(prefix)) continue;
 
     const prefixUrl = new URL(prefix);
-    if (prefixUrl.origin !== startOrigin) {
-      throw new Error(
-        "Include path prefix URLs must use the same origin as the start URL",
-      );
+    if (!allowedOrigins.has(prefixUrl.origin)) {
+      throw new Error("Include path prefix URLs must use an allowed origin");
     }
   }
 }
@@ -514,20 +528,18 @@ function compileExcludePathPatterns(patterns: string[] | undefined): RegExp[] {
 
 function isAllowedUrl(params: {
   url: string;
-  startUrl: string;
-  allowedPathPrefixes: string[];
+  config: WebCrawlerConfig;
   excludePathPatterns: RegExp[];
 }): boolean {
   const url = new URL(params.url);
-  const startUrl = new URL(params.startUrl);
 
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-  if (url.origin !== startUrl.origin) return false;
+  if (!getAllowedOrigins(params.config).has(url.origin)) return false;
 
   return isPathInScope({
     pathname: url.pathname,
     search: url.search,
-    allowedPathPrefixes: params.allowedPathPrefixes,
+    allowedPathPrefixes: getPathPrefixes(params.config, params.url),
     excludePathPatterns: params.excludePathPatterns,
   });
 }
@@ -751,5 +763,119 @@ class CrawlBatcher implements AsyncIterable<ConnectorSyncBatch> {
     for (const waiter of this.waiters.splice(0)) {
       waiter();
     }
+  }
+}
+
+function getStartUrls(config: WebCrawlerConfig): string[] {
+  return [
+    ...new Set(
+      [config.startUrl, ...(config.additionalStartUrls ?? [])].map(
+        normalizeCrawlUrl,
+      ),
+    ),
+  ];
+}
+
+function getAllowedOrigins(config: WebCrawlerConfig): Set<string> {
+  return new Set(
+    [...getStartUrls(config), ...(config.allowedOrigins ?? [])].map(
+      (url) => new URL(url).origin,
+    ),
+  );
+}
+
+function getPathPrefixes(config: WebCrawlerConfig, url: string): string[] {
+  const origin = new URL(url).origin;
+  if (config.includePathPrefixes?.length) {
+    return config.includePathPrefixes
+      .filter(
+        (prefix) =>
+          !/^https?:\/\//i.test(prefix) || new URL(prefix).origin === origin,
+      )
+      .map(normalizePathPrefix);
+  }
+  const seeds = getStartUrls(config).filter(
+    (seed) => new URL(seed).origin === origin,
+  );
+  return seeds.length
+    ? seeds.flatMap((seed) => buildAllowedPathPrefixes(config, seed))
+    : ["/"];
+}
+
+async function renderPage(params: {
+  url: string;
+  config: WebCrawlerConfig;
+}): Promise<{ html: string; url: string }> {
+  const { chromium } = await import("playwright-core");
+  const browser = await chromium.launch({
+    executablePath: config.kb.crawlerChromiumPath,
+    chromiumSandbox: true,
+  });
+  try {
+    const context = await browser.newContext({
+      serviceWorkers: "block",
+      acceptDownloads: false,
+      userAgent: params.config.userAgent ?? getDefaultUserAgent(),
+    });
+    await context.routeWebSocket("**/*", (socket) => socket.close());
+    const page = await context.newPage();
+    const excludePathPatterns = compileExcludePathPatterns(
+      params.config.excludePathPatterns,
+    );
+    await context.route("**/*", async (route) => {
+      const request = route.request();
+      try {
+        const url = new URL(request.url());
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          await route.abort();
+          return;
+        }
+        await assertPublicCrawlUrl({
+          url: url.href,
+          allowPrivateNetwork: params.config.allowPrivateNetwork ?? false,
+        });
+        if (
+          request.isNavigationRequest() &&
+          !isAllowedUrl({
+            url: url.href,
+            config: params.config,
+            excludePathPatterns,
+          })
+        ) {
+          await route.abort();
+          return;
+        }
+        await route.continue();
+      } catch {
+        await route.abort();
+      }
+    });
+    const response = await page.goto(params.url, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    if (!response?.ok())
+      throw new Error("Rendered page did not return a successful response");
+    if (params.config.contentSelector) {
+      await page
+        .locator(params.config.contentSelector)
+        .first()
+        .waitFor({ state: "attached", timeout: 10_000 });
+    }
+    await sleep(params.config.renderWaitMs ?? 1_000);
+    if (
+      !isAllowedUrl({
+        url: page.url(),
+        config: params.config,
+        excludePathPatterns,
+      })
+    ) {
+      throw new Error(
+        "Rendered page navigated outside the configured crawl scope",
+      );
+    }
+    return { html: await page.content(), url: page.url() };
+  } finally {
+    await browser.close();
   }
 }

@@ -146,6 +146,46 @@ class KbFileModel {
     });
   }
 
+  /** Client-chosen UUID makes external uploads retryable without filename matching. */
+  static async upsertContent(params: {
+    id: string;
+    organizationId: string;
+    uploadedBy: string;
+    filename: string;
+    mimeType: string;
+    data: Buffer;
+    contentHash: string;
+  }) {
+    const content = {
+      filename: params.filename,
+      mimeType: params.mimeType,
+      data: params.data,
+      sizeBytes: params.data.byteLength,
+      contentHash: params.contentHash,
+      storageProvider: "db" as const,
+      objectKey: null,
+    };
+    const [file] = await db
+      .insert(schema.kbFilesTable)
+      .values({
+        ...content,
+        id: params.id,
+        organizationId: params.organizationId,
+        uploadedBy: params.uploadedBy,
+      })
+      .onConflictDoUpdate({
+        target: schema.kbFilesTable.id,
+        set: content,
+        setWhere: and(
+          eq(schema.kbFilesTable.organizationId, params.organizationId),
+          eq(schema.kbFilesTable.uploadedBy, params.uploadedBy),
+          eq(schema.kbFilesTable.storageProvider, "db"),
+        ),
+      })
+      .returning();
+    return file ?? null;
+  }
+
   static async update(params: {
     id: string;
     organizationId: string;

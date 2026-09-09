@@ -10,6 +10,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface WebCrawlerConfigFieldsProps {
@@ -26,6 +27,72 @@ export function WebCrawlerConfigFields({
   const appName = useAppName();
   return (
     <div className="space-y-4">
+      {[
+        {
+          name: "additionalStartUrls",
+          label: "Additional Start URLs",
+          description:
+            "Comma-separated seed URLs. All seeds share the page and depth limits.",
+          placeholder: "https://example.org/news/",
+        },
+        {
+          name: "allowedOrigins",
+          label: "Additional Allowed Origins",
+          description:
+            "Comma-separated origins to follow when linked. Include the scheme and optional port, without paths.",
+          placeholder: "https://news.example.org",
+        },
+      ].map(({ name, label, description, placeholder }) => (
+        <FormField
+          key={name}
+          control={form.control}
+          name={`${prefix}.${name}`}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{label} (optional)</FormLabel>
+              <FormDescription>{description}</FormDescription>
+              <FormControl>
+                <Input
+                  {...field}
+                  placeholder={placeholder}
+                  value={formatArrayValue(field.value)}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      ))}
+      <FormField
+        control={form.control}
+        name={`${prefix}.renderJavaScript`}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Render JavaScript</FormLabel>
+            <FormDescription>
+              Use Chromium for pages that load content with JavaScript. Requires
+              a browser installed on the server.
+            </FormDescription>
+            <FormControl>
+              <Switch
+                checked={field.value ?? false}
+                onCheckedChange={field.onChange}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      {form.watch(`${prefix}.renderJavaScript`) && (
+        <NumberField
+          form={form}
+          name={`${prefix}.renderWaitMs`}
+          label="Render Wait"
+          placeholder="1000"
+          description="Milliseconds to wait after loading the page, up to 10000."
+        />
+      )}
+
       <FormField
         control={form.control}
         name={`${prefix}.includePathPrefixes`}

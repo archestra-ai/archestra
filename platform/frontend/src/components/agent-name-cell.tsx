@@ -19,6 +19,7 @@ export function AgentNameCell({
   description,
   labels,
   extraBadges,
+  icon,
 }: {
   name: string;
   /**
@@ -30,11 +31,17 @@ export function AgentNameCell({
   description?: string | null;
   labels?: AgentLabels;
   extraBadges?: ReactNode;
+  /**
+   * The entity's icon, rendered inline before the name (as the knowledge
+   * connectors table does) rather than in its own column, so the table isn't
+   * spending a fixed slot of horizontal space on it.
+   */
+  icon?: ReactNode;
 }) {
   const hasMetadata = !!extraBadges || !!labels?.length || builtIn;
   const displayName = truncateName(name);
 
-  return (
+  const content = (
     <div className="font-medium">
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -71,6 +78,15 @@ export function AgentNameCell({
           </div>
         )}
       </div>
+    </div>
+  );
+
+  if (!icon) return content;
+
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="flex shrink-0 items-center justify-center">{icon}</span>
+      <div className="min-w-0">{content}</div>
     </div>
   );
 }

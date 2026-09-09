@@ -42363,7 +42363,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Resolve and validate an outbound A2A Agent Card without saving it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
+        "description": "Resolve and validate an outbound A2A Agent Card without saving it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "requestBody": {
           "required": true,
           "content": {
@@ -42827,7 +42827,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:create"
+            "agentSettings:update"
           ]
         }
       }
@@ -43292,7 +43292,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Configure an outbound A2A agent and its default connection.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
+        "description": "Configure an outbound A2A agent and its default connection.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "requestBody": {
           "required": true,
           "content": {
@@ -43894,7 +43894,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:create"
+            "agentSettings:update"
           ]
         }
       }
@@ -43905,7 +43905,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:read`: View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "parameters": [
           {
             "schema": {
@@ -44309,7 +44309,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "agentSettings:read"
           ]
         }
       }
@@ -44320,7 +44320,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Update an outbound A2A agent, refresh its card, or rotate its credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:update`: Modify agent configuration and settings",
+        "description": "Update an outbound A2A agent, refresh its card, or rotate its credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "requestBody": {
           "required": true,
           "content": {
@@ -44925,7 +44925,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:update"
+            "agentSettings:update"
           ]
         }
       },
@@ -44934,7 +44934,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Delete an outbound A2A agent that is not assigned as a subagent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:delete`: Delete agents",
+        "description": "Delete an outbound A2A agent that is not assigned as a subagent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "parameters": [
           {
             "schema": {
@@ -45199,7 +45199,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:delete"
+            "agentSettings:update"
           ]
         }
       }

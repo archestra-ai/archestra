@@ -28,7 +28,10 @@ const a2aRemoteAgentsTable = pgTable(
     description: text("description"),
     discoveryMode: text("discovery_mode").$type<A2aDiscoveryMode>().notNull(),
     discoveryUrl: text("discovery_url"),
-    /** Validated, normalized A2A Agent Card. Never contains credentials. */
+    /**
+     * Validated, normalized A2A Agent Card. Never contains Archestra-managed
+     * connection credentials; remote card metadata remains untrusted.
+     */
     agentCard: jsonb("agent_card").$type<Record<string, unknown>>().notNull(),
     cardHash: text("card_hash").notNull(),
     etag: text("etag"),

@@ -2579,7 +2579,11 @@ export function AgentForm({
       return;
     }
     if (!hasCompleteLlmSelection) {
-      toast.error("Select a model for the selected API key");
+      toast.error(
+        llmApiKeyId
+          ? "Select a model for the selected API key"
+          : "Select an API key for the selected model",
+      );
       return;
     }
     // Edit mode writes the assignments first, against an id that already

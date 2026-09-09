@@ -461,7 +461,7 @@ function PluginsList() {
             new Date(left.original.updatedAt).getTime() -
             new Date(right.original.updatedAt).getTime(),
         }),
-      size: 300,
+      size: 240,
       header: "Details",
       cell: ({ row }) => {
         const plugin = row.original;
@@ -505,30 +505,29 @@ function PluginsList() {
                   <span>Manual</span>
                 </>
               )}
-              {plugin.pendingSourceSha ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className="ml-1 shrink-0 border-amber-500/40 text-amber-600 dark:text-amber-400"
-                    >
-                      Update available
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    A new source commit is waiting for review on the plugin
-                    page.
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
             </div>
+            {plugin.pendingSourceSha ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="border-amber-500/40 text-amber-600 dark:text-amber-400"
+                  >
+                    Update available
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  A new source commit is waiting for review on the plugin page.
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
           </div>
         );
       },
     },
     {
       id: "visibility",
-      size: 130,
+      size: 190,
       header: "Visibility",
       cell: ({ row }) => (
         <ResourceVisibilityBadge
@@ -896,12 +895,7 @@ function PluginsList() {
                     onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
                     rangeSelection={rangeSelection}
                     isLoading={isFetching}
-                    fixedWidthColumnIds={[
-                      "compatibility",
-                      "visibility",
-                      "source",
-                      "updatedAt",
-                    ]}
+                    fixedWidthColumnIds={["details", "visibility"]}
                     flexibleColumnIds={["displayName"]}
                   />
                 }

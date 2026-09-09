@@ -25,7 +25,10 @@ export function ConnectWithAi() {
     >
       <div className="w-full max-w-3xl">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Connect your AI
+          Connect your{" "}
+          <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            AI
+          </span>
         </h1>
         <p className="mt-3 text-base text-muted-foreground">
           Paste this into your coding agent. It handles the setup.

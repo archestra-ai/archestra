@@ -68,7 +68,12 @@ export default function ConnectionPage() {
     <PageLayout
       title={
         isApproval ? (
-          `Connect ${requestedClient?.label ?? "your client"}`
+          <>
+            Connect{" "}
+            <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+              {requestedClient?.label ?? "your client"}
+            </span>
+          </>
         ) : (
           <>
             Give Your AI{" "}
@@ -78,6 +83,11 @@ export default function ConnectionPage() {
             access to tools
           </>
         )
+      }
+      documentTitle={
+        isApproval
+          ? `Connect ${requestedClient?.label ?? "your client"}`
+          : "Connection"
       }
       actionButton={
         !isApproval ? (

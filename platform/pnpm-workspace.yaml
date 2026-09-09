@@ -55,13 +55,8 @@ overrides:
   # CVE-2026-54466 (GHSA-xv26-6w52-cph6, message corruption via protocol
   # length-header abuse) fixed in 0.7.5, the package's latest release.
   websocket-driver: '>=0.7.5'
-  # CVE-2026-64641/-64642/-64645/-64649 (4× HIGH: SSRF, improper authorization,
-  # excessive iteration) fixed in 16.2.11. The frontend's canary pin already
-  # has the fixes; this lifts the second next copy pnpm resolves for
-  # better-auth's optional `next` peer in the backend image. The <16.3.0
-  # selector cannot match the frontend's 16.3.0-canary.* pin (semver ranges
-  # without a prerelease comparator never match prerelease versions).
-  'next@<16.3.0': '>=16.2.11 <16.3.0'
+  # CVE-2026-75604 / GHSA-2xp9-vwfh-vxw4 (CRITICAL) fixed in 16.3.3.
+  next: 16.3.3
   # form-data 3.0.5 / 4.0.6 fix CVE-2026-12143 (HIGH). Floors rather than exact
   # pins, and bounded per major so a <4 consumer is not jumped onto 4.x.
   form-data@>=4: '>=4.0.6'
@@ -84,7 +79,8 @@ overrides:
   # force-jumped onto the js-yaml 5 major.
   # Then GHSA-5p4m-2wfm-xmqj (HIGH, quadratic CPU in !!omap resolution) fixed
   # in 4.3.1.
-  js-yaml: '>=4.3.1 <5'
+  # CVE-2026-84375: resource consumption fixed in 4.3.2.
+  js-yaml: '>=4.3.2 <5'
   qs: 6.15.2
   d3-path: 3.1.0
   # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25.
@@ -112,9 +108,11 @@ overrides:
   # floor can't carry the backend's upstream dispatcher onto undici 8.x, which
   # is a major-version change and not this pin's business.
   undici: '>=7.29.0 <8'
-  '@xmldom/xmldom': '>=0.9.10'
-  mammoth>@xmldom/xmldom: 0.8.13
-  samlify>@xmldom/xmldom: 0.8.13
+  # CVE-2026-83605 through CVE-2026-83619: XML injection/DoS fixes.
+  # Preserve the consumers' release lines.
+  '@xmldom/xmldom': 0.9.12
+  mammoth>@xmldom/xmldom: 0.8.15
+  samlify>@xmldom/xmldom: 0.8.15
   path-to-regexp: '>=8.4.0'
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
@@ -152,7 +150,8 @@ overrides:
   '@grpc/grpc-js': '>=1.14.4'
   # GHSA-f88m-g3jw-g9cj (HIGH, dependency on vulnerable third-party component)
   # fixed in 0.35.0. Transitive-only (optional dep of next's image optimizer).
-  sharp: '>=0.35.0'
+  # GHSA-rgj7-g3m4-5g8c: heap buffer overflow fixed in 0.35.4.
+  sharp: 0.35.4
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:

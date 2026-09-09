@@ -58,6 +58,9 @@ const nextConfig: NextConfig = {
     incomingRequests: true,
   },
   experimental: {
+    // Avoid evaluating every shared schema and SDK when a page imports a constant.
+    optimizePackageImports:
+      process.env.NODE_ENV === "development" ? ["@archestra/shared"] : [],
     // Next 16.3 defaults to the TypeScript CLI, but the workspace keeps the
     // TypeScript 6 compiler API in a shim whose binary is intentionally `tsc6`.
     useTypeScriptCli: false,

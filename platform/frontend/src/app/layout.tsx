@@ -15,6 +15,7 @@ import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
 import { getDeploymentFavicon } from "@/lib/favicon.server";
+import { PageTitleProvider } from "@/lib/hooks/use-page-title";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
@@ -258,15 +259,17 @@ export default async function RootLayout({
                 disableTransitionOnChange
               >
                 <PostHogProviderWrapper>
-                  <OrgThemeLoader />
-                  <DynamicHead />
-                  <WithAuthCheck>
-                    <WebsocketInitializer />
-                    <RumTracker />
-                    <AppShell>
-                      <WithPagePermissions>{children}</WithPagePermissions>
-                    </AppShell>
-                  </WithAuthCheck>
+                  <PageTitleProvider>
+                    <OrgThemeLoader />
+                    <DynamicHead />
+                    <WithAuthCheck>
+                      <WebsocketInitializer />
+                      <RumTracker />
+                      <AppShell>
+                        <WithPagePermissions>{children}</WithPagePermissions>
+                      </AppShell>
+                    </WithAuthCheck>
+                  </PageTitleProvider>
                 </PostHogProviderWrapper>
               </ThemeProvider>
             </ChatProvider>

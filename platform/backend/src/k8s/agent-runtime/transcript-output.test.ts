@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { Writable } from "node:stream";
 import { CoreV1Api, Exec, KubeConfig } from "@kubernetes/client-node";
+import { vi } from "vitest";
 import type WebSocket from "ws";
 import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
-import { expect, test, vi } from "@/test";
+import { expect, test } from "@/test";
 import manager from "./manager";
 
 // This manager caches its clients. Isolate the fake cluster from other files,

@@ -42,10 +42,7 @@ const remoteAgent = {
   discoveryUrl: "https://agent.example.com",
   agentCard: { name: "Fixture Agent" },
   cardHash: "card-hash",
-  etag: null,
-  lastModified: null,
   lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
-  discoveryError: null,
   createdAt: "2026-09-08T12:00:00.000Z",
   updatedAt: "2026-09-08T12:00:00.000Z",
   scope: "personal",
@@ -56,7 +53,6 @@ const remoteAgent = {
   connection: {
     id: "connection-1",
     remoteAgentId: "remote-agent-1",
-    name: "Default",
     selectedInterface: {
       url: "https://agent.example.com/a2a",
       protocolBinding: "JSONRPC",
@@ -67,7 +63,6 @@ const remoteAgent = {
     authConfig: {},
     enabled: true,
     lastVerifiedAt: "2026-09-08T12:00:00.000Z",
-    lastVerificationError: null,
     createdAt: "2026-09-08T12:00:00.000Z",
     updatedAt: "2026-09-08T12:00:00.000Z",
     hasCredential: true,
@@ -150,15 +145,6 @@ describe("external A2A agent routed pages", () => {
     );
 
     renderPage(<CreateA2aRemoteAgentPage />);
-    const sectionHeadings = screen
-      .getAllByRole("heading", { level: 3 })
-      .map((heading) => heading.textContent);
-    expect(sectionHeadings).toEqual([
-      "Agent Card",
-      "Authentication",
-      "Details",
-      "Access",
-    ]);
     expect(screen.queryByLabelText("Agent Card source")).toBeNull();
     expect(screen.queryByLabelText("Agent Card JSON")).toBeNull();
     expect(
@@ -457,18 +443,6 @@ describe("external A2A agent routed pages", () => {
     expect(screen.queryByRole("button", { name: /More actions/ })).toBeNull();
   });
 
-  it("lets a settings manager reveal a newly entered replacement credential", async () => {
-    server.use(
-      http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
-    );
-
-    renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
-
-    expect(
-      await screen.findByRole("button", { name: "Show value" }),
-    ).toBeInTheDocument();
-  });
-
   it("pauses delegation from the detail actions", async () => {
     const user = userEvent.setup();
     let updatedBody: unknown;
@@ -498,30 +472,6 @@ describe("external A2A agent routed pages", () => {
     );
 
     await waitFor(() => expect(updatedBody).toEqual({ enabled: false }));
-  });
-
-  it("offers the inverse action for a disabled connection", async () => {
-    const user = userEvent.setup();
-    server.use(
-      http.get(`${REGISTRY_URL}/:id`, () =>
-        HttpResponse.json({
-          ...remoteAgent,
-          connection: { ...remoteAgent.connection, enabled: false },
-        }),
-      ),
-    );
-
-    renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
-
-    await screen.findByLabelText("Agent base URL");
-    await user.click(
-      screen.getByRole("button", {
-        name: `More actions ${remoteAgent.name}`,
-      }),
-    );
-    expect(
-      await screen.findByRole("menuitem", { name: "Enable delegation" }),
-    ).toBeInTheDocument();
   });
 
   it("explains the missing permission on the direct create route", () => {

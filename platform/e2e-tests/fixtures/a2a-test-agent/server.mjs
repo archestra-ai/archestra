@@ -16,7 +16,6 @@ const TERMINAL_STATES = new Set([
 
 const LEGACY_METHOD_ALIASES = new Map([
   ["message/send", "SendMessage"],
-  ["message/stream", "SendStreamingMessage"],
   ["tasks/get", "GetTask"],
   ["tasks/cancel", "CancelTask"],
 ]);
@@ -176,7 +175,7 @@ function buildAgentCard(request, options) {
       },
     ],
     capabilities: {
-      streaming: true,
+      streaming: false,
       pushNotifications: false,
       extendedAgentCard: false,
     },
@@ -376,57 +375,6 @@ function cancelTask(state, params) {
   return task;
 }
 
-function writeSse(response, id, result) {
-  response.write(`data: ${JSON.stringify(jsonRpcResult(id, result))}\n\n`);
-}
-
-function streamMessage(response, state, id, params) {
-  const task = buildTask(state, params, "working");
-  const input = extractInputText(params?.message);
-  const agentMessage = buildAgentMessage(
-    state,
-    task.contextId,
-    task.id,
-    input,
-    fixtureMode(params),
-  );
-  const artifact = {
-    artifactId: deterministicId("3", Number(task.id.slice(-12))),
-    name: "fixture-response",
-    parts: agentMessage.parts,
-  };
-
-  response.writeHead(200, {
-    "cache-control": "no-cache",
-    connection: "keep-alive",
-    "content-type": "text/event-stream; charset=utf-8",
-  });
-  writeSse(response, id, { task });
-  writeSse(response, id, {
-    artifactUpdate: {
-      taskId: task.id,
-      contextId: task.contextId,
-      artifact,
-      lastChunk: true,
-    },
-  });
-
-  task.status = {
-    state: "TASK_STATE_COMPLETED",
-    timestamp: FIXED_TIMESTAMP,
-  };
-  task.artifacts = [artifact];
-  task.history.push(agentMessage);
-  writeSse(response, id, {
-    statusUpdate: {
-      taskId: task.id,
-      contextId: task.contextId,
-      status: task.status,
-    },
-  });
-  response.end();
-}
-
 function initialState() {
   return {
     nextContextId: 1,
@@ -555,8 +503,6 @@ export function createA2aFixtureServer(inputOptions = {}) {
             200,
             jsonRpcResult(body.id, cancelTask(state, body.params ?? {})),
           );
-        case "SendStreamingMessage":
-          return streamMessage(response, state, body.id, body.params ?? {});
         default:
           return json(
             response,

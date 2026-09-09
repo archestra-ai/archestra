@@ -12977,16 +12977,12 @@ export type ListA2aRemoteAgentsResponses = {
             [key: string]: unknown;
         };
         cardHash: string;
-        etag: string | null;
-        lastModified: string | null;
         lastDiscoveredAt: string;
-        discoveryError: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
             id: string;
             remoteAgentId: string;
-            name: string;
             selectedInterface: {
                 url: string;
                 protocolBinding: 'JSONRPC' | 'HTTP+JSON';
@@ -13002,7 +12998,6 @@ export type ListA2aRemoteAgentsResponses = {
             };
             enabled: boolean;
             lastVerifiedAt: string | null;
-            lastVerificationError: string | null;
             createdAt: string;
             updatedAt: string;
             hasCredential: boolean;
@@ -13049,7 +13044,6 @@ export type CreateA2aRemoteAgentData = {
         };
         name?: string;
         description?: string | null;
-        connectionName?: string;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
         users?: Array<string>;
@@ -13141,16 +13135,12 @@ export type CreateA2aRemoteAgentResponses = {
             [key: string]: unknown;
         };
         cardHash: string;
-        etag: string | null;
-        lastModified: string | null;
         lastDiscoveredAt: string;
-        discoveryError: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
             id: string;
             remoteAgentId: string;
-            name: string;
             selectedInterface: {
                 url: string;
                 protocolBinding: 'JSONRPC' | 'HTTP+JSON';
@@ -13166,7 +13156,6 @@ export type CreateA2aRemoteAgentResponses = {
             };
             enabled: boolean;
             lastVerifiedAt: string | null;
-            lastVerificationError: string | null;
             createdAt: string;
             updatedAt: string;
             hasCredential: boolean;
@@ -13363,16 +13352,12 @@ export type GetA2aRemoteAgentResponses = {
             [key: string]: unknown;
         };
         cardHash: string;
-        etag: string | null;
-        lastModified: string | null;
         lastDiscoveredAt: string;
-        discoveryError: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
             id: string;
             remoteAgentId: string;
-            name: string;
             selectedInterface: {
                 url: string;
                 protocolBinding: 'JSONRPC' | 'HTTP+JSON';
@@ -13388,7 +13373,6 @@ export type GetA2aRemoteAgentResponses = {
             };
             enabled: boolean;
             lastVerifiedAt: string | null;
-            lastVerificationError: string | null;
             createdAt: string;
             updatedAt: string;
             hasCredential: boolean;
@@ -13436,7 +13420,6 @@ export type UpdateA2aRemoteAgentData = {
             credential: string;
         };
         enabled?: boolean;
-        connectionName?: string;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
         users?: Array<string>;
@@ -13530,16 +13513,12 @@ export type UpdateA2aRemoteAgentResponses = {
             [key: string]: unknown;
         };
         cardHash: string;
-        etag: string | null;
-        lastModified: string | null;
         lastDiscoveredAt: string;
-        discoveryError: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
             id: string;
             remoteAgentId: string;
-            name: string;
             selectedInterface: {
                 url: string;
                 protocolBinding: 'JSONRPC' | 'HTTP+JSON';
@@ -13555,7 +13534,6 @@ export type UpdateA2aRemoteAgentResponses = {
             };
             enabled: boolean;
             lastVerifiedAt: string | null;
-            lastVerificationError: string | null;
             createdAt: string;
             updatedAt: string;
             hasCredential: boolean;

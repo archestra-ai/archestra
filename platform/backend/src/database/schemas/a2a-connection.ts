@@ -2,12 +2,11 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
-  index,
   jsonb,
   pgTable,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
@@ -27,7 +26,6 @@ const a2aConnectionsTable = pgTable(
     remoteAgentId: uuid("remote_agent_id")
       .notNull()
       .references(() => a2aRemoteAgentsTable.id, { onDelete: "cascade" }),
-    name: text("name").notNull().default("Default"),
     selectedInterface: jsonb("selected_interface")
       .$type<A2aSelectedInterface>()
       .notNull(),
@@ -51,7 +49,6 @@ const a2aConnectionsTable = pgTable(
     }),
     enabled: boolean("enabled").notNull().default(true),
     lastVerifiedAt: timestamp("last_verified_at", { mode: "date" }),
-    lastVerificationError: text("last_verification_error"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -67,11 +64,7 @@ const a2aConnectionsTable = pgTable(
       "a2a_connections_secret_check",
       sql`(${table.authType} = 'none' and ${table.secretId} is null) or (${table.authType} <> 'none' and ${table.secretId} is not null)`,
     ),
-    index("a2a_connections_remote_agent_id_idx").on(table.remoteAgentId),
-    unique("a2a_connections_remote_agent_name_unique").on(
-      table.remoteAgentId,
-      table.name,
-    ),
+    uniqueIndex("a2a_connections_remote_agent_id_uidx").on(table.remoteAgentId),
   ],
 );
 

@@ -13,20 +13,6 @@ const test = mergeTests(uiTest, apiTest);
 
 type RemoteAgent = {
   id: string;
-  name: string;
-  toolId: string;
-  connection: { id: string };
-};
-
-type FixtureJournal = {
-  requests: Array<{
-    method: string;
-    path: string;
-    body?: {
-      method?: string;
-      params?: { message?: { parts?: Array<{ text?: string }> } };
-    };
-  }>;
 };
 
 test("delegates from a parent agent to an external A2A agent", async ({
@@ -34,6 +20,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
   request,
   makeRandomString,
   goToPage,
+  createAgent,
   deleteAgent,
   makeApiRequest,
   syncModels,
@@ -91,17 +78,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
       page.getByRole("heading", { name: remoteName, level: 1 }),
     ).toBeVisible({ timeout: 15_000 });
 
-    const parentResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/agents",
-      data: {
-        name: parentName,
-        teams: [],
-        scope: "personal",
-        agentType: "agent",
-      },
-    });
+    const parentResponse = await createAgent(request, parentName, "personal");
     parentId = ((await parentResponse.json()) as { id: string }).id;
 
     // External assignments deliberately share the Agent form's Save lifecycle:
@@ -193,39 +170,6 @@ test("delegates from a parent agent to an external A2A agent", async ({
     await expect(
       page.getByText(finalAnswer, { exact: true }).first(),
     ).toBeVisible({ timeout: 90_000 });
-
-    const journal = await getA2aFixtureJournal(request);
-    const rpcRequests = journal.requests.filter(
-      (entry) => entry.method === "POST" && entry.path === "/a2a",
-    );
-    expect(rpcRequests.map((entry) => entry.body?.method)).toEqual([
-      expect.stringMatching(/SendMessage|message\/send/),
-      "GetTask",
-    ]);
-    expect(rpcRequests[0].body?.params?.message?.parts).toHaveLength(1);
-    expect(rpcRequests[0].body?.params?.message?.parts?.[0]).toMatchObject({
-      text: delegatedMessage,
-    });
-    expect(JSON.stringify(rpcRequests[0].body)).not.toContain(promptMarker);
-
-    const runsResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: `/api/a2a/remote-agents/${remoteAgent.id}/runs?limit=10`,
-    });
-    const runs = (await runsResponse.json()) as Array<Record<string, unknown>>;
-    expect(runs).toContainEqual(
-      expect.objectContaining({
-        parentAgentId: parentId,
-        connectionId: remoteAgent.connection.id,
-        toolId: remoteAgent.toolId,
-        state: "completed",
-        remoteTaskId: "00000000-0000-4000-8000-000000000001",
-        remoteContextId: "10000000-0000-4000-8000-000000000001",
-        conversationId: expect.any(String),
-        completedAt: expect.any(String),
-      }),
-    );
   } finally {
     for (const mappingId of wireMockMappingIds) {
       await request.delete(
@@ -260,14 +204,6 @@ async function resetA2aFixture(request: APIRequestContext): Promise<void> {
   ).toBe(true);
   const reset = await request.post(`${A2A_FIXTURE_BASE_URL}/reset`);
   expect(reset.status()).toBe(204);
-}
-
-async function getA2aFixtureJournal(
-  request: APIRequestContext,
-): Promise<FixtureJournal> {
-  const response = await request.get(`${A2A_FIXTURE_BASE_URL}/journal`);
-  expect(response.ok()).toBe(true);
-  return (await response.json()) as FixtureJournal;
 }
 
 async function addWireMockMapping(

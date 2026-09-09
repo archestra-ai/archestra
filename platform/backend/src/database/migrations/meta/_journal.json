@@ -3235,6 +3235,13 @@
       "when": 1788916474000,
       "tag": "0461_worthless_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 462,
+      "version": "7",
+      "when": 1788980870126,
+      "tag": "0462_flawless_abomination",
+      "breakpoints": true
     }
   ]
 }

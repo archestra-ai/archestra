@@ -1,4 +1,5 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
@@ -8,6 +9,7 @@ describe("outbound A2A visibility reads", () => {
 
   test("list, filters, and direct reads enforce owner/team/org/user visibility", async ({
     makeMember,
+    makeOrganization,
     makeTeam,
     makeTeamMember,
     makeUser,
@@ -43,6 +45,31 @@ describe("outbound A2A visibility reads", () => {
       name: "Shared with organization",
       scope: "org",
     });
+    const credentialBackedResponse = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        name: "Credential-backed target",
+        source: { type: "inline_card", agentCard: makeAgentCard("api-key") },
+        auth: {
+          type: "api_key",
+          headerName: "X-API-Key",
+          credential: "list-secret",
+        },
+        scope: "org",
+      },
+    });
+    expect(credentialBackedResponse.statusCode).toBe(200);
+    const credentialBacked = credentialBackedResponse.json();
+    const foreignOrganization = await makeOrganization();
+    await createA2aRemoteAgent({
+      organizationId: foreignOrganization.id,
+      input: {
+        name: "Foreign target",
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+      },
+    });
 
     ctx.user = viewer;
     const list = await ctx.app.inject({
@@ -50,9 +77,30 @@ describe("outbound A2A visibility reads", () => {
       url: "/api/a2a/remote-agents",
     });
     expect(list.statusCode).toBe(200);
-    expect(new Set(list.json().map((item: { id: string }) => item.id))).toEqual(
-      new Set([sharedUser.id, sharedTeam.id, organization.id]),
+    const listed = list.json();
+    expect(new Set(listed.map((item: { id: string }) => item.id))).toEqual(
+      new Set([
+        sharedUser.id,
+        sharedTeam.id,
+        organization.id,
+        credentialBacked.id,
+      ]),
     );
+    expect(
+      listed.find((item: { id: string }) => item.id === credentialBacked.id),
+    ).toMatchObject({
+      connection: {
+        authType: "api_key",
+        authConfig: { headerName: "X-API-Key" },
+        hasCredential: true,
+      },
+    });
+    expect(JSON.stringify(listed)).not.toContain("list-secret");
+    expect(JSON.stringify(listed)).not.toContain("Foreign target");
+    expect(
+      listed.find((item: { id: string }) => item.id === credentialBacked.id)
+        .connection.secretId,
+    ).toBeUndefined();
 
     const teamFilter = await ctx.app.inject({
       method: "GET",
@@ -68,7 +116,7 @@ describe("outbound A2A visibility reads", () => {
       url: `/api/a2a/remote-agents?authorId=${owner.id}`,
     });
     expect(authorFilter.statusCode).toBe(200);
-    expect(authorFilter.json()).toHaveLength(3);
+    expect(authorFilter.json()).toHaveLength(4);
 
     const visibleDetail = await ctx.app.inject({
       method: "GET",

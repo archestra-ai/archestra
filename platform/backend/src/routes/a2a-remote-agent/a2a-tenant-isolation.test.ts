@@ -22,7 +22,6 @@ async function createRemoteAgent(organizationId: string, name: string) {
       name,
       source: { type: "inline_card", agentCard: makeAgentCard("none") },
       auth: { type: "none" },
-      connectionName: "Default",
     },
   });
 }

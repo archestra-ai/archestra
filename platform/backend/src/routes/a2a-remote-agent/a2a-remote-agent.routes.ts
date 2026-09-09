@@ -232,7 +232,7 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: params.id,
         organizationId,
         userId: user.id,
-        canManage: false,
+        canManage: true,
       });
       if (!remoteAgent) {
         throw new ApiError(404, "Outbound A2A agent not found");

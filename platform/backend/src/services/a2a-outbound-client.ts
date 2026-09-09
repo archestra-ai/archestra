@@ -185,7 +185,6 @@ export async function executeOutboundA2aDelegation(params: {
     }
     await A2aConnectionModel.update(target.connection.id, {
       lastVerifiedAt: new Date(),
-      lastVerificationError: null,
     }).catch(() => {});
     return outcome.text || "The external agent returned no text or data.";
   } catch (error) {
@@ -205,17 +204,18 @@ export async function executeOutboundA2aDelegation(params: {
     // and identifiers. Transport/SDK failures have no such outcome and become
     // a local failed run instead.
     if (!(error instanceof OutboundA2aOutcomeError)) {
+      const failureReason = outboundFailureReason(error);
       await A2aOutboundRunModel.update(run.id, {
         state: "failed",
         errorCode: errorCode(error),
-        statusReason: safeErrorMessage(error),
+        statusReason: failureReason,
         completedAt: new Date(),
       }).catch(() => {});
     }
     logger.error(
       {
         errorCode: errorCode(error),
-        errorMessage: safeErrorMessage(error),
+        errorMessage: outboundFailureReason(error),
         runId: run.id,
         parentAgentId: context.agentId,
         remoteAgentId: target.remoteAgent.id,
@@ -325,7 +325,8 @@ function normalizeResult(result: SendMessageResult): {
       state,
       remoteTaskId: result.id || null,
       remoteContextId: result.contextId || null,
-      statusReason: statusText || null,
+      statusReason:
+        state === "completed" ? null : `Outbound A2A agent returned ${state}`,
     };
   }
 
@@ -391,15 +392,21 @@ function isTerminalState(state: A2aOutboundRunState): boolean {
 }
 
 function errorCode(error: unknown): string {
-  if (error instanceof DOMException && error.name === "AbortError") {
+  if (error instanceof Error && error.name === "AbortError") {
     return "aborted";
   }
-  if (error instanceof Error && error.name) return error.name;
-  return "unknown";
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return "timeout";
+  }
+  return "request_failed";
 }
 
-function safeErrorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message.slice(0, 2_000)
-    : "Unknown error";
+function outboundFailureReason(error: unknown): string {
+  if (error instanceof Error && error.name === "AbortError") {
+    return "Outbound A2A request was aborted";
+  }
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return "Outbound A2A request timed out";
+  }
+  return "Outbound A2A request failed";
 }

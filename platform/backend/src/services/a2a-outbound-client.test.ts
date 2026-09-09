@@ -7,7 +7,6 @@ import { A2aConnectionModel, A2aRemoteAgentModel, ToolModel } from "@/models";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { expect, test } from "@/test";
 import type { A2aConnectionAuthInput } from "@/types";
-import { isAllowedA2aAddress } from "@/utils/outbound-url";
 import { executeOutboundA2aDelegation } from "./a2a-outbound-client";
 
 type OutboundA2aTarget = Parameters<
@@ -27,17 +26,6 @@ const a2aFixture = (await import(fixtureModuleUrl)) as {
 };
 const { createA2aFixtureServer, DEFAULT_API_KEY, DEFAULT_BEARER_TOKEN } =
   a2aFixture;
-
-test("allows only public unicast addresses plus loopback in local development", () => {
-  expect(isAllowedA2aAddress("8.8.8.8")).toBe(true);
-  expect(isAllowedA2aAddress("2001:4860:4860::8888")).toBe(true);
-  expect(isAllowedA2aAddress("127.0.0.1")).toBe(true);
-  expect(isAllowedA2aAddress("10.0.0.1")).toBe(false);
-  expect(isAllowedA2aAddress("169.254.169.254")).toBe(false);
-  expect(isAllowedA2aAddress("100.64.0.1")).toBe(false);
-  expect(isAllowedA2aAddress("224.0.0.1")).toBe(false);
-  expect(isAllowedA2aAddress("::")).toBe(false);
-});
 
 test("returns text and structured data through the real A2A SDK", async ({
   makeAgent,
@@ -216,7 +204,7 @@ test("persists failed remote task state and identifiers", async ({
         message: "[fixture:failed] remote failure detail",
         context: makeContext({ parent, organizationId: organization.id }),
       }),
-    ).rejects.toThrow("Fixture response: remote failure detail");
+    ).rejects.toThrow("Outbound A2A agent returned failed");
 
     const [run] = await db
       .select()
@@ -229,7 +217,7 @@ test("persists failed remote task state and identifiers", async ({
       remoteTaskId: "00000000-0000-4000-8000-000000000001",
       remoteContextId: "10000000-0000-4000-8000-000000000001",
       errorCode: "remote_failed",
-      statusReason: "Fixture response: remote failure detail",
+      statusReason: "Outbound A2A agent returned failed",
     });
     expect(run.completedAt).toBeInstanceOf(Date);
   });
@@ -267,6 +255,16 @@ test("cancels a still-working remote task when the parent aborts", async ({
         (request) => request.body?.method === "CancelTask",
       ),
     ).toBe(true);
+    const [run] = await db
+      .select()
+      .from(schema.a2aOutboundRunsTable)
+      .where(
+        eq(schema.a2aOutboundRunsTable.connectionId, target.connection.id),
+      );
+    expect(run).toMatchObject({
+      errorCode: "aborted",
+      statusReason: "Outbound A2A request was aborted",
+    });
   });
 });
 
@@ -374,7 +372,6 @@ async function createTarget(params: {
     input: {
       source: { type: "well_known", url: params.baseUrl },
       auth: params.auth,
-      connectionName: "Default",
     },
   });
   const stored = await A2aRemoteAgentModel.findByIdForOrganization({

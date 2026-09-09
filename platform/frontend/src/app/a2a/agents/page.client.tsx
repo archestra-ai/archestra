@@ -18,12 +18,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
-import { A2aBulkVisibilityDialog } from "@/components/a2a-remote-agent-bulk-visibility-dialog";
+import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -57,6 +58,7 @@ import {
   type A2aRemoteAgent,
   useA2aRemoteAgentRuns,
   useA2aRemoteAgents,
+  useBulkUpdateA2aRemoteAgentVisibility,
   useDeleteA2aRemoteAgent,
 } from "@/lib/a2a-remote-agents.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -121,6 +123,9 @@ export default function OutboundA2aAgentsPage() {
   const { data: canManage } = useHasPermissions({
     agentSettings: ["update"],
   });
+  const { data: canReadActivity } = useHasPermissions({
+    agentSettings: ["read"],
+  });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -128,6 +133,7 @@ export default function OutboundA2aAgentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<A2aRemoteAgent | null>(null);
   const deleteMutation = useDeleteA2aRemoteAgent();
   const bulkDeleteMutation = useDeleteA2aRemoteAgent({ notify: false });
+  const bulkVisibilityMutation = useBulkUpdateA2aRemoteAgentVisibility();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
@@ -279,7 +285,7 @@ export default function OutboundA2aAgentsPage() {
 
   const columns = useMemo<ColumnDef<A2aRemoteAgent>[]>(
     () => [
-      ...(canManage
+      ...(canReadActivity
         ? [
             createSelectColumn<A2aRemoteAgent>({
               rowLabel: (agent) => `Select ${agent.name}`,
@@ -378,7 +384,7 @@ export default function OutboundA2aAgentsPage() {
         ),
       },
     ],
-    [canManage, currentUserId, renderActions],
+    [canManage, canReadActivity, currentUserId, renderActions],
   );
 
   const showLoading = query.isPending && remoteAgents.length === 0;
@@ -503,7 +509,7 @@ export default function OutboundA2aAgentsPage() {
                     actions={renderActions(agent)}
                     onNavigate={() => openAgent(agent)}
                     footer={
-                      canManage ? (
+                      canReadActivity ? (
                         <RecentRun remoteAgentId={agent.id} />
                       ) : undefined
                     }
@@ -620,11 +626,33 @@ export default function OutboundA2aAgentsPage() {
         pendingLabel="Deleting..."
       />
       {bulkVisibilityOpen ? (
-        <A2aBulkVisibilityDialog
-          agents={selectedRemoteAgents}
+        <BulkVisibilityDialog
+          items={selectedRemoteAgents}
+          noun="external A2A agent"
+          plural="external A2A agents"
           open={bulkVisibilityOpen}
           onOpenChange={setBulkVisibilityOpen}
-          onComplete={clearSelection}
+          isPending={bulkVisibilityMutation.isPending}
+          renderSelector={({ subject: _, ...props }) => (
+            <A2aRemoteAgentScopeSelector {...props} />
+          )}
+          onApply={async (change) => {
+            const outcome = await bulkVisibilityMutation.mutateAsync({
+              agents: selectedRemoteAgents,
+              scope: change.scope,
+              teamIds: change.teamIds,
+              userIds: change.userIds,
+            });
+            reportBulkOutcome({
+              outcome,
+              verb: "Updated",
+              failureVerb: "update",
+              noun: "external A2A agent",
+            });
+            if (outcome.succeeded.length === 0) return false;
+            if (outcome.failed.length === 0) clearSelection();
+            return true;
+          }}
         />
       ) : null}
     </PageLayout>

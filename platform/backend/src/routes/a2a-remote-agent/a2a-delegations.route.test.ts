@@ -16,7 +16,6 @@ async function createRemoteAgent(organizationId: string, name: string) {
       name,
       source: { type: "inline_card", agentCard: makeAgentCard("none") },
       auth: { type: "none" },
-      connectionName: "Default",
     },
   });
 }
@@ -32,7 +31,7 @@ async function assignedToolIds(agentId: string): Promise<string[]> {
 describe("outbound A2A subagent assignments", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
 
-  test("GET and POST persist and return an explicit outbound assignment", async ({
+  test("persists, lists, replaces, and removes the explicit assignment set", async ({
     makeAgent,
     makeMember,
   }) => {
@@ -42,72 +41,11 @@ describe("outbound A2A subagent assignments", () => {
       authorId: ctx.user.id,
       agentType: "agent",
       scope: "org",
-      accessAllSubagents: false,
     });
-    const remote = await createRemoteAgent(
+    const first = await createRemoteAgent(
       ctx.organizationId,
       "External Researcher",
     );
-
-    const initiallyEmpty = await ctx.app.inject({
-      method: "GET",
-      url: `/api/agents/${parent.id}/a2a-delegations`,
-    });
-    expect(initiallyEmpty.statusCode).toBe(200);
-    expect(initiallyEmpty.json()).toEqual([]);
-
-    const assigned = await ctx.app.inject({
-      method: "POST",
-      url: `/api/agents/${parent.id}/a2a-delegations`,
-      payload: { connectionIds: [remote.connection.id] },
-    });
-    expect(assigned.statusCode).toBe(200);
-    expect(assigned.json()).toEqual({
-      added: [remote.connection.id],
-      removed: [],
-    });
-    expect(await assignedToolIds(parent.id)).toEqual([remote.toolId]);
-
-    const listed = await ctx.app.inject({
-      method: "GET",
-      url: `/api/agents/${parent.id}/a2a-delegations`,
-    });
-    expect(listed.statusCode).toBe(200);
-    expect(listed.json()).toEqual([
-      {
-        remoteAgentId: remote.id,
-        connectionId: remote.connection.id,
-        toolId: remote.toolId,
-        name: "External Researcher",
-        description: "A deterministic outbound A2A route-test target.",
-        enabled: true,
-      },
-    ]);
-
-    const idempotent = await ctx.app.inject({
-      method: "POST",
-      url: `/api/agents/${parent.id}/a2a-delegations`,
-      payload: {
-        connectionIds: [remote.connection.id, remote.connection.id],
-      },
-    });
-    expect(idempotent.statusCode).toBe(200);
-    expect(idempotent.json()).toEqual({ added: [], removed: [] });
-    expect(await assignedToolIds(parent.id)).toEqual([remote.toolId]);
-  });
-
-  test("POST replaces and removes the complete explicit assignment set", async ({
-    makeAgent,
-    makeMember,
-  }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
-    const parent = await makeAgent({
-      organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
-      agentType: "agent",
-      scope: "org",
-    });
-    const first = await createRemoteAgent(ctx.organizationId, "First Remote");
     const second = await createRemoteAgent(ctx.organizationId, "Second Remote");
 
     const initial = await ctx.app.inject({
@@ -116,6 +54,27 @@ describe("outbound A2A subagent assignments", () => {
       payload: { connectionIds: [first.connection.id] },
     });
     expect(initial.statusCode).toBe(200);
+    expect(initial.json()).toEqual({
+      added: [first.connection.id],
+      removed: [],
+    });
+    expect(await assignedToolIds(parent.id)).toEqual([first.toolId]);
+
+    const listed = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agents/${parent.id}/a2a-delegations`,
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()).toEqual([
+      {
+        remoteAgentId: first.id,
+        connectionId: first.connection.id,
+        toolId: first.toolId,
+        name: "External Researcher",
+        description: "A deterministic outbound A2A route-test target.",
+        enabled: true,
+      },
+    ]);
 
     const replacement = await ctx.app.inject({
       method: "POST",
@@ -500,7 +459,6 @@ describe("outbound A2A subagent assignments", () => {
         name: "Private external target",
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        connectionName: "Default",
         scope: "personal",
       },
     });
@@ -540,7 +498,6 @@ describe("outbound A2A subagent assignments", () => {
         name: "Hidden existing target",
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        connectionName: "Default",
         scope: "personal",
       },
     });

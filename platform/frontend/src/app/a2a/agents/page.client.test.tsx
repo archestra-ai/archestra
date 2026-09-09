@@ -39,10 +39,7 @@ const remoteAgent = {
   discoveryUrl: "https://agent.example.com",
   agentCard: { name: "Fixture Agent" },
   cardHash: "card-hash",
-  etag: null,
-  lastModified: null,
   lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
-  discoveryError: null,
   createdAt: "2026-09-08T12:00:00.000Z",
   updatedAt: "2026-09-08T12:00:00.000Z",
   scope: "personal",
@@ -53,7 +50,6 @@ const remoteAgent = {
   connection: {
     id: "connection-1",
     remoteAgentId: "remote-agent-1",
-    name: "Default",
     selectedInterface: {
       url: "https://agent.example.com/a2a",
       protocolBinding: "JSONRPC",
@@ -64,7 +60,6 @@ const remoteAgent = {
     authConfig: {},
     enabled: true,
     lastVerifiedAt: "2026-09-08T12:00:00.000Z",
-    lastVerificationError: null,
     createdAt: "2026-09-08T12:00:00.000Z",
     updatedAt: "2026-09-08T12:00:00.000Z",
     hasCredential: false,
@@ -154,7 +149,7 @@ afterAll(() => {
 });
 
 describe("OutboundA2aAgentsPage", () => {
-  it("routes connect, card, Edit, and table-row actions to full pages", async () => {
+  it("routes connect, card, and table-row actions to full pages", async () => {
     const user = userEvent.setup();
     const push = vi.fn();
     vi.mocked(useRouter).mockReturnValue({
@@ -173,11 +168,6 @@ describe("OutboundA2aAgentsPage", () => {
     const card = screen.getByTestId("a2a-remote-agent-card-remote-agent-1");
     fireEvent.click(card);
     expect(push).toHaveBeenCalledWith("/a2a/agents/remote-agent-1");
-
-    await user.click(
-      within(card).getByRole("button", { name: "Edit Payments Agent" }),
-    );
-    expect(push).toHaveBeenLastCalledWith("/a2a/agents/remote-agent-1");
 
     await user.click(screen.getByRole("button", { name: "View as table" }));
     const row = screen.getByRole("row", { name: /Payments Agent/ });
@@ -276,13 +266,15 @@ describe("OutboundA2aAgentsPage", () => {
       push,
       replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions) =>
-        ({
-          data: !Object.hasOwn(permissions, "agentSettings"),
-          isPending: false,
-        }) as ReturnType<typeof useHasPermissions>,
-    );
+    vi.mocked(useHasPermissions).mockImplementation((permissions) => {
+      const agentSettings = permissions.agentSettings;
+      return {
+        data:
+          !agentSettings ||
+          (agentSettings.includes("read") && !agentSettings.includes("update")),
+        isPending: false,
+      } as ReturnType<typeof useHasPermissions>;
+    });
     server.use(http.get(REGISTRY_URL, () => HttpResponse.json([remoteAgent])));
 
     renderPage();
@@ -293,6 +285,7 @@ describe("OutboundA2aAgentsPage", () => {
     expect(
       within(card).queryByRole("button", { name: /More actions/ }),
     ).toBeNull();
+    expect(within(card).getByText("Recent activity")).toBeInTheDocument();
     await user.click(
       within(card).getByRole("button", { name: "View Payments Agent" }),
     );

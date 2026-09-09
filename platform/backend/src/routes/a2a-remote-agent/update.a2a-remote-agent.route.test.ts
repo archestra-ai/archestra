@@ -93,7 +93,6 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
       payload: {
         name: "After edit",
         description: "Edited description",
-        connectionName: "Production",
         enabled: false,
         scope: "team",
         teams: [team.id],
@@ -109,7 +108,6 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
       teams: [{ id: team.id, name: "Edited Audience" }],
       users: [],
       connection: {
-        name: "Production",
         enabled: false,
         authType: "bearer",
         hasCredential: true,
@@ -128,7 +126,6 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
       input: {
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        connectionName: "Default",
       },
     });
     expect(legacy.authorId).toBeNull();

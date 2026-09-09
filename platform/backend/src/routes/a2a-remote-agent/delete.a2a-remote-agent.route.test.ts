@@ -8,7 +8,7 @@ import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
 describe("DELETE /api/a2a/remote-agents/:id", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
 
-  test("deletes an unassigned remote agent and its generated delegation tool", async () => {
+  test("deletes an unassigned remote agent", async () => {
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/a2a/remote-agents",
@@ -33,12 +33,6 @@ describe("DELETE /api/a2a/remote-agents/:id", () => {
         organizationId: ctx.organizationId,
       }),
     ).toBeNull();
-
-    const list = await ctx.app.inject({
-      method: "GET",
-      url: "/api/a2a/remote-agents",
-    });
-    expect(list.json()).toEqual([]);
   });
 
   test("retains monitoring history after deleting a remote agent", async () => {

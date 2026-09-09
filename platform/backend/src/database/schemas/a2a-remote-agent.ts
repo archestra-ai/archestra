@@ -15,9 +15,7 @@ import usersTable from "./user";
 
 /**
  * An external agent identity and its last accepted public Agent Card.
- * Credentials intentionally live on a2a_connections so one remote identity can
- * be reached through more than one security context without leaking secrets
- * into discovery data.
+ * Credentials live on the connection so discovery metadata stays non-secret.
  */
 const a2aRemoteAgentsTable = pgTable(
   "a2a_remote_agents",
@@ -43,12 +41,9 @@ const a2aRemoteAgentsTable = pgTable(
      */
     agentCard: jsonb("agent_card").$type<Record<string, unknown>>().notNull(),
     cardHash: text("card_hash").notNull(),
-    etag: text("etag"),
-    lastModified: text("last_modified"),
     lastDiscoveredAt: timestamp("last_discovered_at", { mode: "date" })
       .notNull()
       .defaultNow(),
-    discoveryError: text("discovery_error"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

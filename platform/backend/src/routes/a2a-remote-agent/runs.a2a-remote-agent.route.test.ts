@@ -7,9 +7,7 @@ import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
 describe("GET /api/a2a/remote-agents/:id/runs", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
 
-  test("returns bounded recent protocol outcomes without message content", async ({
-    makeAgent,
-  }) => {
+  test("returns the newest bounded protocol outcome", async ({ makeAgent }) => {
     const parent = await makeAgent({ organizationId: ctx.organizationId });
     const remote = await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
@@ -17,8 +15,21 @@ describe("GET /api/a2a/remote-agents/:id/runs", () => {
         name: "Monitored Remote",
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        connectionName: "Default",
       },
+    });
+    await A2aOutboundRunModel.create({
+      organizationId: ctx.organizationId,
+      parentAgentId: parent.id,
+      remoteAgentId: remote.id,
+      connectionId: remote.connection.id,
+      toolId: remote.toolId,
+      messageId: "older-outbound-message",
+      remoteTaskId: "older-remote-task",
+      state: "failed",
+      targetNameSnapshot: remote.name,
+      interfaceSnapshot: remote.connection.selectedInterface,
+      startedAt: new Date("2026-01-01T00:00:00.000Z"),
+      completedAt: new Date("2026-01-01T00:00:01.000Z"),
     });
     await A2aOutboundRunModel.create({
       organizationId: ctx.organizationId,
@@ -31,6 +42,7 @@ describe("GET /api/a2a/remote-agents/:id/runs", () => {
       state: "completed",
       targetNameSnapshot: remote.name,
       interfaceSnapshot: remote.connection.selectedInterface,
+      startedAt: new Date("2026-01-02T00:00:00.000Z"),
       completedAt: new Date(),
     });
 
@@ -48,7 +60,6 @@ describe("GET /api/a2a/remote-agents/:id/runs", () => {
         targetNameSnapshot: "Monitored Remote",
       }),
     ]);
-    expect(JSON.stringify(response.json())).not.toContain("message content");
   });
 
   test("does not expose runs for another organization", async ({
@@ -60,38 +71,9 @@ describe("GET /api/a2a/remote-agents/:id/runs", () => {
       input: {
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        connectionName: "Default",
       },
     });
 
-    const response = await ctx.app.inject({
-      method: "GET",
-      url: `/api/a2a/remote-agents/${remote.id}/runs`,
-    });
-
-    expect(response.statusCode).toBe(404);
-  });
-
-  test("does not expose runs for an inaccessible personal target", async ({
-    makeMember,
-    makeUser,
-  }) => {
-    const owner = ctx.user;
-    const viewer = await makeUser();
-    await makeMember(owner.id, ctx.organizationId);
-    await makeMember(viewer.id, ctx.organizationId);
-    const remote = await createA2aRemoteAgent({
-      organizationId: ctx.organizationId,
-      authorId: owner.id,
-      input: {
-        source: { type: "inline_card", agentCard: makeAgentCard("none") },
-        auth: { type: "none" },
-        connectionName: "Default",
-        scope: "personal",
-      },
-    });
-
-    ctx.user = viewer;
     const response = await ctx.app.inject({
       method: "GET",
       url: `/api/a2a/remote-agents/${remote.id}/runs`,

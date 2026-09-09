@@ -14,7 +14,6 @@ import a2aConnectionsTable from "./a2a-connection";
 import a2aRemoteAgentsTable from "./a2a-remote-agent";
 import agentsTable from "./agent";
 import conversationsTable from "./conversation";
-import mcpToolCallsTable from "./mcp-tool-call";
 import organizationsTable from "./organization";
 import toolsTable from "./tool";
 import usersTable from "./user";
@@ -45,10 +44,6 @@ const a2aOutboundRunsTable = pgTable(
     toolId: uuid("tool_id").references(() => toolsTable.id, {
       onDelete: "set null",
     }),
-    mcpToolCallId: uuid("mcp_tool_call_id").references(
-      () => mcpToolCallsTable.id,
-      { onDelete: "set null" },
-    ),
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -82,7 +77,10 @@ const a2aOutboundRunsTable = pgTable(
       table.connectionId,
       table.remoteTaskId,
     ),
-    index("a2a_outbound_runs_created_at_idx").on(table.createdAt),
+    index("a2a_outbound_runs_remote_agent_started_at_idx").on(
+      table.remoteAgentId,
+      table.startedAt,
+    ),
   ],
 );
 

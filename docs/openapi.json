@@ -42919,21 +42919,9 @@
                       "cardHash": {
                         "type": "string"
                       },
-                      "etag": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "lastModified": {
-                        "nullable": true,
-                        "type": "string"
-                      },
                       "lastDiscoveredAt": {
                         "type": "string",
                         "format": "date-time"
-                      },
-                      "discoveryError": {
-                        "nullable": true,
-                        "type": "string"
                       },
                       "createdAt": {
                         "type": "string",
@@ -42955,9 +42943,6 @@
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "name": {
-                            "type": "string"
                           },
                           "selectedInterface": {
                             "type": "object",
@@ -43024,10 +43009,6 @@
                             "type": "string",
                             "format": "date-time"
                           },
-                          "lastVerificationError": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -43043,14 +43024,12 @@
                         "required": [
                           "id",
                           "remoteAgentId",
-                          "name",
                           "selectedInterface",
                           "securityRequirement",
                           "authType",
                           "authConfig",
                           "enabled",
                           "lastVerifiedAt",
-                          "lastVerificationError",
                           "createdAt",
                           "updatedAt",
                           "hasCredential"
@@ -43120,10 +43099,7 @@
                       "discoveryUrl",
                       "agentCard",
                       "cardHash",
-                      "etag",
-                      "lastModified",
                       "lastDiscoveredAt",
-                      "discoveryError",
                       "createdAt",
                       "updatedAt",
                       "connection",
@@ -43526,12 +43502,6 @@
                     "type": "string",
                     "maxLength": 2000
                   },
-                  "connectionName": {
-                    "default": "Default",
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
-                  },
                   "scope": {
                     "default": "personal",
                     "type": "string",
@@ -43617,21 +43587,9 @@
                     "cardHash": {
                       "type": "string"
                     },
-                    "etag": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "lastModified": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "lastDiscoveredAt": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "discoveryError": {
-                      "nullable": true,
-                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -43653,9 +43611,6 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "name": {
-                          "type": "string"
                         },
                         "selectedInterface": {
                           "type": "object",
@@ -43722,10 +43677,6 @@
                           "type": "string",
                           "format": "date-time"
                         },
-                        "lastVerificationError": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -43741,14 +43692,12 @@
                       "required": [
                         "id",
                         "remoteAgentId",
-                        "name",
                         "selectedInterface",
                         "securityRequirement",
                         "authType",
                         "authConfig",
                         "enabled",
                         "lastVerifiedAt",
-                        "lastVerificationError",
                         "createdAt",
                         "updatedAt",
                         "hasCredential"
@@ -43818,10 +43767,7 @@
                     "discoveryUrl",
                     "agentCard",
                     "cardHash",
-                    "etag",
-                    "lastModified",
                     "lastDiscoveredAt",
-                    "discoveryError",
                     "createdAt",
                     "updatedAt",
                     "connection",
@@ -44145,21 +44091,9 @@
                     "cardHash": {
                       "type": "string"
                     },
-                    "etag": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "lastModified": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "lastDiscoveredAt": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "discoveryError": {
-                      "nullable": true,
-                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -44181,9 +44115,6 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "name": {
-                          "type": "string"
                         },
                         "selectedInterface": {
                           "type": "object",
@@ -44250,10 +44181,6 @@
                           "type": "string",
                           "format": "date-time"
                         },
-                        "lastVerificationError": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -44269,14 +44196,12 @@
                       "required": [
                         "id",
                         "remoteAgentId",
-                        "name",
                         "selectedInterface",
                         "securityRequirement",
                         "authType",
                         "authConfig",
                         "enabled",
                         "lastVerifiedAt",
-                        "lastVerificationError",
                         "createdAt",
                         "updatedAt",
                         "hasCredential"
@@ -44346,10 +44271,7 @@
                     "discoveryUrl",
                     "agentCard",
                     "cardHash",
-                    "etag",
-                    "lastModified",
                     "lastDiscoveredAt",
-                    "discoveryError",
                     "createdAt",
                     "updatedAt",
                     "connection",
@@ -44751,11 +44673,6 @@
                   "enabled": {
                     "type": "boolean"
                   },
-                  "connectionName": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
-                  },
                   "scope": {
                     "type": "string",
                     "enum": [
@@ -44847,21 +44764,9 @@
                     "cardHash": {
                       "type": "string"
                     },
-                    "etag": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "lastModified": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "lastDiscoveredAt": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "discoveryError": {
-                      "nullable": true,
-                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -44883,9 +44788,6 @@
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "name": {
-                          "type": "string"
                         },
                         "selectedInterface": {
                           "type": "object",
@@ -44952,10 +44854,6 @@
                           "type": "string",
                           "format": "date-time"
                         },
-                        "lastVerificationError": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -44971,14 +44869,12 @@
                       "required": [
                         "id",
                         "remoteAgentId",
-                        "name",
                         "selectedInterface",
                         "securityRequirement",
                         "authType",
                         "authConfig",
                         "enabled",
                         "lastVerifiedAt",
-                        "lastVerificationError",
                         "createdAt",
                         "updatedAt",
                         "hasCredential"
@@ -45048,10 +44944,7 @@
                     "discoveryUrl",
                     "agentCard",
                     "cardHash",
-                    "etag",
-                    "lastModified",
                     "lastDiscoveredAt",
-                    "discoveryError",
                     "createdAt",
                     "updatedAt",
                     "connection",
@@ -45582,7 +45475,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:read`: View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "parameters": [
           {
             "schema": {
@@ -45986,7 +45879,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "agentSettings:read"
           ]
         }
       }

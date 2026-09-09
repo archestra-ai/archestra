@@ -40,10 +40,9 @@ A2A_FIXTURE_AUTH_MODE=bearer node platform/e2e-tests/fixtures/a2a-test-agent/ser
 - `POST /reset` or `POST /__fixture/reset` — clears tasks, request history,
   and deterministic ID counters.
 
-The JSON-RPC endpoint implements `SendMessage`, `SendStreamingMessage`,
-`GetTask`, and `CancelTask`. It also recognizes the older method spellings
-`message/send`, `message/stream`, `tasks/get`, and `tasks/cancel` as aliases,
-but responses use the advertised v1.0 shapes.
+The JSON-RPC endpoint implements `SendMessage`, `GetTask`, and `CancelTask`. It
+also recognizes the older method spellings `message/send`, `tasks/get`, and
+`tasks/cancel` as aliases, but responses use the advertised v1.0 shapes.
 
 ## Deterministic scenarios
 
@@ -60,16 +59,11 @@ Choose a scenario by prefixing the first text part, or by setting
 | `[fixture:artifact]` | Completed task with text and structured-data artifact parts |
 | `[fixture:untrusted]` | Direct message containing a stable prompt-injection-shaped payload |
 
-`SendStreamingMessage` emits a task snapshot, one artifact update, and a
-terminal status update over SSE. Push notifications and extended cards are not
-advertised or implemented.
-
 ## Validate it
 
 ```bash
-node --test platform/e2e-tests/fixtures/a2a-test-agent/server.test.mjs
+pnpm --dir platform test:e2e:lite -- --project=chromium tests/outbound-a2a.spec.ts
 ```
 
-The tests cover discovery, immediate and task responses, structured artifacts,
-task fetch/cancel, A2A error codes, bearer and API-key rejection/acceptance,
-credential redaction, journal reset, and SSE framing.
+The browser test covers discovery, assignment, chat delegation, and delayed-task
+polling through the real outbound stack.

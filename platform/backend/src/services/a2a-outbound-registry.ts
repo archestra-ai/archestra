@@ -15,6 +15,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { secretManager } from "@/secrets-manager";
 import type {
   A2aConnectionAuthInput,
@@ -115,13 +116,11 @@ export async function createA2aRemoteAgent(params: {
       agentCard: inspection.agentCard,
       cardHash: inspection.cardHash,
       lastDiscoveredAt: new Date(),
-      discoveryError: null,
     });
     remoteAgentId = remoteAgent.id;
 
     const connection = await A2aConnectionModel.create({
       remoteAgentId: remoteAgent.id,
-      name: input.connectionName,
       selectedInterface: inspection.selectedInterface,
       securityRequirement: inspection.selectedSecurityRequirement,
       authType: input.auth.type,
@@ -131,7 +130,6 @@ export async function createA2aRemoteAgent(params: {
       // Discovery validates the card and selected protocol metadata; it does
       // not prove that an authenticated message can execute successfully.
       lastVerifiedAt: null,
-      lastVerificationError: null,
     });
     const tool = await ToolModel.createA2aDelegationTool(
       connection.id,
@@ -256,7 +254,6 @@ export async function updateA2aRemoteAgent(params: {
           lastDiscoveredAt: params.input.source
             ? now
             : existing.remoteAgent.lastDiscoveredAt,
-          discoveryError: null,
           updatedAt: now,
         })
         .where(eq(schema.a2aRemoteAgentsTable.id, params.id))
@@ -277,12 +274,10 @@ export async function updateA2aRemoteAgent(params: {
               : authConfig(params.input.auth),
           secretId,
           enabled: params.input.enabled ?? existing.connection.enabled,
-          name: params.input.connectionName ?? existing.connection.name,
           lastVerifiedAt:
             params.input.source || params.input.auth
               ? null
               : existing.connection.lastVerifiedAt,
-          lastVerificationError: null,
           updatedAt: now,
         })
         .where(eq(schema.a2aConnectionsTable.id, existing.connection.id))
@@ -742,18 +737,14 @@ export async function safeA2aFetch(
     if (response.status >= 300 && response.status < 400) {
       throw new Error("A2A redirects are not followed");
     }
-    const contentLength = Number(response.headers.get("content-length"));
-    if (
-      Number.isFinite(contentLength) &&
-      contentLength > MAX_A2A_RESPONSE_BYTES
-    ) {
+    const body = await readResponseBodyWithLimit(
+      response,
+      MAX_A2A_RESPONSE_BYTES,
+    );
+    if (!body) {
       throw new Error("A2A response is too large");
     }
-    const body = await response.arrayBuffer();
-    if (body.byteLength > MAX_A2A_RESPONSE_BYTES) {
-      throw new Error("A2A response is too large");
-    }
-    return new Response(body, {
+    return new Response(Uint8Array.from(body), {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,

@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { ToolModel, TrustedDataPolicyModel } from "@/models";
+import { ToolModel } from "@/models";
 import { syncA2aDelegations } from "@/services/a2a-outbound-assignments";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { expect, test } from "@/test";
@@ -39,7 +39,6 @@ test("blocks an outbound A2A delegation with the exact synthetic tool policy bef
           agentCard: makeAgentCard(baseUrl),
         },
         auth: { type: "none" },
-        connectionName: "Default",
       },
     });
     await syncA2aDelegations({
@@ -96,65 +95,6 @@ test("blocks an outbound A2A delegation with the exact synthetic tool policy bef
   });
 });
 
-test("classifies same-named outbound results by exact synthetic tool", async ({
-  makeOrganization,
-}) => {
-  const organization = await makeOrganization();
-  const first = await createA2aRemoteAgent({
-    organizationId: organization.id,
-    input: {
-      name: "Shared External",
-      source: {
-        type: "inline_card",
-        agentCard: makeAgentCard("https://first.example.com"),
-      },
-      auth: { type: "none" },
-      connectionName: "Default",
-    },
-  });
-  const second = await createA2aRemoteAgent({
-    organizationId: organization.id,
-    input: {
-      name: "shared-external",
-      source: {
-        type: "inline_card",
-        agentCard: makeAgentCard("https://second.example.com"),
-      },
-      auth: { type: "none" },
-      connectionName: "Default",
-    },
-  });
-  await db
-    .update(schema.trustedDataPoliciesTable)
-    .set({ action: "mark_as_trusted" })
-    .where(eq(schema.trustedDataPoliciesTable.toolId, first.toolId));
-  const firstTool = await ToolModel.findById(first.toolId);
-  if (!firstTool) throw new Error("expected first synthetic tool");
-  await db
-    .update(schema.toolsTable)
-    .set({ name: firstTool.name })
-    .where(eq(schema.toolsTable.id, second.toolId));
-
-  const context = { teamIds: [], externalAgentId: "test" };
-  const firstResult = await TrustedDataPolicyModel.evaluate(
-    "unused",
-    firstTool.name,
-    "output",
-    context,
-    first.toolId,
-  );
-  const secondResult = await TrustedDataPolicyModel.evaluate(
-    "unused",
-    firstTool.name,
-    "output",
-    context,
-    second.toolId,
-  );
-
-  expect(firstResult.isTrusted).toBe(true);
-  expect(secondResult.isTrusted).toBe(false);
-});
-
 test("stamps guardrail defaults from the owning organization", async ({
   makeOrganization,
 }) => {
@@ -171,7 +111,6 @@ test("stamps guardrail defaults from the owning organization", async ({
         agentCard: makeAgentCard("https://defaults.example.com"),
       },
       auth: { type: "none" },
-      connectionName: "Default",
     },
   });
 
@@ -210,7 +149,6 @@ test("hides and rejects an inaccessible external target for a real user while pr
       input: {
         source: { type: "inline_card", agentCard: makeAgentCard(baseUrl) },
         auth: { type: "none" },
-        connectionName: "Default",
         scope: "personal",
       },
     });

@@ -17,6 +17,7 @@ import type {
   InsertA2aRemoteAgent,
   Tool,
 } from "@/types";
+import TeamModel from "./team";
 
 class A2aRemoteAgentModel {
   static async findByIdForAudit(
@@ -57,7 +58,6 @@ class A2aRemoteAgentModel {
       discoveryUrl: remoteAgent.discoveryUrl,
       cardHash: remoteAgent.cardHash,
       connectionId: connection.id,
-      connectionName: connection.name,
       selectedInterface: connection.selectedInterface,
       securityRequirement: connection.securityRequirement,
       authType: connection.authType,
@@ -280,22 +280,10 @@ class A2aRemoteAgentModel {
         AND EXISTS (
           SELECT 1 FROM ${schema.a2aRemoteAgentTeamsTable} grants
           WHERE grants.remote_agent_id = ${schema.a2aRemoteAgentsTable.id}
-            AND grants.team_id IN (
-              WITH RECURSIVE effective_teams(team_id, organization_id) AS (
-                SELECT tm.team_id, direct_team.organization_id
-                FROM team_member tm
-                INNER JOIN team direct_team ON direct_team.id = tm.team_id
-                WHERE tm.user_id = ${userId}
-                UNION
-                SELECT parent_team.id, parent_team.organization_id
-                FROM team child_team
-                INNER JOIN effective_teams et ON child_team.id = et.team_id
-                INNER JOIN team parent_team
-                  ON parent_team.id = child_team.parent_team_id
-                  AND parent_team.organization_id = et.organization_id
-              )
-              SELECT team_id FROM effective_teams
-            )
+            AND ${TeamModel.effectiveMembershipCondition({
+              userId,
+              teamIdColumn: sql.raw("grants.team_id"),
+            })}
         )
       )
     )`;

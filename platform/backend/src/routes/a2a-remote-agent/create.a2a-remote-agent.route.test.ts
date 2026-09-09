@@ -15,8 +15,12 @@ describe("POST /api/a2a/remote-agents", () => {
       url: "/api/a2a/remote-agents",
       payload: {
         name: "External researcher",
-        source: { type: "inline_card", agentCard: makeAgentCard("bearer") },
-        auth: { type: "bearer", credential: "a2a-super-secret" },
+        source: { type: "inline_card", agentCard: makeAgentCard("api-key") },
+        auth: {
+          type: "api_key",
+          headerName: "X-API-Key",
+          credential: "a2a-super-secret",
+        },
       },
     });
 
@@ -32,9 +36,8 @@ describe("POST /api/a2a/remote-agents", () => {
       discoveryMode: "inline_card",
       discoveryUrl: null,
       connection: {
-        name: "Default",
-        authType: "bearer",
-        authConfig: {},
+        authType: "api_key",
+        authConfig: { headerName: "X-API-Key" },
         hasCredential: true,
         enabled: true,
       },

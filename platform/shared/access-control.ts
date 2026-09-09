@@ -676,12 +676,14 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   // Inspecting or mutating arbitrary outbound destinations can configure
   // credential-bearing egress, so those operations remain settings-manager
-  // only. Credential-redacted registry summaries and run history require Agent
-  // read, with their handlers enforcing the configured visibility boundary.
+  // only. Credential-redacted registry summaries require Agent read and are
+  // visibility-filtered unless the caller can update Agent settings. Run
+  // history includes caller and conversation identifiers, so it requires
+  // Agent-settings read and intentionally permits organization-wide access.
   [RouteId.InspectA2aRemoteAgent]: { agentSettings: ["update"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
-  [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agentSettings: ["read"] },
   [RouteId.CreateA2aRemoteAgent]: { agentSettings: ["update"] },
   [RouteId.UpdateA2aRemoteAgent]: { agentSettings: ["update"] },
   [RouteId.DeleteA2aRemoteAgent]: { agentSettings: ["update"] },

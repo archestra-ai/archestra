@@ -43,17 +43,16 @@ import { ScopeBadge } from "@/components/scope-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import {
+  TableCard,
   TableCardGrid,
   TableCardSelectionScope,
   TableCardView,
   TableCardViewContent,
   TableCardViewToggle,
-  useNavigableCard,
 } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -633,89 +632,55 @@ function ProjectCard({
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
   const router = useRouter();
-  const navigation = useNavigableCard({
-    onNavigate: () => router.push(`/projects/${project.id}`),
-    selected,
-  });
   return (
-    <div
-      {...navigation.props}
-      className={`rounded-lg border p-4 transition-colors ${navigation.className} ${selected ? "border-primary bg-primary/5" : ""}`}
-    >
-      <div className="flex items-start gap-3">
-        <Checkbox
-          className="mt-1"
-          checked={selected}
-          disabled={selectionDisabled}
-          onCheckedChange={(value) => onSelectedChange(!!value)}
-          onClick={onSelectionClick}
-          aria-label={`Select ${project.name}`}
-          aria-description={
-            selectionDisabled ? "You cannot modify this project" : undefined
-          }
-          title={
-            selectionDisabled ? "You cannot modify this project" : undefined
-          }
+    <TableCard
+      icon={<AgentIcon icon={project.icon} fallbackType="project" size={20} />}
+      title={
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Link href={`/projects/${project.id}`} className="truncate">
+            {project.name}
+          </Link>
+          <LabelTags labels={project.labels} />
+        </span>
+      }
+      description={project.description}
+      actions={
+        <ProjectActionsMenu
+          pinned={!!project.pinnedAt}
+          canPin={project.viewerRole !== "admin"}
+          canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
+          canDelete={canDeleteProject({
+            viewerRole: project.viewerRole,
+            visibility: project.visibility,
+            isProjectAdmin: !!isProjectAdmin,
+            canShareOrg: !!canShareOrg,
+          })}
+          onTogglePin={() => onTogglePin(project)}
+          onEdit={() => onEdit(project)}
+          onDelete={() => onDelete(project)}
         />
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <Link
-              href={`/projects/${project.id}`}
-              className="flex min-w-0 items-center gap-2"
-            >
-              <span className="shrink-0">
-                <AgentIcon
-                  icon={project.icon}
-                  fallbackType="project"
-                  size={18}
-                />
-              </span>
-              <span className="min-w-0 truncate font-medium">
-                {project.name}
-              </span>
-            </Link>
-            <LabelTags labels={project.labels} />
-          </div>
-          <span className="flex shrink-0 items-center gap-1">
-            {/* Scope pill (personal/team/org) on every card. The owner label is
-              added only on another member's PERSONAL project (admin oversight),
-              where the personal pill alone can't say whose it is — for team/org
-              the scope pill already conveys the sharing. */}
-            <ScopeBadge
-              scope={projectVisibilityToScope(project.visibility)}
-              teamNames={project.shareTeamNames}
-              userNames={project.shareUserNames}
-            />
-            {project.viewerRole === "admin" && project.visibility === null && (
-              <Badge variant="secondary">
-                {project.ownerName
-                  ? `Owned by ${project.ownerName}`
-                  : "Other user"}
-              </Badge>
-            )}
-            <ProjectActionsMenu
-              pinned={!!project.pinnedAt}
-              canPin={project.viewerRole !== "admin"}
-              canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
-              canDelete={canDeleteProject({
-                viewerRole: project.viewerRole,
-                visibility: project.visibility,
-                isProjectAdmin: !!isProjectAdmin,
-                canShareOrg: !!canShareOrg,
-              })}
-              onTogglePin={() => onTogglePin(project)}
-              onEdit={() => onEdit(project)}
-              onDelete={() => onDelete(project)}
-            />
-          </span>
-        </div>
+      }
+      selected={selected}
+      selectionDisabled={selectionDisabled}
+      selectionDisabledTooltip="You cannot modify this project"
+      onSelectedChange={onSelectedChange}
+      onSelectionClick={onSelectionClick}
+      selectionLabel={`Select ${project.name}`}
+      onNavigate={() => router.push(`/projects/${project.id}`)}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <ScopeBadge
+          scope={projectVisibilityToScope(project.visibility)}
+          teamNames={project.shareTeamNames}
+          userNames={project.shareUserNames}
+        />
+        {project.viewerRole === "admin" && project.visibility === null ? (
+          <Badge variant="secondary">
+            {project.ownerName ? `Owned by ${project.ownerName}` : "Other user"}
+          </Badge>
+        ) : null}
       </div>
-      {/* Always reserve two lines so cards keep a uniform height regardless of
-          description length (or absence). */}
-      <p className="mt-1 line-clamp-2 h-10 text-sm text-muted-foreground">
-        {project.description}
-      </p>
-    </div>
+    </TableCard>
   );
 }
 

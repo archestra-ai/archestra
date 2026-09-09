@@ -22,11 +22,9 @@ import { LabelTags } from "@/components/label-tags";
 import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-history-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
-import { useNavigableCard } from "@/components/table-card-view";
+import { TableCard } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,45 +78,6 @@ export function AppCard({
     />
   ) : (
     <ExternalAppCard app={app} showDisabledSelection={selection === null} />
-  );
-}
-
-function CardSelectionCheckbox({
-  label,
-  selection,
-  disabled = false,
-  disabledReason = "Installed apps are managed through their MCP server",
-}: {
-  label: string;
-  selection?: BulkCardSelectionProps;
-  disabled?: boolean;
-  disabledReason?: string;
-}) {
-  const checkbox = (
-    <Checkbox
-      className={cn("mt-1", disabled && "pointer-events-none")}
-      checked={selection?.selected ?? false}
-      onCheckedChange={(value) => selection?.onSelectedChange(!!value)}
-      onClick={(event) => {
-        event.stopPropagation();
-        selection?.onSelectionClick(event);
-      }}
-      aria-label={label}
-      disabled={disabled}
-    />
-  );
-
-  if (!disabled) return checkbox;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex cursor-not-allowed" title={disabledReason}>
-          {checkbox}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{disabledReason}</TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -274,76 +233,28 @@ function OwnedAppCard({
       setIsOpening(false);
     }
   };
-  const navigation = useNavigableCard({
-    onNavigate: isOpening ? undefined : () => void handleOpen(),
-  });
-
   return (
     <>
-      <Card
-        {...navigation.props}
-        className={cn(
-          "relative flex min-h-[180px] flex-col gap-0 p-4 transition-colors",
-          navigation.className,
-        )}
-      >
-        {isOpening ? <CardOpeningOverlay /> : null}
-
-        {/* Header row mirrors the project card: icon + title on one line at the
-            left, the scope pill / owner badge / overflow menu at the right. */}
-        <div className="mb-1 flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-start gap-3">
-            {selection ? (
-              <CardSelectionCheckbox
-                label={`Select ${app.name}`}
-                selection={selection}
-                disabled={selection.selectionDisabled || !access.canEdit}
-                disabledReason={
-                  settingsDisabledReason ??
-                  "You do not have permission to modify this app"
-                }
-              />
-            ) : null}
-            <AppTypeIcon owned icon={app.icon} />
+      <TableCard
+        className="relative"
+        icon={<AppTypeIcon owned icon={app.icon} />}
+        title={
+          <span className="flex min-w-0 items-center gap-1.5">
             <button
               type="button"
-              className="min-w-0 text-left"
+              className="truncate text-left"
               disabled={isOpening}
               aria-label={`Open ${app.name} in new chat`}
               onClick={() => void handleOpen()}
             >
-              <CardTitle className="truncate leading-snug">
-                {app.name}
-              </CardTitle>
+              {app.name}
             </button>
-          </div>
-          <CardOverflowMenu
-            leading={
-              <>
-                <LabelTags labels={app.labels} />
-                <ScopeBadge
-                  scope={app.scope}
-                  teamNames={app.teams?.map((team) => team.name)}
-                  userNames={app.users?.map((user) => user.name)}
-                />
-                {/* A disabled app is author-only, so this badge only ever
-                    shows on the author's own card. */}
-                {!app.enabled ? (
-                  <Badge variant="outline">Disabled</Badge>
-                ) : null}
-                {app.locked ? <Badge variant="outline">Locked</Badge> : null}
-                {/* Between the scope pill and the overflow menu, exactly as the
-                    project card places its owner badge. */}
-                {isForeignPersonalApp ? (
-                  <Badge variant="secondary">
-                    {app.authorName
-                      ? `Owned by ${app.authorName}`
-                      : "Other user"}
-                  </Badge>
-                ) : null}
-              </>
-            }
-          >
+            <LabelTags labels={app.labels} />
+          </span>
+        }
+        description={app.description}
+        actions={
+          <CardOverflowMenu>
             <PinMenuItem
               pinned={!!app.pinnedAt}
               target={{ source: "owned", appId: app.id }}
@@ -366,10 +277,6 @@ function OwnedAppCard({
                 Open in new tab
               </Link>
             </DropdownMenuItem>
-            {/* Opening an app is where an app chat is started, so it is where
-                the locked-chat choice has to be offered — there is no composer
-                to toggle beforehand. Hidden unless the instance has the
-                feature on, like the composer's own toggle. */}
             {lockedChatEnabled ? (
               <DropdownMenuItem onSelect={() => void handleOpen(true)}>
                 <LockedChatIcon className="h-4 w-4" />
@@ -385,25 +292,40 @@ function OwnedAppCard({
               onSelect={() => setDeleteOpen(true)}
             />
           </CardOverflowMenu>
-        </div>
-
-        {app.description ? (
-          <CardDescription className="line-clamp-3 break-words">
-            {app.description}
-          </CardDescription>
-        ) : null}
-
-        {/* The card's answer to the "Created by" column the tables carry.
-            Hidden for an external app, whose creator is somebody outside this
-            organization — an em dash would read as missing data rather than as
-            "not applicable". */}
-        {app.source === "owned" ? (
+        }
+        selected={selection?.selected}
+        selectionDisabled={selection?.selectionDisabled || !access.canEdit}
+        selectionDisabledTooltip={
+          settingsDisabledReason ??
+          "You do not have permission to modify this app"
+        }
+        onSelectedChange={selection?.onSelectedChange}
+        onSelectionClick={selection?.onSelectionClick}
+        selectionLabel={selection ? `Select ${app.name}` : undefined}
+        onNavigate={isOpening ? undefined : () => void handleOpen()}
+        footer={
           <CreatedByCell
             createdBy={app.createdBy}
             className="text-xs text-muted-foreground"
           />
-        ) : null}
-      </Card>
+        }
+      >
+        {isOpening ? <CardOpeningOverlay /> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <ScopeBadge
+            scope={app.scope}
+            teamNames={app.teams?.map((team) => team.name)}
+            userNames={app.users?.map((user) => user.name)}
+          />
+          {!app.enabled ? <Badge variant="outline">Disabled</Badge> : null}
+          {app.locked ? <Badge variant="outline">Locked</Badge> : null}
+          {isForeignPersonalApp ? (
+            <Badge variant="secondary">
+              {app.authorName ? `Owned by ${app.authorName}` : "Other user"}
+            </Badge>
+          ) : null}
+        </div>
+      </TableCard>
 
       <AppDeleteDialog
         app={{ id: app.id, name: app.name }}
@@ -467,46 +389,27 @@ function ExternalAppCard({
       setIsOpening(false);
     }
   };
-  const navigation = useNavigableCard({
-    onNavigate: isOpening ? undefined : () => void handleOpen(),
-  });
-
   return (
-    <Card
-      {...navigation.props}
-      className={cn(
-        "relative flex min-h-[180px] flex-col gap-0 p-4 transition-colors",
-        navigation.className,
-      )}
-    >
-      {isOpening ? <CardOpeningOverlay /> : null}
-
-      {/* Header row mirrors the project card: icon + title on one line at the
-          left, the scope pill / overflow menu at the right. */}
-      <div className="mb-1 flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-start gap-3">
-          {showDisabledSelection ? (
-            <CardSelectionCheckbox label={`Select ${app.name}`} disabled />
-          ) : null}
-          <AppTypeIcon owned={false} icon={app.icon} />
+    <TableCard
+      className="relative"
+      icon={<AppTypeIcon owned={false} icon={app.icon} />}
+      title={
+        <span className="flex min-w-0 items-center gap-1.5">
           <button
             type="button"
-            className="min-w-0 text-left"
+            className="truncate text-left"
             disabled={isOpening}
             aria-label={`Open ${app.name} in new chat`}
             onClick={() => void handleOpen()}
           >
-            <CardTitle className="truncate leading-snug">{app.name}</CardTitle>
+            {app.name}
           </button>
-        </div>
-        <CardOverflowMenu
-          leading={
-            <>
-              <LabelTags labels={app.labels} />
-              <ScopeBadge scope={app.scope} />
-            </>
-          }
-        >
+          <LabelTags labels={app.labels} />
+        </span>
+      }
+      description={app.description}
+      actions={
+        <CardOverflowMenu>
           <PinMenuItem
             pinned={!!app.pinnedAt}
             target={{
@@ -516,8 +419,6 @@ function ExternalAppCard({
               toolName: app.toolName,
             }}
           />
-          {/* A tool with required inputs only opens via the chat prompt flow —
-              its standalone page can't render anything useful, so don't offer it. */}
           {app.requiresInput ? null : (
             <DropdownMenuItem asChild>
               <Link href={runHref} target="_blank" rel="noreferrer">
@@ -526,8 +427,6 @@ function ExternalAppCard({
               </Link>
             </DropdownMenuItem>
           )}
-          {/* Same reasoning as the owned card: opening the app is where the
-              app chat is created, so it is where the lock is chosen. */}
           {lockedChatEnabled ? (
             <DropdownMenuItem onSelect={() => void handleOpen(true)}>
               <LockedChatIcon className="h-4 w-4" />
@@ -541,14 +440,19 @@ function ExternalAppCard({
             </Link>
           </DropdownMenuItem>
         </CardOverflowMenu>
+      }
+      selected={false}
+      selectionDisabled={showDisabledSelection}
+      selectionDisabledTooltip="Installed apps are managed through their MCP server"
+      onSelectedChange={showDisabledSelection ? () => undefined : undefined}
+      selectionLabel={showDisabledSelection ? `Select ${app.name}` : undefined}
+      onNavigate={isOpening ? undefined : () => void handleOpen()}
+    >
+      {isOpening ? <CardOpeningOverlay /> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <ScopeBadge scope={app.scope} />
       </div>
-
-      {app.description ? (
-        <CardDescription className="line-clamp-3 break-words">
-          {app.description}
-        </CardDescription>
-      ) : null}
-    </Card>
+    </TableCard>
   );
 }
 

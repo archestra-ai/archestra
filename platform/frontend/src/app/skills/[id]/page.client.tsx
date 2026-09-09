@@ -15,6 +15,7 @@ import { AgentBadge } from "@/components/agent-badge";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { PageLayout } from "@/components/page-layout";
+import { FloatingActionBar } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,6 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { WizardFooter } from "@/components/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   backToListLabel,
@@ -454,38 +454,36 @@ function SkillDetailView({
             }
           />
 
-          {/* A reader who cannot change the skill has no save row at all — the
-              alert above already says why. No rule above it either: the panel
-              is already ruled off, and a second line right under it read as a
-              stray divider. */}
+          {/* The save row floats at the foot of the form so it is in reach
+              without scrolling to the bottom of a long skill, the same bar the
+              settings pages use. A reader who cannot change the skill has no
+              save row at all — the alert above already says why. */}
           {!isReadOnly && (
-            <WizardFooter className="border-t-0 sm:justify-end">
-              <div className="flex items-center gap-2">
-                {isDirty && !isSaving && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={discardChanges}
-                  >
-                    Discard changes
-                  </Button>
+            <FloatingActionBar>
+              <PermissionButton
+                permissions={{ skill: ["update"] }}
+                disabled={!isDirty || !contentComplete || isGone || isSaving}
+                onClick={handleSave}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>Save changes</span>
                 )}
-                <PermissionButton
-                  permissions={{ skill: ["update"] }}
-                  disabled={!isDirty || !contentComplete || isGone || isSaving}
-                  onClick={handleSave}
+              </PermissionButton>
+              {isDirty && !isSaving && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={discardChanges}
                 >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <span>Save changes</span>
-                  )}
-                </PermissionButton>
-              </div>
-            </WizardFooter>
+                  Discard changes
+                </Button>
+              )}
+            </FloatingActionBar>
           )}
         </div>
       )}

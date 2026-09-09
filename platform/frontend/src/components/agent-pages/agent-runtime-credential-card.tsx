@@ -101,102 +101,105 @@ export function AgentRuntimeCredentialCard({
           </Button>
         )}
       </div>
-      <div className="divide-y border-t">
-        {credentials.map((credential) => {
-          const configured = preflight?.configured.includes(credential.key);
-          const definition = definitions.data?.find(
-            (candidate) => candidate.key === credential.credentialId,
-          );
-          return (
-            <div
-              key={credential.key}
-              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
-            >
-              <div className="flex min-w-0 flex-1 items-start gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-                  <RuntimeCredentialIcon icon={definition?.icon ?? null} />
+      {credentials.length > 0 && (
+        <div className="divide-y border-t">
+          {credentials.map((credential) => {
+            const configured = preflight?.configured.includes(credential.key);
+            const definition = definitions.data?.find(
+              (candidate) => candidate.key === credential.credentialId,
+            );
+            return (
+              <div
+                key={credential.key}
+                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+              >
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+                    <RuntimeCredentialIcon icon={definition?.icon ?? null} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-sm font-medium">
+                      {credential.label}
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {credential.description ||
+                        `${credential.scope === "shared" ? "Organization" : "Personal"} connection${definition ? ` using ${definition.name}` : ""}`}
+                    </p>
+                    <CredentialConnectionStatus
+                      configured={configured === true}
+                      required={credential.required}
+                      scope={credential.scope}
+                    />
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-medium">
-                    {credential.label}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {credential.description ||
-                      `${credential.scope === "shared" ? "Organization" : "Personal"} connection${definition ? ` using ${definition.name}` : ""}`}
-                  </p>
-                  <CredentialConnectionStatus
-                    configured={configured === true}
-                    required={credential.required}
-                    scope={credential.scope}
-                  />
-                </div>
-              </div>
-              {!readOnly && (
-                <div className="shrink-0 self-end sm:self-auto">
-                  <TableRowActions
-                    itemName={credential.label}
-                    actions={[
-                      {
-                        icon: configured ? (
-                          <RefreshCw className="size-4" />
-                        ) : (
-                          <Plug className="size-4" />
-                        ),
-                        label: configured
-                          ? "Replace"
-                          : definition
-                            ? "Connect"
-                            : "Set secret",
-                        permissions:
-                          definition && credential.scope === "shared"
-                            ? { agentSettings: ["update"] }
-                            : { agent: ["read"] },
-                        disabled: !definition && setCredential.isPending,
-                        disabledTooltip:
-                          "A credential update is already in progress.",
-                        onClick: () => {
-                          if (definition) {
-                            setConnectionDialog({ credential, definition });
-                          } else {
-                            setManualCredential(credential);
-                          }
+                {!readOnly && (
+                  <div className="shrink-0 self-end sm:self-auto">
+                    <TableRowActions
+                      itemName={credential.label}
+                      actions={[
+                        {
+                          icon: configured ? (
+                            <RefreshCw className="size-4" />
+                          ) : (
+                            <Plug className="size-4" />
+                          ),
+                          label: configured
+                            ? "Replace"
+                            : definition
+                              ? "Connect"
+                              : "Set secret",
+                          permissions:
+                            definition && credential.scope === "shared"
+                              ? { agentSettings: ["update"] }
+                              : { agent: ["read"] },
+                          disabled: !definition && setCredential.isPending,
+                          disabledTooltip:
+                            "A credential update is already in progress.",
+                          onClick: () => {
+                            if (definition) {
+                              setConnectionDialog({ credential, definition });
+                            } else {
+                              setManualCredential(credential);
+                            }
+                          },
                         },
-                      },
-                    ]}
-                    dropdownActions={
-                      configured
-                        ? [
-                            {
-                              icon: credential.credentialId ? (
-                                <Unplug className="size-4" />
-                              ) : (
-                                <Trash2 className="size-4" />
-                              ),
-                              label: credential.credentialId
-                                ? "Disconnect"
-                                : "Delete secret",
-                              permissions:
-                                definition && credential.scope === "shared"
-                                  ? { agentSettings: ["update"] }
-                                  : { agent: ["read"] },
-                              disabled:
-                                deleteCredential.isPending ||
-                                deleteConnection.isPending,
-                              disabledTooltip:
-                                "A credential update is already in progress.",
-                              variant: "destructive",
-                              onClick: () => setCredentialToDelete(credential),
-                            },
-                          ]
-                        : []
-                    }
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                      ]}
+                      dropdownActions={
+                        configured
+                          ? [
+                              {
+                                icon: credential.credentialId ? (
+                                  <Unplug className="size-4" />
+                                ) : (
+                                  <Trash2 className="size-4" />
+                                ),
+                                label: credential.credentialId
+                                  ? "Disconnect"
+                                  : "Delete secret",
+                                permissions:
+                                  definition && credential.scope === "shared"
+                                    ? { agentSettings: ["update"] }
+                                    : { agent: ["read"] },
+                                disabled:
+                                  deleteCredential.isPending ||
+                                  deleteConnection.isPending,
+                                disabledTooltip:
+                                  "A credential update is already in progress.",
+                                variant: "destructive",
+                                onClick: () =>
+                                  setCredentialToDelete(credential),
+                              },
+                            ]
+                          : []
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {!readOnly && manualCredential && (
         <AgentCredentialValueDialog
           credential={manualCredential}

@@ -35,6 +35,8 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   MemberModel,
   ProjectModel,
   TeamModel,
@@ -44,6 +46,7 @@ import { getAgentCredentialReadiness } from "@/services/agent-credential-readine
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
+import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
@@ -590,6 +593,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "An agent's model and API key must be set together",
         );
       }
+      await assertAgentRuntimeModelCompatibility({
+        runtime: body.runtime,
+        agent: {
+          llmApiKeyId: body.llmApiKeyId ?? null,
+          modelId: body.modelId ?? null,
+        },
+        organizationId,
+        userId: user.id,
+      });
 
       const environmentId = await resolveNewAgentEnvironmentId({
         userId: user.id,
@@ -1678,6 +1690,27 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (
+        body.runtime !== undefined ||
+        body.modelId !== undefined ||
+        body.llmApiKeyId !== undefined
+      ) {
+        await assertAgentRuntimeModelCompatibility({
+          runtime:
+            body.runtime !== undefined ? body.runtime : existingAgent.runtime,
+          agent: {
+            llmApiKeyId:
+              body.llmApiKeyId !== undefined
+                ? body.llmApiKeyId
+                : existingAgent.llmApiKeyId,
+            modelId:
+              body.modelId !== undefined ? body.modelId : existingAgent.modelId,
+          },
+          organizationId,
+          userId: user.id,
+        });
+      }
+
       if (body.environmentId !== undefined) {
         await assertEnvironmentAssignable({
           userId: user.id,
@@ -2725,6 +2758,56 @@ function requireAgentRuntimePermission(params: {
       403,
       "Privileged background deployments are disabled by the deployment operator",
     );
+  }
+}
+
+async function assertAgentRuntimeModelCompatibility(params: {
+  runtime:
+    | Pick<AgentRuntime, "command" | "inferenceProtocol">
+    | null
+    | undefined;
+  agent: Pick<Agent, "llmApiKeyId" | "modelId">;
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  const { runtime } = params;
+  if (!runtime) return;
+  if (params.agent.llmApiKeyId || params.agent.modelId) {
+    if (!params.agent.llmApiKeyId || !params.agent.modelId) {
+      throw new ApiError(
+        400,
+        "An agent's model and API key must be set together",
+      );
+    }
+    const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
+    const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+      params.organizationId,
+      params.userId,
+      userTeamIds,
+    );
+    const selectedKey = availableKeys.find(
+      (key) => key.id === params.agent.llmApiKeyId,
+    );
+    const selectedModelIsLinked = selectedKey
+      ? (
+          await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+            selectedKey.id,
+          ])
+        ).some(({ model }) => model.id === params.agent.modelId)
+      : false;
+    if (!selectedModelIsLinked) {
+      throw new ApiError(
+        400,
+        "The selected model and API key must be linked and available to you",
+      );
+    }
+  }
+  const result = await getResolvedAgentRuntimeModelCompatibility({
+    ...params,
+    runtime,
+  });
+  if (!result.compatibility.compatible) {
+    throw new ApiError(409, result.compatibility.message);
   }
 }
 

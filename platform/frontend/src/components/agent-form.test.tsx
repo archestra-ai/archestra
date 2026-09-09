@@ -1,4 +1,8 @@
-import { BUILT_IN_AGENT_IDS, E2eTestId } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  E2eTestId,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
@@ -54,6 +58,8 @@ const {
   useAgentToolsMock,
   useBulkUpdateAgentToolsMock,
   useInternalMcpCatalogMock,
+  useAgentRuntimePreflightMock,
+  useOrganizationDefaultModelMock,
   saveChannelChangesMock,
 } = vi.hoisted(() => ({
   /** Stands in for what the agent write hooks reject with once they toasted. */
@@ -129,6 +135,12 @@ const {
       isError: boolean;
     } => ({ data: [], isPending: false, isError: false }),
   ),
+  useAgentRuntimePreflightMock: vi.fn(() => ({ data: undefined })),
+  useOrganizationDefaultModelMock: vi.fn(() => ({
+    isSet: false,
+    model: null,
+    label: null,
+  })),
   useAgentDelegationsMock: vi.fn(
     (): { data: unknown[]; isSuccess: boolean } => ({
       data: [],
@@ -232,6 +244,14 @@ vi.mock("@/lib/agent-tools.query", () => ({
   useSyncAgentDelegations: useSyncAgentDelegationsMock,
   useAgentTools: useAgentToolsMock,
   useBulkUpdateAgentTools: useBulkUpdateAgentToolsMock,
+}));
+
+vi.mock("@/lib/agent-runtime.query", () => ({
+  useAgentRuntimePreflight: useAgentRuntimePreflightMock,
+}));
+
+vi.mock("@/lib/hooks/use-organization-default-model", () => ({
+  useOrganizationDefaultModel: useOrganizationDefaultModelMock,
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -345,7 +365,57 @@ vi.mock("@/components/agent-icon-picker", () => ({
 }));
 
 vi.mock("@/components/chat/model-selector", () => ({
-  ModelSelector: () => null,
+  ModelSelector: ({
+    selectedModel,
+    onModelChange,
+    modelFilter,
+  }: {
+    selectedModel: string;
+    onModelChange?: (modelId: string) => void;
+    modelFilter?: (model: {
+      id: string;
+      provider: SupportedProvider;
+    }) => boolean;
+  }) => (
+    <>
+      <output data-testid="selected-model">{selectedModel}</output>
+      {onModelChange && (
+        <button type="button" onClick={() => onModelChange("manual-model")}>
+          Pick manual model
+        </button>
+      )}
+      {modelFilter && (
+        <>
+          <output data-testid="runtime-model-filter">
+            {JSON.stringify({
+              gemini: modelFilter({ id: "gemini-2.5-pro", provider: "gemini" }),
+              openai: modelFilter({ id: "gpt-4o", provider: "openai" }),
+              anthropic: modelFilter({
+                id: "claude-sonnet-4-6",
+                provider: "anthropic",
+              }),
+              bedrock: modelFilter({
+                id: "us.anthropic.claude-sonnet-4-6",
+                provider: "bedrock",
+              }),
+            })}
+          </output>
+          <output data-testid="runtime-bedrock-model-filter">
+            {JSON.stringify({
+              claude: modelFilter({
+                id: "anthropic.claude-sonnet-4-6",
+                provider: "bedrock",
+              }),
+              nova: modelFilter({
+                id: "amazon.nova-pro-v1:0",
+                provider: "bedrock",
+              }),
+            })}
+          </output>
+        </>
+      )}
+    </>
+  ),
 }));
 
 vi.mock("@/components/external-docs-link", () => ({
@@ -385,6 +455,30 @@ vi.mock("./agent-pages/agent-runtime-credential-card", () => ({
   AgentRuntimeCredentialCard: () => <div>Mock Background Credentials</div>,
 }));
 
+vi.mock("./agent-runtime-fields", () => ({
+  AgentRuntimeFields: ({
+    value,
+    onChange,
+  }: {
+    value: { inferenceProtocol: string } | null;
+    onChange: (value: { inferenceProtocol: string } | null) => void;
+  }) => (
+    <div data-testid="agent-runtime">
+      <button
+        type="button"
+        onClick={() =>
+          value && onChange({ ...value, inferenceProtocol: "openai_responses" })
+        }
+      >
+        Set runtime to OpenAI Responses
+      </button>
+      <button type="button" onClick={() => onChange(null)}>
+        Disable runtime
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock(
   "@/app/settings/messaging-channels/email/agent-email-settings-dialog",
   () => ({
@@ -394,14 +488,70 @@ vi.mock(
 
 vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   LlmProviderApiKeyDropdown: ({
+    onAddApiKey,
     onSelectKey,
+    providerFilter,
   }: {
+    onAddApiKey?: () => void;
     onSelectKey: (keyId: string) => void;
+    providerFilter?: (provider: SupportedProvider) => boolean;
   }) => (
-    <button type="button" onClick={() => onSelectKey("key-1")}>
-      Pick API key
-    </button>
+    <>
+      <button type="button" onClick={() => onSelectKey("key-1")}>
+        Pick API key
+      </button>
+      {onAddApiKey && (
+        <button type="button" onClick={onAddApiKey}>
+          Add provider key
+        </button>
+      )}
+      {providerFilter && (
+        <output data-testid="runtime-provider-filter">
+          {JSON.stringify({
+            gemini: providerFilter("gemini"),
+            openai: providerFilter("openai"),
+            anthropic: providerFilter("anthropic"),
+            bedrock: providerFilter("bedrock"),
+          })}
+        </output>
+      )}
+    </>
   ),
+}));
+
+vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
+  CreateLlmProviderApiKeyDialog: ({
+    allowedProviders,
+    credentialMode,
+    description,
+    onSuccess,
+    open,
+    showConsoleLink,
+    title,
+  }: {
+    allowedProviders?: SupportedProvider[];
+    credentialMode?: string;
+    description: string;
+    onSuccess?: (keyId?: string) => void;
+    open: boolean;
+    showConsoleLink?: boolean;
+    title: string;
+  }) =>
+    open ? (
+      <div>
+        <span>{title}</span>
+        <span>{description}</span>
+        <output data-testid="create-key-allowed-providers">
+          {allowedProviders?.join(",")}
+        </output>
+        <output data-testid="create-key-mode">
+          {`${credentialMode}:${showConsoleLink}`}
+        </output>
+        <button type="button" onClick={() => onSuccess?.("created-key-id")}>
+          Create provider key
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/share-personal-credentials-dialog", () => ({
@@ -596,8 +746,23 @@ vi.mock("@/components/ui/popover", () => ({
 }));
 
 vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
+  Select: ({
+    children,
+    value,
+    onValueChange,
+  }: {
+    children?: React.ReactNode;
+    value?: string;
+    onValueChange?: (value: string) => void;
+  }) => (
+    <div>
+      <button
+        type="button"
+        aria-label={`Set ${value} to OpenAI Responses`}
+        onClick={() => onValueChange?.("openai_responses")}
+      />
+      {children}
+    </div>
   ),
   SelectContent: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -2120,6 +2285,281 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it("opens the shared provider-key dialog from the agent picker", async () => {
+    const user = userEvent.setup();
+    renderConfiguration();
+
+    await user.click(screen.getByRole("button", { name: "Add provider key" }));
+
+    expect(screen.getByText("Add API Key")).toBeInTheDocument();
+    expect(
+      screen.getByText("Add an LLM provider API key."),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("create-key-mode")).toHaveTextContent(
+      "api-key:true",
+    );
+  });
+
+  it("selects a newly created key after its available-key refetch", async () => {
+    const user = userEvent.setup();
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        openai: [
+          {
+            dbId: "created-model",
+            id: "gpt-4o",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    const view = renderConfiguration();
+    await act(async () => {});
+
+    await user.click(screen.getByRole("button", { name: "Add provider key" }));
+    await user.click(
+      screen.getByRole("button", { name: "Create provider key" }),
+    );
+
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "created-key-id",
+          name: "Created OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "created-model",
+        },
+      ],
+    });
+    view.rerender(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(await screen.findByTestId("selected-model")).toHaveTextContent(
+      "created-model",
+    );
+  });
+
+  it("does not let a delayed created key overwrite a manual picker choice", async () => {
+    const user = userEvent.setup();
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Manual OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "manual-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        openai: [
+          {
+            dbId: "manual-model",
+            id: "gpt-4o",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+          {
+            dbId: "created-model",
+            id: "gpt-4.1",
+            displayName: "GPT-4.1",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    const view = renderConfiguration();
+    await act(async () => {});
+
+    await user.click(screen.getByRole("button", { name: "Add provider key" }));
+    await user.click(
+      screen.getByRole("button", { name: "Create provider key" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Manual OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "manual-model",
+        },
+        {
+          id: "created-key-id",
+          name: "Created OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "created-model",
+        },
+      ],
+    });
+    view.rerender(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(await screen.findByTestId("selected-model")).toHaveTextContent(
+      "manual-model",
+    );
+  });
+
+  it("does not let a delayed created key overwrite a manual model choice", async () => {
+    const user = userEvent.setup();
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Existing Gemini key",
+          provider: "gemini",
+          scope: "personal",
+          bestModelId: "initial-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        gemini: [
+          {
+            dbId: "initial-model",
+            id: "gemini-2.5-flash",
+            displayName: "Gemini 2.5 Flash",
+            provider: "gemini",
+            isFree: false,
+          },
+          {
+            dbId: "manual-model",
+            id: "gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            provider: "gemini",
+            isFree: false,
+          },
+        ],
+        openai: [
+          {
+            dbId: "created-model",
+            id: "gpt-4o",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    const view = renderConfiguration();
+    await act(async () => {});
+
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    await user.click(screen.getByRole("button", { name: "Add provider key" }));
+    await user.click(
+      screen.getByRole("button", { name: "Create provider key" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Pick manual model" }));
+    expect(await screen.findByTestId("selected-model")).toHaveTextContent(
+      "manual-model",
+    );
+
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Existing Gemini key",
+          provider: "gemini",
+          scope: "personal",
+          bestModelId: "initial-model",
+        },
+        {
+          id: "created-key-id",
+          name: "Created OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "created-model",
+        },
+      ],
+    });
+    view.rerender(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(await screen.findByTestId("selected-model")).toHaveTextContent(
+      "manual-model",
+    );
+  });
+
+  it("does not select a created provider incompatible with the agent runtime", async () => {
+    const user = userEvent.setup();
+    const runtime = {
+      image: "example.com/coding-agent:latest",
+      command: ["archestra-codex"],
+      inferenceProtocol: "openai_responses" as const,
+      backend: "kubernetes" as const,
+      steerMode: "pipe" as const,
+      privileged: false,
+      resources: null,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      maxCostUsd: null,
+      idleTimeoutMinutes: null,
+    };
+    const view = render(
+      <AgentForm
+        agentType="agent"
+        agent={{ ...baseAgent, runtime }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add provider key" }));
+    expect(
+      screen.getByTestId("create-key-allowed-providers"),
+    ).toHaveTextContent("openai");
+    await user.click(
+      screen.getByRole("button", { name: "Create provider key" }),
+    );
+
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "created-key-id",
+          name: "Created Gemini key",
+          provider: "gemini",
+          scope: "personal",
+          bestModelId: "gemini-model",
+        },
+      ],
+    });
+    view.rerender(
+      <AgentForm
+        agentType="agent"
+        agent={{ ...baseAgent, runtime }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(await screen.findByTestId("selected-model")).toBeEmptyDOMElement();
+  });
+
   it("saves messaging channel changes before the agent update", async () => {
     const user = userEvent.setup();
     renderConfigurationWithChannels();
@@ -2179,6 +2619,669 @@ describe("AgentForm save payload and failure handling", () => {
       "teams",
       "users",
     ]);
+  });
+
+  it("blocks saving an existing model that is incompatible with its dedicated runtime", async () => {
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        gemini: [
+          {
+            dbId: "gemini-model",
+            id: "gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            provider: "gemini",
+            isFree: false,
+          },
+        ],
+      },
+    });
+
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "gemini-key",
+          modelId: "gemini-model",
+          runtime: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Choose a compatible model or runtime to save."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+    expect(updateAgent).not.toHaveBeenCalled();
+  });
+
+  it("enables Save after correcting a stale preflight incompatibility", async () => {
+    vi.mocked(useFeature).mockImplementation(
+      ((flag: string) =>
+        flag === "agentRuntime") as unknown as typeof useFeature,
+    );
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        gemini: [
+          {
+            dbId: "gemini-model",
+            id: "gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            provider: "gemini",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    useAgentRuntimePreflightMock.mockReturnValue({
+      data: {
+        ready: false,
+        incompatible: "This Agent Runtime image expects the Anthropic API.",
+        missing: [],
+        misconfigured: [],
+      },
+    } as never);
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "gemini-key",
+          modelId: "gemini-model",
+          runtime: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["advanced"]}
+        activeSection="advanced"
+      />,
+    );
+
+    await screen.findByText("Choose a compatible model or runtime to save.");
+    await user.click(
+      screen.getByRole("button", {
+        name: "Set runtime to OpenAI Responses",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Choose a compatible model or runtime to save."),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+  });
+
+  it("enables Save after disabling a runtime with a stale preflight incompatibility", async () => {
+    vi.mocked(useFeature).mockImplementation(
+      ((flag: string) =>
+        flag === "agentRuntime") as unknown as typeof useFeature,
+    );
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        gemini: [
+          {
+            dbId: "gemini-model",
+            id: "gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            provider: "gemini",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    useAgentRuntimePreflightMock.mockReturnValue({
+      data: {
+        ready: false,
+        incompatible: "This Agent Runtime image expects the Anthropic API.",
+        missing: [],
+        misconfigured: [],
+      },
+    } as never);
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "gemini-key",
+          modelId: "gemini-model",
+          runtime: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["advanced"]}
+        activeSection="advanced"
+      />,
+    );
+
+    await screen.findByText("Choose a compatible model or runtime to save.");
+    await user.click(screen.getByRole("button", { name: "Disable runtime" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Choose a compatible model or runtime to save."),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+  });
+
+  it("blocks an Anthropic runtime when the inherited organization model is Gemini", async () => {
+    useOrganizationDefaultModelMock.mockReturnValue({
+      isSet: true,
+      label: "Google · Gemini 2.5 Pro",
+      model: {
+        dbId: "gemini-default",
+        id: "gemini-2.5-pro",
+        displayName: "Gemini 2.5 Pro",
+        provider: "gemini",
+        capabilities: { supportedEndpoints: null },
+        isFree: false,
+      },
+    } as never);
+
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Choose a compatible model or runtime to save."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+  });
+
+  test.each([
+    "tools",
+    "advanced",
+  ] as const)("shows recovery guidance beside Save on the %s-only form", async (section) => {
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        gemini: [
+          {
+            dbId: "gemini-model",
+            id: "gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            provider: "gemini",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "gemini-key",
+          modelId: "gemini-model",
+          runtime: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={[section]}
+        activeSection={section}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Choose a compatible model or runtime to save."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+  });
+
+  it("shows recovery guidance on a standalone advanced page", async () => {
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        gemini: [
+          {
+            dbId: "gemini-model",
+            id: "gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            provider: "gemini",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: "gemini-key",
+          modelId: "gemini-model",
+          runtime: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["advanced"]}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Choose a compatible model or runtime to save."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+  });
+
+  it("clears the model when a newly selected key has no runtime-compatible models", async () => {
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "Gemini key",
+          provider: "gemini",
+          scope: "personal",
+          bestModelId: "gemini-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        gemini: [
+          {
+            dbId: "gemini-model",
+            id: "gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            provider: "gemini",
+            isFree: false,
+          },
+        ],
+      },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            inferenceProtocol: "anthropic",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
+  });
+
+  it("defers key-driven model selection until the model catalog arrives", async () => {
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "model-1",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
+    const user = userEvent.setup();
+    const view = render(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    expect(screen.getByTestId("selected-model")).toBeEmptyDOMElement();
+    expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        openai: [
+          {
+            dbId: "model-1",
+            id: "gpt-4o",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    view.rerender(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(await screen.findByTestId("selected-model")).toHaveTextContent(
+      "model-1",
+    );
+    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+  });
+
+  it("does not let a delayed catalog subscription overwrite a newer key choice", async () => {
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "chatgpt-key",
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "subscription-model",
+          subscriptionKind: "chatgpt",
+        },
+        {
+          id: "key-1",
+          name: "OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "regular-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
+    const user = userEvent.setup();
+    const view = render(
+      <AgentForm
+        agentType="agent"
+        initialValues={{ requiredSubscriptionKind: "chatgpt" }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        openai: [
+          {
+            dbId: "subscription-model",
+            id: "claude-looking-id",
+            displayName: "Subscription model",
+            provider: "openai",
+            isFree: false,
+          },
+          {
+            dbId: "regular-model",
+            id: "gemini-looking-id",
+            displayName: "Regular model",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    });
+    view.rerender(
+      <AgentForm
+        agentType="agent"
+        initialValues={{ requiredSubscriptionKind: "chatgpt" }}
+        sections={["configuration"]}
+      />,
+    );
+
+    expect(await screen.findByTestId("selected-model")).toHaveTextContent(
+      "regular-model",
+    );
+  });
+
+  it("filters Codex to OpenAI but leaves OpenCode's same protocol provider-neutral", async () => {
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "openai-model",
+        },
+      ],
+    });
+    const runtime = (command: string[]) => ({
+      image: "example.com/coding-agent:latest",
+      command,
+      inferenceProtocol: "openai_responses" as const,
+      backend: "kubernetes" as const,
+      steerMode: "pipe" as const,
+      privileged: false,
+      resources: null,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      maxCostUsd: null,
+      idleTimeoutMinutes: null,
+    });
+    const user = userEvent.setup();
+    const codex = render(
+      <AgentForm
+        agentType="agent"
+        initialValues={{ runtime: runtime(["archestra-codex"]) }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    expect(await screen.findByTestId("runtime-model-filter")).toHaveTextContent(
+      '{"gemini":false,"openai":true,"anthropic":false,"bedrock":false}',
+    );
+    expect(screen.getByTestId("runtime-provider-filter")).toHaveTextContent(
+      '{"gemini":false,"openai":true,"anthropic":false,"bedrock":false}',
+    );
+
+    codex.unmount();
+    render(
+      <AgentForm
+        agentType="agent"
+        initialValues={{ runtime: runtime(["archestra-opencode"]) }}
+        sections={["configuration"]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    expect(await screen.findByTestId("runtime-model-filter")).toHaveTextContent(
+      '{"gemini":true,"openai":true,"anthropic":true,"bedrock":true}',
+    );
+    expect(screen.getByTestId("runtime-provider-filter")).toHaveTextContent(
+      '{"gemini":true,"openai":true,"anthropic":true,"bedrock":true}',
+    );
+  });
+
+  it("keeps Claude Bedrock keys visible while filtering non-Claude Bedrock models", async () => {
+    const runtime = {
+      image: "example.com/coding-agent:latest",
+      command: ["archestra-claude-code"],
+      inferenceProtocol: "anthropic" as const,
+      backend: "kubernetes" as const,
+      steerMode: "pipe" as const,
+      privileged: false,
+      resources: null,
+      environment: null,
+      credentials: null,
+      ttlHours: null,
+      maxCostUsd: null,
+      idleTimeoutMinutes: null,
+    };
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        initialValues={{ runtime }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+
+    expect(
+      await screen.findByTestId("runtime-provider-filter"),
+    ).toHaveTextContent(
+      '{"gemini":false,"openai":false,"anthropic":true,"bedrock":true}',
+    );
+    expect(screen.getByTestId("runtime-model-filter")).toHaveTextContent(
+      '{"gemini":false,"openai":false,"anthropic":true,"bedrock":true}',
+    );
+    expect(
+      screen.getByTestId("runtime-bedrock-model-filter"),
+    ).toHaveTextContent('{"claude":true,"nova":false}');
+  });
+
+  it("skips a Responses-only best model for a Chat Completions runtime", async () => {
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "key-1",
+          name: "OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "responses-model",
+        },
+      ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        openai: [
+          {
+            dbId: "responses-model",
+            id: "gpt-5.3-codex",
+            displayName: "Codex",
+            provider: "openai",
+            isFree: false,
+          },
+          {
+            dbId: "chat-model",
+            id: "gpt-4o",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={{
+          ...baseAgent,
+          llmApiKeyId: null,
+          modelId: null,
+          runtime: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            inferenceProtocol: "openai_chat",
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            maxCostUsd: null,
+            idleTimeoutMinutes: null,
+          },
+        }}
+        sections={["configuration"]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pick API key" }));
+    expect(screen.getByTestId("selected-model")).toHaveTextContent(
+      "chat-model",
+    );
   });
 
   it("writes only the channel assignments from a messaging-only surface", async () => {
@@ -2280,6 +3383,19 @@ describe("AgentForm save payload and failure handling", () => {
         },
       ],
     });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        openai: [
+          {
+            dbId: "model-1",
+            id: "gpt-4o",
+            displayName: "GPT-4o",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
+    });
     renderConfiguration();
 
     await user.click(
@@ -2305,6 +3421,19 @@ describe("AgentForm save payload and failure handling", () => {
           subscriptionKind: "chatgpt",
         },
       ],
+    });
+    useLlmModelsByProviderMock.mockReturnValue({
+      modelsByProvider: {
+        openai: [
+          {
+            dbId: "codex-model",
+            id: "gpt-5.3-codex",
+            displayName: "Codex",
+            provider: "openai",
+            isFree: false,
+          },
+        ],
+      },
     });
 
     render(

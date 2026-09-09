@@ -17685,6 +17685,7 @@ export type GetAgentRuntimePreflightResponses = {
             label: string;
             description?: string;
         }>;
+        incompatible: string | null;
     };
 };
 
@@ -68790,6 +68791,7 @@ export type GetLlmModelsResponses = {
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
             supportsReasoningEffort: boolean | null;
+            supportedEndpoints?: Array<'/chat/completions' | '/responses'> | null;
             recommendedForAgents: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;

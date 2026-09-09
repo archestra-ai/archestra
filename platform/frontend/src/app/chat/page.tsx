@@ -194,6 +194,7 @@ import {
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -830,6 +831,11 @@ export function ChatPageContent({
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
     useConversation(conversationId);
+  usePageTitle(
+    conversation
+      ? getConversationDisplayTitle(conversation.title, conversation.messages)
+      : "Chat",
+  );
   const canManageShare =
     !!conversationId &&
     !!conversation &&

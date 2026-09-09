@@ -5,6 +5,7 @@ import {
   DEFAULT_APP_FULL_NAME,
 } from "@archestra/shared";
 import { useEffect } from "react";
+import { useCurrentPageTitle } from "@/lib/hooks/use-page-title";
 import { useAppearanceSettings } from "@/lib/organization.query";
 
 const DEFAULT_FAVICON_PATH = "/default-favicon.ico";
@@ -18,12 +19,14 @@ const PNG_DATA_URI_PREFIX = "data:image/png;base64,";
  */
 export function DynamicHead() {
   const { data: appearance, isFetched } = useAppearanceSettings();
+  const pageTitle = useCurrentPageTitle();
 
   // Update document title only after data has loaded to avoid flashing default
   useEffect(() => {
     if (!isFetched) return;
-    document.title = appearance?.appName || DEFAULT_APP_FULL_NAME;
-  }, [appearance?.appName, isFetched]);
+    const appName = appearance?.appName || DEFAULT_APP_FULL_NAME;
+    document.title = pageTitle ? `${pageTitle} - ${appName}` : appName;
+  }, [appearance?.appName, isFetched, pageTitle]);
 
   // The server-rendered layout already contains the current content-versioned
   // favicon. Avoid replacing that stable candidate when the same appearance

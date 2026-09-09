@@ -60,6 +60,10 @@ const llmProviderApiKeysTable = pgTable(
     isSystem: boolean("is_system").notNull().default(false),
     /** When multiple LLM provider API keys exist for the same provider+scope, the primary key is preferred */
     isPrimary: boolean("is_primary").notNull().default(false),
+    /** A provider rejected this credential; cleared after successful validation. */
+    requiresReauthentication: boolean("requires_reauthentication")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

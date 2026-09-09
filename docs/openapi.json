@@ -88273,6 +88273,7 @@
                 "llmOauthClient.rotated",
                 "llmOauthClient.bulk_deleted",
                 "llmProviderApiKey.created",
+                "llmProviderApiKey.updated",
                 "llmProviderApiKey.deleted",
                 "llmProxy.updated",
                 "llmProviderApiKey.bulk_deleted",
@@ -88599,6 +88600,7 @@
                                   "llmOauthClient.rotated",
                                   "llmOauthClient.bulk_deleted",
                                   "llmProviderApiKey.created",
+                                  "llmProviderApiKey.updated",
                                   "llmProviderApiKey.deleted",
                                   "llmProxy.updated",
                                   "llmProviderApiKey.bulk_deleted",
@@ -89236,6 +89238,7 @@
                             "llmOauthClient.rotated",
                             "llmOauthClient.bulk_deleted",
                             "llmProviderApiKey.created",
+                            "llmProviderApiKey.updated",
                             "llmProviderApiKey.deleted",
                             "llmProxy.updated",
                             "llmProviderApiKey.bulk_deleted",
@@ -270553,10 +270556,63 @@
                   "properties": {
                     "success": {
                       "type": "boolean"
+                    },
+                    "failures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "apiKeyId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "ollama-native",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "kimi",
+                              "azure",
+                              "github-copilot",
+                              "microsoft-365-copilot",
+                              "archestra",
+                              "voyage"
+                            ]
+                          },
+                          "requiresReauthentication": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "apiKeyId",
+                          "name",
+                          "provider",
+                          "requiresReauthentication"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
-                    "success"
+                    "success",
+                    "failures"
                   ],
                   "additionalProperties": false
                 }
@@ -276628,6 +276684,9 @@
                       "isPrimary": {
                         "type": "boolean"
                       },
+                      "requiresReauthentication": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -277228,6 +277287,9 @@
                     "isPrimary": {
                       "type": "boolean"
                     },
+                    "requiresReauthentication": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -277638,6 +277700,9 @@
                         "type": "boolean"
                       },
                       "isPrimary": {
+                        "type": "boolean"
+                      },
+                      "requiresReauthentication": {
                         "type": "boolean"
                       },
                       "createdAt": {
@@ -278113,6 +278178,9 @@
                       "type": "boolean"
                     },
                     "isPrimary": {
+                      "type": "boolean"
+                    },
+                    "requiresReauthentication": {
                       "type": "boolean"
                     },
                     "createdAt": {
@@ -278694,6 +278762,9 @@
                       "type": "boolean"
                     },
                     "isPrimary": {
+                      "type": "boolean"
+                    },
+                    "requiresReauthentication": {
                       "type": "boolean"
                     },
                     "createdAt": {
@@ -279369,6 +279440,9 @@
                       "type": "boolean"
                     },
                     "isPrimary": {
+                      "type": "boolean"
+                    },
+                    "requiresReauthentication": {
                       "type": "boolean"
                     },
                     "createdAt": {

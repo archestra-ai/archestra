@@ -66,6 +66,22 @@ describe("systemKeyManager", () => {
     vi.mocked(fetchBedrockModelsViaIam).mockResolvedValue([]);
   });
 
+  test("reports failed providers while continuing to sync healthy system keys", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    vi.mocked(fetchGeminiModelsViaVertexAi).mockRejectedValueOnce(
+      new Error("Provider unavailable"),
+    );
+    expect(await systemKeyManager.syncSystemKeys(organization.id)).toEqual([
+      "gemini",
+    ]);
+    expect(
+      await LlmProviderApiKeyModel.findSystemKey("anthropic"),
+    ).not.toBeNull();
+    expect(await systemKeyManager.syncSystemKeys(organization.id)).toEqual([]);
+  });
+
   test("renames existing Vertex system keys to identify their model provider", async ({
     makeOrganization,
   }) => {

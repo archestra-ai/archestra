@@ -3214,6 +3214,13 @@
       "when": 1788816275859,
       "tag": "0458_opposite_gorilla_man",
       "breakpoints": true
+    },
+    {
+      "idx": 459,
+      "version": "7",
+      "when": 1788918138111,
+      "tag": "0459_worthless_christian_walker",
+      "breakpoints": true
     }
   ]
 }

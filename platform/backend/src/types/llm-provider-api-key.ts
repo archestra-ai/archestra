@@ -26,6 +26,7 @@ export const SelectLlmProviderApiKeySchema = createSelectSchema(
   baseUrl: z.string().nullable(),
   inferenceBaseUrl: z.string().nullable(),
   extraHeaders: z.record(z.string(), z.string()).nullable(),
+  requiresReauthentication: z.boolean().optional(),
 });
 
 export const InsertLlmProviderApiKeySchema = createInsertSchema(
@@ -35,6 +36,7 @@ export const InsertLlmProviderApiKeySchema = createInsertSchema(
     id: true,
     createdAt: true,
     updatedAt: true,
+    requiresReauthentication: true,
   })
   .extend({
     provider: SupportedProvidersSchema,
@@ -49,6 +51,7 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
   .omit({
     id: true,
     organizationId: true,
+    requiresReauthentication: true,
     createdAt: true,
     updatedAt: true,
   })

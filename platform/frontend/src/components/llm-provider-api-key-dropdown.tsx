@@ -7,13 +7,14 @@ import {
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
-import { CheckIcon, ChevronDown, Key, Plus } from "lucide-react";
+import { CheckIcon, ChevronDown, Key, Plus, TriangleAlert } from "lucide-react";
 import Image from "next/image";
 import { useMemo } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
+import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +40,10 @@ type DropdownLlmProviderApiKey = Pick<
   "id" | "name" | "provider"
 > &
   Partial<
-    Pick<LlmProviderApiKey, "scope" | "teamName" | "subscriptionKind">
+    Pick<
+      LlmProviderApiKey,
+      "scope" | "teamName" | "subscriptionKind" | "requiresReauthentication"
+    >
   > & {
     connectRequired?: boolean;
   };
@@ -172,7 +176,9 @@ export function LlmProviderApiKeyDropdown({
                       variant="secondary"
                       className="shrink-0 px-1.5 py-0 text-[10px]"
                     >
-                      Per-user
+                      {selectedKey.requiresReauthentication
+                        ? "Reconnect required"
+                        : "Per-user"}
                     </Badge>
                   )}
                 </>
@@ -202,7 +208,14 @@ export function LlmProviderApiKeyDropdown({
                 : undefined)
             }
           >
-            <Key className="size-4 shrink-0" />
+            {selectedKey?.requiresReauthentication ? (
+              <TriangleAlert
+                className="size-4 shrink-0 text-amber-500"
+                aria-label="Reconnect required"
+              />
+            ) : (
+              <Key className="size-4 shrink-0" />
+            )}
           </PromptInputButton>
         )}
       </PopoverTrigger>
@@ -211,6 +224,9 @@ export function LlmProviderApiKeyDropdown({
         align="start"
         portal={popoverPortal}
       >
+        {selectedKey?.requiresReauthentication && (
+          <SubscriptionReconnectNotice credential={selectedKey} compact />
+        )}
         <Command>
           <CommandInput
             placeholder={searchPlaceholder}
@@ -294,7 +310,11 @@ export function LlmProviderApiKeyDropdown({
                         variant={key.connectRequired ? "outline" : "secondary"}
                         className="shrink-0 px-1 py-0 text-[10px]"
                       >
-                        {key.connectRequired ? "Connect" : "Per-user"}
+                        {key.requiresReauthentication
+                          ? "Reconnect required"
+                          : key.connectRequired
+                            ? "Connect"
+                            : "Per-user"}
                       </Badge>
                     </div>
                     {selectedApiKeyId === key.id && (

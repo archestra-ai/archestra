@@ -999,6 +999,31 @@ describe("AgentForm delegation state", () => {
     expect(useAgentDelegationsMock).toHaveBeenCalledWith(baseAgent.id);
   });
 
+  it("marks only the experimental subagent options as Beta", () => {
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const subagentsHeading = screen.getByRole("heading", {
+      name: "Subagents",
+    });
+    expect(within(subagentsHeading).queryByText("Beta")).toBeNull();
+
+    const externalAgentsTitle = screen.getByText("External Agents");
+    expect(
+      within(externalAgentsTitle.parentElement as HTMLElement).getByText(
+        "Beta",
+      ),
+    ).toBeInTheDocument();
+
+    const advisorTitle = screen.getByText("Advisor Subagent");
+    expect(
+      within(advisorTitle.parentElement as HTMLElement).getByText("Beta"),
+    ).toBeInTheDocument();
+  });
+
   it("saves a gateway's subagent mode and delegation set", async () => {
     const user = userEvent.setup();
     const gateway = {

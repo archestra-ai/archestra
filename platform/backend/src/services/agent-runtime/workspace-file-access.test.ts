@@ -1,4 +1,4 @@
-import { afterEach } from "vitest";
+import { afterEach, beforeEach } from "vitest";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -9,14 +9,20 @@ import { expect, test, vi } from "@/test";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "./backends/kubernetes";
 import { accessAgentWorkspaceFile } from "./workspace-files";
 
-afterEach(() => vi.useRealTimers());
+beforeEach(() => {
+  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 test("file access rejects other owners and resumes retained storage without an Agent turn", async ({
   makeOrganization,
   makeUser,
   makeAgent,
 }) => {
-  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
   const org = await makeOrganization();
   const owner = await makeUser();
   const stranger = await makeUser();
@@ -178,11 +184,11 @@ for (const finalState of [
     // Database queries may complete out of call order. Establish which request
     // reaches the external resume first before assigning its completion gate.
     const firstResult = Promise.allSettled([first]);
-    await firstStarted;
+    await Promise.race([firstStarted, first]);
     const second = access();
     // Register rejection handlers before allowing either external resume to finish.
     const results = Promise.allSettled([first, second]);
-    await started;
+    await Promise.race([started, second]);
     expect(read).not.toHaveBeenCalled();
     waiting[0]();
     expect((await firstResult)[0].status).toBe("fulfilled");

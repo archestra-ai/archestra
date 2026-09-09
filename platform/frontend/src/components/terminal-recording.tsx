@@ -12,13 +12,11 @@ export function TerminalRecording({ content }: { content: string }) {
   const positions = useMemo(() => indexTerminalRecording(content), [content]);
   const [selectedOffset, setSelectedOffset] = useState<number | null>(null);
   const last = positions.length - 1;
-  const position =
+  const matchingPosition =
     selectedOffset === null
-      ? last
-      : Math.max(
-          0,
-          positions.findIndex((offset) => offset >= selectedOffset),
-        );
+      ? -1
+      : positions.findIndex((offset) => offset >= selectedOffset);
+  const position = matchingPosition === -1 ? last : matchingPosition;
   // Older recordings emit their geometry only with the final captured frame.
   // Use that grid for earlier screens too, rather than refitting absolute cursor positions.
   const geometry = useMemo(

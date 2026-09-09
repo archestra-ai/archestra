@@ -2,12 +2,14 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
+import { A2AContextModel, A2ATaskModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { captureToolAuditBefore, recordToolAudit } from "./audit";
 
 const toolName = (shortName: string) =>
   `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
@@ -62,6 +64,74 @@ describe("archestra tool audit records", () => {
     });
     return data;
   }
+
+  test("audits an MCP continuation's new task without retaining its message", async () => {
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: adminUserId,
+    });
+    const previous = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: testAgent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const args = {
+      task_id: previous.id,
+      message: "Private follow-up instructions",
+    };
+    const capture = await captureToolAuditBefore({
+      toolName: toolName("steer_run"),
+      args,
+      organizationId,
+      userId: adminUserId,
+    });
+    expect(capture).not.toBeNull();
+    if (!capture) throw new Error("Missing continuation audit registration");
+    const continuation = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: testAgent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    await recordToolAudit({
+      capture,
+      toolName: toolName("steer_run"),
+      args,
+      result: {
+        content: [],
+        structuredContent: {
+          success: true,
+          task_id: continuation.id,
+          previous_task_id: previous.id,
+        },
+      },
+    });
+    const rows = await findRows("agentRun");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      action: "agentRun.created",
+      actorId: adminUserId,
+      resourceId: continuation.id,
+      before: null,
+      after: {
+        taskId: continuation.id,
+        agentId: testAgent.id,
+        state: "TASK_STATE_SUBMITTED",
+      },
+    });
+    expect(JSON.stringify(rows)).not.toContain(args.message);
+
+    // A live steer produces no new run and must not claim one was created.
+    await recordToolAudit({
+      capture,
+      toolName: toolName("steer_run"),
+      args,
+      result: {
+        content: [],
+        structuredContent: { success: true, task_id: previous.id },
+      },
+    });
+    expect(await findRows("agentRun")).toHaveLength(1);
+  });
 
   test("create_team writes team.created with the created id and after-state", async () => {
     const result = await executeArchestraTool(

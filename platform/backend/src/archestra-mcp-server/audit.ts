@@ -4,6 +4,7 @@ import {
   extractAuditResourceName,
   sanitizeAuditSnapshot,
 } from "@/middleware/audit-log-hook";
+import A2ATaskModel from "@/models/a2a/task";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import AppModel from "@/models/app";
@@ -39,6 +40,8 @@ type ArchestraToolAuditContext = {
 type ArchestraToolAuditSpec = {
   resourceType: string;
   action: AuditEventName;
+  /** Some tools create a resource only in one of their successful branches. */
+  recordWhen?: (result: CallToolResult) => boolean;
   /** Pick the target id straight from validated tool args (edits/deletes). */
   idFromArgs?: (args: Record<string, unknown>) => string | null;
   /** Pick the created id from the tool's structuredContent on success. */
@@ -152,6 +155,7 @@ export async function recordToolAudit(params: {
 }): Promise<void> {
   const { capture, toolName, args, result } = params;
   const { spec, ctx } = capture;
+  if (spec.recordWhen && !spec.recordWhen(result)) return;
   try {
     const outcome = result.isError ? "failure" : "success";
 
@@ -287,6 +291,24 @@ const agentEditSpec: ArchestraToolAuditSpec = {
 };
 
 const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
+  steer_run: {
+    resourceType: "agentRun",
+    action: "agentRun.created",
+    // Steering a live terminal creates no run. A retained-workspace
+    // continuation returns both the old and newly created task IDs.
+    recordWhen: (result) =>
+      !result.isError &&
+      typeof result.structuredContent?.previous_task_id === "string",
+    idFromResult: (result) => str(result?.task_id),
+    fetchById: async (id, organizationId) => {
+      const task = await A2ATaskModel.findById(id);
+      if (!task?.agentId) return null;
+      const agent = await AgentModel.findById(task.agentId);
+      if (agent?.organizationId !== organizationId) return null;
+      // Do not retain messages, terminal content, or credentials in the audit.
+      return { taskId: task.id, agentId: task.agentId, state: task.state };
+    },
+  },
   // Agents / MCP gateways (all rows in the agents table).
   create_agent: agentCreateSpec,
   create_mcp_gateway: agentCreateSpec,

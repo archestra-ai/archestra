@@ -518,26 +518,26 @@ function SessionsTable() {
         <FilterBar
           leading
           onClearFilters={hasFilters ? clearFilters : undefined}
+          search={
+            <div className={filterSearchClass}>
+              <SearchInput
+                isLoading={isFetching}
+                objectNamePlural="logs"
+                searchFields={["session ID"]}
+                paramName="search"
+                className="relative w-full"
+                paginationMode="cursor"
+                onSearchChange={cursorPagination.goNewest}
+              />
+              {/* Keep validation below search without moving the table. */}
+              {searchIsNotSessionId && (
+                <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
+                  Enter a valid session UUID
+                </output>
+              )}
+            </div>
+          }
         >
-          {/* Anchor the "not a session ID" hint as a floating overlay under the
-            input so toggling it never reflows the filter bar or the table. */}
-          <div className={filterSearchClass}>
-            <SearchInput
-              isLoading={isFetching}
-              objectNamePlural="logs"
-              searchFields={["session ID"]}
-              paramName="search"
-              className="relative w-full"
-              paginationMode="cursor"
-              onSearchChange={cursorPagination.goNewest}
-            />
-            {searchIsNotSessionId && (
-              <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
-                Enter a valid session UUID
-              </output>
-            )}
-          </div>
-
           {/* Two people's personal agents can both be called "My Agent", so the
             picker carries each one's scope and owner email rather than a bare
             name. */}

@@ -544,6 +544,22 @@ export default function KnowledgeFilesPage() {
           <FilterBar
             leading
             onClearFilters={hasActiveFilters ? clearFilters : undefined}
+            search={
+              <SearchInput
+                isLoading={isLoading}
+                value={search}
+                onSearchChange={(value) => {
+                  setSearch(value);
+                  updateQueryParams({ page: "1" });
+                }}
+                // The term lives in local state and the page reset is handled just
+                // above, so the component's own query-param sync would only add a
+                // second router push per keystroke.
+                syncQueryParams={false}
+                placeholder="Search documents…"
+                className={filterSearchClass}
+              />
+            }
           >
             {openDirectory ? (
               <Button
@@ -564,20 +580,6 @@ export default function KnowledgeFilesPage() {
               <span className="font-medium text-sm">{openDirectory.name}</span>
             )}
 
-            <SearchInput
-              isLoading={isLoading}
-              value={search}
-              onSearchChange={(value) => {
-                setSearch(value);
-                updateQueryParams({ page: "1" });
-              }}
-              // The term lives in local state and the page reset is handled just
-              // above, so the component's own query-param sync would only add a
-              // second router push per keystroke.
-              syncQueryParams={false}
-              placeholder="Search documents…"
-              className={filterSearchClass}
-            />
             <EntityLabelFilter
               useLabelKeys={useKnowledgeFileLabelKeys}
               useLabelValues={useKnowledgeFileLabelValues}

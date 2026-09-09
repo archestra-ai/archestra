@@ -741,14 +741,16 @@ export default function ApiKeysPage() {
                       })
                   : undefined
               }
+              search={
+                <SearchInput
+                  isLoading={isFetching}
+                  objectNamePlural="credentials"
+                  searchFields={["name"]}
+                  paramName="search"
+                  className={filterSearchClass}
+                />
+              }
             >
-              <SearchInput
-                isLoading={isFetching}
-                objectNamePlural="credentials"
-                searchFields={["name"]}
-                paramName="search"
-                className={filterSearchClass}
-              />
               <Select
                 value={providerFilter}
                 onValueChange={(value) =>

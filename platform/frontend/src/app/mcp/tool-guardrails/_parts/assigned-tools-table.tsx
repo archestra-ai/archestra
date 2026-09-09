@@ -637,16 +637,19 @@ export function AssignedToolsTable({
   return (
     <BulkActionsScope>
       <CollectionFilters>
-        <FilterBar leading>
-          <SearchInput
-            isLoading={isLoading}
-            objectNamePlural="tools"
-            searchFields={["name"]}
-            paramName="search"
-            onSearchChange={handleSearchChange}
-            className={filterSearchClass}
-          />
-
+        <FilterBar
+          leading
+          search={
+            <SearchInput
+              isLoading={isLoading}
+              objectNamePlural="tools"
+              searchFields={["name"]}
+              paramName="search"
+              onSearchChange={handleSearchChange}
+              className={filterSearchClass}
+            />
+          }
+        >
           <FilterSelect
             value={originFilter}
             onValueChange={handleOriginFilterChange}

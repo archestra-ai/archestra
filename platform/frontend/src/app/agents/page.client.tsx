@@ -616,14 +616,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               <FilterBar
                 leading
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+                search={
+                  <SearchInput
+                    isLoading={isFetching}
+                    objectNamePlural="agents"
+                    searchFields={["name"]}
+                    paramName="name"
+                    className={filterSearchClass}
+                  />
+                }
               >
-                <SearchInput
-                  isLoading={isFetching}
-                  objectNamePlural="agents"
-                  searchFields={["name"]}
-                  paramName="name"
-                  className={filterSearchClass}
-                />
                 <ResourceScopeFilter
                   showBuiltIn
                   showLabels

@@ -159,14 +159,16 @@ export function ArchestraCatalogTab({
                 }
               : undefined
           }
+          search={
+            <SearchInput
+              placeholder="Search servers by name..."
+              value={searchQuery}
+              onSearchChange={setSearchQuery}
+              syncQueryParams={false}
+              className={filterSearchClass}
+            />
+          }
         >
-          <SearchInput
-            placeholder="Search servers by name..."
-            value={searchQuery}
-            onSearchChange={setSearchQuery}
-            syncQueryParams={false}
-            className={filterSearchClass}
-          />
           <Select
             value={filters.type}
             onValueChange={(value) =>

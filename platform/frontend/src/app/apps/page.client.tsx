@@ -189,13 +189,18 @@ export default function AppsPage() {
     >
       <TableCardView storageKey="archestra-apps-view">
         <CollectionFilters>
-          <FilterBar leading actions={<TableCardViewToggle />}>
-            <SearchInput
-              isLoading={isFetching}
-              paramName="search"
-              placeholder="Search apps"
-              className={filterSearchClass}
-            />
+          <FilterBar
+            leading
+            actions={<TableCardViewToggle />}
+            search={
+              <SearchInput
+                isLoading={isFetching}
+                paramName="search"
+                placeholder="Search apps"
+                className={filterSearchClass}
+              />
+            }
+          >
             <Select
               value={kind}
               onValueChange={(value) =>

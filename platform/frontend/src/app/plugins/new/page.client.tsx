@@ -194,15 +194,16 @@ function NewPluginWizard() {
                   </div>
                   <FilterBar
                     onClearFilters={search ? () => setSearch("") : undefined}
-                  >
-                    <SearchInput
-                      value={search}
-                      onSearchChange={setSearch}
-                      syncQueryParams={false}
-                      placeholder="Search marketplaces by name or use case..."
-                      className="w-full flex-1"
-                    />
-                  </FilterBar>
+                    search={
+                      <SearchInput
+                        value={search}
+                        onSearchChange={setSearch}
+                        syncQueryParams={false}
+                        placeholder="Search marketplaces by name or use case..."
+                        className="w-full flex-1"
+                      />
+                    }
+                  />
                 </CardHeader>
                 <CardContent className="p-0">
                   {filteredMarketplaces.length === 0 ? (

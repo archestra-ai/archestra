@@ -1177,17 +1177,19 @@ export function InternalMCPCatalog({
                 )}
               </>
             }
+            search={
+              <SearchInput
+                objectNamePlural="MCP servers"
+                searchFields={["name"]}
+                value={searchQueryFromUrl}
+                onSearchChange={handleSearchChange}
+                syncQueryParams={false}
+                debounceMs={0}
+                className={filterSearchClass}
+                inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+              />
+            }
           >
-            <SearchInput
-              objectNamePlural="MCP servers"
-              searchFields={["name"]}
-              value={searchQueryFromUrl}
-              onSearchChange={handleSearchChange}
-              syncQueryParams={false}
-              debounceMs={0}
-              className={filterSearchClass}
-              inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
-            />
             <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
             {!selectedFacet && (
               <ResourceScopeFilter

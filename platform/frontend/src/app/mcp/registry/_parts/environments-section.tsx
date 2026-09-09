@@ -392,14 +392,16 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         <FilterBar
           leading
           onClearFilters={hasActiveFilters ? clearFilters : undefined}
+          search={
+            <SearchInput
+              placeholder="Search by name or namespace"
+              value={search}
+              onSearchChange={setSearch}
+              syncQueryParams={false}
+              className={filterSearchClass}
+            />
+          }
         >
-          <SearchInput
-            placeholder="Search by name or namespace"
-            value={search}
-            onSearchChange={setSearch}
-            syncQueryParams={false}
-            className={filterSearchClass}
-          />
           <FilterSelect
             value={egressModeFilter}
             onValueChange={(value) =>

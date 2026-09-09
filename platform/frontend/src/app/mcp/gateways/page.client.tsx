@@ -687,14 +687,16 @@ function McpGateways({
               <FilterBar
                 leading
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+                search={
+                  <SearchInput
+                    isLoading={isFetching}
+                    objectNamePlural="gateways"
+                    searchFields={["name"]}
+                    paramName="name"
+                    className={filterSearchClass}
+                  />
+                }
               >
-                <SearchInput
-                  isLoading={isFetching}
-                  objectNamePlural="gateways"
-                  searchFields={["name"]}
-                  paramName="name"
-                  className={filterSearchClass}
-                />
                 <ResourceScopeFilter
                   showLabels
                   ownerLabelPlural="MCP gateways"

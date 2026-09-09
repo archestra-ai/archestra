@@ -280,6 +280,49 @@ describe("ModelsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders the provider icon inline before the model ID", async () => {
+    keyCreated = true;
+    renderPage();
+
+    expect(await screen.findByText(model.modelId)).toBeVisible();
+    // The icon moved out of its own column and now sits in the Model ID cell.
+    expect(screen.getByRole("img", { name: "Anthropic" })).toBeVisible();
+  });
+
+  it("hydrates filter state from the URL query params", async () => {
+    keyCreated = true;
+    // A chat model filtered to embedding-only should drop out entirely.
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("modelType=embedding") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText("No models match your filters"),
+    ).toBeVisible();
+    expect(screen.queryByText(model.modelId)).not.toBeInTheDocument();
+  });
+
+  it("syncs the search filter to the URL query params", async () => {
+    keyCreated = true;
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      await screen.findByPlaceholderText(/search models/i),
+      "claude",
+    );
+
+    await waitFor(() =>
+      expect(routerPush).toHaveBeenCalledWith(
+        expect.stringContaining("search=claude"),
+        { scroll: false },
+      ),
+    );
+  });
+
   it("clears an active label filter from the model collection", async () => {
     keyCreated = true;
     vi.mocked(useSearchParams).mockReturnValue(

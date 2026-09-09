@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useCancelAgentRun, useMyAgentRun } from "@/lib/agent-runtime.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const query = useMyAgentRun(taskId);
@@ -41,6 +42,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   );
   const [commandCopied, setCommandCopied] = useState(false);
   const run = query.data;
+  usePageTitle(run?.title ?? "Agent Runtime");
 
   // Metadata and the log stream are readable by shared viewers, but attaching
   // to the live terminal runs a shell under the owner's own credentials — so it

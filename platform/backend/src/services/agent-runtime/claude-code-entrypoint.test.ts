@@ -152,6 +152,66 @@ fi
           ],
         });
       }
+      // The native transcript is flushed asynchronously. A Stop payload must
+      // preserve its final response even when the JSONL ends at a tool result.
+      const laggingTranscript = path.join(runtime, "lagging.jsonl");
+      const finalText = "Final response from hook payload.";
+      for (const flushed of [false, true]) {
+        await writeFile(
+          laggingTranscript,
+          `${[
+            JSON.stringify({
+              type: "user",
+              message: { content: "Finish the task." },
+            }),
+            ...(flushed
+              ? [
+                  JSON.stringify({
+                    type: "assistant",
+                    message: { content: finalText },
+                  }),
+                ]
+              : []),
+          ].join("\n")}\n`,
+        );
+        await execFileAsync(
+          "bash",
+          [
+            "-c",
+            'printf "%s" "$TEST_HOOK_PAYLOAD" | "$1"',
+            "hook-test",
+            path.join(runtime, "transcript-hook.sh"),
+          ],
+          {
+            env: {
+              ...process.env,
+              ARCHESTRA_AGENT_RUNTIME_DIR: runtime,
+              ARCHESTRA_AGENT_RUNTIME_MODE: mode,
+              TEST_HOOK_PAYLOAD: JSON.stringify({
+                transcript_path: laggingTranscript,
+                last_assistant_message: finalText,
+              }),
+            },
+          },
+        );
+        const readable = JSON.parse(
+          await readFile(
+            path.join(runtime, "readable-transcript.json"),
+            "utf8",
+          ),
+        );
+        expect(readable.entries).toEqual([
+          { type: "message", role: "user", text: "Finish the task." },
+          { type: "message", role: "assistant", text: finalText },
+        ]);
+        if (mode === "one_shot") {
+          expect(
+            (
+              await readFile(path.join(runtime, "final-answer.txt"), "utf8")
+            ).trim(),
+          ).toBe(finalText);
+        }
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

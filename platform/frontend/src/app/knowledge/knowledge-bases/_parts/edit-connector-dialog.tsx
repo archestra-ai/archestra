@@ -5,7 +5,6 @@ import {
   getConnectorNamePlaceholder,
   type TextSearchLanguage,
 } from "@archestra/shared";
-import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
@@ -16,13 +15,8 @@ import {
 } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { StandardFormDialog } from "@/components/standard-dialog";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -119,6 +113,9 @@ export function EditConnectorDialog({
   const [teamIds, setTeamIds] = useState<string[]>(connector.teamIds);
   const [labels, setLabels] = useState<ProfileLabel[]>(connector.labels ?? []);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const [activeSection, setActiveSection] = useState<"general" | "advanced">(
+    "general",
+  );
 
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
@@ -138,6 +135,7 @@ export function EditConnectorDialog({
 
   useEffect(() => {
     if (open) {
+      setActiveSection("general");
       setVisibility(connector.visibility);
       setTeamIds(connector.teamIds);
       setLabels(connector.labels ?? []);
@@ -261,31 +259,29 @@ export function EditConnectorDialog({
   };
 
   return (
-    <StandardFormDialog
+    <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
-      title={
-        <span className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
-            <ConnectorTypeIcon type={connectorType} className="h-4 w-4" />
-          </div>
-          Edit {typeLabel} Connector
-        </span>
+      title={`Edit ${typeLabel} Connector`}
+      description="Update the settings for this connector."
+      sidebarLabel={typeLabel}
+      sidebarDescription="Knowledge Connector"
+      sidebarIcon={
+        <ConnectorTypeIcon type={connectorType} className="h-4 w-4" />
       }
-      description={
-        <>
-          Update the settings for this connector.{" "}
-          <ExternalDocsLink
-            href={connectorDocsUrl}
-            className="underline"
-            showIcon={false}
-          >
-            Learn more
-          </ExternalDocsLink>
-        </>
+      activeSection={activeSection}
+      navItems={[
+        { id: "general", label: "General" },
+        { id: "advanced", label: "Advanced" },
+      ]}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={form.handleSubmit(handleSubmit, () =>
+        setActiveSection("general"),
+      )}
+      wrapForm={(children) => <Form {...form}>{children}</Form>}
+      sidebarFooter={
+        <ExternalDocsLink href={connectorDocsUrl}>Learn more</ExternalDocsLink>
       }
-      size="medium"
-      onSubmit={form.handleSubmit(handleSubmit)}
       footer={
         <>
           <Button
@@ -301,114 +297,176 @@ export function EditConnectorDialog({
         </>
       }
     >
-      <Form {...form}>
-        <div className="space-y-4">
-          <FormField
-            control={form.control}
-            name="enabled"
-            render={({ field }) => (
-              <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <FormLabel className="text-sm font-medium">Enabled</FormLabel>
-                  <FormDescription className="text-xs">
-                    When disabled, scheduled syncs will not run.
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
+      <div hidden={activeSection !== "general"} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="enabled"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <FormLabel className="text-sm font-medium">Enabled</FormLabel>
+                <FormDescription className="text-xs">
+                  When disabled, scheduled syncs will not run.
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
 
+        <FormField
+          control={form.control}
+          name="name"
+          rules={{ required: "Name is required" }}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Name</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={getConnectorNamePlaceholder(connectorType)}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                Description{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="A short description of this connector"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="environmentId"
+          render={({ field }) => (
+            <EnvironmentSelector
+              value={field.value ?? null}
+              onChange={field.onChange}
+              resource="knowledgeSource"
+              helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
+            />
+          )}
+        />
+
+        <KnowledgeSourceVisibilitySelector
+          visibility={visibility}
+          onVisibilityChange={setVisibility}
+          teamIds={teamIds}
+          onTeamIdsChange={setTeamIds}
+          showTeamRequired
+          supportsAutoSync={connectorSupportsAutoSync(
+            connectorType,
+            orchestratorK8sRuntime,
+          )}
+          autoSyncPermissionAction="update"
+        />
+
+        {visibility === "auto-sync-permissions" &&
+          connectorType === "notion" && <NotionAutoSyncPermissionsNote />}
+
+        <div className="border-t" />
+
+        {urlConfig && (
           <FormField
             control={form.control}
-            name="name"
-            rules={{ required: "Name is required" }}
+            name={urlConfig.fieldName as Path<EditConnectorFormValues>}
+            rules={{ required: `${urlConfig.label} is required` }}
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel>{urlConfig.label}</FormLabel>
+                <FormDescription>{urlConfig.description}</FormDescription>
                 <FormControl>
                   <Input
-                    placeholder={getConnectorNamePlaceholder(connectorType)}
+                    placeholder={urlConfig.placeholder}
                     {...field}
+                    value={(field.value as string) ?? ""}
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
+        )}
 
+        <ConnectorInlineConfigFields
+          connectorType={connectorType}
+          form={form}
+          mode="edit"
+          emailRequired={emailRequired}
+          autoSyncRequirement={connectorFieldsRequirement}
+        />
+
+        {Boolean(apiTokenLabel) && (
           <FormField
             control={form.control}
-            name="description"
+            name="apiToken"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>
-                  Description{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </FormLabel>
+                <FormLabel>{apiTokenLabel}</FormLabel>
+                <FormDescription>
+                  <span>
+                    Leave empty to keep existing credentials unchanged.
+                  </span>{" "}
+                  {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
+                  {credentialRequirement}
+                </FormDescription>
                 <FormControl>
-                  <Input
-                    placeholder="A short description of this connector"
-                    {...field}
-                  />
+                  {apiTokenMultiline ? (
+                    <SecretTextarea
+                      placeholder={apiTokenPlaceholder}
+                      rows={5}
+                      {...field}
+                    />
+                  ) : (
+                    <SecretInput placeholder={apiTokenPlaceholder} {...field} />
+                  )}
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
+        )}
 
-          <FormField
-            control={form.control}
-            name="environmentId"
-            render={({ field }) => (
-              <EnvironmentSelector
-                value={field.value ?? null}
-                onChange={field.onChange}
-                resource="knowledgeSource"
-                helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
-              />
-            )}
-          />
-
-          <KnowledgeSourceVisibilitySelector
-            visibility={visibility}
-            onVisibilityChange={setVisibility}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
-            showTeamRequired
-            supportsAutoSync={connectorSupportsAutoSync(
-              connectorType,
-              orchestratorK8sRuntime,
-            )}
-            autoSyncPermissionAction="update"
-          />
-
-          {visibility === "auto-sync-permissions" &&
-            connectorType === "notion" && <NotionAutoSyncPermissionsNote />}
-
-          <div className="border-t" />
-
-          {urlConfig && (
+        {visibility === "auto-sync-permissions" &&
+          connectorSupportsAdminApiKey(connectorType) && (
             <FormField
               control={form.control}
-              name={urlConfig.fieldName as Path<EditConnectorFormValues>}
-              rules={{ required: `${urlConfig.label} is required` }}
+              name="adminApiKey"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{urlConfig.label}</FormLabel>
-                  <FormDescription>{urlConfig.description}</FormDescription>
+                  <FormLabel>Organization admin API key (optional)</FormLabel>
+                  <FormDescription>
+                    <AdminApiKeyDescription type={connectorType} /> Leave empty
+                    to keep the existing key.
+                  </FormDescription>
                   <FormControl>
-                    <Input
-                      placeholder={urlConfig.placeholder}
+                    <SecretInput
+                      placeholder="Atlassian organization admin API key"
                       {...field}
-                      value={(field.value as string) ?? ""}
                     />
                   </FormControl>
                   <FormMessage />
@@ -417,117 +475,40 @@ export function EditConnectorDialog({
             />
           )}
 
-          <ConnectorInlineConfigFields
-            connectorType={connectorType}
-            form={form}
-            mode="edit"
-            emailRequired={emailRequired}
-            autoSyncRequirement={connectorFieldsRequirement}
-          />
-
-          {Boolean(apiTokenLabel) && (
-            <FormField
-              control={form.control}
-              name="apiToken"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{apiTokenLabel}</FormLabel>
-                  <FormDescription>
-                    <span>
-                      Leave empty to keep existing credentials unchanged.
-                    </span>{" "}
-                    {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
-                    {credentialRequirement}
-                  </FormDescription>
-                  <FormControl>
-                    {apiTokenMultiline ? (
-                      <SecretTextarea
-                        placeholder={apiTokenPlaceholder}
-                        rows={5}
-                        {...field}
-                      />
-                    ) : (
-                      <SecretInput
-                        placeholder={apiTokenPlaceholder}
-                        {...field}
-                      />
-                    )}
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+        {visibility === "auto-sync-permissions" &&
+          connectorType === "perforce" && (
+            <PerforcePermissionSyncFields
+              form={form}
+              mode="edit"
+              adminCredentialDescription={permissionSyncRequirement}
             />
           )}
-
-          {visibility === "auto-sync-permissions" &&
-            connectorSupportsAdminApiKey(connectorType) && (
-              <FormField
-                control={form.control}
-                name="adminApiKey"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Organization admin API key (optional)</FormLabel>
-                    <FormDescription>
-                      <AdminApiKeyDescription type={connectorType} /> Leave
-                      empty to keep the existing key.
-                    </FormDescription>
-                    <FormControl>
-                      <SecretInput
-                        placeholder="Atlassian organization admin API key"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-          {visibility === "auto-sync-permissions" &&
-            connectorType === "perforce" && (
-              <PerforcePermissionSyncFields
-                form={form}
-                mode="edit"
-                adminCredentialDescription={permissionSyncRequirement}
-              />
-            )}
-
-          <Collapsible>
-            <CollapsibleTrigger
-              type="button"
-              className="flex w-full items-center justify-between cursor-pointer group border-t pt-3"
-            >
-              <span className="text-sm font-medium">Advanced</span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4 space-y-4">
-              <SchedulePicker
-                form={form}
-                name="schedule"
-                connectorTypeLabel={typeLabel}
-              />
-              {visibility === "auto-sync-permissions" && (
-                <PermissionSyncIntervalPicker
-                  form={form}
-                  name="permissionSyncIntervalSeconds"
-                  connectorTypeLabel={typeLabel}
-                />
-              )}
-              <TextSearchLanguagePicker form={form} name="ftsLanguage" />
-              <ConnectorAdvancedConfigFields
-                connectorType={connectorType}
-                form={form}
-                mode="edit"
-              />
-              <ProfileLabels
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              />
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
-      </Form>
-    </StandardFormDialog>
+      </div>
+      <div hidden={activeSection !== "advanced"} className="space-y-4">
+        <SchedulePicker
+          form={form}
+          name="schedule"
+          connectorTypeLabel={typeLabel}
+        />
+        {visibility === "auto-sync-permissions" && (
+          <PermissionSyncIntervalPicker
+            form={form}
+            name="permissionSyncIntervalSeconds"
+            connectorTypeLabel={typeLabel}
+          />
+        )}
+        <TextSearchLanguagePicker form={form} name="ftsLanguage" />
+        <ConnectorAdvancedConfigFields
+          connectorType={connectorType}
+          form={form}
+          mode="edit"
+        />
+        <ProfileLabels
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
+      </div>
+    </TabbedDialogShell>
   );
 }

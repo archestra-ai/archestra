@@ -28,7 +28,6 @@ describe.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         env: { ARCHESTRA_AGENT_RUNTIME_TASK_ID: taskId },
         secretEnv: {},
         activeDeadlineSeconds: 600,
-        ephemeralStorageLimit: "1Gi",
         workspaceStorageSize: "1Gi",
         imagePullSecrets: [],
         ownerReferences: undefined,

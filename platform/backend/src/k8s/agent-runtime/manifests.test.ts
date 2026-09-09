@@ -27,7 +27,6 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
   },
   secretEnv: { ARCHESTRA_MCP_GATEWAY_TOKEN: "arch_secret" },
   activeDeadlineSeconds: 3600,
-  ephemeralStorageLimit: "10Gi",
   workspaceStorageSize: "10Gi",
   imagePullSecrets: [],
   ownerReferences: undefined,

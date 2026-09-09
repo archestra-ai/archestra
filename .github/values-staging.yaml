@@ -75,18 +75,16 @@ archestra:
     # Agent Runtime is intentionally independent of ARCHESTRA_BETA.
     # Enable it only on staging while the capability is being rolled out.
     ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
-    # Agent Runtime Jobs run in separate pods, so the API's ordinary loopback URL
+    # Agent Sandbox workspaces run in separate pods, so the API's ordinary loopback URL
     # cannot reach the platform from a run pod. Use the in-cluster Service that
     # the Agent Runtime NetworkPolicy already permits on port 9000.
     ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL: "http://archestra-platform.archestra.svc.cluster.local:9000"
-    # Lobster Env workers run dockerd + kind + tilt inside their pods, which
-    # needs the privileged opt-in, and land on the dedicated autoscaled
-    # Agent Runtime pool (tainted archestra-agent-runtime=true) so heavy runs never
-    # pressure the platform's own nodes. The storage cap covers the in-pod
-    # /var/lib/docker emptyDir on that pool's 200GB disks.
+    # Nested development stacks require privilege and a dedicated node pool.
+    # Runtime state, home directories, and Docker data share one durable PVC.
     ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"
     ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR: "archestra-agent-runtime=true"
-    ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT: "60Gi"
+    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE: "60Gi"
+    ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS: "standard-rwo"
     # Scale-from-zero on the Agent Runtime pool plus a cold multi-GB image pull can
     # take 6+ minutes before the container starts.
     ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS: "900"

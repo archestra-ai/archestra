@@ -36,8 +36,6 @@ export type AgentRunLaunchSpec = {
   env: Record<string, string>;
   secretEnv: Record<string, string>;
   activeDeadlineSeconds: number | null;
-  /** Writable scratch-space ceiling enforced by the runtime backend. */
-  ephemeralStorageLimit: string;
   /** Durable workspace PVC, including nested Docker storage for privileged runtimes. */
   workspaceStorageSize?: string;
   workspaceStorageClass?: string;

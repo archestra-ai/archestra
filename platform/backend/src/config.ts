@@ -2315,12 +2315,6 @@ const config = {
       memoryLimit:
         process.env.ARCHESTRA_AGENT_RUNTIME_MEMORY_LIMIT?.trim() || "4Gi",
     },
-    ephemeralStorageLimit: parseK8sResourceQuantity({
-      envName: "ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT",
-      value: process.env.ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT,
-      validator: isValidK8sMemoryQuantity,
-      defaultValue: "10Gi",
-    }),
     workspaceStorageSize: parseK8sResourceQuantity({
       envName: "ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE",
       value: process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE,

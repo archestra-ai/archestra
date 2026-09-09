@@ -363,7 +363,6 @@ export async function buildAgentRunLaunchSpec(params: {
         (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) *
         60 *
         60,
-      ephemeralStorageLimit: config.agentRuntime.ephemeralStorageLimit,
       workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
       nodeSelector: config.agentRuntime.nodeSelector,

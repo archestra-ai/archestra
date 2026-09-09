@@ -71,7 +71,15 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       nodeSelector: {},
       imagePullSecrets: [],
       inputFileCount: 0,
-      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      effectiveNetworkPolicy: {
+        source: "environment",
+        policy: {
+          egressMode: "restricted",
+          domainPreset: "none",
+          allowedDomains: [],
+          allowedCidrs: ["203.0.113.0/24"],
+        },
+      },
     };
     const { runtimeScope, ...manifestSpec } = spec;
     try {
@@ -128,6 +136,56 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       );
       // Lose the launching process at the external wake-up boundary, after
       // saving its intent but before any continuation command can execute.
+      kubectl(
+        ["apply", "-f", "-"],
+        JSON.stringify({
+          apiVersion: "networking.k8s.io/v1",
+          kind: "NetworkPolicy",
+          metadata: { name: `${name}-egress` },
+          spec: {
+            podSelector: {
+              matchLabels: { "archestra.io/agent-run-task-id": initialTaskId },
+            },
+            policyTypes: ["Egress"],
+            egress: [{}],
+          },
+        }),
+      );
+      // A stale provider allow policy cannot be ignored when switching to the
+      // standard policy. Simulate its API refusing deletion; do not wake the
+      // workspace or publish a runnable handoff in that case.
+      const stalePolicyDelete = vi
+        .spyOn(CustomObjectsApi.prototype, "deleteNamespacedCustomObject")
+        .mockRejectedValueOnce(new Error("policy deletion forbidden"));
+      await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
+        "policy deletion forbidden",
+      );
+      expect(stalePolicyDelete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          group: "cilium.io",
+          name: `${name}-egress`,
+        }),
+      );
+      stalePolicyDelete.mockRestore();
+      expect(
+        kubectl([
+          "get",
+          "secret",
+          `agent-turn-${task.id}`,
+          "--ignore-not-found",
+          "-o",
+          "name",
+        ]).trim(),
+      ).toBe("");
+      expect(
+        kubectl([
+          "get",
+          "sandbox",
+          name,
+          "-o",
+          "jsonpath={.spec.operatingMode}",
+        ]),
+      ).toBe("Suspended");
       const wake = vi
         .spyOn(CustomObjectsApi.prototype, "patchNamespacedCustomObject")
         .mockRejectedValueOnce(new Error("simulated launcher interruption"));
@@ -135,6 +193,19 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         "simulated launcher interruption",
       );
       wake.mockRestore();
+      const restrictedPolicy = JSON.parse(
+        kubectl(["get", "networkpolicy", `${name}-egress`, "-o", "json"]),
+      );
+      expect(restrictedPolicy.spec.podSelector.matchLabels).toEqual({
+        "archestra.io/agent-run-task-id": initialTaskId,
+      });
+      expect(restrictedPolicy.spec.egress).not.toContainEqual({});
+      expect(JSON.stringify(restrictedPolicy.spec.egress)).toContain(
+        "203.0.113.0/24",
+      );
+      expect(JSON.stringify(restrictedPolicy.spec.egress)).not.toContain(
+        '"cidr":"0.0.0.0/0"',
+      );
       expect(
         kubectl([
           "get",
@@ -152,6 +223,22 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       expect(exec("cat /home/node/recovery-result")).toBe("initialcontinued");
       await manager.recoverRun(run);
       expect(exec("cat /home/node/recovery-result")).toBe("initialcontinued");
+      await manager.continueRun({
+        session: run,
+        spec: {
+          ...spec,
+          effectiveNetworkPolicy: { source: "built_in", policy: null },
+        },
+      });
+      const relaxedPolicy = JSON.parse(
+        kubectl(["get", "networkpolicy", `${name}-egress`, "-o", "json"]),
+      );
+      expect(JSON.stringify(relaxedPolicy.spec.egress)).toContain(
+        '"cidr":"0.0.0.0/0"',
+      );
+      expect(JSON.stringify(relaxedPolicy.spec.egress)).not.toContain(
+        "203.0.113.0/24",
+      );
       await manager.suspendWorkspace(run);
       await until(
         () =>
@@ -192,6 +279,13 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         "--wait=false",
       ]);
       kubectl(["delete", "secret", `${name}-env`, "--ignore-not-found"]);
+      kubectl([
+        "delete",
+        "networkpolicy",
+        `${name}-egress`,
+        `${name}-np`,
+        "--ignore-not-found",
+      ]);
     }
     function exec(command: string) {
       return kubectl([

@@ -299,6 +299,7 @@ class AgentRuntimeManager {
         "The Agent image or privilege configuration changed; start a new workspace instead",
       );
     }
+    await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
     // Keep the pending handoff outside this process before waiting for compute.
     // It contains credentials, so use a Secret, not annotations or task logs.
     const initialSecretName = agentRuntimeNames(
@@ -953,6 +954,79 @@ class AgentRuntimeManager {
 
   // ===================== internals =====================
 
+  private async refreshWorkspaceEgress(params: {
+    sandbox: AgentSandbox;
+    spec: AgentRunLaunchSpec;
+  }): Promise<void> {
+    const clients = this.requireClients();
+    // The retained Pod keeps its original selector even though this turn has
+    // a new task ID. Policies must continue selecting that Pod after a wake-up.
+    const taskId =
+      params.sandbox.spec.podTemplate.metadata?.labels?.[
+        AGENT_RUNTIME_TASK_LABEL
+      ];
+    if (!taskId)
+      throw new Error("Workspace is missing its network policy selector");
+    const spec: KubernetesAgentRunLaunchSpec = {
+      ...params.spec,
+      taskId,
+      frozenName: params.sandbox.metadata.name ?? params.spec.frozenName,
+      namespace: params.spec.runtimeScope,
+      ownerReferences: params.sandbox.metadata.ownerReferences,
+    };
+    const policies = buildAgentRuntimeEnvironmentEgressPolicies({
+      spec,
+      capabilities: (await getK8sCapabilities()).networkPolicy,
+      clusterDnsIps: await clusterDnsResolver.getClusterDnsIps(clients.coreApi),
+    });
+    await this.applyEgressPolicies(policies);
+    await this.applyNetworkPolicy(
+      buildAgentRuntimePlatformEgressPolicy({
+        spec,
+        platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
+        platformPodLabels: config.agentRuntime.platformPodSelector,
+        platformPorts: [config.api.port],
+      }),
+    );
+    // Policies are additive. Leaving an old allow policy of a different kind
+    // would defeat a tightened Environment policy. Finish pruning before the
+    // continuation request is published or a suspended Pod is woken.
+    const name = agentRuntimeNames(spec.frozenName).environmentNetworkPolicy;
+    const desiredKinds = new Set(policies.map(({ kind }) => kind));
+    const removals: Array<
+      [AgentRuntimeEgressPolicyObject["kind"], () => Promise<unknown>]
+    > = [
+      [
+        "NetworkPolicy",
+        () =>
+          clients.networkingApi.deleteNamespacedNetworkPolicy({
+            name,
+            namespace: spec.namespace,
+          }),
+      ],
+      ...Object.entries(AGENT_RUNTIME_EGRESS_POLICY_CRDS).map(
+        ([kind, coordinates]) =>
+          [
+            kind as AgentRuntimeEgressPolicyObject["kind"],
+            () =>
+              clients.customObjectsApi.deleteNamespacedCustomObject({
+                ...coordinates,
+                name,
+                namespace: spec.namespace,
+              }),
+          ] as [AgentRuntimeEgressPolicyObject["kind"], () => Promise<unknown>],
+      ),
+    ];
+    for (const [kind, remove] of removals) {
+      if (desiredKinds.has(kind)) continue;
+      try {
+        await remove();
+      } catch (error) {
+        if (!isK8sNotFoundError(error)) throw error;
+      }
+    }
+  }
+
   private async applyNetworkPolicy(body: k8s.V1NetworkPolicy): Promise<void> {
     const clients = this.requireClients();
     const namespace = body.metadata?.namespace;
@@ -1015,9 +1089,9 @@ class AgentRuntimeManager {
           ...coordinates,
           namespace: metadata.namespace,
           name: metadata.name,
-          body: policy.object,
+          body: [{ op: "replace", path: "/spec", value: policy.object.spec }],
         },
-        setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+        setHeaderOptions("Content-Type", PatchStrategy.JsonPatch),
       );
     }
   }

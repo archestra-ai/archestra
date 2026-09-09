@@ -186,6 +186,10 @@ internet CIDR-exception, and floor behavior as MCP server pods and code sandboxe
 Archestra control plane remain reachable so the run can use the LLM
 proxy and MCP gateway.
 
+Continuations refresh the current Environment policy before starting the next turn.
+Obsolete policy types are removed, including when a suspended workspace resumes.
+Changing the execution namespace requires a new workspace.
+
 See [Network egress policies](/docs/platform-environments#network-egress-policies)
 for policy modes, provider support, and the fixed SSRF floor.
 

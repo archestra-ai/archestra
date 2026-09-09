@@ -4,6 +4,7 @@ import type { AgentCard } from "@a2a-js/sdk";
 import { DefaultAgentCardResolver } from "@a2a-js/sdk/client";
 import { and, eq } from "drizzle-orm";
 import { Agent as UndiciAgent } from "undici";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import {
   A2aConnectionModel,
@@ -834,7 +835,7 @@ function assertNoRequiredExtensions(card: Record<string, unknown>): void {
   ) {
     throw new ApiError(
       400,
-      "Agent Card requires an A2A extension that Archestra does not support",
+      `Agent Card requires an A2A extension that ${archestraMcpBranding.appName} does not support`,
     );
   }
 }

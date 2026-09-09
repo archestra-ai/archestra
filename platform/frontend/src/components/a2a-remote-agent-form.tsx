@@ -31,6 +31,7 @@ import type {
 } from "@/lib/a2a-remote-agents.query";
 import { useInspectA2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
 import { useSession } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { getApiErrorMessage } from "@/lib/utils";
 
@@ -71,6 +72,7 @@ export function A2aRemoteAgentForm({
     defaultValues: valuesFromAgent(agent),
   });
   const inspectMutation = useInspectA2aRemoteAgent();
+  const appName = useAppName();
   const [inspectionRequested, setInspectionRequested] = useState(false);
   const { data: session } = useSession();
   const url = form.watch("url");
@@ -287,7 +289,7 @@ export function A2aRemoteAgentForm({
 
           <SettingsSection
             title="Authentication"
-            description="Configure how Archestra authenticates requests to this external agent."
+            description={`Configure how ${appName} authenticates requests to this external agent.`}
           >
             <div className="space-y-2">
               <Label htmlFor="a2a-auth">Authentication</Label>

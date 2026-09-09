@@ -410,7 +410,7 @@ function PluginsList() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      size: 460,
+      size: 360,
       cell: ({ row }) => {
         const plugin = row.original;
         return (
@@ -461,7 +461,7 @@ function PluginsList() {
             new Date(left.original.updatedAt).getTime() -
             new Date(right.original.updatedAt).getTime(),
         }),
-      size: 240,
+      size: 340,
       header: "Details",
       cell: ({ row }) => {
         const plugin = row.original;

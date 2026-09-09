@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.0-beta.3](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.2...platform-v1.4.0-beta.3) (2026-09-09)
+
+
+### Features
+
+* **frontend:** add responsive table filters and widen model IDs ([#7766](https://github.com/archestra-ai/archestra/issues/7766)) ([c087958](https://github.com/archestra-ai/archestra/commit/c087958b78930765f287748169b75a650dfe635a))
+* **frontend:** condense model tables and persist filters in the URL ([#7762](https://github.com/archestra-ai/archestra/issues/7762)) ([57cf12f](https://github.com/archestra-ai/archestra/commit/57cf12fee5345ae76815de0e8775f6bb1840120a))
+* **frontend:** float the save bar on agent, gateway, skill, and plugin edit pages ([#7769](https://github.com/archestra-ai/archestra/issues/7769)) ([2bfccc5](https://github.com/archestra-ai/archestra/commit/2bfccc56fde9a346464ef7cb102cfcf53758873c))
+* **knowledge:** add rendered multi-site crawling and repeatable ingestion ([#7771](https://github.com/archestra-ai/archestra/issues/7771)) ([65857c2](https://github.com/archestra-ai/archestra/commit/65857c27df66d92ba1c8969e26bd9027bd5ce972))
+
+
+### Bug Fixes
+
+* **mcp:** align registry view toggle order ([#7768](https://github.com/archestra-ai/archestra/issues/7768)) ([bb47786](https://github.com/archestra-ai/archestra/commit/bb47786486a187c401565f4d2f09bff6789bbdfa))
+
 ## [1.4.0-beta.2](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.1...platform-v1.4.0-beta.2) (2026-09-09)
 
 

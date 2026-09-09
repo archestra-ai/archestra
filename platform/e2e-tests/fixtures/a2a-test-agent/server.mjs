@@ -145,17 +145,17 @@ function isAuthorized(request, options) {
   return bearerValid || apiKeyValid;
 }
 
-function requestBaseUrl(request, configuredBaseUrl) {
+function requestBaseUrl(request, configuredBaseUrl, basePath) {
   if (configuredBaseUrl) return configuredBaseUrl.replace(/\/$/, "");
   const forwardedProtocol = request.headers["x-forwarded-proto"];
   const protocol = Array.isArray(forwardedProtocol)
     ? forwardedProtocol[0]
     : forwardedProtocol || "http";
-  return `${protocol}://${request.headers.host}`;
+  return `${protocol}://${request.headers.host}${basePath}`;
 }
 
 function buildAgentCard(request, options) {
-  const baseUrl = requestBaseUrl(request, options.baseUrl);
+  const baseUrl = requestBaseUrl(request, options.baseUrl, options.basePath);
   const security = securityFor(options.authMode);
 
   return {
@@ -386,11 +386,15 @@ function initialState() {
 }
 
 export function createA2aFixtureServer(inputOptions = {}) {
+  const requestedBasePath = inputOptions.basePath ?? "";
+  const trimmedBasePath = requestedBasePath.replace(/^\/+|\/+$/g, "");
+  const basePath = trimmedBasePath ? `/${trimmedBasePath}` : "";
   const options = {
     apiKey: inputOptions.apiKey ?? DEFAULT_API_KEY,
     authMode: inputOptions.authMode ?? "none",
     baseUrl: inputOptions.baseUrl,
     bearerToken: inputOptions.bearerToken ?? DEFAULT_BEARER_TOKEN,
+    basePath,
   };
   securityFor(options.authMode);
   let state = initialState();
@@ -421,7 +425,7 @@ export function createA2aFixtureServer(inputOptions = {}) {
 
     if (
       request.method === "GET" &&
-      url.pathname === "/.well-known/agent-card.json"
+      url.pathname === `${options.basePath}/.well-known/agent-card.json`
     ) {
       state.requests.push({
         sequence: state.requests.length + 1,
@@ -434,7 +438,10 @@ export function createA2aFixtureServer(inputOptions = {}) {
       });
     }
 
-    if (request.method !== "POST" || url.pathname !== "/a2a") {
+    if (
+      request.method !== "POST" ||
+      url.pathname !== `${options.basePath}/a2a`
+    ) {
       return json(response, 404, { error: "Not found" });
     }
 

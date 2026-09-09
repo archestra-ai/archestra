@@ -66,8 +66,14 @@ export function makeAgentCard(
 export async function startA2aDiscoveryFixture(
   authMode: FixtureAuthMode = "none",
   hostname = "127.0.0.1",
+  basePath = "",
 ): Promise<{ baseUrl: string; close: () => Promise<void> }> {
-  const server = createA2aFixtureServer({ authMode }) as Server;
+  const trimmedBasePath = basePath.replace(/^\/+|\/+$/g, "");
+  const normalizedBasePath = trimmedBasePath ? `/${trimmedBasePath}` : "";
+  const server = createA2aFixtureServer({
+    authMode,
+    basePath: normalizedBasePath,
+  }) as Server;
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, hostname, resolve);
@@ -75,7 +81,7 @@ export async function startA2aDiscoveryFixture(
   const address = server.address() as AddressInfo;
 
   return {
-    baseUrl: `http://${hostname}:${address.port}`,
+    baseUrl: `http://${hostname}:${address.port}${normalizedBasePath}`,
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

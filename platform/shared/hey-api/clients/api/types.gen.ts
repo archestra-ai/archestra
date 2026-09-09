@@ -13003,6 +13003,8 @@ export type ListA2aRemoteAgentsResponses = {
             hasCredential: boolean;
         };
         toolId: string;
+        assignmentCount: number;
+        lastUsedAt: string | null;
         authorName: string | null;
         teams: Array<{
             id: string;
@@ -13161,6 +13163,8 @@ export type CreateA2aRemoteAgentResponses = {
             hasCredential: boolean;
         };
         toolId: string;
+        assignmentCount: number;
+        lastUsedAt: string | null;
         authorName: string | null;
         teams: Array<{
             id: string;
@@ -13378,6 +13382,8 @@ export type GetA2aRemoteAgentResponses = {
             hasCredential: boolean;
         };
         toolId: string;
+        assignmentCount: number;
+        lastUsedAt: string | null;
         authorName: string | null;
         teams: Array<{
             id: string;
@@ -13539,6 +13545,8 @@ export type UpdateA2aRemoteAgentResponses = {
             hasCredential: boolean;
         };
         toolId: string;
+        assignmentCount: number;
+        lastUsedAt: string | null;
         authorName: string | null;
         teams: Array<{
             id: string;

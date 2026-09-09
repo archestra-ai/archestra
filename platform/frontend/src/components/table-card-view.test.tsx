@@ -130,6 +130,13 @@ describe("TableCardView", () => {
     expect(onNavigate).toHaveBeenCalledOnce();
   });
 
+  it("allows cards to shrink with narrow containers", () => {
+    const { container } = render(<TableCard title="Responsive card" />);
+
+    expect(container.firstElementChild).toHaveClass("min-w-0");
+    expect(container.firstElementChild).not.toHaveClass("min-w-80");
+  });
+
   it("keeps the Shift-range anchor when switching between table and cards", () => {
     render(<SharedRangeView />);
 

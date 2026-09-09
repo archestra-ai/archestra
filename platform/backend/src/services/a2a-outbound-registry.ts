@@ -389,10 +389,15 @@ async function resolveAgentCard(source: A2aRemoteAgentSource) {
     if (source.type === "inline_card") {
       return resolver.normalizeAgentCard(source.agentCard);
     }
-    return await resolver.resolve(
-      source.url,
-      source.type === "card_url" ? "" : undefined,
-    );
+    if (source.type === "card_url") {
+      return await resolver.resolve(source.url, "");
+    }
+    const baseUrl = new URL(source.url);
+    const basePath = baseUrl.pathname.replace(/\/+$/, "");
+    baseUrl.pathname = `${basePath}/.well-known/agent-card.json`;
+    baseUrl.search = "";
+    baseUrl.hash = "";
+    return await resolver.resolve(baseUrl.href, "");
   } catch (error) {
     throw new ApiError(
       400,
@@ -626,13 +631,22 @@ async function hydratePublicRemoteAgents(
   rows: Awaited<ReturnType<typeof A2aRemoteAgentModel.findAllForOrganization>>,
 ): Promise<PublicA2aRemoteAgent[]> {
   const remoteAgentIds = rows.map((row) => row.remoteAgent.id);
+  const toolIds = rows.map((row) => row.toolId);
   const authorIds = rows.flatMap((row) =>
     row.remoteAgent.authorId ? [row.remoteAgent.authorId] : [],
   );
-  const [teamsByAgent, usersByAgent, authorNames] = await Promise.all([
+  const [
+    teamsByAgent,
+    usersByAgent,
+    authorNames,
+    assignmentsByTool,
+    lastUsedAtByAgent,
+  ] = await Promise.all([
     A2aRemoteAgentTeamModel.getDetailsForRemoteAgents(remoteAgentIds),
     A2aRemoteAgentUserModel.getDetailsForRemoteAgents(remoteAgentIds),
     UserModel.getNamesByIds(authorIds),
+    A2aRemoteAgentModel.countAssignmentsByToolIds(toolIds),
+    A2aRemoteAgentModel.getLastUsedAtByRemoteAgentIds(remoteAgentIds),
   ]);
 
   return rows.map((row) => {
@@ -641,6 +655,8 @@ async function hydratePublicRemoteAgents(
       ...row.remoteAgent,
       connection: { ...connection, hasCredential: Boolean(secretId) },
       toolId: row.toolId,
+      assignmentCount: assignmentsByTool.get(row.toolId) ?? 0,
+      lastUsedAt: lastUsedAtByAgent.get(row.remoteAgent.id) ?? null,
       authorName: row.remoteAgent.authorId
         ? (authorNames.get(row.remoteAgent.authorId) ?? null)
         : null,

@@ -216,6 +216,8 @@ export const PublicA2aConnectionSchema = SelectA2aConnectionSchema.omit({
 export const PublicA2aRemoteAgentSchema = SelectA2aRemoteAgentSchema.extend({
   connection: PublicA2aConnectionSchema,
   toolId: z.string().uuid(),
+  assignmentCount: z.number().int().nonnegative(),
+  lastUsedAt: z.date().nullable(),
   authorName: z.string().nullable(),
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
   users: z.array(

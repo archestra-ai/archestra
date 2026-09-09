@@ -927,6 +927,7 @@ export function AccessLevelSelector({
   assignedTeamIds,
   assignedUserIds = [],
   onUserIdsChange,
+  onChoiceChange,
   onTeamIdsChange,
   hasNoAvailableTeams,
   showTeamRequired,
@@ -947,6 +948,7 @@ export function AccessLevelSelector({
    */
   assignedUserIds?: string[];
   onUserIdsChange?: (ids: string[]) => void;
+  onChoiceChange?: (choice: AgentVisibilityChoice) => void;
   onTeamIdsChange: (ids: string[]) => void;
   hasNoAvailableTeams: boolean;
   showTeamRequired: boolean;
@@ -1050,7 +1052,10 @@ export function AccessLevelSelector({
       label="Visibility"
       value={choice}
       options={options}
-      onValueChange={selectChoice}
+      onValueChange={(nextChoice) => {
+        onChoiceChange?.(nextChoice);
+        selectChoice(nextChoice);
+      }}
     >
       {choice === "user" && onUserIdsChange && (
         <UserShareField

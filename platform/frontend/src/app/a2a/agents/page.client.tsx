@@ -6,7 +6,6 @@ import type {
   SortingState,
 } from "@tanstack/react-table";
 import {
-  Activity,
   Bot,
   ChevronDown,
   ChevronUp,
@@ -19,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
 import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
+import { AgentLastUsedFooter } from "@/components/agent-card-meta";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   openRowOnPlainClick,
@@ -56,7 +56,6 @@ import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   type A2aRemoteAgent,
-  useA2aRemoteAgentRuns,
   useA2aRemoteAgents,
   useBulkUpdateA2aRemoteAgentVisibility,
   useDeleteA2aRemoteAgent,
@@ -122,9 +121,6 @@ export default function OutboundA2aAgentsPage() {
   const query = useA2aRemoteAgents();
   const { data: canManage } = useHasPermissions({
     agentSettings: ["update"],
-  });
-  const { data: canReadActivity } = useHasPermissions({
-    agentSettings: ["read"],
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: session } = useSession();
@@ -233,10 +229,28 @@ export default function OutboundA2aAgentsPage() {
     }
   }, [pageIndex, pageSize, setPagination, totalPages]);
 
-  const visibleAgents = filteredAgents.slice(
-    pageIndex * pageSize,
-    (pageIndex + 1) * pageSize,
+  const visibleAgents = useMemo(
+    () =>
+      filteredAgents.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+    [filteredAgents, pageIndex, pageSize],
   );
+  const visibleAgentIds = useMemo(
+    () => visibleAgents.map((agent) => agent.id),
+    [visibleAgents],
+  );
+
+  useEffect(() => {
+    const visibleIds = new Set(visibleAgentIds);
+    setRowSelection((current) => {
+      const selectedIds = Object.keys(current);
+      if (selectedIds.every((id) => visibleIds.has(id))) return current;
+      return Object.fromEntries(
+        selectedIds
+          .filter((id) => visibleIds.has(id))
+          .map((id) => [id, current[id]]),
+      );
+    });
+  }, [visibleAgentIds]);
   const cardSelection = useBulkCardSelection({
     rows: visibleAgents,
     getRowId: (agent) => agent.id,
@@ -256,6 +270,9 @@ export default function OutboundA2aAgentsPage() {
   );
 
   const hasActiveFilters = !!(nameFilter || scopeFilter.hasActiveScopeFilters);
+  const emptyDescription = canManage
+    ? "Connect your first external agent using its base URL."
+    : "An administrator can connect an external agent using its base URL.";
   const clearFilters = useCallback(() => {
     updateQueryParams({
       page: "1",
@@ -285,7 +302,7 @@ export default function OutboundA2aAgentsPage() {
 
   const columns = useMemo<ColumnDef<A2aRemoteAgent>[]>(
     () => [
-      ...(canReadActivity
+      ...(canManage
         ? [
             createSelectColumn<A2aRemoteAgent>({
               rowLabel: (agent) => `Select ${agent.name}`,
@@ -335,6 +352,18 @@ export default function OutboundA2aAgentsPage() {
         ),
       },
       {
+        id: "status",
+        header: "Status",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <Badge
+            variant={row.original.connection.enabled ? "default" : "secondary"}
+          >
+            {row.original.connection.enabled ? "Enabled" : "Disabled"}
+          </Badge>
+        ),
+      },
+      {
         id: "visibility",
         header: "Accessible to",
         enableSorting: false,
@@ -353,27 +382,11 @@ export default function OutboundA2aAgentsPage() {
         ),
       },
       {
-        id: "status",
-        header: "Status",
+        id: "assignments",
+        header: "Assigned agents",
         enableSorting: false,
-        cell: ({ row }) => (
-          <Badge
-            variant={row.original.connection.enabled ? "default" : "secondary"}
-          >
-            {row.original.connection.enabled ? "Enabled" : "Disabled"}
-          </Badge>
-        ),
+        cell: ({ row }) => countLabel(row.original.assignmentCount, "agent"),
       },
-      ...(canManage
-        ? [
-            {
-              id: "activity",
-              header: "Recent activity",
-              enableSorting: false,
-              cell: ({ row }) => <RecentRun remoteAgentId={row.original.id} />,
-            } satisfies ColumnDef<A2aRemoteAgent>,
-          ]
-        : []),
       {
         id: "actions",
         header: "Actions",
@@ -384,7 +397,7 @@ export default function OutboundA2aAgentsPage() {
         ),
       },
     ],
-    [canManage, canReadActivity, currentUserId, renderActions],
+    [canManage, currentUserId, renderActions],
   );
 
   const showLoading = query.isPending && remoteAgents.length === 0;
@@ -492,7 +505,7 @@ export default function OutboundA2aAgentsPage() {
                 isLoading={showLoading}
                 emptyIcon={Bot}
                 emptyMessage="No external A2A agents connected"
-                emptyDescription="Start with a well-known Agent Card URL or paste a card manually."
+                emptyDescription={emptyDescription}
                 hasActiveFilters={hasActiveFilters}
                 filteredEmptyMessage="No external A2A agents match your filters"
                 onClearFilters={clearFilters}
@@ -504,61 +517,56 @@ export default function OutboundA2aAgentsPage() {
                     key={agent.id}
                     testId={`a2a-remote-agent-card-${agent.id}`}
                     icon={<AgentIcon size={20} />}
-                    title={agent.name}
+                    title={
+                      <Link
+                        href={`/a2a/agents/${agent.id}`}
+                        className="truncate"
+                      >
+                        {agent.name}
+                      </Link>
+                    }
                     description={agent.description || "External A2A agent"}
                     actions={renderActions(agent)}
                     onNavigate={() => openAgent(agent)}
                     footer={
-                      canReadActivity ? (
-                        <RecentRun remoteAgentId={agent.id} />
-                      ) : undefined
+                      <AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />
                     }
                     {...(canManage ? cardSelection(agent) : {})}
                     selectionLabel={`Select ${agent.name}`}
                   >
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
-                        <ResourceVisibilityBadge
-                          scope={agent.scope}
-                          teams={agent.teams}
-                          users={agent.users}
-                          authorId={agent.authorId}
-                          authorName={agent.authorName}
-                          currentUserId={currentUserId}
-                          showSelfAsMe
-                          compact
-                        />
-                        <Badge variant="secondary">A2A 1.x</Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ResourceVisibilityBadge
+                        scope={agent.scope}
+                        teams={agent.teams}
+                        users={agent.users}
+                        authorId={agent.authorId}
+                        authorName={agent.authorName}
+                        currentUserId={currentUserId}
+                        showSelfAsMe
+                      />
+                      <Badge
+                        variant={
+                          agent.connection.enabled ? "default" : "secondary"
+                        }
+                      >
+                        {agent.connection.enabled ? "Enabled" : "Disabled"}
+                      </Badge>
+                      {agent.connection.authType !== "none" ? (
                         <Badge variant="outline">
-                          {agent.connection.selectedInterface.protocolBinding}
+                          {agent.connection.authType === "bearer"
+                            ? "Bearer auth"
+                            : "API key auth"}
                         </Badge>
-                        <Badge
-                          variant={
-                            agent.connection.enabled ? "default" : "secondary"
-                          }
-                        >
-                          {agent.connection.enabled ? "Enabled" : "Disabled"}
-                        </Badge>
-                      </div>
-                      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                        <dt className="text-muted-foreground">Discovery</dt>
-                        <dd className="truncate">
-                          {agent.discoveryMode.replaceAll("_", " ")}
-                        </dd>
-                        <dt className="text-muted-foreground">
-                          Authentication
-                        </dt>
-                        <dd>
-                          {agent.connection.authType.replaceAll("_", " ")}
-                        </dd>
-                        <dt className="text-muted-foreground">Endpoint</dt>
-                        <dd
-                          className="truncate"
-                          title={agent.connection.selectedInterface.url}
-                        >
-                          {agent.connection.selectedInterface.url}
-                        </dd>
-                      </dl>
+                      ) : null}
+                      <Badge variant="outline">
+                        {agent.connection.selectedInterface.protocolBinding}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        title={`Assigned as a subagent to ${countLabel(agent.assignmentCount, "agent")}`}
+                      >
+                        {countLabel(agent.assignmentCount, "agent")}
+                      </Badge>
                     </div>
                   </TableCard>
                 ))}
@@ -584,7 +592,7 @@ export default function OutboundA2aAgentsPage() {
                 }
                 emptyIcon={Bot}
                 emptyMessage="No external A2A agents connected"
-                emptyDescription="Start with a well-known Agent Card URL or paste a card manually."
+                emptyDescription={emptyDescription}
                 hasActiveFilters={hasActiveFilters}
                 filteredEmptyMessage="No external A2A agents match your filters"
                 onClearFilters={clearFilters}
@@ -659,27 +667,6 @@ export default function OutboundA2aAgentsPage() {
   );
 }
 
-function RecentRun({ remoteAgentId }: { remoteAgentId: string }) {
-  const query = useA2aRemoteAgentRuns(remoteAgentId);
-  const run = query.data?.[0];
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="flex items-center gap-1.5 text-muted-foreground">
-        <Activity className="h-3.5 w-3.5" />
-        Recent activity
-      </span>
-      {query.isPending ? (
-        <span className="text-muted-foreground">Loading…</span>
-      ) : query.isError ? (
-        <span className="text-destructive">Unavailable</span>
-      ) : run ? (
-        <span title={new Date(run.startedAt).toLocaleString()}>
-          {run.state.replaceAll("_", " ")} ·{" "}
-          {new Date(run.startedAt).toLocaleDateString()}
-        </span>
-      ) : (
-        <span className="text-muted-foreground">No runs yet</span>
-      )}
-    </div>
-  );
+function countLabel(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }

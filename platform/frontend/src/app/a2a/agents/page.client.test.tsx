@@ -65,6 +65,8 @@ const remoteAgent = {
     hasCredential: false,
   },
   toolId: "tool-1",
+  assignmentCount: 2,
+  lastUsedAt: "2026-09-09T12:00:00.000Z",
 } satisfies archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number] & {
   scope: "personal";
   authorId: string;
@@ -81,10 +83,13 @@ const teamRemoteAgent = {
   authorId: "user-2",
   authorName: "Other User",
   teams: [{ id: "team-1", name: "Finance" }],
+  assignmentCount: 1,
   connection: {
     ...remoteAgent.connection,
     id: "connection-2",
     remoteAgentId: "remote-agent-2",
+    authType: "bearer",
+    hasCredential: true,
   },
 } as const;
 
@@ -94,10 +99,29 @@ const otherPersonalRemoteAgent = {
   name: "Other Personal Agent",
   authorId: "user-2",
   authorName: "Other User",
+  assignmentCount: 0,
+  lastUsedAt: null,
   connection: {
     ...remoteAgent.connection,
     id: "connection-3",
     remoteAgentId: "remote-agent-3",
+  },
+} as const;
+
+const disabledRemoteAgent = {
+  ...remoteAgent,
+  id: "remote-agent-4",
+  name: "Paused Agent",
+  scope: "org",
+  authorId: "user-2",
+  authorName: "Other User",
+  assignmentCount: 0,
+  lastUsedAt: null,
+  connection: {
+    ...remoteAgent.connection,
+    id: "connection-4",
+    remoteAgentId: "remote-agent-4",
+    enabled: false,
   },
 } as const;
 
@@ -149,7 +173,7 @@ afterAll(() => {
 });
 
 describe("OutboundA2aAgentsPage", () => {
-  it("routes connect, card, and table-row actions to full pages", async () => {
+  it("routes connect, cards, and table rows to full pages", async () => {
     const user = userEvent.setup();
     const push = vi.fn();
     vi.mocked(useRouter).mockReturnValue({
@@ -166,6 +190,9 @@ describe("OutboundA2aAgentsPage", () => {
     expect(push).toHaveBeenCalledWith("/a2a/agents/new");
 
     const card = screen.getByTestId("a2a-remote-agent-card-remote-agent-1");
+    expect(
+      within(card).getByRole("link", { name: "Payments Agent" }),
+    ).toHaveAttribute("href", "/a2a/agents/remote-agent-1");
     fireEvent.click(card);
     expect(push).toHaveBeenCalledWith("/a2a/agents/remote-agent-1");
 
@@ -192,7 +219,7 @@ describe("OutboundA2aAgentsPage", () => {
 
     expect(await screen.findByText("Reporting Agent")).toBeInTheDocument();
     expect(screen.queryByText("Payments Agent")).not.toBeInTheDocument();
-    expect(screen.getByTitle("Finance")).toHaveTextContent("Team");
+    expect(screen.getByTitle("Finance")).toHaveTextContent("Finance");
   });
 
   it("hides other users' personal agents by default and shows them with the Other users filter", async () => {
@@ -285,11 +312,118 @@ describe("OutboundA2aAgentsPage", () => {
     expect(
       within(card).queryByRole("button", { name: /More actions/ }),
     ).toBeNull();
-    expect(within(card).getByText("Recent activity")).toBeInTheDocument();
+    expect(within(card).getByText(/Last used/)).toBeInTheDocument();
+    expect(
+      within(card).queryByRole("checkbox", { name: "Select Payments Agent" }),
+    ).toBeNull();
     await user.click(
       within(card).getByRole("button", { name: "View Payments Agent" }),
     );
     expect(push).toHaveBeenCalledWith("/a2a/agents/remote-agent-1");
+  });
+
+  it("matches agent card anatomy with compact metadata and a last-used footer", async () => {
+    server.use(
+      http.get(REGISTRY_URL, () =>
+        HttpResponse.json([remoteAgent, teamRemoteAgent, disabledRemoteAgent]),
+      ),
+    );
+
+    renderPage();
+
+    const paymentsCard = await screen.findByTestId(
+      "a2a-remote-agent-card-remote-agent-1",
+    );
+    expect(
+      within(paymentsCard).getByText(remoteAgent.description),
+    ).toBeVisible();
+    expect(within(paymentsCard).getByTitle("Me")).toBeVisible();
+    expect(within(paymentsCard).getByText("Enabled")).toBeVisible();
+    expect(within(paymentsCard).getByText("JSONRPC")).toBeVisible();
+    expect(within(paymentsCard).getByText("2 agents")).toHaveAttribute(
+      "title",
+      "Assigned as a subagent to 2 agents",
+    );
+    expect(paymentsCard).toHaveTextContent("Last used");
+    expect(within(paymentsCard).queryByText("Bearer auth")).toBeNull();
+
+    const reportingCard = screen.getByTestId(
+      "a2a-remote-agent-card-remote-agent-2",
+    );
+    expect(within(reportingCard).getByTitle("Finance")).toBeVisible();
+    expect(within(reportingCard).getByText("Bearer auth")).toBeVisible();
+    expect(within(reportingCard).getByText("1 agent")).toBeVisible();
+
+    const pausedCard = screen.getByTestId(
+      "a2a-remote-agent-card-remote-agent-4",
+    );
+    expect(within(pausedCard).getByText("Disabled")).toBeVisible();
+    expect(within(pausedCard).getByText("0 agents")).toBeVisible();
+    expect(pausedCard).toHaveTextContent("Last used never");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "View as table" }),
+    );
+    expect(screen.getByRole("columnheader", { name: "Status" })).toBeVisible();
+    expect(
+      screen.getByRole("columnheader", { name: "Accessible to" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("columnheader", { name: "Assigned agents" }),
+    ).toBeVisible();
+  });
+
+  it("prunes selections that leave the filtered result", async () => {
+    server.use(
+      http.get(REGISTRY_URL, () =>
+        HttpResponse.json([remoteAgent, teamRemoteAgent]),
+      ),
+    );
+    const view = renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: "Select Payments Agent" }),
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select Payments Agent" }),
+    ).toBeChecked();
+
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("scope=team") as ReturnType<typeof useSearchParams>,
+    );
+    view.rerenderPage();
+    await waitFor(() =>
+      expect(screen.queryByText("Payments Agent")).not.toBeInTheDocument(),
+    );
+
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    view.rerenderPage();
+    expect(
+      await screen.findByRole("checkbox", { name: "Select Payments Agent" }),
+    ).not.toBeChecked();
+  });
+
+  it("describes the base-URL create path without offering it to read-only users", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !permissions.agentSettings?.includes("update"),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    server.use(http.get(REGISTRY_URL, () => HttpResponse.json([])));
+
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "An administrator can connect an external agent using its base URL.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Connect agent" })).toBeNull();
+    expect(screen.queryByText(/paste a card manually/i)).toBeNull();
   });
 });
 
@@ -297,9 +431,11 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const renderPageTree = () => (
     <QueryClientProvider client={queryClient}>
       <OutboundA2aAgentsPage />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(renderPageTree());
+  return { ...view, rerenderPage: () => view.rerender(renderPageTree()) };
 }

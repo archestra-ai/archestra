@@ -1,4 +1,6 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { A2aOutboundRunModel } from "@/models";
+import AgentToolModel from "@/models/agent-tool";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
@@ -193,6 +195,82 @@ describe("outbound A2A visibility reads", () => {
       url: `/api/a2a/remote-agents/${hidden.id}`,
     });
     expect(detail.statusCode).toBe(200);
+  });
+
+  test("list and detail return the exact number of local agent assignments", async ({
+    makeAgent,
+  }) => {
+    const assigned = await createRemote(ctx, {
+      name: "Assigned target",
+      scope: "org",
+    });
+    const unassigned = await createRemote(ctx, {
+      name: "Unassigned target",
+      scope: "org",
+    });
+    const firstAgent = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+    });
+    const secondAgent = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+    });
+    await AgentToolModel.createIfNotExists(firstAgent.id, assigned.toolId);
+    await AgentToolModel.createIfNotExists(secondAgent.id, assigned.toolId);
+    await A2aOutboundRunModel.create({
+      organizationId: ctx.organizationId,
+      parentAgentId: firstAgent.id,
+      remoteAgentId: assigned.id,
+      connectionId: assigned.connection.id,
+      toolId: assigned.toolId,
+      messageId: "latest-use-message",
+      state: "completed",
+      targetNameSnapshot: assigned.name,
+      interfaceSnapshot: assigned.connection.selectedInterface,
+      startedAt: new Date("2026-09-09T12:00:00.000Z"),
+      completedAt: new Date("2026-09-09T12:01:00.000Z"),
+    });
+
+    const list = await ctx.app.inject({
+      method: "GET",
+      url: "/api/a2a/remote-agents",
+    });
+    expect(list.statusCode).toBe(200);
+    expect(
+      list
+        .json()
+        .map(
+          (item: {
+            id: string;
+            assignmentCount: number;
+            lastUsedAt: string | null;
+          }) => ({
+            id: item.id,
+            assignmentCount: item.assignmentCount,
+            lastUsedAt: item.lastUsedAt,
+          }),
+        ),
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          id: assigned.id,
+          assignmentCount: 2,
+          lastUsedAt: "2026-09-09T12:00:00.000Z",
+        },
+        { id: unassigned.id, assignmentCount: 0, lastUsedAt: null },
+      ]),
+    );
+
+    const detail = await ctx.app.inject({
+      method: "GET",
+      url: `/api/a2a/remote-agents/${assigned.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({
+      assignmentCount: 2,
+      lastUsedAt: "2026-09-09T12:00:00.000Z",
+    });
   });
 });
 

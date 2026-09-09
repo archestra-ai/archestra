@@ -68,7 +68,6 @@ export function CreateA2aRemoteAgentPage() {
           <A2aRemoteAgentForm
             isSaving={createMutation.isPending}
             onDirtyChange={setFormDirty}
-            onCancel={() => navigationGuard.requestNavigate(LIST_HREF)}
             onSubmit={(submission) => {
               if (!submission.source || !submission.scope) return;
               createMutation.mutate(
@@ -221,7 +220,6 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
           readOnly={!canManage}
           isSaving={updateMutation.isPending}
           onDirtyChange={setFormDirty}
-          onCancel={() => navigationGuard.requestNavigate(LIST_HREF)}
           onSubmit={(submission: A2aRemoteAgentFormSubmission) => {
             updateMutation.mutate(submission);
           }}

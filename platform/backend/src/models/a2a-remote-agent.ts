@@ -1,11 +1,13 @@
 import type { ResourceVisibilityScope } from "@archestra/shared";
 import {
   and,
+  count,
   desc,
   eq,
   exists,
   inArray,
   isNull,
+  max,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -259,6 +261,44 @@ class A2aRemoteAgentModel {
       .from(schema.agentToolsTable)
       .where(eq(schema.agentToolsTable.toolId, toolId));
     return rows.length;
+  }
+
+  static async countAssignmentsByToolIds(
+    toolIds: string[],
+  ): Promise<Map<string, number>> {
+    if (toolIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        assignmentCount: count(schema.agentToolsTable.id),
+      })
+      .from(schema.agentToolsTable)
+      .where(inArray(schema.agentToolsTable.toolId, toolIds))
+      .groupBy(schema.agentToolsTable.toolId);
+    return new Map(
+      rows.map((row) => [row.toolId, Number(row.assignmentCount)]),
+    );
+  }
+
+  static async getLastUsedAtByRemoteAgentIds(
+    remoteAgentIds: string[],
+  ): Promise<Map<string, Date>> {
+    if (remoteAgentIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        remoteAgentId: schema.a2aOutboundRunsTable.remoteAgentId,
+        lastUsedAt: max(schema.a2aOutboundRunsTable.startedAt),
+      })
+      .from(schema.a2aOutboundRunsTable)
+      .where(inArray(schema.a2aOutboundRunsTable.remoteAgentId, remoteAgentIds))
+      .groupBy(schema.a2aOutboundRunsTable.remoteAgentId);
+    return new Map(
+      rows.flatMap((row) =>
+        row.remoteAgentId && row.lastUsedAt
+          ? [[row.remoteAgentId, row.lastUsedAt] as const]
+          : [],
+      ),
+    );
   }
 
   static visibilityCondition(userId: string): SQL {

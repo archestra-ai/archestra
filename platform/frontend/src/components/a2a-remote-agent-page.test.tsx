@@ -153,19 +153,47 @@ describe("external A2A agent routed pages", () => {
     const baseUrlInput = screen.getByLabelText("Agent base URL");
     await user.click(baseUrlInput);
     await user.paste(remoteAgent.discoveryUrl);
-    await user.type(
+    expect(
+      screen.getByRole("button", { name: "Connect agent" }),
+    ).toBeDisabled();
+    expect(
       screen.getByLabelText("Display name (optional)"),
-      remoteAgent.name,
-    );
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+    expect(
+      await screen.findByRole("status", { name: "Connection compatible" }),
+    ).toBeInTheDocument();
+    const nameInput = screen.getByLabelText("Display name (optional)");
+    const descriptionInput = screen.getByLabelText("Description (optional)");
+    await user.type(nameInput, remoteAgent.name);
+    await user.type(descriptionInput, remoteAgent.description);
+    await user.clear(screen.getByLabelText("Agent base URL"));
     await user.type(
-      screen.getByLabelText("Description (optional)"),
-      remoteAgent.description,
+      screen.getByLabelText("Agent base URL"),
+      "https://changed.example.com",
     );
     expect(
-      await screen.findByRole("status", { name: "Agent Card found" }),
-    ).toHaveTextContent("Fixture Agent");
+      screen.getByRole("button", { name: "Connect agent" }),
+    ).toBeDisabled();
+    await user.clear(screen.getByLabelText("Agent base URL"));
+    await user.type(
+      screen.getByLabelText("Agent base URL"),
+      remoteAgent.discoveryUrl,
+    );
+    expect(
+      screen.getByRole("button", { name: "Connect agent" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+    await screen.findByRole("status", { name: "Connection compatible" });
+    expect(screen.getByLabelText("Display name (optional)")).toHaveValue(
+      remoteAgent.name,
+    );
+    expect(screen.getByLabelText("Description (optional)")).toHaveValue(
+      remoteAgent.description,
+    );
     expect(inspectedBody).toEqual({
       source: { type: "well_known", url: remoteAgent.discoveryUrl },
+      auth: { type: "none" },
     });
     await user.click(screen.getByRole("button", { name: "Connect agent" }));
 
@@ -209,7 +237,7 @@ describe("external A2A agent routed pages", () => {
       screen.getByLabelText("Agent base URL"),
       remoteAgent.discoveryUrl,
     );
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("link", { name: "External Agents" }));
 
     expect(
       screen.getByRole("heading", { name: "Discard unsaved changes?" }),
@@ -219,12 +247,14 @@ describe("external A2A agent routed pages", () => {
     expect(push).toHaveBeenCalledWith("/a2a/agents");
   });
 
-  it("rejects a path URL locally and discovers the card after correction", async () => {
+  it("rejects query parameters and discovers from a canonical path-prefixed base URL", async () => {
     const user = userEvent.setup();
     let inspectCalls = 0;
+    let inspectedBody: unknown;
     server.use(
-      http.post(`${REGISTRY_URL}/inspect`, () => {
+      http.post(`${REGISTRY_URL}/inspect`, async ({ request }) => {
         inspectCalls += 1;
+        inspectedBody = await request.json();
         return HttpResponse.json({
           name: "Fixture Agent",
           description: "A deterministic external agent",
@@ -240,21 +270,76 @@ describe("external A2A agent routed pages", () => {
     renderPage(<CreateA2aRemoteAgentPage />);
     const baseUrlInput = screen.getByLabelText("Agent base URL");
     await user.click(baseUrlInput);
-    await user.paste("https://agent.example.com/a2a");
+    await user.paste("https://agent.example.com/apikey?tenant=one");
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
 
     expect(
       await screen.findByRole("alert", {}, { timeout: 2_000 }),
-    ).toHaveTextContent("Enter a base URL without a path, query, or fragment.");
+    ).toHaveTextContent(
+      "Enter an HTTP(S) base URL without credentials, a query, or a fragment.",
+    );
     expect(inspectCalls).toBe(0);
 
     await user.clear(baseUrlInput);
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     await user.click(baseUrlInput);
-    await user.paste(remoteAgent.discoveryUrl);
+    await user.paste(`${remoteAgent.discoveryUrl}/apikey/`);
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
     expect(
       await screen.findByRole("status", { name: "Agent Card found" }),
     ).toHaveTextContent("Fixture Agent");
-    expect(inspectCalls).toBe(1);
+    expect(inspectCalls).toBe(2);
+    expect(inspectedBody).toEqual({
+      source: {
+        type: "well_known",
+        url: `${remoteAgent.discoveryUrl}/apikey`,
+      },
+      auth: { type: "none" },
+    });
+  });
+
+  it("requires a selected user or team for explicit access choices", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [
+        { id: "user-1", name: "Test User", email: "owner@example.com" },
+        { id: "user-2", name: "Morgan Lee", email: "morgan@example.com" },
+      ],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
+    vi.mocked(useTeams).mockReturnValue({
+      data: [{ id: "team-1", name: "Operations", parentId: null }],
+    } as unknown as ReturnType<typeof useTeams>);
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json({
+          name: "Fixture Agent",
+          description: null,
+          agentCard: remoteAgent.agentCard,
+          cardHash: remoteAgent.cardHash,
+          selectedInterface: remoteAgent.connection.selectedInterface,
+          supportedAuthTypes: ["none"],
+          selectedSecurityRequirement: null,
+        }),
+      ),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.type(
+      screen.getByLabelText("Agent base URL"),
+      remoteAgent.discoveryUrl,
+    );
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+    await screen.findByRole("status", { name: "Connection compatible" });
+    await user.click(screen.getByRole("button", { name: /Personal/ }));
+    await user.click(screen.getByRole("button", { name: /Users/ }));
+    expect(
+      screen.getByRole("button", { name: "Connect agent" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /Users/ }));
+    await user.click(screen.getByRole("button", { name: /Teams/ }));
+    expect(
+      screen.getByRole("button", { name: "Connect agent" }),
+    ).toBeDisabled();
   });
 
   it("prefills edit and omits unchanged source and stored credential on a visibility-only update", async () => {
@@ -304,10 +389,6 @@ describe("external A2A agent routed pages", () => {
       discoveryUrl: "https://agent.example.com/custom-card.json",
     },
     { discoveryMode: "inline_card" as const, discoveryUrl: null },
-    {
-      discoveryMode: "well_known" as const,
-      discoveryUrl: "https://agent.example.com/nested/",
-    },
   ])("preserves a legacy $discoveryMode source during an unrelated edit", async ({
     discoveryMode,
     discoveryUrl,
@@ -352,7 +433,7 @@ describe("external A2A agent routed pages", () => {
           agentCard: remoteAgent.agentCard,
           cardHash: "refreshed-card-hash",
           selectedInterface: remoteAgent.connection.selectedInterface,
-          supportedAuthTypes: ["none"],
+          supportedAuthTypes: ["bearer"],
           selectedSecurityRequirement: null,
         });
       }),
@@ -371,10 +452,12 @@ describe("external A2A agent routed pages", () => {
     await user.clear(baseUrlInput);
     await user.click(baseUrlInput);
     await user.paste(remoteAgent.discoveryUrl);
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
 
     await waitFor(() =>
       expect(inspectedBody).toEqual({
         source: { type: "well_known", url: remoteAgent.discoveryUrl },
+        auth: { type: "bearer" },
       }),
     );
     expect(
@@ -391,6 +474,59 @@ describe("external A2A agent routed pages", () => {
         source: { type: "well_known", url: remoteAgent.discoveryUrl },
       }),
     );
+  });
+
+  it("uses one submit action for edit and enables it when dirty", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
+    );
+
+    renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
+    const nameInput = await screen.findByLabelText("Display name (optional)");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Changed name");
+    expect(
+      screen.queryByRole("button", { name: "Discard changes" }),
+    ).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Save changes" }),
+    ).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+  });
+
+  it("keeps unsupported authentication choices visible and disabled", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json({
+          name: "Fixture Agent",
+          description: null,
+          agentCard: remoteAgent.agentCard,
+          cardHash: remoteAgent.cardHash,
+          selectedInterface: remoteAgent.connection.selectedInterface,
+          supportedAuthTypes: ["none"],
+          selectedSecurityRequirement: null,
+        }),
+      ),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    expect(screen.getByRole("radio", { name: "Bearer token" })).toBeEnabled();
+    await user.type(
+      screen.getByLabelText("Agent base URL"),
+      remoteAgent.discoveryUrl,
+    );
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+    await screen.findByRole("status", { name: "Connection compatible" });
+
+    expect(screen.getByRole("radio", { name: /Bearer token/ })).toBeDisabled();
+    expect(
+      screen.getByRole("radio", { name: /API key header/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getAllByText("Not supported by this Agent Card"),
+    ).toHaveLength(2);
   });
 
   it("shows why automatic Agent Card validation failed", async () => {
@@ -413,6 +549,7 @@ describe("external A2A agent routed pages", () => {
       screen.getByLabelText("Agent base URL"),
       remoteAgent.discoveryUrl,
     );
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Agent Card must accept the text/plain input mode",
@@ -433,14 +570,32 @@ describe("external A2A agent routed pages", () => {
     expect(
       await screen.findByText(/you do not have permission to change/i),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Agent base URL")).toBeDisabled();
-    expect(
-      screen.getByText("A credential is configured for this connection."),
-    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Agent base URL")).toBeNull();
+    expect(screen.getByText("Configured")).toBeInTheDocument();
+    expect(screen.getByText(remoteAgent.discoveryUrl)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByLabelText("Replace credential (optional)")).toBeNull();
     expect(screen.queryByRole("button", { name: "Show value" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     expect(screen.queryByRole("button", { name: /More actions/ })).toBeNull();
+  });
+
+  it("lets external-agent managers choose organization visibility", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data:
+            !!permissions.agentSettings?.includes("update") ||
+            !!permissions.team?.includes("read"),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+
+    await user.click(screen.getByRole("button", { name: /Personal/ }));
+    expect(screen.getByRole("button", { name: /Organization/ })).toBeEnabled();
   });
 
   it("pauses delegation from the detail actions", async () => {

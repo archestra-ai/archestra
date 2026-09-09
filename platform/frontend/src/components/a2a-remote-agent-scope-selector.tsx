@@ -1,17 +1,7 @@
 "use client";
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
-import { Globe, User, Users } from "lucide-react";
-import {
-  UserShareField,
-  useUserShareChoice,
-  useUserShareOption,
-} from "@/components/user-share-field";
-import {
-  TeamVisibilityPicker,
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
+import { AccessLevelSelector } from "@/components/agent-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useTeams } from "@/lib/teams/team.query";
 
@@ -24,6 +14,8 @@ export function A2aRemoteAgentScopeSelector({
   onTeamIdsChange,
   userIds,
   onUserIdsChange,
+  onChoiceChange,
+  initialScope,
 }: {
   scope: ResourceVisibilityScope;
   onScopeChange: (scope: ResourceVisibilityScope) => void;
@@ -31,73 +23,35 @@ export function A2aRemoteAgentScopeSelector({
   onTeamIdsChange: (ids: string[]) => void;
   userIds: string[];
   onUserIdsChange: (ids: string[]) => void;
+  onChoiceChange?: (choice: A2aVisibilityChoice) => void;
+  initialScope?: ResourceVisibilityScope;
 }) {
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  const { data: canManageExternalAgents } = useHasPermissions({
+    agentSettings: ["update"],
+  });
+  const { data: isAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: isTeamAdmin } = useHasPermissions({ agent: ["team-admin"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
-  const userOption = useUserShareOption<A2aVisibilityChoice>("user");
-  const { isUserChoice, selectChoice } =
-    useUserShareChoice<ResourceVisibilityScope>({
-      scope,
-      personalScope: "personal",
-      userIds,
-      onScopeChange,
-      onUserIdsChange,
-    });
-  const choice: A2aVisibilityChoice = isUserChoice ? "user" : scope;
-  const hasNoTeams = !!canReadTeams && (teams ?? []).length === 0;
-  const options: VisibilityOption<A2aVisibilityChoice>[] = [
-    {
-      value: "personal",
-      label: "Personal",
-      description: "Only you can use this external agent",
-      icon: User,
-    },
-    userOption,
-    {
-      value: "team",
-      label: "Teams",
-      description: "Share this external agent with selected teams",
-      icon: Users,
-      disabled: !canReadTeams || hasNoTeams,
-      disabledLabel: !canReadTeams
-        ? "Requires permission"
-        : hasNoTeams
-          ? "No teams available"
-          : undefined,
-      disabledReason: !canReadTeams
-        ? "Team sharing is unavailable without permission to view teams."
-        : hasNoTeams
-          ? "There are no teams to share with yet."
-          : undefined,
-    },
-    {
-      value: "org",
-      label: "Organization",
-      description: "Anyone in your organization can use this external agent",
-      icon: Globe,
-    },
-  ];
+  const hasNoAvailableTeams = !!canReadTeams && (teams ?? []).length === 0;
 
   return (
-    <VisibilitySelector
-      label="Visibility"
-      value={choice}
-      options={options}
-      onValueChange={selectChoice}
-    >
-      {choice === "user" ? (
-        <UserShareField value={userIds} onValueChange={onUserIdsChange} />
-      ) : null}
-      {choice === "team" ? (
-        <TeamVisibilityPicker
-          teams={teams ?? []}
-          disabled={!canReadTeams || hasNoTeams}
-          value={teamIds}
-          onChange={onTeamIdsChange}
-          required
-          unavailableMessage={!canReadTeams ? "Teams unavailable" : undefined}
-        />
-      ) : null}
-    </VisibilitySelector>
+    <AccessLevelSelector
+      scope={scope}
+      onScopeChange={onScopeChange}
+      onChoiceChange={onChoiceChange}
+      initialScope={initialScope}
+      isAdmin={!!isAdmin || !!canManageExternalAgents}
+      isTeamAdmin={!!isTeamAdmin || !!canManageExternalAgents}
+      canReadTeams={!!canReadTeams}
+      agentType="agent"
+      teams={teams}
+      assignedTeamIds={teamIds}
+      onTeamIdsChange={onTeamIdsChange}
+      assignedUserIds={userIds}
+      onUserIdsChange={onUserIdsChange}
+      hasNoAvailableTeams={hasNoAvailableTeams}
+      showTeamRequired
+    />
   );
 }

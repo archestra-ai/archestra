@@ -68,6 +68,32 @@ describe("POST /api/a2a/remote-agents/inspect", () => {
     });
   });
 
+  test("resolves the well-known Agent Card relative to a path-prefixed base URL", async () => {
+    const fixture = await startA2aDiscoveryFixture(
+      "none",
+      "127.0.0.1",
+      "/apikey",
+    );
+    closeFixture = fixture.close;
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents/inspect",
+      payload: {
+        source: { type: "well_known", url: fixture.baseUrl },
+        auth: { type: "none" },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: "Deterministic A2A Test Agent",
+      selectedInterface: {
+        url: `${fixture.baseUrl}/a2a`,
+      },
+    });
+  });
+
   test("validates saved authentication metadata without requiring the secret value", async () => {
     const response = await ctx.app.inject({
       method: "POST",

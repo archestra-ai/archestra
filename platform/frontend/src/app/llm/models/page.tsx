@@ -103,7 +103,8 @@ export default function ModelsPage() {
     isLoadingError: isModelsLoadError,
     refetch,
   } = useModelsWithApiKeys({ toastOnError: false });
-  const { data: apiKeys = [] } = useLlmProviderApiKeys();
+  const { data: apiKeys = [], isLoading: isApiKeysLoading } =
+    useLlmProviderApiKeys();
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
@@ -140,10 +141,13 @@ export default function ModelsPage() {
   );
 
   useEffect(() => {
-    if (!canFilterFreeModels && freeOnly) {
+    // Wait for the provider-key query to settle before clearing: on a cold
+    // cache `apiKeys` starts empty, so acting while it loads would strip a
+    // `?freeOnly=true` deep link before an OpenRouter key had a chance to load.
+    if (!isApiKeysLoading && !canFilterFreeModels && freeOnly) {
       updateQueryParams({ freeOnly: null });
     }
-  }, [canFilterFreeModels, freeOnly, updateQueryParams]);
+  }, [isApiKeysLoading, canFilterFreeModels, freeOnly, updateQueryParams]);
 
   const bulkVisibility = useBulkUpdateModelVisibility();
 

@@ -129,6 +129,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "llmOauthClient.bulk_deleted": "LLM OAuth clients bulk deleted",
   // LLM provider key
   "llmProviderApiKey.created": "LLM provider key created",
+  "llmProviderApiKey.updated": "Updated provider credential",
   "llmProviderApiKey.deleted": "LLM provider key deleted",
   // LLM Proxy
   "llmProxy.updated": "LLM Proxy updated",

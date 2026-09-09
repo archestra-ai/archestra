@@ -110,6 +110,13 @@ const LlmModelSchema = z.object({
   isConnected: z.boolean().optional(),
 });
 
+const ModelSyncFailureSchema = z.object({
+  apiKeyId: z.string(),
+  name: z.string(),
+  provider: SupportedProvidersSchema,
+  requiresReauthentication: z.boolean(),
+});
+
 const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   registerEntityLabelRoutes(fastify, {
     basePath: "/api/llm-provider-models",
@@ -310,15 +317,23 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Sync models from providers for all visible API keys and store them in the database",
         tags: ["LLM Models"],
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            failures: z.array(ModelSyncFailureSchema),
+          }),
+        ),
       },
     },
     async ({ organizationId, user }, reply) => {
-      await syncModelsForVisibleApiKeys({ organizationId, userId: user.id });
+      const failures = await syncModelsForVisibleApiKeys({
+        organizationId,
+        userId: user.id,
+      });
 
       logger.info({ organizationId }, "Completed model sync for all API keys");
 
-      return reply.send({ success: true });
+      return reply.send({ success: failures.length === 0, failures });
     },
   );
 
@@ -621,7 +636,7 @@ export default llmModelsRoutes;
 export async function syncModelsForVisibleApiKeys(params: {
   organizationId: string;
   userId: string;
-}): Promise<void> {
+}): Promise<z.infer<typeof ModelSyncFailureSchema>[]> {
   const { organizationId, userId } = params;
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
   const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
@@ -629,16 +644,42 @@ export async function syncModelsForVisibleApiKeys(params: {
     userId,
     userTeamIds,
   );
-
-  if (apiKeys.some(shouldHandleWithSystemKeySync)) {
-    await systemKeyManager.syncSystemKeys(organizationId);
-  }
-
-  await Promise.all(
-    apiKeys
-      .filter((apiKey) => !shouldHandleWithSystemKeySync(apiKey))
-      .map((apiKey) => syncVisibleApiKeyModels({ apiKey, organizationId })),
+  const systemFailures = apiKeys.some(shouldHandleWithSystemKeySync)
+    ? await systemKeyManager.syncSystemKeys(organizationId)
+    : [];
+  const results = await Promise.all(
+    apiKeys.map(async (apiKey) => {
+      try {
+        if (shouldHandleWithSystemKeySync(apiKey)) {
+          if (systemFailures?.includes(apiKey.provider))
+            throw new ApiError(502, "Provider model refresh failed");
+        } else {
+          await syncVisibleApiKeyModels({ apiKey, organizationId });
+        }
+        return null;
+      } catch {
+        return {
+          apiKeyId: apiKey.id,
+          name: apiKey.name,
+          provider: apiKey.provider,
+        };
+      }
+    }),
   );
+  const failedKeys = results.filter((result) => result !== null);
+  if (failedKeys.length === 0) return [];
+  const currentKeys = await LlmProviderApiKeyModel.findByIds(
+    failedKeys.map((key) => key.apiKeyId),
+  );
+  const rejectedIds = new Set(
+    currentKeys
+      .filter((key) => key.requiresReauthentication)
+      .map((key) => key.id),
+  );
+  return failedKeys.map((key) => ({
+    ...key,
+    requiresReauthentication: rejectedIds.has(key.apiKeyId),
+  }));
 }
 
 /**
@@ -735,7 +776,9 @@ async function syncVisibleApiKeyModels(params: {
   const { apiKey, organizationId } = params;
 
   if (shouldHandleWithSystemKeySync(apiKey)) {
-    await systemKeyManager.syncSystemKeys(organizationId);
+    const failures = await systemKeyManager.syncSystemKeys(organizationId);
+    if (failures?.includes(apiKey.provider))
+      throw new ApiError(502, "Provider model refresh failed");
     return;
   }
 
@@ -760,7 +803,7 @@ async function syncVisibleApiKeyModels(params: {
         "No secret value for API key, skipping sync",
       );
     }
-    return;
+    throw new ApiError(400, "No credential is configured");
   }
 
   try {
@@ -780,6 +823,7 @@ async function syncVisibleApiKeyModels(params: {
       },
       "Failed to sync models for API key",
     );
+    throw error;
   }
 }
 

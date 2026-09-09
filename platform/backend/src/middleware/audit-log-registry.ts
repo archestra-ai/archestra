@@ -379,6 +379,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
   },
 
+  "/api/llm-provider-api-keys/:id/reconnect": {
+    resourceType: "llmProviderApiKey",
+    resourceIdParam: "id",
+    action: "llmProviderApiKey.updated",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
+  },
+
   // Tool Invocation Policies
   "/api/autonomy-policies/tool-invocation": {
     resourceType: "toolInvocationPolicy",

@@ -123,6 +123,7 @@ export const AuditEventNameSchema = z.enum([
   "llmOauthClient.rotated",
   "llmOauthClient.bulk_deleted",
   "llmProviderApiKey.created",
+  "llmProviderApiKey.updated",
   "llmProviderApiKey.deleted",
   "llmProxy.updated",
   "llmProviderApiKey.bulk_deleted",

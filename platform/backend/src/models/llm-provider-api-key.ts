@@ -268,6 +268,8 @@ class LlmProviderApiKeyModel {
         createdBy: schema.llmProviderApiKeysTable.createdBy,
         isSystem: schema.llmProviderApiKeysTable.isSystem,
         isPrimary: schema.llmProviderApiKeysTable.isPrimary,
+        requiresReauthentication:
+          schema.llmProviderApiKeysTable.requiresReauthentication,
         createdAt: schema.llmProviderApiKeysTable.createdAt,
         updatedAt: schema.llmProviderApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
@@ -389,6 +391,8 @@ class LlmProviderApiKeyModel {
         createdBy: schema.llmProviderApiKeysTable.createdBy,
         isSystem: schema.llmProviderApiKeysTable.isSystem,
         isPrimary: schema.llmProviderApiKeysTable.isPrimary,
+        requiresReauthentication:
+          schema.llmProviderApiKeysTable.requiresReauthentication,
         createdAt: schema.llmProviderApiKeysTable.createdAt,
         updatedAt: schema.llmProviderApiKeysTable.updatedAt,
         teamName: schema.teamsTable.name,
@@ -850,8 +854,29 @@ class LlmProviderApiKeyModel {
   }
 
   /**
-   * Update an LLM provider API key.
+   * Store validation status without letting an older request overwrite a reconnect.
    */
+  static async setRequiresReauthentication(params: {
+    id: string;
+    requiresReauthentication: boolean;
+    expectedUpdatedAt?: Date;
+  }): Promise<void> {
+    await db
+      .update(schema.llmProviderApiKeysTable)
+      .set({
+        requiresReauthentication: params.requiresReauthentication,
+        updatedAt: params.expectedUpdatedAt ?? new Date(),
+      })
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.id, params.id),
+          params.expectedUpdatedAt
+            ? sql`date_trunc('milliseconds', ${schema.llmProviderApiKeysTable.updatedAt}) = ${params.expectedUpdatedAt}`
+            : undefined,
+        ),
+      );
+  }
+
   static async update(
     id: string,
     data: UpdateLlmProviderApiKey,
@@ -1041,6 +1066,7 @@ class LlmProviderApiKeyModel {
       scope: row.scope,
       teamId: row.teamId ?? null,
       isPrimary: row.isPrimary,
+      requiresReauthentication: row.requiresReauthentication,
       baseUrl: row.baseUrl ?? null,
       inferenceBaseUrl: row.inferenceBaseUrl ?? null,
       extraHeaderNames: row.extraHeaders

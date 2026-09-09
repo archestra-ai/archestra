@@ -211,6 +211,11 @@ describe("ConnectConfigPanel — HTTPS endpoint requirement", () => {
     } as ReturnType<typeof useAvailableLlmProviderApiKeys>);
   });
 
+  it("offers the downloadable profile for local HTTP", async () => {
+    renderPanel({ baseUrl: "http://localhost:3000/v1" });
+    expect(await screen.findByTestId("connect-download-config")).toBeVisible();
+  });
+
   it("does not offer a profile for an HTTP endpoint", () => {
     const { provisionPassthrough, provisionVirtual } = stubKeyProvisioning();
     renderPanel({ baseUrl: "http://stack.localhost:9003/v1" });

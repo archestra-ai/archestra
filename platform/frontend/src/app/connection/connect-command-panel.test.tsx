@@ -1,3 +1,5 @@
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
   render,
@@ -6,6 +8,12 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import { useSearchParams } from "next/navigation";
+
+vi.mock("next/navigation");
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useConfig, useFeature } from "@/lib/config/config.query";
@@ -138,7 +146,13 @@ function renderPanel(
   return render(<ConnectCommandPanel {...renderPanelProps(overrides)} />);
 }
 
+// Radix Select scrolls the focused option; jsdom has no layout engine.
+Element.prototype.scrollIntoView = vi.fn();
+
 beforeEach(() => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
   vi.clearAllMocks();
   vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(useConfig).mockReturnValue({
@@ -210,6 +224,99 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("keeps approval compact while customized choices reach the approved setup", async () => {
+    const decisions: unknown[] = [];
+    const server = setupServer(
+      http.get("http://localhost:9000/api/client-connections/demo", () =>
+        HttpResponse.json({
+          clientId: "claude-code",
+          platform: "macos",
+          userCode: "ABCD-1234",
+          expiresAt: "2099-01-01T00:00:00Z",
+        }),
+      ),
+      http.post(
+        "http://localhost:9000/api/client-connections/demo/decision",
+        async ({ request }) => {
+          decisions.push(await request.json());
+          return HttpResponse.json({
+            status: "approved",
+            clientId: "claude-code",
+            platform: "macos",
+          });
+        },
+      ),
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectRequest=demo&platform=macos") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const user = userEvent.setup();
+    // The setup hook reports an API failure as null after surfacing its error.
+    createSetupMock.mockResolvedValueOnce(null);
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectCommandPanel {...renderPanelProps()} />
+      </QueryClientProvider>,
+    );
+    try {
+      await screen.findByText("ABCD-1234");
+      await user.click(
+        await screen.findByRole("button", { name: "Retry setup" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Retry setup" }),
+        ).toBeNull(),
+      );
+      expect(screen.queryByText(COMMAND)).toBeNull();
+      expect(screen.queryByTestId("connect-regenerate-command")).toBeNull();
+      expect(screen.queryByTestId("connect-change-skills")).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
+      ).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Customize setup" }));
+      await user.click(screen.getByTestId("connect-change-skills"));
+      await user.click(
+        screen.getByRole("checkbox", { name: "Install shared skills" }),
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ skills: undefined }),
+        ),
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Done customizing" }),
+      );
+      expect(
+        screen.queryByRole("checkbox", { name: "Install shared skills" }),
+      ).toBeNull();
+      await user.click(
+        screen.getByRole("checkbox", {
+          name: "This code matches the code in my terminal.",
+        }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Approve connection" }),
+      );
+      await screen.findByText(
+        "Connection approved. Return to your terminal to finish setup.",
+      );
+      expect(decisions).toEqual([{ decision: "approve", setupId: "setup-1" }]);
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      server.close();
+      archestraApiClient.setConfig({ baseUrl: "" });
+    }
+  });
+
   it("regenerates the setup as proxy and skills availability changes without losing the gateway", async () => {
     const props = renderPanelProps();
     const { rerender } = render(<ConnectCommandPanel {...props} />);
@@ -916,15 +1023,19 @@ describe("ConnectCommandPanel", () => {
     );
   });
 
-  it("offers provider tabs for multi-provider clients", async () => {
+  it("offers provider selection inside the proxy editor", async () => {
     const onProviderSelect = vi.fn();
     renderPanel({ onProviderSelect });
     await screen.findByText(COMMAND);
 
-    const bedrockTab = screen.getByRole("button", { name: "AWS Bedrock" });
-    expect(screen.getByRole("button", { name: "Anthropic" })).toBeVisible();
-
-    await userEvent.setup().click(bedrockTab);
+    const user = userEvent.setup();
+    expect(screen.queryByRole("combobox", { name: "Provider" })).toBeNull();
+    await user.click(screen.getByTestId("connect-change-proxy"));
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Provider" }), {
+      key: "ArrowDown",
+    });
+    expect(screen.getByRole("option", { name: "Anthropic" })).toBeVisible();
+    await user.click(screen.getByRole("option", { name: "AWS Bedrock" }));
     expect(onProviderSelect).toHaveBeenCalledWith("bedrock");
   });
 
@@ -1157,7 +1268,7 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("keeps the full provider tab list after picking GitHub Copilot", async () => {
+    it("keeps provider selection available after picking GitHub Copilot", async () => {
       // Copilot forces virtual-key auth, but only while it is selected. It
       // must not overwrite the stored auth mode — that would filter every
       // keyless provider out of the tabs until the next page load.
@@ -1165,13 +1276,13 @@ describe("ConnectCommandPanel", () => {
       const copilotCli = findClient("copilot-cli");
       const { rerender } = renderPanel({ client: copilotCli });
 
-      // All supported providers are offered before the pick.
-      expect(
-        await screen.findByRole("button", { name: "OpenAI" }),
-      ).toBeVisible();
-      expect(
-        screen.getByRole("button", { name: "GitHub Copilot" }),
-      ).toBeVisible();
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Provider" }), {
+        key: "ArrowDown",
+      });
+      expect(screen.getByRole("option", { name: "OpenAI" })).toBeVisible();
+      await user.click(screen.getByRole("option", { name: "GitHub Copilot" }));
 
       // Picking Copilot lands in the URL provider prop.
       rerender(
@@ -1184,7 +1295,11 @@ describe("ConnectCommandPanel", () => {
       );
       await screen.findByRole("button", { name: /Sign in with GitHub/i });
       // The other providers stay offered so the user can switch back.
-      expect(screen.getByRole("button", { name: "OpenAI" })).toBeVisible();
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Provider" }), {
+        key: "ArrowDown",
+      });
+      expect(screen.getByRole("option", { name: "OpenAI" })).toBeVisible();
+      await user.click(screen.getByRole("option", { name: "OpenAI" }));
 
       // Switching back generates a passthrough command again.
       rerender(

@@ -3,16 +3,80 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-07
+lastUpdated: 2026-09-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-![The Connection page with Claude Code selected, showing the one-time setup command](/docs/automated_screenshots/platform-claude-code-example_connect-page.webp)
+![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-The Connection page lets you connect your local coding agent to Archestra with a single command. You pick the client — Claude Code, Codex, etc., and the page gives you a setup script to paste and run in your terminal.
+The Connection page provides a prompt for your coding agent.
+Your agent prepares the connection; you review and approve it in your browser.
+
+**Other ways to connect** opens manual setup for Claude Desktop, Cursor, n8n, and other clients.
+Refreshing returns to the prompt.
+Client-specific links still open their setup instructions directly.
 
 On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
+
+## Connect From Your Coding Client
+
+The terminal on the Connection page provides a prompt for your deployment.
+You can also give your coding agent this prompt, replacing the example hostname:
+
+> Read https://ai.example.com/connect.md and connect this client.
+
+The public instructions need no installed skill or platform login.
+They support Claude Code, Cursor, Codex, and Copilot CLI.
+The terminal needs Node.js 18 or newer on macOS, Linux, or Windows.
+
+The agent downloads a public bootstrap installer and starts a connection request.
+Your browser opens a compact approval page for the requested client and operating system.
+The setup uses your deployment’s defaults. **Customize setup** reveals the optional settings.
+Sign in using your deployment's usual login or SSO.
+Review the configuration and confirm that the browser code matches your terminal.
+![Browser approval with a matching terminal code](/docs/automated_screenshots/platform-connection_browser-approval.webp)
+
+Approval releases the setup script to the waiting installer.
+Denying the request prevents installation.
+
+The installer uses the same configuration defaults and permissions as the Connection page.
+It runs the existing setup script after approval.
+Your coding client may ask permission before running downloaded code.
+
+### Completing the Connection
+
+Browser approval authorizes installation. MCP gateway authentication remains the client's native OAuth flow.
+Follow the installer output to authenticate the gateway and reload your client.
+Verify that the gateway can list tools before considering the connection complete.
+
+Cursor still requires its model settings and marketplace steps inside the app.
+See [Supported Clients](#supported-clients) for each client's remaining steps.
+This flow does not automate those UI-only settings.
+
+### Troubleshooting
+
+- **No browser opens:** open the approval URL printed in your terminal.
+- **Remote terminal:** add `--no-open` when starting the bootstrap installer.
+- **Expired or denied request:** start the installer again for a new approval URL.
+- **Client or operating system mismatch:** select the requested values before approving.
+- **Deployment temporarily unavailable:** polling retries until the request expires.
+- **Setup download or execution fails:** fix the reported issue and start again.
+- **Tools unavailable after setup:** complete the client's MCP sign-in and reload it.
+
+Approval requests expire after ten minutes, including the approved script's download window.
+The setup script can be downloaded once.
+A failed download may consume that link; restarting creates a fresh request.
+
+The bootstrap keeps its polling secret in the terminal process.
+Browser URLs carry a request identifier, never that secret.
+Only approve a request you started with a matching terminal code.
+Never paste passwords, cookies, polling secrets, or setup scripts into a chat.
+
+Deployments expose `/llms.txt` with a link to `/connect.md`.
+Automatic discovery varies by client; the explicit prompt above avoids relying on discovery.
+Both public documents must remain reachable without application authentication.
+An upstream proxy that requires login for every URL must allow these documents and bootstrap endpoints.
 
 ## What the Script Configures
 
@@ -145,7 +209,12 @@ For a full walkthrough, see [Using Claude Desktop (Cowork)](/docs/platform-claud
 
 > **Note:** Claude Desktop's third-party inference cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
 
-Claude Desktop is a desktop app, so you apply every change in its UI — there is no script and nothing on disk to back up.
+Download the configuration profile from the Connection page and import it into Claude Desktop.
+Remote endpoints require HTTPS. Local development also supports HTTP on `localhost`, `127.0.0.1`, and `[::1]`.
+This applies to the gateway and shared-skills marketplace. Other HTTP hostnames remain unsupported.
+
+Import the file through **Developer → Configure Third-Party Inference → Import configuration**.
+The profile contains credentials. Keep it private and delete it after importing.
 
 - **MCP gateway** — enable Developer Mode, open Developer → Configure Third-Party Inference, add a blank managed MCP server, and paste the gateway URL. Sign in once in your browser.
 - **LLM proxy** — in the same form, paste the gateway base URL and your API key, then add the Archestra attribution headers under Custom headers.
@@ -176,4 +245,10 @@ Which model providers the page offers is not set here. That is one deployment-wi
 
 ## Use Case
 
-Acme's Archestra administrator onboards engineering team members with one link to the Connection page. Acme engineers using Claude Code, Codex, etc. run the script from the connection page to integrate with Archestra. Now Acme managers can control inference costs, govern tool use, see LLM traffic logs, share skills, MCP registry, etc. while their engineers keep using the tools that make them most productive.
+Acme's administrator shares `https://ai.example.com/connect.md` with a new engineer.
+The engineer asks Claude Code to read it and connect.
+They sign in through SSO and approve the matching terminal code.
+The installer applies the reviewed configuration.
+They finish MCP authentication in Claude Code and verify that tools are available.
+
+The Connection page also provides a setup command for manual installation.

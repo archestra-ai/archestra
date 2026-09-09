@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -8,11 +9,23 @@ import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
+import { CONNECT_CLIENTS } from "./clients";
+import { ConnectWithAi } from "./connect-with-ai";
 import { ConnectionFlow } from "./connection-flow";
 import { getConnectableProviders } from "./connection-flow.utils";
 
 export default function ConnectionPage() {
-  usePageTitle("Connect");
+  const searchParams = useSearchParams();
+  const [showManualSetup, setShowManualSetup] = useState(false);
+  const isApproval = !!searchParams.get("connectRequest");
+  const requestedClient = CONNECT_CLIENTS.find(
+    (client) => client.id === searchParams.get("clientId"),
+  );
+  usePageTitle(
+    isApproval
+      ? `Connect ${requestedClient?.label ?? "your client"}`
+      : "Connect",
+  );
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const organizationQuery = useOrganization(true, { fresh: true });
   useEffect(() => {
@@ -49,16 +62,34 @@ export default function ConnectionPage() {
     organization?.connectionDefaultMcpGatewayId ?? null;
   const adminDefaultClientId = organization?.connectionDefaultClientId ?? null;
 
+  if (!isApproval && !searchParams.get("clientId") && !showManualSetup) {
+    return <ConnectWithAi onManualSetup={() => setShowManualSetup(true)} />;
+  }
+
   return (
     <PageLayout
       title={
-        <>
-          Give Your AI{" "}
-          <span className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text py-1 align-baseline text-transparent">
-            secure
-          </span>{" "}
-          access to tools
-        </>
+        isApproval ? (
+          <>
+            Connect{" "}
+            <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+              {requestedClient?.label ?? "your client"}
+            </span>
+          </>
+        ) : (
+          <>
+            Give Your AI{" "}
+            <span className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text py-1 align-baseline text-transparent">
+              secure
+            </span>{" "}
+            access to tools
+          </>
+        )
+      }
+      documentTitle={
+        isApproval
+          ? `Connect ${requestedClient?.label ?? "your client"}`
+          : "Connection"
       }
       maxWidth="wizard"
     >

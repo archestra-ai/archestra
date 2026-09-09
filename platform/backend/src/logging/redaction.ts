@@ -9,6 +9,7 @@ export const REDACTED_LOG_PATHS = [
   "authorization",
   "cookie",
   "rawToken",
+  "deviceCode",
   "passthroughHeaders",
   "apiKey",
   "token",

@@ -43,6 +43,41 @@ describe("buildClaudeDesktopConfigProfile", () => {
     expect(profile.mcp).toBeDefined();
   });
 
+  it.each([
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+  ])("builds a complete local profile for %s", (host) => {
+    const url = `http://${host}:3000`;
+    const profile = buildClaudeDesktopConfigProfile({
+      ...base,
+      baseUrl: `${url}/v1`,
+      gateway: { slug: "local-gateway", name: "Local Gateway" },
+      skillMarketplace: {
+        cloneUrl: `${url}/skills/m/test/repo.git`,
+        marketplaceName: "local-skills",
+      },
+    });
+    expect(profile.inference?.baseUrl).toBe(`${url}/v1/anthropic`);
+    expect(profile.mcp?.managedServers[0].url).toBe(
+      `${url}/v1/mcp/local-gateway`,
+    );
+    expect(profile.plugins?.marketplaces[0].url).toBe(
+      `${url}/skills/m/test/repo.git`,
+    );
+  });
+
+  it.each([
+    "http://localhost.example.com",
+    "http://192.168.1.2",
+    "http://localhost@remote.example.com",
+    "http://user:pass@localhost",
+    "https://user:pass@example.com",
+    "file:///tmp/profile",
+  ])("rejects unsupported or credential-bearing URL %s", (url) => {
+    expect(isClaudeDesktopProfileUrlSupported(url)).toBe(false);
+  });
+
   it("rejects an endpoint that Claude Desktop cannot import", () => {
     expect(
       isClaudeDesktopProfileUrlSupported("http://stack.localhost:9003/v1"),

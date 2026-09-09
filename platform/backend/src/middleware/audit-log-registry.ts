@@ -136,6 +136,10 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  "/api/client-connections/:id/decision": {
+    resourceType: "clientConnection",
+    action: "clientConnection.updated",
+  },
   // Agents
   "/api/agents": {
     resourceType: "agent",

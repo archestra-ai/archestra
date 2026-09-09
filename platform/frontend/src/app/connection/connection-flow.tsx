@@ -100,7 +100,12 @@ export function ConnectionFlow({
   const selectClient = (id: string) => {
     setClientId(id);
     // Providers vary per client, so clear any bookmarked provider on switch.
-    updateUrlParams({ clientId: id, providerId: null });
+    // Keep ordinary manual setup transient so refresh returns to the prompt.
+    // Explicit client links retain their bookmarkable selection.
+    updateUrlParams({
+      ...(urlClientId ? { clientId: id } : {}),
+      providerId: null,
+    });
   };
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
@@ -242,13 +247,15 @@ export function ConnectionFlow({
   return (
     <div className="flex flex-col">
       {/* Step 1 — Client */}
-      <WizardStep n={1} title="Select your client" last={!client}>
-        <ClientPicker
-          clients={visibleClients}
-          selected={clientId}
-          onSelect={selectClient}
-        />
-      </WizardStep>
+      {!searchParams.get("connectRequest") && (
+        <WizardStep n={1} title="Select your client" last={!client}>
+          <ClientPicker
+            clients={visibleClients}
+            selected={clientId}
+            onSelect={selectClient}
+          />
+        </WizardStep>
+      )}
 
       {/* Steps 2-3 (script clients) — review, then run the command */}
       {client && isScriptClient(client.id) && (

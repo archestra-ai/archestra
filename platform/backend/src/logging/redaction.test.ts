@@ -26,12 +26,18 @@ describe("log redaction", () => {
     const { logger, records } = createCapturingLogger();
 
     logger.info(
-      { authorization: "Bearer abc", token: "tok_123", userId: "u1" },
+      {
+        authorization: "Bearer abc",
+        token: "tok_123",
+        deviceCode: "private-polling-proof",
+        userId: "u1",
+      },
       "msg",
     );
 
     expect(records[0].authorization).toBe("[Redacted]");
     expect(records[0].token).toBe("[Redacted]");
+    expect(records[0].deviceCode).toBe("[Redacted]");
     expect(records[0].userId).toBe("u1");
   });
 

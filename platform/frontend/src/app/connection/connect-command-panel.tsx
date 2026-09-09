@@ -7,7 +7,15 @@ import {
 } from "@archestra/shared";
 import { KeyRound, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  type ComponentProps,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AgentSelector,
   type AgentSelectorAgent,
@@ -44,6 +52,7 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils";
+import { ClientConnectionApproval } from "./client-connection-approval";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
 import {
   type ConnectionBaseUrl,
@@ -182,6 +191,11 @@ export function ConnectCommandPanel({
   skillsEnabled = true,
   pluginsEnabled = true,
 }: ConnectCommandPanelProps) {
+  const searchParams = useSearchParams();
+  const connectRequest = searchParams.get("connectRequest");
+  const [customizing, setCustomizing] = useState(false);
+  const compact = !!connectRequest && !customizing;
+  const requestedPlatform = searchParams.get("platform");
   const { eligible: skillsEligible, skills: allSkills } = useConnectSkills(
     llmProxyId,
     skillsEnabled,
@@ -251,8 +265,14 @@ export function ConnectCommandPanel({
   // user can override it in the review step.
   const [platform, setPlatform] = useState<ConnectPlatformOption>("macos");
   useEffect(() => {
-    setPlatform(toPlatformOption(detectPlatform()));
-  }, []);
+    setPlatform(
+      requestedPlatform === "windows" ||
+        requestedPlatform === "linux" ||
+        requestedPlatform === "macos"
+        ? toPlatformOption(requestedPlatform)
+        : toPlatformOption(detectPlatform()),
+    );
+  }, [requestedPlatform]);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -388,7 +408,10 @@ export function ConnectCommandPanel({
   // Claude Desktop panel's "Finish the OAuth flow" step. The gateway is the
   // thing being authorized, so the step is gateway-gated.
   const showOAuthStep =
-    client.id === "claude-code" && !!gateway && !virtualKeyUnbacked;
+    !connectRequest &&
+    client.id === "claude-code" &&
+    !!gateway &&
+    !virtualKeyUnbacked;
   // The script installs skills itself for everyone who can read them, so the
   // wizard never grows an extra step here. The marketplace step appears only
   // when there is no script to carry them: nothing to connect at all (below),
@@ -435,12 +458,17 @@ export function ConnectCommandPanel({
   );
   const [failed, setFailed] = useState(false);
 
+  const setupPlatform =
+    connectRequest && requestedPlatform === "linux" && platform === "macos"
+      ? "linux"
+      : platform;
+
   // One key per distinct setup payload. The effect below regenerates when it
   // changes; the ref guards against an older in-flight response overwriting a
   // newer one.
   const inputsKey = JSON.stringify({
     clientId: client.id,
-    platform,
+    platform: setupPlatform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
     proxyId: proxyActive ? llmProxyId : null,
@@ -460,7 +488,7 @@ export function ConnectCommandPanel({
     async (key: string) => {
       const inputs = JSON.parse(key) as {
         clientId: ScriptClientId;
-        platform: ConnectPlatformOption;
+        platform: NonNullable<CreateConnectionSetupBody["platform"]>;
         baseUrl: string;
         gatewayId: string | null;
         proxyId: string | null;
@@ -627,6 +655,25 @@ export function ConnectCommandPanel({
 
   const proxyEditor = hasProxy ? (
     <div className="grid gap-3">
+      {providers.length > 1 && (
+        <EditorField label="Provider">
+          <Select
+            value={provider ?? undefined}
+            onValueChange={onProviderSelect}
+          >
+            <SelectTrigger aria-label="Provider">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {providers.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {providerCatalog.label(p)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </EditorField>
+      )}
       <EditorField label="Auth">
         <div className="grid gap-1.5">
           {/* The toggle stays visible even for a per-user provider (GitHub
@@ -848,10 +895,15 @@ export function ConnectCommandPanel({
 
   return (
     <>
-      <WizardStep n={2} title="Review the setup">
+      <ConnectionSection
+        compact={!!connectRequest}
+        n={2}
+        title={connectRequest ? `Connect ${client.label}` : "Review the setup"}
+      >
         <ul className="grid gap-2">
           {gateway && (
             <SetupSummaryRow
+              compact={compact}
               editable={!!gatewayEditor}
               isEditing={editing === "gateway"}
               onToggle={() => toggleEdit("gateway")}
@@ -866,6 +918,7 @@ export function ConnectCommandPanel({
           )}
           {hasProxy && (
             <SetupSummaryRow
+              compact={compact}
               done={proxyActive}
               editable
               isEditing={editing === "proxy"}
@@ -909,6 +962,7 @@ export function ConnectCommandPanel({
           )}
           {isCopilotClient && proxyActive && provider && (
             <SetupSummaryRow
+              compact={compact}
               done
               editable
               isEditing={editing === "model"}
@@ -924,6 +978,7 @@ export function ConnectCommandPanel({
           )}
           {skillsEligible && (
             <SetupSummaryRow
+              compact={compact}
               done={includeSkills}
               editable
               isEditing={editing === "skills"}
@@ -953,6 +1008,7 @@ export function ConnectCommandPanel({
           )}
           {pluginsEnabled && plugins.length > 0 && (
             <SetupSummaryRow
+              compact={compact}
               done={selectedPlugins.length > 0 && client.id !== "cursor"}
               editable={!!pluginsEditor}
               isEditing={editing === "plugins"}
@@ -994,6 +1050,7 @@ export function ConnectCommandPanel({
           )}
           {showEndpoint && (
             <SetupSummaryRow
+              compact={compact}
               editable
               isEditing={editing === "endpoint"}
               onToggle={() => toggleEdit("endpoint")}
@@ -1005,6 +1062,7 @@ export function ConnectCommandPanel({
             </SetupSummaryRow>
           )}
           <SetupSummaryRow
+            compact={compact}
             editable
             isEditing={editing === "platform"}
             onToggle={() => toggleEdit("platform")}
@@ -1018,9 +1076,26 @@ export function ConnectCommandPanel({
             </span>
           </SetupSummaryRow>
         </ul>
-      </WizardStep>
+        {connectRequest && (
+          <Button
+            variant="ghost"
+            className="mt-3"
+            aria-expanded={customizing}
+            onClick={() => setCustomizing(!customizing)}
+          >
+            <span>{customizing ? "Done customizing" : "Customize setup"}</span>
+          </Button>
+        )}
+      </ConnectionSection>
 
-      <WizardStep n={3} title="Run the setup script" last={!showOAuthStep}>
+      <ConnectionSection
+        compact={!!connectRequest}
+        n={3}
+        title={
+          connectRequest ? "Approve the connection" : "Run the setup script"
+        }
+        last={!showOAuthStep}
+      >
         <div className="flex flex-col gap-3">
           <output
             className="sr-only"
@@ -1030,26 +1105,26 @@ export function ConnectCommandPanel({
             {commandStatus}
           </output>
           <CreditWarningNotice warning={result?.creditWarning} />
-          <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
-            {providers.length > 1 && proxyActive && (
-              <div className="flex items-center gap-1 border-b border-[#1f2937] px-3">
-                {providers.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => onProviderSelect(p)}
-                    className={cn(
-                      "border-b-2 px-2.5 py-2.5 font-mono text-xs transition-colors",
-                      p === provider
-                        ? "border-white font-semibold text-white"
-                        : "border-transparent text-[#9ca3af] hover:text-white",
-                    )}
-                  >
-                    {providerCatalog.label(p)}
-                  </button>
-                ))}
-              </div>
+          {connectRequest && failed && (
+            <div role="alert" className="flex items-center gap-3 text-sm">
+              <span>Could not prepare the setup.</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runGeneration(inputsKey)}
+              >
+                <span>Retry setup</span>
+              </Button>
+            </div>
+          )}
+          <div
+            className={cn(
+              "overflow-hidden rounded-xl border",
+              connectRequest
+                ? "bg-card"
+                : "border-[#1f2937] bg-[#0d1117] shadow-lg",
             )}
+          >
             {!hasRunnableAnything ? (
               <div className="px-5 py-4 text-sm text-[#9ca3af]">
                 No selected resource can be configured for this client and
@@ -1082,6 +1157,14 @@ export function ConnectCommandPanel({
                 canAddKey={canCreateProviderKey === true}
                 onAddKey={() => setShowAddProviderKey(true)}
               />
+            ) : connectRequest ? (
+              <ClientConnectionApproval
+                key={connectRequest}
+                requestId={connectRequest}
+                setupId={result?.id}
+                clientId={client.id}
+                platform={setupPlatform}
+              />
             ) : (
               <SetupCommandLine
                 command={result?.command ?? null}
@@ -1092,28 +1175,31 @@ export function ConnectCommandPanel({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
-            <span className="max-w-2xl">
-              The command downloads a one-time setup script (expires in 15
-              minutes) and pipes it straight to{" "}
-              {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
-              {platformLabels[platform]}. The script applies the setup reviewed
-              above by editing your client config in place — it isn&apos;t
-              undone automatically, so revert manually if you need to.
-            </span>
-            <button
-              type="button"
-              onClick={() => runGeneration(inputsKey)}
-              disabled={isPending}
-              data-testid="connect-regenerate-command"
-              className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
-            >
-              <RotateCcw className="size-3" />
-              Regenerate
-            </button>
-          </div>
+          {!connectRequest && (
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <span className="max-w-2xl">
+                The command downloads a one-time setup script (expires in 15
+                minutes) and pipes it straight to{" "}
+                {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
+                {platformLabels[platform]}. The script applies the setup
+                reviewed above by editing your client config in place — it
+                isn&apos;t undone automatically, so revert manually if you need
+                to.
+              </span>
+              <button
+                type="button"
+                onClick={() => runGeneration(inputsKey)}
+                disabled={isPending}
+                data-testid="connect-regenerate-command"
+                className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                <RotateCcw className="size-3" />
+                Regenerate
+              </button>
+            </div>
+          )}
         </div>
-      </WizardStep>
+      </ConnectionSection>
 
       {showOAuthStep && (
         <WizardStep n={4} title={FINISH_OAUTH_FLOW_TITLE} last>
@@ -1400,4 +1486,12 @@ function NothingToConnectPanel() {
       first.
     </div>
   );
+}
+
+function ConnectionSection({
+  compact,
+  ...props
+}: ComponentProps<typeof WizardStep> & { compact: boolean }) {
+  if (!compact) return <WizardStep {...props} />;
+  return <section className="mb-6 max-w-2xl">{props.children}</section>;
 }

@@ -125,6 +125,48 @@ describe("LlmProviderApiKeyDropdown", () => {
     expect(options[0]).toHaveTextContent("Staging key");
   });
 
+  it("allows only compatible providers while retaining an invalid selected key", async () => {
+    const user = userEvent.setup();
+    const onSelectKey = vi.fn();
+
+    renderDropdown({
+      availableKeys: [
+        {
+          id: "openai-key",
+          name: "OpenAI key",
+          provider: "openai",
+          scope: "personal",
+        },
+        {
+          id: "gemini-key",
+          name: "Gemini key",
+          provider: "gemini",
+          scope: "personal",
+        },
+        {
+          id: "anthropic-key",
+          name: "Anthropic key",
+          provider: "anthropic",
+          scope: "personal",
+        },
+      ] as LlmProviderApiKey[],
+      selectedApiKeyId: "gemini-key",
+      onSelectKey,
+      providerFilter: (provider) => provider === "openai",
+      triggerVariant: "button",
+    });
+
+    await user.click(screen.getByRole("button", { name: /gemini key/i }));
+
+    const gemini = screen.getByRole("option", { name: /gemini key/i });
+    expect(gemini).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("option", { name: /anthropic key/i })).toBeNull();
+    await user.click(gemini);
+    expect(onSelectKey).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("option", { name: /openai key/i }));
+    expect(onSelectKey).toHaveBeenCalledWith("openai-key");
+  });
+
   it("offers provider-key creation inside the selector", async () => {
     const user = userEvent.setup();
     const onAddApiKey = vi.fn();

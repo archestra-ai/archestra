@@ -5,6 +5,7 @@ import {
   MAX_STOP_SEQUENCES,
   ModelInputModalitySchema,
   ModelOutputModalitySchema,
+  ProviderEndpointSchema,
   SupportedEmbeddingDimensionsSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -175,6 +176,8 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   supportsToolCalling: true,
   supportsReasoningEffort: true,
 }).extend({
+  /** Provider-declared OpenAI-compatible surfaces, when the catalog provides them. */
+  supportedEndpoints: z.array(ProviderEndpointSchema).nullable().optional(),
   /**
    * Endpoint-scoped agent-suitability verdict from the `api_key_models` link
    * (not a `models` column). Tri-state: `false` is evidence-backed, `true`

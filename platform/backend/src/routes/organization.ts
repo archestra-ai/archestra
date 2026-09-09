@@ -1,6 +1,7 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
+  getAgentRuntimeModelCompatibility,
   isModelSelectionComplete,
   providerRequiresPerUserCredential,
   RouteId,
@@ -33,9 +34,11 @@ import {
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   McpServerModel,
   McpToolCallModel,
   MemberModel,
+  ModelModel,
   OrganizationModel,
   OrganizationRoleModel,
   SessionModel,
@@ -284,15 +287,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
-      if (body.defaultLlmApiKeyId) {
-        const apiKey = await LlmProviderApiKeyModel.findById(
-          body.defaultLlmApiKeyId,
-        );
-        if (!apiKey || apiKey.organizationId !== organizationId) {
-          throw new ApiError(404, "API key not found");
-        }
-      }
-
       // The default model and its API key are a pair: persist both or neither.
       // Validate the merged result only when this update touches either field.
       if (
@@ -319,6 +313,15 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "The default model and API key must be set together",
           );
         }
+        await assertOrganizationDefaultModelSelection({
+          organizationId,
+          modelId: mergedModelId,
+          apiKeyId: mergedApiKeyId,
+        });
+        await assertRuntimeAgentsSupportOrganizationDefault({
+          organizationId,
+          modelId: mergedModelId,
+        });
       }
 
       if (body.defaultAgentId) {
@@ -1388,6 +1391,62 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+async function assertOrganizationDefaultModelSelection(params: {
+  organizationId: string;
+  modelId: string | null;
+  apiKeyId: string | null;
+}): Promise<void> {
+  if (!params.modelId && !params.apiKeyId) return;
+  if (!params.modelId || !params.apiKeyId) {
+    throw new ApiError(
+      400,
+      "The default model and API key must be set together",
+    );
+  }
+  const apiKey = await LlmProviderApiKeyModel.findById(params.apiKeyId);
+  if (!apiKey || apiKey.organizationId !== params.organizationId) {
+    throw new ApiError(404, "API key not found");
+  }
+  const modelIsLinked = (
+    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([apiKey.id])
+  ).some(({ model }) => model.id === params.modelId);
+  if (!modelIsLinked) {
+    throw new ApiError(400, "The default model and API key must be linked");
+  }
+}
+
+async function assertRuntimeAgentsSupportOrganizationDefault(params: {
+  organizationId: string;
+  modelId: string | null;
+}): Promise<void> {
+  if (!params.modelId) return;
+  const [model, agents] = await Promise.all([
+    ModelModel.findById(params.modelId),
+    AgentModel.findRuntimeAgentsInheritingOrganizationDefault(
+      params.organizationId,
+    ),
+  ]);
+  if (!model) {
+    throw new ApiError(404, "Default model not found");
+  }
+  const incompatible = agents.find((agent) => {
+    if (!agent.runtime) return false;
+    return !getAgentRuntimeModelCompatibility({
+      inferenceProtocol: agent.runtime.inferenceProtocol,
+      runtimeCommand: agent.runtime.command,
+      provider: model.provider,
+      modelId: model.modelId,
+      supportedEndpoints: model.supportedEndpoints,
+    }).compatible;
+  });
+  if (incompatible) {
+    throw new ApiError(
+      409,
+      `The proposed default model is incompatible with Agent Runtime Agent "${incompatible.name}". Update that Agent's runtime or choose a compatible default model.`,
+    );
+  }
+}
 
 export default organizationRoutes;
 

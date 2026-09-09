@@ -31,6 +31,7 @@ import {
   preflightAgentRuntimeCredentials,
   setAgentRuntimeCredential,
 } from "@/services/agent-runtime/credentials";
+import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
   cancelDetachedAgentTask,
@@ -65,7 +66,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentRuntimePreflight,
         description:
-          "Report credentials the current user still needs before this Agent can execute delegated work in its runtime",
+          "Report credentials and model compatibility the current user needs before this Agent can execute delegated work in its runtime",
         tags: ["Agents"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(
@@ -74,21 +75,33 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
             configured: z.array(z.string()),
             missing: z.array(MissingAgentRuntimeCredentialSchema),
             misconfigured: z.array(MissingAgentRuntimeCredentialSchema),
+            incompatible: z.string().nullable(),
           }),
         ),
       },
     },
     async (request, reply) => {
-      const runtime = await requireReadableAgentRuntimeOnly(request);
+      const { agent, runtime } = await requireReadableAgentRuntime(request);
       const preflight = await preflightAgentRuntimeCredentials({
         runtime,
         organizationId: request.organizationId,
         userId: request.user.id,
       });
+      const modelCompatibility =
+        await getResolvedAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
       return reply.send({
         ready:
           preflight.missing.length === 0 &&
-          preflight.misconfigured.length === 0,
+          preflight.misconfigured.length === 0 &&
+          modelCompatibility.compatibility.compatible,
+        incompatible: modelCompatibility.compatibility.compatible
+          ? null
+          : modelCompatibility.compatibility.message,
         ...preflight,
       });
     },
@@ -800,12 +813,6 @@ async function mayReadProjectSession(params: {
     "project",
     "read-all",
   );
-}
-
-async function requireReadableAgentRuntimeOnly(
-  request: AgentRequest,
-): Promise<ResolvedAgentRuntime> {
-  return (await requireReadableAgentRuntime(request)).runtime;
 }
 
 async function requireReadableAgentRuntime(

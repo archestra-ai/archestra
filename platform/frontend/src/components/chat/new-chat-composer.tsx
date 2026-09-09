@@ -177,6 +177,7 @@ export function NewChatComposer({
               ...runtimePreflight.data.misconfigured,
             ]}
             declarations={runtimeAgent?.runtime?.credentials ?? []}
+            incompatible={runtimePreflight.data.incompatible}
             onConnected={() => runtimePreflight.refetch()}
           />
         )}

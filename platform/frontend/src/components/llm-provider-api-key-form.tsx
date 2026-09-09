@@ -455,6 +455,8 @@ interface LlmProviderApiKeyFormProps {
   disableProvider?: boolean;
   /** Optional allowlist for provider selection. */
   allowedProviders?: CreateLlmProviderApiKeyBody["provider"][];
+  /** Omit providers outside the allowlist instead of rendering them disabled. */
+  hideUnavailableProviders?: boolean;
   /** Hide scope and primary-key controls when the parent fixes those values. */
   hideScopeAndPrimary?: boolean;
   /** When true, providers without embedding support are disabled in the picker. */
@@ -485,6 +487,7 @@ export function LlmProviderApiKeyForm({
   bedrockIamAuthEnabled = false,
   disableProvider = false,
   allowedProviders,
+  hideUnavailableProviders = false,
   hideScopeAndPrimary = false,
   forEmbedding = false,
   allowPersonalSubscriptions = true,
@@ -672,6 +675,15 @@ export function LlmProviderApiKeyForm({
               )) &&
             (!isOllamaProvider(key) || key === ollamaListedTransport),
         )
+        // Focused creation flows only offer providers their runtime can use.
+        // Other callers retain disabled entries, which explain their own limits.
+        .filter(
+          ([key]) =>
+            !hideUnavailableProviders ||
+            allowedProviderSet.has(
+              key as CreateLlmProviderApiKeyBody["provider"],
+            ),
+        )
         // Providers the admins turned off are not offered. The one already
         // selected stays in the list even when hidden, so an existing key's
         // disabled trigger still renders its own provider.
@@ -744,6 +756,7 @@ export function LlmProviderApiKeyForm({
       collapsedOllamaLabel,
       forEmbedding,
       geminiVertexAiEnabled,
+      hideUnavailableProviders,
       ollamaListedTransport,
       provider,
       providerCatalog,

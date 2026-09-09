@@ -481,6 +481,103 @@ export function isModelRouterSupportedProvider(
   );
 }
 
+/**
+ * Determines whether a provider can be served by an Agent Runtime image's
+ * inference protocol. Model-specific restrictions intentionally live below so
+ * credential pickers can filter providers without inventing an empty model id.
+ */
+export function getAgentRuntimeProviderCompatibility(params: {
+  inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
+  /** The runtime entrypoint; maintained vendor runtimes constrain providers. */
+  runtimeCommand?: readonly string[] | null;
+  provider: SupportedProvider;
+}): { compatible: true } | { compatible: false; message: string } {
+  const runtimeCommand = params.runtimeCommand?.[0];
+  if (runtimeCommand === "archestra-claude-code") {
+    if (params.inferenceProtocol !== "anthropic") {
+      return {
+        compatible: false,
+        message:
+          "The maintained Claude Code runtime requires the Anthropic API inference protocol.",
+      };
+    }
+    if (params.provider === "anthropic" || params.provider === "bedrock") {
+      return { compatible: true };
+    }
+    return {
+      compatible: false,
+      message: `The maintained Claude Code runtime requires an Anthropic model or a Claude model on AWS Bedrock, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
+    };
+  }
+  if (runtimeCommand === "archestra-codex" && params.provider !== "openai") {
+    return {
+      compatible: false,
+      message: `The maintained Codex runtime requires an OpenAI model, but the Agent's selected model uses ${providerDisplayNames[params.provider]}.`,
+    };
+  }
+  if (
+    params.inferenceProtocol === "anthropic" &&
+    params.provider !== "anthropic"
+  ) {
+    return {
+      compatible: false,
+      message: `This Agent Runtime image expects the Anthropic API, but the Agent's selected model uses ${providerDisplayNames[params.provider]}. Choose an Anthropic model or use an OpenAI-compatible Agent Runtime image.`,
+    };
+  }
+  if (
+    params.inferenceProtocol !== "anthropic" &&
+    !isModelRouterSupportedProvider(params.provider)
+  ) {
+    return {
+      compatible: false,
+      message: `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this Agent Runtime image.`,
+    };
+  }
+  return { compatible: true };
+}
+
+/**
+ * Determines whether the model can be served by an Agent Runtime image's
+ * inference protocol. Keep this beside the model-router contract so the UI and
+ * runtime preflight apply the same compatibility rules.
+ */
+export function getAgentRuntimeModelCompatibility(params: {
+  inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
+  /** The runtime entrypoint; maintained vendor runtimes constrain providers. */
+  runtimeCommand?: readonly string[] | null;
+  provider: SupportedProvider;
+  modelId?: string | null;
+  supportedEndpoints?: readonly string[] | null;
+}): { compatible: true } | { compatible: false; message: string } {
+  const providerCompatibility = getAgentRuntimeProviderCompatibility(params);
+  if (!providerCompatibility.compatible) return providerCompatibility;
+
+  if (
+    params.runtimeCommand?.[0] === "archestra-claude-code" &&
+    params.provider === "bedrock" &&
+    params.modelId &&
+    !/(?:^|[./])anthropic\.claude-/.test(params.modelId)
+  ) {
+    return {
+      compatible: false,
+      message:
+        "The Claude Code runtime requires a Claude model when using AWS Bedrock.",
+    };
+  }
+  if (
+    params.inferenceProtocol === "openai_chat" &&
+    (requiresResponsesApi(params.supportedEndpoints) ||
+      (params.provider === "openai" &&
+        requiresOpenAiResponsesApi(params.modelId ?? "")))
+  ) {
+    return {
+      compatible: false,
+      message: `This Agent Runtime image uses Chat Completions, but model "${params.modelId}" requires the Responses API. Choose a Chat Completions model or an image that uses OpenAI Responses.`,
+    };
+  }
+  return { compatible: true };
+}
+
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
   anthropicKeylessAuthEnabled?: boolean;

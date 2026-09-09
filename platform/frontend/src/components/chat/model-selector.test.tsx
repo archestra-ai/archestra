@@ -68,8 +68,23 @@ vi.mock("@/components/ai-elements/model-selector", () => ({
       {children}
     </div>
   ),
-  ModelSelectorItem: ({ children }: { children: ReactNode }) => (
-    <div data-testid="model-option">{children}</div>
+  ModelSelectorItem: ({
+    children,
+    onSelect,
+    disabled,
+  }: {
+    children: ReactNode;
+    onSelect?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button
+      data-testid="model-option"
+      type="button"
+      disabled={disabled}
+      onClick={onSelect}
+    >
+      {children}
+    </button>
   ),
   ModelSelectorInput: () => null,
   ModelSelectorLogo: () => null,
@@ -274,6 +289,88 @@ describe("ModelSelector coverage matrix", () => {
       variant: "default",
     });
     expect(onModelChange).not.toHaveBeenCalled();
+  });
+
+  it("filters unsupported runtime models without changing the current selection", () => {
+    setQuery({
+      modelsByProvider: {
+        gemini: [
+          model({
+            dbId: "gemini-1",
+            id: "gemini-2.5-pro",
+            provider: "gemini",
+          }),
+        ],
+        anthropic: [
+          model({
+            dbId: "claude-1",
+            id: "claude-sonnet-4",
+            displayName: "Claude Sonnet",
+            provider: "anthropic",
+          }),
+        ],
+      },
+    });
+    const { onModelChange } = renderSelector({
+      selectedModel: "gemini-1",
+      modelFilter: (candidate) => candidate.provider === "anthropic",
+      suppressAutoSelect: true,
+      unavailableModelHeading: "Current model (unavailable)",
+    });
+
+    expect(onModelChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+
+    expect(
+      screen
+        .getAllByTestId("model-group")
+        .some(
+          (group) =>
+            group.getAttribute("data-heading") ===
+            "Current model (unavailable)",
+        ),
+    ).toBe(true);
+    const currentModel = screen.getByRole("button", { name: "gemini-1" });
+    expect(currentModel).toBeDisabled();
+    fireEvent.click(currentModel);
+    expect(onModelChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/Claude Sonnet/)).toBeInTheDocument();
+    expect(screen.getAllByTestId("model-option")).toHaveLength(2);
+
+    fireEvent.click(screen.getByText(/Claude Sonnet/));
+    expect(onModelChange).toHaveBeenCalledWith("claude-1");
+  });
+
+  it("keeps a filtered-out current model visible when no compatible models remain", () => {
+    setQuery({
+      modelsByProvider: {
+        gemini: [
+          model({
+            dbId: "gemini-flash",
+            id: "gemini-2.5-flash",
+            displayName: "Gemini 2.5 Flash",
+            provider: "gemini",
+          }),
+        ],
+      },
+    });
+    const { onModelChange } = renderSelector({
+      selectedModel: "gemini-flash",
+      modelFilter: () => false,
+      unavailableModelHeading: "Current model (unavailable)",
+    });
+
+    expect(screen.getByText("Gemini 2.5 Flash")).toBeInTheDocument();
+    expect(onModelChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+
+    const currentModel = screen.getByRole("button", {
+      name: "gemini-flash",
+    });
+    expect(currentModel).toBeDisabled();
+    fireEvent.click(currentModel);
+    expect(onModelChange).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId("model-option")).toHaveLength(1);
   });
 
   // The option tree is expensive with many models, and the toolbar rerenders

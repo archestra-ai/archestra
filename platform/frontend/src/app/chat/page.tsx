@@ -3807,6 +3807,9 @@ export function ChatPageContent({
                                         initialRuntimeAgent?.runtime
                                           ?.credentials ?? []
                                       }
+                                      incompatible={
+                                        runtimePreflight.data.incompatible
+                                      }
                                       onConnected={() =>
                                         runtimePreflight.refetch()
                                       }

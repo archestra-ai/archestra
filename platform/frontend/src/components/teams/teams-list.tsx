@@ -138,6 +138,7 @@ export function TeamsList() {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
       setDeleteDialogOpen(false);
@@ -176,6 +177,7 @@ export function TeamsList() {
           return toBulkOutcome(data ?? { succeeded: [], failed: [] });
         }),
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
     },

@@ -2,6 +2,11 @@ import type { AddressInfo } from "node:net";
 import { vi } from "vitest";
 import type { A2AExecuteParams } from "@/agents/a2a-executor";
 import config from "@/config";
+import {
+  AgentModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -253,6 +258,63 @@ describe("a2a v2 task methods", () => {
       },
     ]);
     expect(settled.status.timestamp).toEqual(expect.any(String));
+  });
+
+  test("rejects an incompatible streaming runtime model before opening SSE", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    config.agentRuntime.enabled = true;
+    const secret = await makeSecret({ secret: { apiKey: "gemini-test-key" } });
+    const providerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+    });
+    const model = await ModelModel.create({
+      externalId: "gemini/gemini-a2a-preflight-test",
+      provider: "gemini",
+      modelId: "gemini-a2a-preflight-test",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      model.id,
+    ]);
+    await AgentModel.update(agentId, {
+      modelId: model.id,
+      llmApiKeyId: providerKey.id,
+      runtime: {
+        image: "example.invalid/runtime-agent:test",
+        command: null,
+        inferenceProtocol: "anthropic",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v2/a2a/${agentId}`,
+      headers: { authorization: "Bearer test-token" },
+      payload: jsonRpc(91, "SendStreamingMessage", {
+        message: userMessage("start incompatible runtime"),
+      }),
+    });
+
+    expect(response.headers["content-type"]).not.toContain("text/event-stream");
+    expect(response.json().error).toMatchObject({
+      code: -32602,
+      message: expect.stringContaining("expects the Anthropic API"),
+    });
+    expect(mockRunTaskInAgentRuntime).not.toHaveBeenCalled();
   });
 
   test("SendMessage returns a durable Task when the Agent uses Agent Runtime", async ({

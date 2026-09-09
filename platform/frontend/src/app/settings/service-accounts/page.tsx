@@ -20,7 +20,6 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
-import { RoleFilterSelect } from "@/components/role-filter-select";
 import { SearchInput } from "@/components/search-input";
 import { AccountHealthBadge } from "@/components/service-account-status-badge";
 import {
@@ -180,7 +179,8 @@ export default function ServiceAccountsSettingsPage() {
 
     return serviceAccounts.filter((account) => {
       if (query && !account.name.toLowerCase().includes(query)) return false;
-      if (roleFilter !== ALL && account.role !== roleFilter) return false;
+      if (roleFilter !== ALL && !account.role.split(",").includes(roleFilter))
+        return false;
       if (
         statusFilter !== ALL &&
         getAccountHealth(account, now) !== statusFilter
@@ -401,7 +401,8 @@ export default function ServiceAccountsSettingsPage() {
                   searchFields={["name"]}
                   className={filterSearchClass}
                 />
-                <RoleFilterSelect
+                <RoleSelect
+                  mode="filter"
                   value={roleFilter}
                   onValueChange={(value) =>
                     updateQueryParams({
@@ -628,8 +629,9 @@ export default function ServiceAccountsSettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="service-account-role">Role</Label>
+              <Label htmlFor="service-account-role">Roles</Label>
               <RoleSelect
+                multiple
                 id="service-account-role"
                 value={form.watch("role")}
                 onValueChange={(role) => form.setValue("role", role)}
@@ -637,7 +639,7 @@ export default function ServiceAccountsSettingsPage() {
                 className="w-full"
               />
               <FieldDescription>
-                The role this service account will use for API requests.
+                The roles this service account will use for API requests.
               </FieldDescription>
             </div>
             <AdvancedLabelsSection

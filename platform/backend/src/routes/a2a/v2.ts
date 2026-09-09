@@ -40,6 +40,7 @@ import {
   resolveTokenOrganizationId,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway/utils";
+import { preflightAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
@@ -893,6 +894,7 @@ enum A2AV2RouterErrorKind {
   AgentNotInternal,
   FailedToResolveActor,
   VersionNotSupported,
+  InvalidAgentRuntimeModel,
 }
 
 const A2A_V2_ROUTER_ERRORS = {
@@ -909,6 +911,10 @@ const A2A_V2_ROUTER_ERRORS = {
   [A2AV2RouterErrorKind.VersionNotSupported]: {
     code: -32009,
     message: `Unsupported A2A-Version. This endpoint serves: ${SUPPORTED_A2A_VERSION_LIST.join(", ")}`,
+  },
+  [A2AV2RouterErrorKind.InvalidAgentRuntimeModel]: {
+    code: -32602,
+    message: "Agent Runtime model is incompatible",
   },
   [A2AV2RouterErrorKind.AgentNotInternal]: {
     code: -32602,
@@ -995,6 +1001,17 @@ class A2AV2Router {
     // (a generated `messageId`) reaches them — the streaming path below has
     // always worked this way.
     const parsed = schema.parse(params) as A2ARouteRequest;
+    if (method === "SendMessage") {
+      await this.preflightDetachedAgentRuntime({
+        agent,
+        actor,
+        request: parsed as A2AProtocolSendMessageRequest,
+        detached: Boolean(
+          (parsed as A2AProtocolSendMessageRequest).configuration
+            ?.returnImmediately,
+        ),
+      });
+    }
 
     return await func({ actor, agentId: agent.id, request: parsed });
   }
@@ -1029,6 +1046,12 @@ class A2AV2Router {
     }
 
     const parsed = A2AProtocolSendMessageRequestSchema.parse(params);
+    await this.preflightDetachedAgentRuntime({
+      agent,
+      actor,
+      request: parsed,
+      detached: true,
+    });
     return { kind: "send", actor, agentId: agent.id, request: parsed };
   }
 
@@ -1068,6 +1091,34 @@ class A2AV2Router {
       agentId: params.agentId,
       request: { id: params.taskId },
     });
+  }
+
+  private async preflightDetachedAgentRuntime(params: {
+    agent: Agent;
+    actor: A2AActor;
+    request: A2AProtocolSendMessageRequest;
+    detached: boolean;
+  }): Promise<void> {
+    if (!params.detached || params.request.message.taskId) return;
+    const runtime = resolveAgentRuntime(params.agent);
+    if (!runtime) return;
+
+    try {
+      await preflightAgentRuntimeModelCompatibility({
+        runtime,
+        agent: params.agent,
+        organizationId: params.actor.organizationId,
+        userId: params.actor.kind === "user" ? params.actor.id : "system",
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new A2AV2RouterError(
+          A2AV2RouterErrorKind.InvalidAgentRuntimeModel,
+          error.message,
+        );
+      }
+      throw error;
+    }
   }
 
   private getRouteForMethod(method: string, usesAgentRuntime = false) {

@@ -62170,7 +62170,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Report credentials the current user still needs before this Agent can execute delegated work in its runtime\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Report credentials and model compatibility the current user needs before this Agent can execute delegated work in its runtime\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
         "parameters": [
           {
             "schema": {
@@ -62249,13 +62249,18 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "incompatible": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "ready",
                     "configured",
                     "missing",
-                    "misconfigured"
+                    "misconfigured",
+                    "incompatible"
                   ],
                   "additionalProperties": false
                 }
@@ -80789,7 +80794,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Update an app's metadata and/or html (forks a new version).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Update an app's metadata and/or html (forks a new version).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -81631,7 +81636,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Update several apps in one request. Today the only bulk-editable surface is visibility — `scope` with the `teamIds` or `userIds` it reaches — and every app in the batch is moved to the same one. Content is deliberately not editable here: replacing html forks a version and is authorized more strictly than re-scoping. Per-app problems are reported in `failed` and leave the rest applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Update several apps in one request. Today the only bulk-editable surface is visibility — `scope` with the `teamIds` or `userIds` it reaches — and every app in the batch is moved to the same one. Content is deliberately not editable here: replacing html forks a version and is authorized more strictly than re-scoping. Per-app problems are reported in `failed` and leave the rest applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -82317,7 +82322,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Enable a disabled app, making it live at its scope.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Enable a disabled app, making it live at its scope.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -82840,7 +82845,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Disable an app, pulling it back to an author-only state.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Disable an app, pulling it back to an author-only state.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -83363,7 +83368,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Lock an app, refusing all chat-driven modification (and REST html replacement/deletion) until unlocked.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Lock an app, refusing all chat-driven modification (and REST html replacement/deletion) until unlocked.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -83886,7 +83891,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Unlock a locked app, making it editable again.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Unlock a locked app, making it editable again.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -85467,7 +85472,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Restore an immutable app version by copying its artifact forward as a new head version. History is never rewritten.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Restore an immutable app version by copying its artifact forward as a new head version. History is never rewritten.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -86966,7 +86971,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Assign an upstream tool to an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Assign an upstream tool to an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -87276,7 +87281,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Unassign a tool from an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Unassign a tool from an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
         "parameters": [
           {
             "schema": {
@@ -242792,6 +242797,60 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "teamIds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "authorIds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "excludeAuthorIds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeOtherPersonal",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",
@@ -242849,6 +242908,20 @@
                           "description": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "private",
+                              "org-wide",
+                              "team-scoped"
+                            ]
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "status": {
                             "type": "string"
@@ -243084,6 +243157,8 @@
                           "organizationId",
                           "name",
                           "description",
+                          "visibility",
+                          "teamIds",
                           "status",
                           "createdAt",
                           "updatedAt",
@@ -243432,6 +243507,20 @@
                         "value"
                       ]
                     }
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "org-wide",
+                      "team-scoped"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -243463,6 +243552,20 @@
                     "description": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "status": {
                       "type": "string"
@@ -243509,6 +243612,8 @@
                     "organizationId",
                     "name",
                     "description",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt",
@@ -243799,6 +243904,20 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -243844,6 +243963,8 @@
                     "organizationId",
                     "name",
                     "description",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt",
@@ -244141,6 +244262,20 @@
                         "value"
                       ]
                     }
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "org-wide",
+                      "team-scoped"
+                    ]
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -244181,6 +244316,20 @@
                     "description": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "private",
+                        "org-wide",
+                        "team-scoped"
+                      ]
+                    },
+                    "teamIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "status": {
                       "type": "string"
@@ -244227,6 +244376,8 @@
                     "organizationId",
                     "name",
                     "description",
+                    "visibility",
+                    "teamIds",
                     "status",
                     "createdAt",
                     "updatedAt",
@@ -244755,7 +244906,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Soft-delete several knowledge bases in one request, removing their connector assignments. Ids the caller cannot see are reported in `failed` and leave the rest of the batch applied. There is no matching PATCH: a knowledge base has no visibility of its own — it is reached through the connectors and documents assigned to it — so its only editable fields are its name and description, which are per-row by nature.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "description": "Soft-delete several knowledge bases in one request, removing their connector assignments. Ids the caller cannot see are reported in `failed` and leave the rest of the batch applied.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "requestBody": {
           "required": true,
           "content": {
@@ -260175,6 +260326,20 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "private",
+                              "org-wide",
+                              "team-scoped"
+                            ]
+                          },
+                          "teamIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "status": {
                             "type": "string"
                           },
@@ -260201,6 +260366,8 @@
                           "organizationId",
                           "name",
                           "description",
+                          "visibility",
+                          "teamIds",
                           "status",
                           "createdBy",
                           "createdAt",
@@ -271451,6 +271618,17 @@
                           "supportsReasoningEffort": {
                             "nullable": true,
                             "type": "boolean"
+                          },
+                          "supportedEndpoints": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "/chat/completions",
+                                "/responses"
+                              ]
+                            }
                           },
                           "recommendedForAgents": {
                             "nullable": true,
@@ -323574,7 +323752,8 @@
                   "defaultMemberRole": {
                     "nullable": true,
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                    "description": "One or more organization role identifiers, separated by commas"
                   }
                 }
               }
@@ -380729,6 +380908,12 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "roles": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "organizationId": {
                             "type": "string"
                           },
@@ -380848,6 +381033,7 @@
                           "id",
                           "name",
                           "description",
+                          "roles",
                           "organizationId",
                           "parentId",
                           "createdBy",
@@ -381165,6 +381351,14 @@
                   "description": {
                     "type": "string"
                   },
+                  "roles": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9_]+$"
+                    }
+                  },
                   "parentId": {
                     "nullable": true,
                     "type": "string"
@@ -381227,6 +381421,12 @@
                     "description": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "organizationId": {
                       "type": "string"
@@ -381347,6 +381547,7 @@
                     "id",
                     "name",
                     "description",
+                    "roles",
                     "organizationId",
                     "parentId",
                     "createdBy",
@@ -381631,6 +381832,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "organizationId": {
                       "type": "string"
                     },
@@ -381750,6 +381957,7 @@
                     "id",
                     "name",
                     "description",
+                    "roles",
                     "organizationId",
                     "parentId",
                     "createdBy",
@@ -382019,6 +382227,14 @@
                   "description": {
                     "type": "string"
                   },
+                  "roles": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9_]+$"
+                    }
+                  },
                   "parentId": {
                     "nullable": true,
                     "type": "string"
@@ -382088,6 +382304,12 @@
                     "description": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "organizationId": {
                       "type": "string"
@@ -382208,6 +382430,7 @@
                     "id",
                     "name",
                     "description",
+                    "roles",
                     "organizationId",
                     "parentId",
                     "createdBy",
@@ -388583,6 +388806,318 @@
           "permissions": [
             "toolPolicy:delete"
           ]
+        }
+      }
+    },
+    "/api/user/permission-sources": {
+      "get": {
+        "operationId": "getUserPermissionSources",
+        "tags": [
+          "User"
+        ],
+        "description": "Get the direct roles and teams granting the current user's permissions\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string"
+                      },
+                      "team": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "permissions": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "create",
+                              "read",
+                              "update",
+                              "delete",
+                              "team-admin",
+                              "admin",
+                              "cancel",
+                              "enable",
+                              "query",
+                              "execute",
+                              "deploy-to-restricted",
+                              "manage",
+                              "manage-deleted",
+                              "read-all",
+                              "share-org",
+                              "impersonate"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "role",
+                      "team",
+                      "permissions"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -398401,7 +398936,8 @@
                                 },
                                 "role": {
                                   "type": "string",
-                                  "minLength": 1
+                                  "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                                  "description": "One or more organization role identifiers, separated by commas"
                                 }
                               },
                               "required": [
@@ -398412,7 +398948,9 @@
                             }
                           },
                           "defaultRole": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                            "description": "One or more organization role identifiers, separated by commas"
                           },
                           "strictMode": {
                             "type": "boolean"
@@ -399063,7 +399601,8 @@
                             },
                             "role": {
                               "type": "string",
-                              "minLength": 1
+                              "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                              "description": "One or more organization role identifiers, separated by commas"
                             }
                           },
                           "required": [
@@ -399073,7 +399612,9 @@
                         }
                       },
                       "defaultRole": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                        "description": "One or more organization role identifiers, separated by commas"
                       },
                       "strictMode": {
                         "type": "boolean"
@@ -399458,7 +399999,8 @@
                               },
                               "role": {
                                 "type": "string",
-                                "minLength": 1
+                                "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                                "description": "One or more organization role identifiers, separated by commas"
                               }
                             },
                             "required": [
@@ -399469,7 +400011,9 @@
                           }
                         },
                         "defaultRole": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                          "description": "One or more organization role identifiers, separated by commas"
                         },
                         "strictMode": {
                           "type": "boolean"
@@ -401258,7 +401802,8 @@
                               },
                               "role": {
                                 "type": "string",
-                                "minLength": 1
+                                "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                                "description": "One or more organization role identifiers, separated by commas"
                               }
                             },
                             "required": [
@@ -401269,7 +401814,9 @@
                           }
                         },
                         "defaultRole": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                          "description": "One or more organization role identifiers, separated by commas"
                         },
                         "strictMode": {
                           "type": "boolean"
@@ -401918,7 +402465,8 @@
                             },
                             "role": {
                               "type": "string",
-                              "minLength": 1
+                              "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                              "description": "One or more organization role identifiers, separated by commas"
                             }
                           },
                           "required": [
@@ -401928,7 +402476,9 @@
                         }
                       },
                       "defaultRole": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                        "description": "One or more organization role identifiers, separated by commas"
                       },
                       "strictMode": {
                         "type": "boolean"
@@ -402314,7 +402864,8 @@
                               },
                               "role": {
                                 "type": "string",
-                                "minLength": 1
+                                "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                                "description": "One or more organization role identifiers, separated by commas"
                               }
                             },
                             "required": [
@@ -402325,7 +402876,9 @@
                           }
                         },
                         "defaultRole": {
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^[a-z0-9_-]+(?:,[a-z0-9_-]+)*$",
+                          "description": "One or more organization role identifiers, separated by commas"
                         },
                         "strictMode": {
                           "type": "boolean"

@@ -33,7 +33,11 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
+import {
+  ResourceDeletedStatusFilter,
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
@@ -93,6 +97,7 @@ import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
 import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
+import { KnowledgeBaseAccessBadge } from "./_parts/knowledge-base-access-badge";
 import { KnowledgeBaseCard } from "./_parts/knowledge-base-card";
 import { useChatWithKnowledgeBase } from "./_parts/use-chat-with-knowledge-base";
 
@@ -124,6 +129,7 @@ function KnowledgeBasesList() {
   // `knowledgeSource:delete`, and the status filter itself is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
   // Label filtering is server-side, so the value rides the list query.
+  const { hasActiveScopeFilters, ...scopeFilters } = useScopeFilterParams();
   const labelsFilter = searchParams.get("labels") || undefined;
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
@@ -141,6 +147,7 @@ function KnowledgeBasesList() {
     search: search || undefined,
     status: isDeletedView ? "deleted" : undefined,
     labels: labelsFilter,
+    ...scopeFilters,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -208,7 +215,7 @@ function KnowledgeBasesList() {
 
   // Changing a filter invalidates an escalation rather than silently
   // re-pointing "all N" at a different N.
-  const filterSignature = `${search}|${isDeletedView}|${labelsFilter ?? ""}`;
+  const filterSignature = `${search}|${isDeletedView}|${labelsFilter ?? ""}|${JSON.stringify(scopeFilters)}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
@@ -232,6 +239,7 @@ function KnowledgeBasesList() {
         search: search || undefined,
         status: isDeletedView ? "deleted" : undefined,
         labels: labelsFilter,
+        ...scopeFilters,
       },
       { enabled: allMatchingActive },
     );
@@ -258,10 +266,19 @@ function KnowledgeBasesList() {
     [pathname, router, searchParams],
   );
 
-  const hasActiveFilters = !!search || isDeletedView || Boolean(labelsFilter);
+  const hasActiveFilters =
+    hasActiveScopeFilters || !!search || isDeletedView || Boolean(labelsFilter);
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const key of ["search", "status", "labels"]) {
+    for (const key of [
+      "search",
+      "status",
+      "labels",
+      "scope",
+      "teamIds",
+      "authorIds",
+      "excludeAuthorIds",
+    ]) {
       params.delete(key);
     }
     params.set("page", "1");
@@ -333,6 +350,18 @@ function KnowledgeBasesList() {
           </div>
         );
       },
+    },
+    {
+      id: "access",
+      header: "Access",
+      size: 180,
+      cell: ({ row }) => (
+        <KnowledgeBaseAccessBadge
+          visibility={row.original.visibility}
+          teamIds={row.original.teamIds}
+          createdBy={row.original.createdBy}
+        />
+      ),
     },
     {
       id: "connectors",
@@ -477,6 +506,10 @@ function KnowledgeBasesList() {
                 paramName="search"
                 className={filterSearchClass}
                 isLoading={isFetching}
+              />
+              <ResourceScopeFilter
+                adminPermission={{ knowledgeSource: ["admin"] }}
+                ownerLabelPlural="knowledge bases"
               />
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}

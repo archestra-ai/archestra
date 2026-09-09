@@ -197,10 +197,11 @@ describe("AuthSettingsPage", () => {
     );
     await user.click(screen.getByRole("option", { name: "24 hours" }));
 
-    // Default role: member -> admin. The role picker is a searchable popover,
+    // Default roles: retain member and add admin. The role picker is a searchable popover,
     // so its options are buttons rather than listbox options.
     await user.click(screen.getByTestId("default-member-role-select"));
     await user.click(screen.getByRole("button", { name: /admin/i }));
+    await user.keyboard("{Escape}");
 
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -210,7 +211,7 @@ describe("AuthSettingsPage", () => {
         oauthAccessTokenLifetimeSeconds: 604_800,
         sessionMaxAgeSeconds: 86_400,
         requireTwoFactor: true,
-        defaultMemberRole: "admin",
+        defaultMemberRole: "member,admin",
       });
     });
   });

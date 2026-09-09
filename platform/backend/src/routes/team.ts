@@ -11,6 +11,10 @@ import { hasPermission } from "@/auth";
 import { enterpriseTier } from "@/enterprise-tier";
 import { TeamLabelModel, TeamModel } from "@/models";
 import {
+  validateInheritedTeamRoles,
+  validateTeamRoles,
+} from "@/services/role-assignment";
+import {
   canManageTeamMembers,
   canReadTeam,
   checkLastAdminInvariant,
@@ -110,16 +114,29 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        body: { name, description, parentId, convertToolResultsToToon, labels },
+        body: {
+          name,
+          description,
+          parentId,
+          convertToolResultsToToon,
+          labels,
+          roles,
+        },
         user,
         organizationId,
         headers,
       },
       reply,
     ) => {
+      await validateTeamRoles({ roles, organizationId, userId: user.id });
       await assertValidTeamParent({
         parentId: parentId ?? null,
         organizationId,
+      });
+      await validateInheritedTeamRoles({
+        teamId: parentId,
+        organizationId,
+        userId: user.id,
       });
       if (parentId) {
         const { success: canManageAllTeams } = await hasPermission(
@@ -145,6 +162,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           parentId,
           convertToolResultsToToon,
           labels,
+          roles,
         }),
       );
     },
@@ -201,7 +219,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async ({ params: { id }, body, organizationId, headers }, reply) => {
+    async ({ params: { id }, body, organizationId, headers, user }, reply) => {
       // Verify the team exists and belongs to the user's organization
       const existingTeam = await TeamModel.findById(id);
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
@@ -225,6 +243,16 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      await validateTeamRoles({
+        roles: body.roles,
+        organizationId,
+        userId: user.id,
+      });
+      await validateInheritedTeamRoles({
+        teamId: body.parentId,
+        organizationId,
+        userId: user.id,
+      });
       const team = await TeamModel.update(id, body);
 
       if (!team) {
@@ -409,6 +437,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(409, "User is already a member of this team");
       }
 
+      await validateInheritedTeamRoles({
+        teamId: id,
+        organizationId,
+        userId: user.id,
+      });
       const member = await TeamModel.addMember(id, userId, role);
 
       return reply.send(member);

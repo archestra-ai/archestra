@@ -19,3 +19,12 @@ export const KnowledgeSourceVisibilitySchema = z.enum([
 export type KnowledgeSourceVisibility = z.infer<
   typeof KnowledgeSourceVisibilitySchema
 >;
+
+export const KnowledgeBaseVisibilitySchema = z.enum([
+  "private",
+  "org-wide",
+  "team-scoped",
+]);
+export type KnowledgeBaseVisibility = z.infer<
+  typeof KnowledgeBaseVisibilitySchema
+>;

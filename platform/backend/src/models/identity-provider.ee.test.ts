@@ -2503,7 +2503,9 @@ describe("resolveSsoRole", () => {
       makeOrganization,
       makeIdentityProvider,
     }) => {
-      const org = await makeOrganization({ defaultMemberRole: "editor" });
+      const org = await makeOrganization({
+        defaultMemberRole: "member,editor",
+      });
       const provider = await makeIdentityProvider(org.id);
 
       const params = createParams({
@@ -2514,14 +2516,16 @@ describe("resolveSsoRole", () => {
 
       const result = await IdentityProviderModel.resolveSsoRole(params);
 
-      expect(result).toBe("editor");
+      expect(result).toBe("member,editor");
     });
 
     test("uses the org default role when no rule matches and the provider has no defaultRole", async ({
       makeOrganization,
       makeIdentityProvider,
     }) => {
-      const org = await makeOrganization({ defaultMemberRole: "editor" });
+      const org = await makeOrganization({
+        defaultMemberRole: "member,editor",
+      });
       const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
@@ -2542,14 +2546,16 @@ describe("resolveSsoRole", () => {
 
       const result = await IdentityProviderModel.resolveSsoRole(params);
 
-      expect(result).toBe("editor");
+      expect(result).toBe("member,editor");
     });
 
     test("prefers the provider's own defaultRole over the org default", async ({
       makeOrganization,
       makeIdentityProvider,
     }) => {
-      const org = await makeOrganization({ defaultMemberRole: "editor" });
+      const org = await makeOrganization({
+        defaultMemberRole: "member,editor",
+      });
       const roleMapping: IdpRoleMappingConfig = {
         rules: [
           {
@@ -2557,7 +2563,7 @@ describe("resolveSsoRole", () => {
             role: "admin",
           },
         ],
-        defaultRole: "viewer",
+        defaultRole: "member,viewer",
       };
       const provider = await makeIdentityProvider(org.id, {
         roleMapping: roleMapping as unknown as Record<string, unknown>,
@@ -2571,7 +2577,7 @@ describe("resolveSsoRole", () => {
 
       const result = await IdentityProviderModel.resolveSsoRole(params);
 
-      expect(result).toBe("viewer");
+      expect(result).toBe("member,viewer");
     });
 
     test("falls back to the member role when the org leaves the default unset", async ({

@@ -1112,6 +1112,32 @@ class AgentModel {
   }
 
   /**
+   * Runtime Agents without an explicit model/key pair inherit the
+   * organization's effective default model. This narrow query supports
+   * validating a proposed default without loading each Agent's relations.
+   */
+  static async findRuntimeAgentsInheritingOrganizationDefault(
+    organizationId: string,
+  ): Promise<Array<Pick<Agent, "id" | "name" | "runtime">>> {
+    return db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        runtime: schema.agentsTable.runtime,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          isNull(schema.agentsTable.llmApiKeyId),
+          isNull(schema.agentsTable.modelId),
+          isNotNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
+
+  /**
    * Find all agents for an organization filtered by accessible agent IDs
    * Returns only agents the user has access to via team membership
    */

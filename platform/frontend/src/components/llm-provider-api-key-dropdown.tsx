@@ -53,6 +53,8 @@ interface LlmProviderApiKeyDropdownProps {
   onSelectKey: (keyId: string) => void;
   onAddApiKey?: () => void;
   currentProvider?: SupportedProvider;
+  /** Restricts new selections while retaining an invalid current selection. */
+  providerFilter?: (provider: SupportedProvider) => boolean;
   triggerVariant?: "prompt-input" | "button" | "select";
   triggerClassName?: string;
   /**
@@ -85,6 +87,7 @@ export function LlmProviderApiKeyDropdown({
   onSelectKey,
   onAddApiKey,
   currentProvider,
+  providerFilter,
   triggerVariant = "prompt-input",
   triggerClassName,
   triggerAriaLabel,
@@ -101,13 +104,23 @@ export function LlmProviderApiKeyDropdown({
   organizationDefaultSelected = false,
   onSelectOrganizationDefault,
 }: LlmProviderApiKeyDropdownProps) {
+  const selectableKeys = useMemo(
+    () =>
+      availableKeys.filter(
+        (key) =>
+          !providerFilter ||
+          providerFilter(key.provider) ||
+          key.id === selectedApiKeyId,
+      ),
+    [availableKeys, providerFilter, selectedApiKeyId],
+  );
   const subscriptionKeys = useMemo(
-    () => availableKeys.filter(isPersonalSubscription),
-    [availableKeys],
+    () => selectableKeys.filter(isPersonalSubscription),
+    [selectableKeys],
   );
   const apiKeys = useMemo(
-    () => availableKeys.filter((key) => !isPersonalSubscription(key)),
-    [availableKeys],
+    () => selectableKeys.filter((key) => !isPersonalSubscription(key)),
+    [selectableKeys],
   );
   const keysByProvider = useMemo(() => groupKeysByProvider(apiKeys), [apiKeys]);
   const availableProviders = useMemo(
@@ -267,6 +280,7 @@ export function LlmProviderApiKeyDropdown({
                       "personal subscription",
                       "per-user",
                     ]}
+                    disabled={providerFilter?.(key.provider) === false}
                     onSelect={() => onSelectKey(key.id)}
                     className="cursor-pointer"
                   >
@@ -326,6 +340,7 @@ export function LlmProviderApiKeyDropdown({
                     }
                     value={key.id}
                     keywords={[provider, key.name, key.teamName ?? ""]}
+                    disabled={providerFilter?.(key.provider) === false}
                     onSelect={() => onSelectKey(key.id)}
                     className="cursor-pointer"
                   >

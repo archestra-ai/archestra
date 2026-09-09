@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-29
+lastUpdated: 2026-09-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -319,7 +319,11 @@ Open a run's details to review warnings and connector errors. The logs name docu
 
 ## Visibility
 
-Each connector has a visibility setting that determines which users can retrieve its data when an agent calls `query_knowledge_sources`. Connectors and Knowledge Bases are filtered by visibility throughout the UI: users only see sources they have access to, and only those can be assigned to agents and MCP Gateways.
+Knowledge Bases can be personal, shared with selected teams, or available across the organization. Personal collections belong to their creator. Team sharing includes members of descendant teams. Existing collections remain organization-wide.
+
+Sharing a collection does not change connector or document permissions. Sources remain available through other authorized collections or direct assignments. Agents in Auto mode search accessible sources independently of collection sharing. Access does not grant permission to manage a collection.
+
+Connector visibility controls which documents users can retrieve:
 
 | Mode                      | Behavior                                                                          |
 | ------------------------- | --------------------------------------------------------------------------------- |
@@ -327,7 +331,7 @@ Each connector has a visibility setting that determines which users can retrieve
 | **Team-scoped**           | Documents accessible only to members of the assigned teams.                       |
 | **Auto-sync permissions** | Per-document ACLs synced from the source system, so each user sees only what they can see upstream. See [Auto-Sync Permissions](#auto-sync-permissions). |
 
-Users with `knowledgeSource:admin` bypass document ACLs while querying. This permission does not grant access to manage auto-sync connectors.
+Users with `knowledgeSource:admin` can access all collections, including personal ones. They also bypass document ACLs while querying. This permission does not grant access to manage auto-sync connectors.
 
 Auto-sync connectors use dedicated `knowledgeSourceAutoSync` permissions for read, create, update, and delete actions. Admin and Platform Admin roles receive all four actions by default. Grant them to other users through a [custom role](/docs/platform-access-control). Users without these management actions can still query documents allowed by the synced ACLs.
 

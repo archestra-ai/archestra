@@ -11,12 +11,15 @@ describe("buildAnthropicVertexRequest", () => {
           Authorization: "Bearer caller-token",
           "x-api-key": "caller-key",
           "anthropic-version": "2023-06-01",
-          "anthropic-beta": "prompt-caching-2024-07-31",
+          "anthropic-beta": "context-management-2025-06-27",
           "x-custom-header": "preserved",
         },
         body: JSON.stringify({
           model: "claude-sonnet-5",
           max_tokens: 32,
+          context_management: {
+            edits: [{ type: "clear_thinking_20251015", keep: "all" }],
+          },
           messages: [{ role: "user", content: "Hello" }],
         }),
       },
@@ -33,13 +36,18 @@ describe("buildAnthropicVertexRequest", () => {
     );
     expect(await request.json()).toEqual({
       anthropic_version: "vertex-2023-10-16",
+      context_management: {
+        edits: [{ type: "clear_thinking_20251015", keep: "all" }],
+      },
       max_tokens: 32,
       messages: [{ role: "user", content: "Hello" }],
     });
     expect(request.headers.get("Authorization")).toBe("Bearer google-token");
     expect(request.headers.get("x-api-key")).toBeNull();
     expect(request.headers.get("anthropic-version")).toBeNull();
-    expect(request.headers.get("anthropic-beta")).toBeNull();
+    expect(request.headers.get("anthropic-beta")).toBe(
+      "context-management-2025-06-27",
+    );
     expect(request.headers.get("x-custom-header")).toBe("preserved");
     expect(request.headers.get("x-goog-user-project")).toBe("test-project");
   });

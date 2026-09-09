@@ -103,7 +103,7 @@ Subdomains are included automatically — `engineering.company.com` matches `com
 When a user authenticates via SSO for the first time:
 
 1. A new user account is created with the email and name from the identity provider
-2. The user's role is determined by role mapping rules (if configured), otherwise the provider's default role (or **Member**)
+2. New users receive the first matching rule's roles, otherwise the provider's default roles or organization defaults
 3. The user is added to the organization
 4. A session is created and the user is logged in
 

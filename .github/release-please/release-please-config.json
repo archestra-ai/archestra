@@ -68,7 +68,6 @@
       "release-type": "node",
       "versioning": "prerelease",
       "prerelease-type": "beta",
-      "release-as": "1.4.0-beta.1",
       "prerelease": true,
       "initial-version": "0.0.1",
       "draft": true,

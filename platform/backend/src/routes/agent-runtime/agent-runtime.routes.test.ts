@@ -11,6 +11,8 @@ import {
   A2ATaskModel,
   AgentRunModel,
   InteractionModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -690,6 +692,51 @@ describe("Agent Runtime routes", () => {
           label: "Shared token",
         }),
       ],
+      incompatible: null,
+    });
+  });
+
+  test("preflight flags an existing Gemini model on the maintained Codex runtime", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const providerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+    });
+    const model = await ModelModel.create({
+      externalId: "gemini/runtime-preflight-test",
+      provider: "gemini",
+      modelId: "runtime-preflight-test",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      model.id,
+    ]);
+    if (!agent.runtime) throw new Error("Test Agent is missing Agent Runtime");
+    const incompatible = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "org",
+      llmApiKeyId: providerKey.id,
+      modelId: model.id,
+      runtime: { ...agent.runtime, command: ["archestra-codex"] },
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${incompatible.id}/runtime/preflight`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ready: false,
+      incompatible: expect.stringContaining("Codex runtime requires an OpenAI"),
     });
   });
 

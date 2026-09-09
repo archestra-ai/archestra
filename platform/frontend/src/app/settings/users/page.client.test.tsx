@@ -26,10 +26,7 @@ vi.mock("@/lib/member.query", () => ({
     isPending: false,
   })),
 }));
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: () => ({ data: { user: { id: CURRENT_USER_ID } } }),
-  useHasPermissions: () => ({ data: true }),
-}));
+vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/impersonation.query", () => ({
   useCanImpersonate: () => false,
   useImpersonationCandidates: () => ({ data: [] }),
@@ -45,6 +42,11 @@ vi.mock("@/components/search-input", () => ({
 vi.mock("../layout", () => ({ useSetSettingsAction: () => vi.fn() }));
 
 import { useSearchParams } from "next/navigation";
+import {
+  useAllPermissions,
+  useHasPermissions,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import { type Member, useMembersPaginated } from "@/lib/member.query";
 import {
@@ -136,6 +138,15 @@ function bodyRows() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: CURRENT_USER_ID } },
+  } as ReturnType<typeof useSession>);
+  vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+    typeof useHasPermissions
+  >);
+  vi.mocked(useAllPermissions).mockReturnValue({ data: {} } as ReturnType<
+    typeof useAllPermissions
+  >);
   vi.mocked(useActiveOrganization).mockReturnValue({
     data: { id: "org-1" },
     isPending: false,

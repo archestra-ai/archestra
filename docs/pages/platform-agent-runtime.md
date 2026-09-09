@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated runtime
-lastUpdated: 2026-09-07
+lastUpdated: "2026-09-08"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -132,14 +132,11 @@ person in both Archestra Chat and the Codex Agent Runtime image. A teammate who
 starts the same Agent uses their own connected account; Archestra never shares
 one user's subscription credential with another user.
 
-Claude Code subscriptions are deliberately narrower. The **Claude Code**
-catalog option declares a required per-user `CLAUDE_CODE_OAUTH_TOKEN`. Each
-user generates it with `claude setup-token` and saves it from the Agent's
-Overview after the Agent is created. Archestra injects it only into the
-official Claude Code Agent Runtime image. It is not registered as a general
-Anthropic provider credential and cannot be used by Archestra Chat, Hermes,
-OpenClaw, or a custom runtime. A Claude Code run does not start without
-that token and never falls back to a metered Anthropic API key.
+Claude Code subscriptions are deliberately narrower. The **Claude Code** catalog option declares a per-user `CLAUDE_CODE_OAUTH_TOKEN` for direct Anthropic access. Each user generates it with `claude setup-token` and saves it from the Agent's Overview after the Agent is created. Archestra injects it only into the official Claude Code Agent Runtime image. It is not registered as a general Anthropic provider credential and cannot be used by Archestra Chat, Hermes, OpenClaw, or a custom runtime. Direct Anthropic runs require that token. They never fall back to a metered Anthropic API key.
+
+Claude Code also supports Claude models hosted on **AWS Bedrock**. Select a Bedrock provider credential and Claude model on the Agent. These runs use Bedrock billing and require no Claude subscription token. Archestra configures Claude Code's native Bedrock transport through the Agent-scoped proxy. AWS credentials stay in the backend; the runtime receives a temporary virtual key. Non-Claude Bedrock models remain incompatible with Claude Code.
+
+Claude Code also supports **Anthropic on Vertex AI** when configured on the platform. Select the Anthropic provider and a Claude model available through Vertex AI. These runs use Google Cloud billing and require no Claude subscription token. The runtime uses the Anthropic proxy; the backend authenticates to Vertex through Google ADC. Google credentials stay in the backend. See [Anthropic on Vertex AI](/docs/platform-supported-llm-providers#anthropic-on-vertex-ai) for setup.
 
 The **Codex** catalog option requires the initiating user's connected ChatGPT
 subscription. If that person has already signed in with ChatGPT under Model
@@ -149,11 +146,7 @@ run does not start with an ordinary OpenAI API key, so selecting the
 maintained runtime cannot silently switch from subscription access to metered
 API billing.
 
-The **Inference API** setting describes the wire protocol expected by the
-image. Choose **OpenAI Responses** for clients such as Codex and OpenCode. Choose **OpenAI
-Chat Completions** for clients such as Hermes and OpenClaw. Choose
-**Anthropic Messages** for clients such as Claude Code. Archestra rejects an
-incompatible model and image before creating a pod.
+The **Inference API** setting describes the wire protocol expected by the image. Choose **OpenAI Responses** for clients such as Codex and OpenCode. Choose **OpenAI Chat Completions** for clients such as Hermes and OpenClaw. Choose **Anthropic Messages** for clients such as Claude Code, including its Bedrock mode. Archestra rejects an incompatible model and image before creating a pod.
 
 The runtime also supplies the pod with the invoking user's Agent-scoped MCP
 gateway URL and token. A maintained catalog image configures its native client
@@ -273,6 +266,8 @@ accept useful follow-up instructions.
 
 ### Runtime environment
 
+Archestra supplies the applicable variables below when launching a run. You do not need to set them manually for the maintained runtime images. For Claude Code with Bedrock or Vertex AI, configure the platform provider and select a supported Claude model. Archestra handles the runtime connection and authentication automatically.
+
 | Variable | Purpose |
 | --- | --- |
 | `ARCHESTRA_AGENT_RUNTIME_AGENT_ID`, `ARCHESTRA_AGENT_RUNTIME_AGENT_NAME` | Durable Agent identity. |
@@ -287,6 +282,8 @@ accept useful follow-up instructions.
 | `ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH`, `ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH` | Known context and output limits for native client configuration. |
 | `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL` | Agent-scoped inference endpoint and its `openai_responses`, `openai_chat`, or `anthropic` protocol. |
 | `ARCHESTRA_VIRTUAL_KEY` | Personal virtual key for the run. |
+| `ANTHROPIC_BEDROCK_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK`, `AWS_REGION` | Configure native Bedrock transport for Claude Code using a Bedrock model. |
+| `AWS_BEARER_TOKEN_BEDROCK` | The run’s virtual key for the Bedrock proxy. AWS credentials remain server-side. |
 | `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL` | Native client aliases for the Agent-scoped proxy. |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` | Native client aliases for the virtual key on the standard provider path. These are omitted when the official Claude Code image uses its run-scoped subscription token. |
 | `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Agent-scoped MCP endpoint and the initiating user's bearer token. |

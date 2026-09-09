@@ -18,6 +18,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import {
   type ComponentType,
   useEffect,
@@ -35,6 +36,8 @@ import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RoleSelect } from "@/components/ui/role-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -146,6 +149,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
   const [name, setName] = useState(team?.name ?? "");
+  const [roles, setRoles] = useState((team?.roles ?? []).join(","));
   const [description, setDescription] = useState(team?.description ?? "");
   const [parentId, setParentId] = useState<string | null>(
     team?.parentId ?? null,
@@ -219,6 +223,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       setCreatedTeam(null);
       setName("");
       setDescription("");
+      setRoles("");
       setParentId(null);
       setLabels([]);
       return;
@@ -226,6 +231,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 
     setName(editTeam?.name ?? "");
     setDescription(editTeam?.description ?? "");
+    setRoles((editTeam?.roles ?? []).join(","));
     setParentId(editTeam?.parentId ?? null);
     setLabels(editTeam?.labels ?? []);
   }, [editTeam, initialSection, mode, open, readOnly]);
@@ -258,6 +264,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         const body = {
           name: name.trim(),
           description: description.trim() || undefined,
+          roles: roles.split(",").filter(Boolean),
           parentId,
           labels: finalLabels.map(({ key, value }) => ({ key, value })),
         };
@@ -316,6 +323,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       memberErrors,
       hadMemberChanges,
     }) => {
+      queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
       if (hadMemberChanges && savedTeam) {
@@ -413,6 +421,8 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           team={team}
           name={name}
           description={description}
+          roles={roles}
+          onRolesChange={setRoles}
           parentId={parentId}
           organizationTeams={organizationTeams}
           canManageAllTeams={canUpdateTeams}
@@ -455,6 +465,8 @@ function TeamSection(props: {
   team: Team | null;
   name: string;
   description: string;
+  roles: string;
+  onRolesChange: (roles: string) => void;
   parentId: string | null;
   organizationTeams: Team[];
   canManageAllTeams: boolean;
@@ -501,27 +513,32 @@ function TeamSection(props: {
           />
         </div>
         <div className="space-y-2">
-          <Label>Parent Team</Label>
-          <Select
-            value={props.parentId ?? "root"}
-            onValueChange={(value) =>
-              props.onParentIdChange(value === "root" ? null : value)
-            }
+          <Label htmlFor="team-roles">Organization Roles</Label>
+          <FieldDescription id="team-roles-description">
+            Members of this team and its descendant teams inherit these
+            permissions. Alternatively, assign roles directly to{" "}
+            <Link
+              href="/settings/users"
+              className="underline underline-offset-4"
+            >
+              users
+            </Link>
+            .
+          </FieldDescription>
+          <RoleSelect
+            multiple
+            allowEmpty
+            id="team-roles"
+            ariaLabel="Organization Roles"
+            aria-describedby="team-roles-description"
+            value={props.roles}
+            onValueChange={props.onRolesChange}
             disabled={props.readOnlyDetails}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="No parent team" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="root">No parent team</SelectItem>
-              {parentOptions.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {formatTeamPath(props.organizationTeams, candidate.id)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldDescription>
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="team-parent">Parent Team</Label>
+          <FieldDescription id="team-parent-description">
             Nest this team in your organization hierarchy. Resource access is
             inherited through the hierarchy; team administration is not.{" "}
             <ExternalDocsLink
@@ -534,6 +551,26 @@ function TeamSection(props: {
             </ExternalDocsLink>
             .
           </FieldDescription>
+          <SearchableSelect
+            id="team-parent"
+            ariaLabel="Parent Team"
+            aria-describedby="team-parent-description"
+            value={props.parentId ?? "root"}
+            onValueChange={(value) =>
+              props.onParentIdChange(value === "root" ? null : value)
+            }
+            disabled={props.readOnlyDetails}
+            className="w-full"
+            placeholder="No parent team"
+            searchPlaceholder="Search teams..."
+            emptyMessage="No matching teams found."
+            pinnedItems={[{ value: "root", label: "No parent team" }]}
+            items={parentOptions.map((candidate) => ({
+              value: candidate.id,
+              label: formatTeamPath(props.organizationTeams, candidate.id),
+              description: candidate.description ?? undefined,
+            }))}
+          />
         </div>
         {props.readOnlyDetails ? (
           <ReadOnlyAdvancedLabels labels={props.labels} />

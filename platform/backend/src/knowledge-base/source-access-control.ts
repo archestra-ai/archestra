@@ -44,6 +44,7 @@ type VisibilityScopedKnowledgeSourceUpdates = Partial<{
 }>;
 
 interface KnowledgeSourceAccessControlContext {
+  userId?: string;
   canReadAll: boolean;
   canManageAutoSync: boolean;
   teamIds: string[];
@@ -252,6 +253,7 @@ class KnowledgeSourceAccessControlService {
     ]);
 
     return {
+      userId: params.userId,
       canReadAll,
       canManageAutoSync,
       teamIds,
@@ -259,12 +261,20 @@ class KnowledgeSourceAccessControlService {
   }
 
   canAccessKnowledgeBase(
-    _accessControl: KnowledgeSourceAccessControlContext,
-    _knowledgeBase: KnowledgeBase,
+    accessControl: KnowledgeSourceAccessControlContext,
+    knowledgeBase: KnowledgeBase,
   ) {
-    // Knowledge bases are just collections of connectors now. Visibility is
-    // enforced at the connector layer, so KB-level access is always allowed.
-    return true;
+    if (knowledgeBase.visibility === "private") {
+      return (
+        accessControl.canReadAll ||
+        (!!accessControl.userId &&
+          knowledgeBase.createdBy === accessControl.userId)
+      );
+    }
+    return this.canAccessSource(accessControl, {
+      ...knowledgeBase,
+      visibility: knowledgeBase.visibility,
+    });
   }
 
   canAccessConnector(

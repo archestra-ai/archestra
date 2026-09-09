@@ -22,6 +22,7 @@ import {
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
+import { preflightAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import {
   resolveAgentRuntime,
   resumeAgentRun,
@@ -419,6 +420,24 @@ export class A2AManager {
         throw new A2AError(A2AErrorKind.NothingToExecute);
       }
 
+      // A detached run returns its task handle before execution. Reject an
+      // incompatible model before compaction, context creation, or turn writes.
+      const runtime = resolveAgentRuntime(agent);
+      if (
+        fullTaskMode &&
+        params.taskRun?.createTask &&
+        params.taskRun.detached &&
+        !task &&
+        runtime
+      ) {
+        await preflightAgentRuntimeModelCompatibility({
+          runtime,
+          agent,
+          organizationId: actor.organizationId,
+          userId: actor.kind === "user" ? actor.id : "system",
+        });
+      }
+
       // Fetch history messages from the db
       let contextDbMessages =
         !this.config.stateless && context
@@ -573,8 +592,6 @@ export class A2AManager {
       // Agent Runtime belongs to the Agent itself and is selected only
       // for a durable task. Invocation surfaces decide whether a plain send
       // should remain a Message or be promoted to that task lifecycle.
-      const runtime = resolveAgentRuntime(agent);
-
       const executeRun = (runOpts: {
         abortSignal?: AbortSignal;
         onTextDelta?: (delta: string) => void;

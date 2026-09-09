@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { z } from "zod";
 import { DOMAIN_VALIDATION_REGEX } from "./incoming-email";
+import { RoleAssignmentSchema } from "./roles";
 
 /**
  * Identity provider IDs - these are the canonical built-in provider identifiers used for:
@@ -335,12 +336,12 @@ export function preserveIdentityProviderSecrets<
 
 export const IdpRoleMappingRuleSchema = z.object({
   expression: z.string().min(1, "Expression is required"),
-  role: z.string().min(1, "Role is required"),
+  role: RoleAssignmentSchema,
 });
 
 export const IdpRoleMappingConfigSchema = z.object({
   rules: z.array(IdpRoleMappingRuleSchema).optional(),
-  defaultRole: z.string().optional(),
+  defaultRole: RoleAssignmentSchema.optional(),
   strictMode: z.boolean().optional(),
   skipRoleSync: z.boolean().optional(),
 });

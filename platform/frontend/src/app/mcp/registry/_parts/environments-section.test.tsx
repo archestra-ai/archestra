@@ -55,13 +55,16 @@ vi.mock("@/components/filter-bar", () => ({
     <div>{children}</div>
   ),
   FilterBar: ({
+    search,
     children,
     onClearFilters,
   }: {
+    search?: React.ReactNode;
     children: React.ReactNode;
     onClearFilters?: () => void;
   }) => (
     <div>
+      {search}
       {children}
       {onClearFilters ? (
         <button type="button" onClick={onClearFilters}>

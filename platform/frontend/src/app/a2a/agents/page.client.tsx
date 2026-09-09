@@ -516,6 +516,7 @@ export default function OutboundA2aAgentsPage() {
                   <TableCard
                     key={agent.id}
                     testId={`a2a-remote-agent-card-${agent.id}`}
+                    className="min-w-0"
                     icon={<AgentIcon size={20} />}
                     title={
                       <Link

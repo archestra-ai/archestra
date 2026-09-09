@@ -565,7 +565,7 @@ export function A2aRemoteAgentForm({
             title="Details"
             description={
               agent
-                ? "Customize how this external agent appears in Archestra."
+                ? `Customize how this external agent appears in ${appName}.`
                 : "Optional local details. Empty fields use the Agent Card values."
             }
           >

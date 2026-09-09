@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
@@ -18,6 +19,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentRunInputModel,
   AgentRunModel,
   OrganizationModel,
   VirtualApiKeyModel,
@@ -29,7 +31,6 @@ import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
-  AGENT_RUNTIME_ATTACHMENTS_DIR,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_INPUTS_READY_FILE,
 } from "@/services/agent-runtime/runtime-contract";
@@ -234,10 +235,11 @@ class AgentRuntimeManager {
     if (!pod) {
       throw new Error("This session ended before its input files were staged");
     }
+    const readyFile = `/var/run/archestra/turns/${params.session.taskId}.inputs-ready`;
     const alreadyReady = await this.execInPod({
       session: params.session,
       podName: pod,
-      command: ["/bin/sh", "-c", `test -f ${AGENT_RUNTIME_INPUTS_READY_FILE}`],
+      command: ["/bin/sh", "-c", 'test -f "$1"', "check-inputs", readyFile],
     })
       .then(() => true)
       .catch(() => false);
@@ -252,7 +254,7 @@ class AgentRuntimeManager {
           "-c",
           'umask 077; mkdir -p "$1"; cat > "$2"',
           "archestra-stage-input",
-          AGENT_RUNTIME_ATTACHMENTS_DIR,
+          path.posix.dirname(input.runtimePath),
           input.runtimePath,
         ],
         stdin: NodeReadable.from([input.fileData]),
@@ -276,10 +278,11 @@ class AgentRuntimeManager {
       command: [
         "/bin/sh",
         "-c",
-        'umask 077; cat > "$1" && touch "$2"',
+        'umask 077; cat > "$1" && mkdir -p /var/run/archestra/turns && touch "$2" "$3"',
         "archestra-stage-input",
         AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
         AGENT_RUNTIME_INPUTS_READY_FILE,
+        readyFile,
       ],
       stdin: NodeReadable.from([manifest]),
     });
@@ -431,6 +434,12 @@ class AgentRuntimeManager {
         );
       return;
     }
+    // Inputs are database-backed so another process can finish this handoff.
+    // Publish the executable request only after this turn's files are durable.
+    await this.stageInputs({
+      session,
+      inputs: await AgentRunInputModel.findByTaskId(session.taskId),
+    });
     await this.execInPod({
       session,
       podName,

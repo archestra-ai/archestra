@@ -388,9 +388,10 @@ activity, not credentials, private reasoning, or raw provider events.
 
 ### Input files
 
-Files attached to the run's first Chat message are staged before the
-Agent command starts. Each run receives a fresh input directory at
-`ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR`. The task text lists
+Files attached to initial runs or API/A2A follow-ups are staged before the
+Agent command starts. Each turn uses its own subdirectory under
+`ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR`. Earlier attachments remain intact.
+The task text lists
 the absolute path of every attached file, and
 `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` points to a JSON
 array containing each file's original name, absolute path, media type, and
@@ -421,7 +422,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_MODE` | `interactive` for a Chat-owned live terminal; `one_shot` for unattended delegation that must exit when complete. |
 | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`, `ARCHESTRA_AGENT_RUNTIME_CONTINUE` | Stable workspace identity and `1` when restoring a saved client session for a follow-up. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK`, `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` | Initial task and Agent instructions. |
-| `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Directory containing files attached to the initial run message. |
+| `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Parent directory containing each turn's attached files. |
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` | JSON manifest containing each input file's name, path, media type, and size. |
 | `ARCHESTRA_AGENT_RUNTIME_MODEL` | Provider-qualified model ID for generic clients. |
 | `ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL` | Provider-native model slug for clients that configure their provider separately. |

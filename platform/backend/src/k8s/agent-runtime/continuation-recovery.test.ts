@@ -14,6 +14,7 @@ import {
   OrganizationModel,
 } from "@/models";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import { persistAgentRunInputs } from "@/services/agent-runtime/input-files";
 import { cleanupAgentRun } from "@/services/agent-runtime/pod-run";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { expect, test, vi } from "@/test";
@@ -61,6 +62,18 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       runtimeScope: "archestra-dev",
       workloadName: name,
     });
+    const [input] = await persistAgentRunInputs({
+      taskId: task.id,
+      organizationId: org.id,
+      uploadedByUserId: user.id,
+      attachments: [
+        {
+          name: "notes.txt",
+          contentType: "text/plain",
+          contentBase64: Buffer.from("continued").toString("base64"),
+        },
+      ],
+    });
     const spec: AgentRunLaunchSpec = {
       taskId: task.id,
       agentRuntimeId: agent.id,
@@ -70,8 +83,7 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       command: [
         "/bin/sh",
         "-c",
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion
-        'test -z "${OPENAI_API_KEY+x}" && printf continued >> /home/node/recovery-result',
+        `test -z "\${OPENAI_API_KEY+x}" && cat '${input.runtimePath}' >> /home/node/recovery-result`,
       ],
       privileged: false,
       resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
@@ -115,7 +127,7 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
             command: [
               "/bin/sh",
               "-c",
-              "printf initial > /home/node/recovery-result",
+              "printf initial > /home/node/recovery-result; mkdir -p /var/run/archestra/attachments; printf original > /var/run/archestra/attachments/notes.txt; touch /var/run/archestra/inputs-ready",
             ],
             ownerReferences: undefined,
           }),
@@ -232,7 +244,14 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
           exec(`cat /var/run/archestra/turns/${task.id}.exit`).trim() === "0",
       );
       expect(exec("cat /home/node/recovery-result")).toBe("initialcontinued");
+      // A duplicate adoption must neither rerun the turn nor overwrite a file
+      // that the agent subsequently edited.
+      exec(`printf edited > '${input.runtimePath}'`);
       await manager.recoverRun(run);
+      expect(exec(`cat '${input.runtimePath}'`)).toBe("edited");
+      expect(exec("cat /var/run/archestra/attachments/notes.txt")).toBe(
+        "original",
+      );
       expect(exec("cat /home/node/recovery-result")).toBe("initialcontinued");
       await manager.continueRun({
         session: run,

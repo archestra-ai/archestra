@@ -1,4 +1,5 @@
 import type { A2AActor } from "@/agents/a2a/a2a-base";
+import logger from "@/logging";
 import { AgentRunModel, AgentWorkspaceModel } from "@/models";
 import { ApiError } from "@/types";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
@@ -43,14 +44,27 @@ export async function deleteAgentWorkspace(params: {
     throw new ApiError(409, "Workspace lifecycle changed; retry deletion");
   // Persist intent first. A control-plane restart or API failure is retried by
   // the reconciler; claiming a continuation can no longer race this deletion.
-  const backend = resolveAgentRuntimeBackendDriver(workspace.backend);
-  const latestRun = await AgentRunModel.findByTaskId(workspace.lastTaskId);
-  if (latestRun) await backend.releaseRun(latestRun);
-  await backend.deleteWorkspace(workspace);
-  await AgentWorkspaceModel.transition({
-    id: workspace.id,
-    from: "deleting",
-    to: "deleted",
-  });
+  try {
+    const backend = resolveAgentRuntimeBackendDriver(workspace.backend);
+    const latestRun = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+    if (latestRun) await backend.releaseRun(latestRun);
+    await backend.deleteWorkspace(workspace);
+    await AgentWorkspaceModel.transition({
+      id: workspace.id,
+      from: "deleting",
+      to: "deleted",
+    });
+  } catch {
+    // All cleanup operations tolerate already-absent resources. Keep the
+    // durable intent even when only part of the infrastructure was removed.
+    logger.warn(
+      { workspaceId: workspace.id },
+      "Workspace deletion incomplete; reconciliation will retry cleanup",
+    );
+    throw new ApiError(
+      500,
+      "Workspace deletion is pending automatic retry; retrying this request is safe",
+    );
+  }
   return { previousState: workspace.state, state: "deleted" as const };
 }

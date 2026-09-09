@@ -66635,6 +66635,34 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100000
+                  },
+                  "attachments": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        },
+                        "contentType": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        },
+                        "contentBase64": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "contentType",
+                        "contentBase64"
+                      ]
+                    }
                   }
                 },
                 "required": [

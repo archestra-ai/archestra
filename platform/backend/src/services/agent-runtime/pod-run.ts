@@ -185,11 +185,6 @@ async function startAgentRunSession(params: {
           409,
           "This workspace is already in use or its retention deadline has passed",
         );
-      if (inputFiles.length)
-        throw new ApiError(
-          409,
-          "Continuation attachments are not yet supported",
-        );
       await backend.continueRun({ session, spec });
     } else {
       await AgentWorkspaceModel.create({

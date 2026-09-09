@@ -1162,13 +1162,32 @@ describe("Agent Runtime routes", () => {
     });
     const next = await createTask(agent.id);
     vi.mocked(startDetachedAgentTask).mockResolvedValue(next);
+    const attachments = [
+      {
+        name: "follow-up.txt",
+        contentType: "text/plain",
+        contentBase64: Buffer.from("follow-up input").toString("base64"),
+      },
+    ];
+    const invalid = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/continue`,
+      payload: {
+        message: "Read this",
+        attachments: [{ ...attachments[0], contentBase64: "invalid" }],
+      },
+    });
+    expect(invalid.statusCode).toBe(400);
     const response = await app.inject({
       method: "POST",
       url: `/api/agent-runs/${task.id}/continue`,
-      payload: { message: "Check the saved change" },
+      payload: { message: "Check the saved change", attachments },
     });
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json().taskId).toBe(next.id);
+    expect(startDetachedAgentTask).toHaveBeenCalledWith(
+      expect.objectContaining({ attachments }),
+    );
     const audits = await db
       .select()
       .from(schema.auditLogsTable)
@@ -1180,7 +1199,7 @@ describe("Agent Runtime routes", () => {
       );
     expect(audits[0]).toMatchObject({
       before: { taskId: task.id },
-      after: { taskId: next.id, previousTaskId: task.id },
+      after: { taskId: next.id, previousTaskId: task.id, attachmentCount: 1 },
     });
     await AgentWorkspaceModel.transition({
       id: workspace.id,
@@ -1324,7 +1343,11 @@ describe("Agent Runtime routes", () => {
     expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(404);
     expect(remove).not.toHaveBeenCalled();
     user = owner;
-    expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(500);
+    const failedDeletion = await app.inject({ method: "DELETE", url });
+    expect(failedDeletion.statusCode).toBe(500);
+    expect(failedDeletion.json().error.message).toContain(
+      "retrying this request is safe",
+    );
     expect(
       (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
     ).toBe("deleting");

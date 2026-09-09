@@ -2,7 +2,11 @@ import { PassThrough, type Readable } from "node:stream";
 import type { Exec } from "@kubernetes/client-node";
 import type WebSocket from "ws";
 
-/** Bound control-plane commands, including when a custom runtime never exits. */
+/** Bound control-plane commands, including when a custom runtime never exits.
+ * The 30-second default covers bounded file transfers and status reads, not
+ * agent execution or Pod readiness. Callers that run a longer control-plane
+ * operation must set timeoutMs explicitly; never leave custom commands unbounded.
+ */
 export function execAgentRuntimeCommand(params: {
   exec: Pick<Exec, "exec">;
   namespace: string;

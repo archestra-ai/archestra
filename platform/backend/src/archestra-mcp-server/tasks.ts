@@ -294,17 +294,17 @@ const registry = defineArchestraTools([
     description:
       "Permanently delete a retained runtime workspace and all of its files. Saved run transcripts remain available. Only the owner can delete it. Cancel any active run first and wait for it to finish. Use only when the requester explicitly asks to discard the workspace, not when they only ask to stop a run.",
     schema: z.object({
-      run_id: z.string().uuid(),
+      task_id: z.string().uuid(),
       confirm_delete: z.literal(true),
     }),
     handler: async ({ args, context }) => {
       try {
         const result = await deleteAgentWorkspace({
           actor: requireActor(context),
-          taskId: args.run_id,
+          taskId: args.task_id,
         });
         return structuredSuccessResult(
-          { run_id: args.run_id, state: result.state },
+          { task_id: args.task_id, state: result.state },
           "Workspace deleted. Its files cannot be recovered; saved transcripts are still available.",
         );
       } catch (error) {
@@ -316,9 +316,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
     title: "Read Workspace File",
     description:
-      "Read a file from your Agent Runtime's retained workspace using a run ID. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. The workspace must be running. Shared transcript access does not grant file access.",
+      "Read a file from your Agent Runtime's retained workspace using a run ID. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access.",
     schema: z.object({
-      run_id: z.string().uuid(),
+      task_id: z.string().uuid(),
       path: z.string().min(1).max(4096),
       encoding: z.enum(["utf8", "base64"]).default("utf8"),
     }),
@@ -326,7 +326,7 @@ const registry = defineArchestraTools([
       try {
         const result = await accessAgentWorkspaceFile({
           actor: requireActor(context),
-          taskId: args.run_id,
+          taskId: args.task_id,
           request: { operation: "read", path: args.path },
         });
         const { content_base64, ...metadata } = result;
@@ -357,7 +357,7 @@ const registry = defineArchestraTools([
     description:
       "Create a file in your Agent Runtime's retained workspace using a run ID. Paths are relative to /home/node/workspace. Accepts UTF-8 text or base64 binary uploads, maximum 4 MiB decoded. Existing files are preserved unless overwrite=true. Parent directories must exist. This changes the runtime filesystem; it does not post a file to Slack or the conversation's skill sandbox.",
     schema: z.object({
-      run_id: z.string().uuid(),
+      task_id: z.string().uuid(),
       path: z.string().min(1).max(4096),
       content: z.string().max(5_592_408),
       encoding: z.enum(["utf8", "base64"]).default("utf8"),
@@ -367,7 +367,7 @@ const registry = defineArchestraTools([
       try {
         const result = await accessAgentWorkspaceFile({
           actor: requireActor(context),
-          taskId: args.run_id,
+          taskId: args.task_id,
           request: {
             operation: "write",
             path: args.path,

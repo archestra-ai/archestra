@@ -2262,7 +2262,7 @@ Required RBAC permission: `agent:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `run_id` | `string` | Yes |  |
+| `task_id` | `string` | Yes |  |
 | `confirm_delete` | `boolean` | Yes |  |
 
 
@@ -2274,7 +2274,7 @@ Required RBAC permission: `agent:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `run_id` | `string` | Yes |  |
+| `task_id` | `string` | Yes |  |
 | `path` | `string` | Yes |  |
 | `encoding` | `"utf8" \| "base64"` | No |  |
 
@@ -2287,7 +2287,7 @@ Required RBAC permission: `agent:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `run_id` | `string` | Yes |  |
+| `task_id` | `string` | Yes |  |
 | `path` | `string` | Yes |  |
 | `content` | `string` | Yes |  |
 | `encoding` | `"utf8" \| "base64"` | No |  |

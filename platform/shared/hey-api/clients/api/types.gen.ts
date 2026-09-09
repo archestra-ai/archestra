@@ -18798,6 +18798,11 @@ export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRu
 export type ContinueAgentRunData = {
     body: {
         message: string;
+        attachments?: Array<{
+            name: string;
+            contentType: string;
+            contentBase64: string;
+        }>;
     };
     path: {
         taskId: string;

@@ -8,12 +8,14 @@ import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
   A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
   AgentTeamModel,
+  AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
@@ -212,6 +214,67 @@ describe("run tools", () => {
     });
     return task;
   }
+
+  test("workspace file tools accept the task ID and enforce original ownership", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const run = await AgentRunModel.findByTaskId(task.id);
+    if (!run) throw new Error("Run fixture missing");
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const access = vi
+      .spyOn(agentRuntimeManager, "accessWorkspaceFile")
+      .mockResolvedValue({
+        path: "notes.txt",
+        size: 5,
+        sha256: "test-digest",
+        content_base64: Buffer.from("hello").toString("base64"),
+      });
+    try {
+      const written = await executeArchestraTool(
+        "archestra__write_workspace_file",
+        { task_id: task.id, path: "notes.txt", content: "hello" },
+        context,
+      );
+      expect(written.isError).toBeFalsy();
+      const read = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "notes.txt" },
+        context,
+      );
+      expect(read.structuredContent).toMatchObject({
+        content: "hello",
+        encoding: "utf8",
+      });
+      expect(access).toHaveBeenCalledTimes(2);
+      const other = await makeUser();
+      await makeMember(other.id, organizationId, { role: "member" });
+      const denied = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "notes.txt" },
+        { ...context, userId: other.id },
+      );
+      expect(denied.isError).toBe(true);
+      expect(access).toHaveBeenCalledTimes(2);
+    } finally {
+      access.mockRestore();
+    }
+  });
 
   test("lists accessible Agent runs with live and thread links", async () => {
     const binding = await ChatOpsChannelBindingModel.create({

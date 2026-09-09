@@ -28,6 +28,7 @@ export function AgentRunLiveness({
 
   const presentation = getLivenessPresentation(run, now);
   const Icon = presentation.icon;
+  const deadline = new Date(run.hardDeadlineAt);
 
   return (
     <output
@@ -56,13 +57,17 @@ export function AgentRunLiveness({
           {presentation.detail}
         </span>
       </div>
-      <time
-        dateTime={new Date(run.hardDeadlineAt).toISOString()}
-        title={`Hard deadline: ${new Date(run.hardDeadlineAt).toLocaleString()}`}
-        className="shrink-0 tabular-nums"
-      >
-        {presentation.deadlineLabel}
-      </time>
+      {Number.isNaN(deadline.getTime()) ? (
+        <span>{presentation.deadlineLabel}</span>
+      ) : (
+        <time
+          dateTime={deadline.toISOString()}
+          title={`Hard deadline: ${deadline.toLocaleString()}`}
+          className="shrink-0 tabular-nums"
+        >
+          {presentation.deadlineLabel}
+        </time>
+      )}
     </output>
   );
 }
@@ -111,7 +116,9 @@ function getLivenessPresentation(
     };
   }
 
-  const deadlineLabel = `Hard stop in ${formatDuration(deadlineAt - now)}`;
+  const deadlineLabel = Number.isNaN(deadlineAt)
+    ? "Hard deadline unavailable"
+    : `Hard stop in ${formatDuration(deadlineAt - now)}`;
   if (
     run.attentionState === "input_required" ||
     run.state === "TASK_STATE_INPUT_REQUIRED"

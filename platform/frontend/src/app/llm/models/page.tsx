@@ -45,12 +45,17 @@ import {
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
+import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
+import {
+  CompactWarning,
+  CompactWarningText,
+} from "@/components/ui/compact-warning";
 import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -561,6 +566,30 @@ export default function ModelsPage() {
       description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
       actionButton={refreshModelsButton}
     >
+      {(apiKeys.some((key) => key.requiresReauthentication) ||
+        syncModelsMutation.data?.success === false) && (
+        <div className="mb-4 space-y-2">
+          {apiKeys
+            .filter((key) => key.requiresReauthentication)
+            .map((key) => (
+              <SubscriptionReconnectNotice key={key.id} credential={key} />
+            ))}
+          {syncModelsMutation.data?.success === false && (
+            <CompactWarning>
+              <RefreshCw />
+              <span className="font-medium">
+                Some models could not be refreshed
+              </span>
+              <CompactWarningText>
+                {syncModelsMutation.data.failures
+                  .map((failure) => failure.name)
+                  .join(", ")}
+                . Existing models are still listed.
+              </CompactWarningText>
+            </CompactWarning>
+          )}
+        </div>
+      )}
       <BulkActionsScope>
         {models.length > 0 && (
           <CollectionFilters>

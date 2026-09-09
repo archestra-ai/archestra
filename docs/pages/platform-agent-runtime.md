@@ -596,11 +596,9 @@ the run.
 ## View Runs from an Agent
 
 An Agent with Agent Runtime configured has a **Runs** tab. A running run opens
-its live terminal. A completed run from any maintained catalog image opens a
-readable transcript. Use the selector to switch to its terminal replay. A
-custom image opens the same readable view when it implements the
-[readable transcript contract](#readable-transcript); otherwise, it opens its
-retained terminal output. Use this tab to:
+its live terminal. Completed runs open their retained terminal recording.
+Recording navigation lets you revisit earlier screens, including output replaced by terminal redraws.
+Structured transcripts remain available to integrations. Use this tab to:
 
 - review run outcomes and timestamps
 - read live or retained container logs

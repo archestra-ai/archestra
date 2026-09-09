@@ -6,9 +6,21 @@ import type { ModelMessage } from "ai";
 export async function loadSessionHistory(
   runtimeDir: string,
 ): Promise<ModelMessage[]> {
-  const value: unknown = JSON.parse(
-    await readFile(join(runtimeDir, "agent-session.json"), "utf8"),
-  );
+  let contents: string;
+  try {
+    contents = await readFile(join(runtimeDir, "agent-session.json"), "utf8");
+  } catch (error) {
+    // A cancelled first turn may never have completed a model step.
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    )
+      return [];
+    throw error;
+  }
+  const value: unknown = JSON.parse(contents);
   if (
     !Array.isArray(value) ||
     !value.every(

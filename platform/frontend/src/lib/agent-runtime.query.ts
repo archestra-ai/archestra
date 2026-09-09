@@ -80,7 +80,12 @@ export function useMyAgentRun(taskId: string, enabled = true) {
         (!query.state.data.workspace ||
           query.state.data.workspace.state === "deleted"))
         ? false
-        : 2_000,
+        : query.state.data?.endedAt &&
+            ["idle", "suspended"].includes(
+              query.state.data.workspace?.state ?? "",
+            )
+          ? 30_000
+          : 2_000,
     retry: (failureCount) => failureCount < 8,
     retryDelay: 500,
   });

@@ -92,7 +92,7 @@ export interface AgentRuntimeBackendDriver {
   /** Recover a durable, unstarted continuation after its launcher disappeared. */
   recoverRun(session: AgentRunRecord): Promise<void>;
   /** Stop only this turn, keeping the workspace available for continuation. */
-  stopRun(session: AgentRunRecord): Promise<void>;
+  stopRun(session: AgentRunRecord): Promise<"suspended" | undefined>;
   /** Revoke turn-scoped access while retaining the workspace for its owner. */
   releaseRun(session: AgentRunRecord): Promise<void>;
   /** Stable connection hints; commands require the caller's own cluster access. */

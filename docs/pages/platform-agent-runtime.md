@@ -306,6 +306,8 @@ its prior session before handling the new `ARCHESTRA_AGENT_RUNTIME_TASK`.
 `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` stays stable across turns, while
 `ARCHESTRA_AGENT_RUNTIME_TASK_ID` identifies the current run. Re-read injected
 credentials on every invocation: a finished turn's virtual key is revoked.
+Archestra clears the initial Kubernetes credential Secret when a turn finishes,
+so replacement Pods do not inherit those earlier credential values.
 
 Custom images should keep their working files and native session state under
 `/home/node`. The initial contents of that directory are copied from the image

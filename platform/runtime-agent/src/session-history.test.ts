@@ -8,6 +8,7 @@ import { loadSessionHistory, saveSessionHistory } from "./session-history.js";
 test("restores saved model context and refuses malformed retained state", async () => {
   const runtimeDir = await mkdtemp(join(tmpdir(), "agent-history-"));
   try {
+    expect(await loadSessionHistory(runtimeDir)).toEqual([]);
     const messages: ModelMessage[] = [
       { role: "user", content: "Remember the selected branch" },
       { role: "assistant", content: "feature/example" },

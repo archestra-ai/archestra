@@ -138,6 +138,11 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
           exec(`cat /var/run/archestra/turns/${initialTaskId}.exit`).trim() ===
           "0",
       );
+      await manager.releaseRun({ ...run, taskId: initialTaskId });
+      expect(
+        JSON.parse(kubectl(["get", "secret", `${name}-env`, "-o", "json"]))
+          .data,
+      ).toEqual({ OPENAI_API_KEY: "" });
       kubectl([
         "patch",
         "sandbox",
@@ -363,6 +368,7 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         await resumeAttempt;
       }
       expect(wakeError).toBeUndefined();
+      expect(exec('printf "%s" "$OPENAI_API_KEY"')).toBe("");
       expect(
         JSON.parse(kubectl(["get", "pod", name, "-o", "json"])).metadata.uid,
       ).not.toBe(retiringUid);

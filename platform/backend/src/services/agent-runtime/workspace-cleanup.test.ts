@@ -5,11 +5,15 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
 } from "@/models";
-import { afterEach, expect, test, vi } from "@/test";
+import { afterEach, beforeEach, expect, test, vi } from "@/test";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "./backends/kubernetes";
 import { cleanupAgentRun } from "./pod-run";
 import { agentRunReconciler } from "./reconciler";
 import { agentRunTranscriptStore } from "./transcript-store";
+
+beforeEach(() => {
+  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+});
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -145,7 +149,7 @@ test("expiry retains the workspace until final transcript capture succeeds", asy
     lastTaskId: task.id,
     expiresAt: new Date(Date.now() - 1000),
   });
-  vi.spyOn(backend, "stopRun").mockResolvedValue();
+  vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
   vi.spyOn(backend, "releaseRun").mockResolvedValue();
   vi.spyOn(backend, "streamOutput").mockImplementation(
     async ({ destination }) => {
@@ -155,8 +159,14 @@ test("expiry retains the workspace until final transcript capture succeeds", asy
   const snapshot = vi
     .spyOn(backend, "snapshotOutput")
     .mockRejectedValue(new Error("temporary snapshot failure"));
-  // Keep the unrelated adoption loop from running a second finalizer in this test.
-  vi.spyOn(backend, "withSessionLease").mockResolvedValue(false);
+  let finalize: Promise<unknown> | undefined;
+  vi.spyOn(backend, "withSessionLease").mockImplementation(
+    async (_session, action) => {
+      finalize = action();
+      await finalize;
+      return true;
+    },
+  );
   const deletion = vi
     .spyOn(backend, "deleteWorkspace")
     .mockImplementation(async () => {
@@ -179,6 +189,9 @@ test("expiry retains the workspace until final transcript capture succeeds", asy
   expect(
     (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
   ).toBe("deleting");
+  await expect.poll(() => finalize !== undefined).toBe(true);
+  await expect(finalize).rejects.toThrow("temporary snapshot failure");
+  expect((await AgentRunModel.findByTaskId(task.id))?.endedAt).toBeNull();
   snapshot.mockImplementation(async ({ destination }) => {
     destination.end("final output before expiry");
   });
@@ -190,14 +203,14 @@ test("expiry retains the workspace until final transcript capture succeeds", asy
 });
 
 test.for([
-  "TASK_STATE_COMPLETED",
-  "TASK_STATE_FAILED",
-  "TASK_STATE_CANCELED",
-] as const)("terminal reconciliation retains %s work and cannot delete a newer turn", async (state, {
-  makeOrganization,
-  makeUser,
-  makeAgent,
-}) => {
+  { state: "TASK_STATE_COMPLETED", suspended: false },
+  { state: "TASK_STATE_FAILED", suspended: false },
+  { state: "TASK_STATE_CANCELED", suspended: false },
+  { state: "TASK_STATE_CANCELED", suspended: true },
+] as const)("terminal reconciliation retains %s work and cannot delete a newer turn", async ({
+  state,
+  suspended,
+}, { makeOrganization, makeUser, makeAgent }) => {
   const organization = await makeOrganization();
   const user = await makeUser();
   const agent = await makeAgent({ organizationId: organization.id });
@@ -240,7 +253,7 @@ test.for([
       destination.end("partial");
     },
   );
-  let stopped = state !== "TASK_STATE_CANCELED";
+  let stopped = state === "TASK_STATE_COMPLETED";
   vi.spyOn(backend, "snapshotOutput").mockImplementation(
     async ({ destination }) => {
       destination.end(stopped ? "complete first turn" : "partial");
@@ -249,15 +262,16 @@ test.for([
   const teardown = vi.spyOn(backend, "teardown").mockResolvedValue();
   const stop = vi.spyOn(backend, "stopRun").mockImplementation(async () => {
     stopped = true;
+    return suspended ? "suspended" : undefined;
   });
   const release = vi.spyOn(backend, "releaseRun").mockResolvedValue();
   await cleanupAgentRun(run);
   expect(teardown).not.toHaveBeenCalled();
-  expect(stop).toHaveBeenCalledTimes(state === "TASK_STATE_CANCELED" ? 1 : 0);
+  expect(stop).toHaveBeenCalledTimes(state === "TASK_STATE_COMPLETED" ? 0 : 1);
   expect(release).toHaveBeenCalledWith(run);
   expect(
     (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
-  ).toBe("idle");
+  ).toBe(suspended ? "suspended" : "idle");
   const chunks: Buffer[] = [];
   await agentRunTranscriptStore.stream({
     runId: run.id,
@@ -290,7 +304,7 @@ test.for([
   );
   await cleanupAgentRun(run);
   expect(teardown).not.toHaveBeenCalled();
-  expect(stop).toHaveBeenCalledTimes(state === "TASK_STATE_CANCELED" ? 1 : 0);
+  expect(stop).toHaveBeenCalledTimes(state === "TASK_STATE_COMPLETED" ? 0 : 1);
   expect(
     (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))
       ?.activeTaskId,

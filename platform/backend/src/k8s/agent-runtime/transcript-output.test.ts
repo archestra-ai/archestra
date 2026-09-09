@@ -1,11 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { Writable } from "node:stream";
-import { CoreV1Api, Exec } from "@kubernetes/client-node";
+import { CoreV1Api, Exec, KubeConfig } from "@kubernetes/client-node";
 import type WebSocket from "ws";
 import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
 import { expect, test, vi } from "@/test";
 import manager from "./manager";
+
+// This manager caches its clients. Isolate the fake cluster from other files,
+// including the opt-in tests that exercise a real Kubernetes controller.
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    agentRuntime: { enabled: true },
+    orchestrator: {
+      kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
+    },
+  }),
+);
 
 for (const outcome of ["success", "disconnect", "failure", "abort"] as const) {
   test(`transcript snapshots require confirmed completion: ${outcome}`, async ({
@@ -13,6 +24,19 @@ for (const outcome of ["success", "disconnect", "failure", "abort"] as const) {
     makeUser,
     makeAgent,
   }) => {
+    vi.spyOn(manager, "isEnabled", "get").mockReturnValue(true);
+    vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
+      function (this: KubeConfig) {
+        this.loadFromOptions({
+          clusters: [
+            { name: "test", server: "https://kubernetes.example.test" },
+          ],
+          users: [{ name: "test" }],
+          contexts: [{ name: "test", cluster: "test", user: "test" }],
+          currentContext: "test",
+        });
+      },
+    );
     const organization = await makeOrganization();
     const user = await makeUser();
     const agent = await makeAgent({ organizationId: organization.id });

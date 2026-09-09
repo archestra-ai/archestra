@@ -1,5 +1,10 @@
-import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
+} from "@/models";
+import { describe, expect, test, vi } from "@/test";
 
 test("context continuation chooses the latest run without crossing owner or Agent boundaries", async ({
   makeOrganization,
@@ -40,6 +45,18 @@ test("context continuation chooses the latest run without crossing owner or Agen
         id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
       }),
     );
+    await AgentWorkspaceModel.create({
+      organizationId: org.id,
+      agentId,
+      actorKind: "user",
+      actorId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: `workspace-${task.id}`,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
   }
   const lookup = {
     contextId: context.id,
@@ -63,6 +80,24 @@ test("context continuation chooses the latest run without crossing owner or Agen
       contextId: crypto.randomUUID(),
     }),
   ).toBeNull();
+  const latest = await AgentWorkspaceModel.findByWorkloadName(
+    runs[1].workloadName,
+  );
+  if (!latest) throw new Error("Expected retained workspace");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(new Date(latest.expiresAt.getTime() + 1));
+    expect(await AgentRunModel.findLatestInContext(lookup)).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+  await AgentWorkspaceModel.transition({
+    id: latest.id,
+    from: "idle",
+    to: "deleted",
+  });
+  // The older retained workspace must not be resurrected as a fallback.
+  expect(await AgentRunModel.findLatestInContext(lookup)).toBeNull();
 });
 
 describe("AgentRunModel completion notifications", () => {

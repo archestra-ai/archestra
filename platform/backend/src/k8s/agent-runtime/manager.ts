@@ -462,8 +462,37 @@ class AgentRuntimeManager {
 
   async releaseRun(session: AgentRunRecord): Promise<void> {
     await this.revokeVirtualKey(session);
-    await this.requireClients()
-      .coreApi.deleteNamespacedSecret({
+    const clients = this.requireClients();
+    // Keep the names for continuation's inherited-env unset list, but prevent
+    // replacement Pods and their exec shells from receiving stale credentials.
+    const name = agentRuntimeNames(session.workloadName).secret;
+    await withK8sApiRetry(
+      async () => {
+        const secret = await clients.coreApi.readNamespacedSecret({
+          namespace: session.runtimeScope,
+          name,
+        });
+        if (!Object.values(secret.data ?? {}).some(Boolean)) return;
+        await clients.coreApi.patchNamespacedSecret(
+          {
+            namespace: session.runtimeScope,
+            name,
+            body: {
+              metadata: { resourceVersion: secret.metadata?.resourceVersion },
+              data: Object.fromEntries(
+                Object.keys(secret.data ?? {}).map((key) => [key, ""]),
+              ),
+            },
+          },
+          setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+        );
+      },
+      { label: "clear retained Agent Runtime credentials" },
+    ).catch((error) => {
+      if (!isK8sNotFoundError(error)) throw error;
+    });
+    await clients.coreApi
+      .deleteNamespacedSecret({
         namespace: session.runtimeScope,
         name: pendingTurnSecretName(session),
       })
@@ -472,12 +501,12 @@ class AgentRuntimeManager {
       });
   }
 
-  async stopRun(session: AgentRunRecord): Promise<void> {
+  async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
     await this.revokeVirtualKey(session);
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
       await this.suspendWorkspace(session);
-      return;
+      return "suspended";
     }
     await this.execInPod({
       session,

@@ -57,12 +57,25 @@ class AgentRunModel {
     actorKind: AgentRunRecord["actorKind"];
     actorId: string;
   }): Promise<AgentRunRecord | null> {
-    const [run] = await db
-      .select(getTableColumns(schema.agentRunsTable))
+    const [result] = await db
+      .select({
+        run: getTableColumns(schema.agentRunsTable),
+        workspace: {
+          state: schema.agentWorkspacesTable.state,
+          expiresAt: schema.agentWorkspacesTable.expiresAt,
+        },
+      })
       .from(schema.agentRunsTable)
       .innerJoin(
         schema.a2aTasksTable,
         eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentRunsTable.workloadName,
+          schema.agentWorkspacesTable.workloadName,
+        ),
       )
       .where(
         and(
@@ -78,7 +91,14 @@ class AgentRunModel {
         desc(schema.agentRunsTable.id),
       )
       .limit(1);
-    return run ?? null;
+    // Only implicit context continuation falls back to a fresh workspace.
+    // Keep active/transitional workspaces so the claim still prevents overlap,
+    // and never search backwards into an older workspace after the latest expires.
+    return result?.workspace &&
+      !["deleted", "deleting"].includes(result.workspace.state) &&
+      result.workspace.expiresAt.getTime() > Date.now()
+      ? result.run
+      : null;
   }
 
   static async updateAttentionState(params: {

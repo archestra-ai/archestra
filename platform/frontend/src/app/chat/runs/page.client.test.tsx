@@ -28,8 +28,12 @@ const terminalState = vi.hoisted(() => ({
   } | null,
 }));
 
+vi.mock("next/navigation");
+
 vi.mock("@/lib/agent-runtime.query", () => ({
   useCancelAgentRun: () => cancelState,
+  useDeleteAgentWorkspace: () => ({ isPending: false, mutate: vi.fn() }),
+  useContinueAgentRun: () => ({ isPending: false, mutate: vi.fn() }),
   useMyAgentRun: () => queryState.value,
 }));
 

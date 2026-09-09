@@ -60,8 +60,8 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     await agentRuntimeManager.recoverRun(session);
   }
 
-  async stopRun(session: AgentRunRecord): Promise<void> {
-    await agentRuntimeManager.stopRun(session);
+  async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
+    return agentRuntimeManager.stopRun(session);
   }
 
   getWorkspaceConnection(

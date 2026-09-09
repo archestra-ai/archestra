@@ -170,6 +170,10 @@ async function startAgentRunSession(params: {
       );
     });
 
+  let claimedWorkspace = false;
+  let createdWorkspace:
+    | Awaited<ReturnType<typeof AgentWorkspaceModel.create>>
+    | undefined;
   try {
     if (workspace) {
       const claimed = await AgentWorkspaceModel.claim({
@@ -185,9 +189,10 @@ async function startAgentRunSession(params: {
           409,
           "This workspace is already in use or its retention deadline has passed",
         );
+      claimedWorkspace = true;
       await backend.continueRun({ session, spec });
     } else {
-      await AgentWorkspaceModel.create({
+      createdWorkspace = await AgentWorkspaceModel.create({
         organizationId: params.organizationId,
         agentId: params.agentId,
         actorKind: params.actor.kind,
@@ -208,29 +213,44 @@ async function startAgentRunSession(params: {
       await backend.stageInputs({ session, inputs: inputFiles });
     }
   } catch (error) {
-    // Nothing was scheduled, but a Secret holding the actor's personal
-    // credentials may already exist. Close the session so the reconciler does
-    // not adopt it, and remove whatever landed.
-    await (workspace
-      ? backend.releaseRun(session)
-      : backend.teardown(session)
-    ).catch((teardownError) => {
+    // A publication can succeed before its exec connection fails. Keep the
+    // claim until stopping that possibly-running turn has been acknowledged.
+    try {
+      let suspended = false;
+      if (claimedWorkspace)
+        suspended = (await backend.stopRun(session)) === "suspended";
+      if (workspace) {
+        await backend.releaseRun(session);
+        if (claimedWorkspace)
+          await AgentWorkspaceModel.release({
+            workloadName: session.workloadName,
+            taskId: session.taskId,
+            suspended,
+          });
+      } else {
+        if (createdWorkspace)
+          await AgentWorkspaceModel.transition({
+            id: createdWorkspace.id,
+            from: "active",
+            to: "deleting",
+          });
+        await backend.teardown(session);
+        if (createdWorkspace)
+          await AgentWorkspaceModel.transition({
+            id: createdWorkspace.id,
+            from: "deleting",
+            to: "deleted",
+          });
+      }
+      await AgentRunModel.close({ id: session.id });
+    } catch (cleanupError) {
+      // Leave the session open for terminal reconciliation, including failed
+      // stop/revoke attempts. Never release another task's workspace claim.
       logger.warn(
-        { error: teardownError, sessionId: session.id },
-        "Teardown after a failed Agent Runtime launch did not complete",
+        { error: cleanupError, sessionId: session.id },
+        "Cleanup after a failed Agent Runtime launch will retry",
       );
-    });
-    if (workspace)
-      await AgentWorkspaceModel.release({
-        workloadName: session.workloadName,
-        taskId: session.taskId,
-      });
-    await AgentRunModel.close({ id: session.id }).catch((error) => {
-      logger.warn(
-        { error, sessionId: session.id, taskId: session.taskId },
-        "Could not mark the Agent run as ended",
-      );
-    });
+    }
     throw error;
   }
 
@@ -322,16 +342,19 @@ export async function cleanupAgentRun(
   const task = await A2ATaskModel.findById(session.taskId);
   // Stop first: the supervisor publishes the final transcript before acknowledging
   // cancellation. Never stop a newer turn that already claimed this workspace.
+  let suspended = false;
   if (
     workspace?.activeTaskId === session.taskId &&
-    task?.state === "TASK_STATE_CANCELED"
+    (task?.state === "TASK_STATE_CANCELED" ||
+      task?.state === "TASK_STATE_FAILED")
   ) {
-    await backend.stopRun(session);
+    suspended = (await backend.stopRun(session)) === "suspended";
   }
   const output = new AgentRuntimeOutputCapture({
     backend,
     session,
-    throwOnSnapshotError: options?.requireTranscript,
+    throwOnSnapshotError:
+      options?.requireTranscript || workspace?.state === "deleting",
   });
   const stopCapture = new AbortController();
   const capture = output.follow(stopCapture.signal);
@@ -341,12 +364,13 @@ export async function cleanupAgentRun(
   await persistTranscript({
     session,
     output,
-    required: options?.requireTranscript,
+    required: options?.requireTranscript || workspace?.state === "deleting",
   });
   await backend.releaseRun(session);
   await AgentWorkspaceModel.release({
     workloadName: session.workloadName,
     taskId: session.taskId,
+    suspended,
   });
   await AgentRunModel.close({
     id: session.id,
@@ -448,9 +472,10 @@ async function followAgentRun(params: {
           : "failed",
     );
     let cleanupSucceeded = true;
+    let suspended = false;
     await (async () => {
-      if (outcome === "aborted" || params.abortSignal?.aborted) {
-        await backend.stopRun(session);
+      if (outcome !== "succeeded" || params.abortSignal?.aborted) {
+        suspended = (await backend.stopRun(session)) === "suspended";
         await output.recoverSnapshot(
           AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS),
         );
@@ -464,6 +489,12 @@ async function followAgentRun(params: {
       );
     });
     await persistTranscript({ session, output });
+    const workspace = await AgentWorkspaceModel.findByWorkloadName(
+      session.workloadName,
+    );
+    // Expiry owns strict final capture. Do not let this best-effort follower
+    // close the run and make the reaper skip a failed transcript recovery.
+    if (workspace?.state === "deleting") cleanupSucceeded = false;
     // Keep failed cleanup open so terminal reconciliation can retry it.
     if (cleanupSucceeded)
       await AgentRunModel.close({
@@ -479,6 +510,7 @@ async function followAgentRun(params: {
       await AgentWorkspaceModel.release({
         workloadName: session.workloadName,
         taskId: session.taskId,
+        suspended,
       });
     }
   }

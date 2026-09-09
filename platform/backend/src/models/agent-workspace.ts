@@ -72,12 +72,13 @@ class AgentWorkspaceModel {
   static async release(params: {
     workloadName: string;
     taskId: string;
+    suspended?: boolean;
   }): Promise<void> {
     const table = schema.agentWorkspacesTable;
     await db
       .update(table)
       .set({
-        state: "idle",
+        state: params.suspended ? "suspended" : "idle",
         activeTaskId: null,
         idleAt: new Date(),
         lastActivityAt: new Date(),

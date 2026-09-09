@@ -13,6 +13,7 @@ test("file access rejects other owners and resumes retained storage without an A
   makeUser,
   makeAgent,
 }) => {
+  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
   const org = await makeOrganization();
   const owner = await makeUser();
   const stranger = await makeUser();

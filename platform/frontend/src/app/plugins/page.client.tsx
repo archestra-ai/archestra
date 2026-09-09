@@ -61,11 +61,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -88,7 +83,6 @@ import {
   pluginActionHref,
 } from "./_parts/plugin-actions-model";
 import { PluginClientIcon } from "./_parts/plugin-client-icon";
-import { PluginGithubSyncBadge } from "./_parts/plugin-github-sync-badge";
 import { PluginInstallDialog } from "./_parts/plugin-install-dialog";
 import {
   ARCHESTRA_PLUGIN_AUTHOR_LABEL,
@@ -101,6 +95,7 @@ import {
   resolvePluginInstallSelection,
 } from "./_parts/plugin-page-config";
 import { PluginSourceIcon } from "./_parts/plugin-source-icon";
+import { PluginSourceInfo } from "./_parts/plugin-source-info";
 
 const PLUGINS_DESCRIPTION =
   "Plugins install client-native files on developer machines.";
@@ -438,11 +433,6 @@ function PluginsList() {
                   {plugin.description}
                 </div>
               )}
-              <div className="mt-1 text-xs text-muted-foreground">
-                {plugin.fileCount} {plugin.fileCount === 1 ? "file" : "files"}
-                <span aria-hidden="true"> · </span>
-                Updated {formatRelativeTimeFromNow(plugin.updatedAt)}
-              </div>
             </div>
           </div>
         );
@@ -493,34 +483,11 @@ function PluginsList() {
               </span>
             </div>
             <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-              {plugin.sourceKind === "github" ? (
-                <>
-                  <Github className="size-3.5 shrink-0" />
-                  <PluginGithubSyncBadge plugin={plugin} />
-                  {repo ? <span className="truncate">· {repo}</span> : null}
-                </>
-              ) : (
-                <>
-                  <Pencil className="size-3.5 shrink-0" />
-                  <span>Manual</span>
-                </>
-              )}
+              <PluginSourceInfo plugin={plugin} />
+              <span className="truncate">
+                {plugin.sourceKind === "github" ? repo : "Manual"}
+              </span>
             </div>
-            {plugin.pendingSourceSha ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="border-amber-500/40 text-amber-600 dark:text-amber-400"
-                  >
-                    Update available
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  A new source commit is waiting for review on the plugin page.
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
           </div>
         );
       },

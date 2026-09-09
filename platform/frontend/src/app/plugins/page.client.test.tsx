@@ -106,7 +106,7 @@ describe("PluginsPage", () => {
     );
   });
 
-  it("groups related facts into a compact table", () => {
+  it("groups related facts into a compact table", async () => {
     render(<PluginsPage />);
 
     for (const name of ["Plugin", "Details", "Visibility", "Actions"]) {
@@ -124,8 +124,13 @@ describe("PluginsPage", () => {
       ).not.toBeInTheDocument();
     }
     const pluginRow = screen.getByText("Policy Runtime").closest("tr");
-    expect(pluginRow).toHaveTextContent("13 files · Updated");
-    expect(screen.getByText("synced")).toBeVisible();
+    expect(pluginRow).not.toHaveTextContent("13 files");
+    await userEvent.hover(
+      screen.getByRole("button", { name: "GitHub source details" }),
+    );
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("13 files");
+    expect(tooltip).toHaveTextContent(/Last updated: Aug 23, 2026/);
   });
 
   it("attributes the vendor's own plugin to its author, not the deployment", () => {

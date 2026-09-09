@@ -26,6 +26,8 @@ async function main() {
     return response.json();
   };
   const started = await request('/api/client-connections', { clientId, platform });
+  if (!Number.isSafeInteger(started.interval) || started.interval < 1 || started.interval > 600) throw new Error('Invalid polling interval.');
+  const pollIntervalMs = started.interval * 1000;
   const verificationUrl = new URL(started.verificationPath, origin);
   if (verificationUrl.origin !== origin.origin || !/^[A-Za-z0-9_-]{43}$/.test(started.deviceCode)) throw new Error('Invalid connection response.');
   console.log('Open ' + verificationUrl.href);
@@ -41,7 +43,7 @@ async function main() {
   const deadline = Math.min(Date.parse(started.expiresAt), Date.now() + 600000);
   if (!Number.isFinite(deadline)) throw new Error('Invalid connection expiry.');
   while (Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
     let state;
     try { state = await request('/api/client-connections/poll', { deviceCode: started.deviceCode }); }
     catch (error) {

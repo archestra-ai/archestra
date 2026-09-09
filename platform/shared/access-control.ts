@@ -719,6 +719,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetClientConnectionInstaller]: {},
   [RouteId.StartClientConnection]: {},
   [RouteId.PollClientConnection]: {},
+  // Any signed-in user may review a request and approve their own setup.
+  // The decision service verifies setup ownership and revalidates its scope.
   [RouteId.GetClientConnection]: {},
   [RouteId.DecideClientConnection]: {},
   [RouteId.CreateConnectionSetup]: {},

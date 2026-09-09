@@ -13,6 +13,9 @@ let status: "approved" | "denied" | "expired";
 let downloads: number;
 let polls: number;
 let transientFailure: boolean;
+let interval: number;
+let startedAt: number;
+let firstPollDelay: number;
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "connect-installer-test-"));
@@ -21,11 +24,16 @@ beforeEach(async () => {
   downloads = 0;
   polls = 0;
   transientFailure = false;
+  interval = 1;
+  startedAt = 0;
+  firstPollDelay = 0;
   server = createServer((req, res) => {
     if (req.url === "/api/client-connections") {
+      startedAt = Date.now();
       res.setHeader("Content-Type", "application/json");
       res.end(
         JSON.stringify({
+          interval,
           deviceCode: "A".repeat(43),
           userCode: "ABCD-1234",
           verificationPath: "/connection?connectRequest=test",
@@ -34,6 +42,7 @@ beforeEach(async () => {
       );
     } else if (req.url === "/api/client-connections/poll") {
       polls++;
+      if (polls === 1) firstPollDelay = Date.now() - startedAt;
       if (transientFailure && polls === 1) {
         res.writeHead(503);
         res.end();
@@ -122,5 +131,24 @@ test("refuses plaintext remote origins before requesting credentials", async () 
   const result = await run("http://deployment.example");
   expect(result.code).toBe(1);
   expect(result.output).toContain("Use HTTPS");
+  expect(downloads).toBe(0);
+});
+
+test("waits for the server-provided polling interval before requesting approval status", async () => {
+  interval = 4;
+  const result = await run();
+  expect(result.code).toBe(0);
+  expect(firstPollDelay).toBeGreaterThanOrEqual(4_000);
+  expect(downloads).toBe(1);
+});
+
+test.each([
+  0, -1, 0.5, 601,
+])("rejects invalid polling interval %s without downloading setup", async (value) => {
+  interval = value;
+  const result = await run();
+  expect(result.code).toBe(1);
+  expect(result.output).toContain("Invalid polling interval");
+  expect(polls).toBe(0);
   expect(downloads).toBe(0);
 });

@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import ChatOpsChannelBindingModel from "./chatops-channel-binding";
 
@@ -9,7 +10,7 @@ describe("ChatOpsChannelBindingModel", () => {
     const organization = await makeOrganization();
     const firstAgent = await makeAgent({ organizationId: organization.id });
     const secondAgent = await makeAgent({ organizationId: organization.id });
-    await ChatOpsChannelBindingModel.create({
+    const first = await ChatOpsChannelBindingModel.create({
       organizationId: organization.id,
       provider: "slack",
       channelId: "dm:pending:user@example.com",
@@ -27,6 +28,11 @@ describe("ChatOpsChannelBindingModel", () => {
       isDm: true,
       dmOwnerEmail: "user@example.com",
     });
+    // Updates use the application clock; inserts use the database clock.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(
+      Math.max(first.updatedAt.getTime(), newest.updatedAt.getTime()) + 1_000,
+    );
     await ChatOpsChannelBindingModel.updateByIdAndOrganization({
       id: newest.id,
       organizationId: organization.id,
@@ -425,8 +431,7 @@ describe("ChatOpsChannelBindingModel", () => {
       const agent1 = await makeAgent({ agentType: "agent" });
       const agent2 = await makeAgent({ agentType: "agent" });
 
-      // Create older binding
-      await ChatOpsChannelBindingModel.create({
+      const first = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
         provider: "slack",
         channelId: "D-old",
@@ -436,8 +441,7 @@ describe("ChatOpsChannelBindingModel", () => {
         dmOwnerEmail: "user@example.com",
       });
 
-      // Create newer binding
-      await ChatOpsChannelBindingModel.create({
+      const second = await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
         provider: "slack",
         channelId: "D-new",
@@ -445,6 +449,16 @@ describe("ChatOpsChannelBindingModel", () => {
         agentId: agent2.id,
         isDm: true,
         dmOwnerEmail: "user@example.com",
+      });
+
+      // Consecutive inserts can share a timestamp. Control the clock used by
+      // updates so this tests recency independently of database clock resolution.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const updateTime =
+        Math.max(first.updatedAt.getTime(), second.updatedAt.getTime()) + 1_000;
+      vi.setSystemTime(updateTime);
+      await ChatOpsChannelBindingModel.update(second.id, {
+        agentId: agent2.id,
       });
 
       const found =
@@ -457,6 +471,21 @@ describe("ChatOpsChannelBindingModel", () => {
       expect(found).toBeDefined();
       expect(found?.agentId).toBe(agent2.id);
       expect(found?.channelId).toBe("D-new");
+
+      // Updating the first-created binding must make it the preferred binding.
+      vi.setSystemTime(updateTime + 1_000);
+      await ChatOpsChannelBindingModel.update(first.id, { agentId: agent1.id });
+
+      const afterUpdate =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: org.id,
+          provider: "slack",
+          dmOwnerEmail: "user@example.com",
+        });
+
+      expect(afterUpdate?.id).toBe(first.id);
+      expect(afterUpdate?.agentId).toBe(agent1.id);
+      expect(afterUpdate?.channelId).toBe("D-old");
     });
   });
 

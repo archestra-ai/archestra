@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { StrictMode } from "react";
 import {
   afterAll,
   afterEach,
@@ -70,7 +71,19 @@ const remoteAgent = {
   toolId: "tool-1",
 } as const;
 
-const server = setupServer();
+const server = setupServer(
+  http.post(`${REGISTRY_URL}/inspect`, () =>
+    HttpResponse.json({
+      name: remoteAgent.name,
+      description: remoteAgent.description,
+      agentCard: remoteAgent.agentCard,
+      cardHash: remoteAgent.cardHash,
+      selectedInterface: remoteAgent.connection.selectedInterface,
+      supportedAuthTypes: [remoteAgent.connection.authType],
+      selectedSecurityRequirement: remoteAgent.connection.securityRequirement,
+    }),
+  ),
+);
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
@@ -381,6 +394,71 @@ describe("external A2A agent routed pages", () => {
     await waitFor(() =>
       expect(updatedBody).toEqual({ scope: "org", teams: [], users: [] }),
     );
+  });
+
+  it("rechecks the saved Agent Card when the edit page opens", async () => {
+    let inspectedBody: unknown;
+    server.use(
+      http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
+      http.post(`${REGISTRY_URL}/inspect`, async ({ request }) => {
+        inspectedBody = await request.json();
+        return HttpResponse.json({
+          name: "Fresh Agent Card",
+          description: remoteAgent.description,
+          agentCard: remoteAgent.agentCard,
+          cardHash: remoteAgent.cardHash,
+          selectedInterface: remoteAgent.connection.selectedInterface,
+          supportedAuthTypes: [remoteAgent.connection.authType],
+          selectedSecurityRequirement:
+            remoteAgent.connection.securityRequirement,
+        });
+      }),
+    );
+
+    renderPage(
+      <StrictMode>
+        <A2aRemoteAgentDetailPage id={remoteAgent.id} />
+      </StrictMode>,
+    );
+
+    expect(
+      await screen.findByRole("status", { name: "Connection compatible" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Agent Card found" }),
+    ).toHaveTextContent("Fresh Agent Card");
+    expect(inspectedBody).toEqual({
+      source: { type: "well_known", url: remoteAgent.discoveryUrl },
+      auth: { type: remoteAgent.connection.authType },
+    });
+  });
+
+  it("shows a fresh unavailable status when the saved Agent Card cannot be reached", async () => {
+    server.use(
+      http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              message: "Unable to resolve the A2A Agent Card: fetch failed",
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
+
+    expect(
+      await screen.findByRole("alert", { name: "Agent Card unavailable" }),
+    ).toHaveTextContent("Unable to resolve the A2A Agent Card: fetch failed");
+    expect(
+      screen.queryByRole("status", { name: "Agent Card found" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("status", { name: "Connection compatible" }),
+    ).toBeNull();
   });
 
   it.each([

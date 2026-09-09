@@ -41,6 +41,8 @@ Use the visibility filters on the External Agents page to narrow the card or tab
 
 Select an external agent card or table row to open its detail page. Settings managers can change its base URL, authentication, display details, or visibility, then select **Save changes**. To pause or resume the connection everywhere without removing its assignments, use **Disable delegation** or **Enable delegation** in the page actions menu. Leave the credential blank to keep the stored secret.
 
+Opening the detail page rechecks Agent Cards discovered from a base URL. The connection section shows an error if the server is unavailable.
+
 The **Edit** action opens the same detail page. To remove a connection, first remove its assignments from internal agents, then open the ellipsis menu and select **Delete**. Removing it also removes its stored credential.
 
 ## Authentication

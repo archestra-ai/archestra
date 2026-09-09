@@ -5,7 +5,7 @@ import type {
   ResourceVisibilityScope,
 } from "@archestra/shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
@@ -74,7 +74,8 @@ export function A2aRemoteAgentForm({
   const formId = useId();
   const initial = valuesFromAgent(agent);
   const form = useForm<FormValues>({ defaultValues: initial });
-  const inspectMutation = useInspectA2aRemoteAgent();
+  const { mutate: inspectRemoteAgent, reset: resetRemoteAgentInspection } =
+    useInspectA2aRemoteAgent();
   const appName = useAppName();
   const { data: session } = useSession();
   const [inspection, setInspection] = useState<Inspection | null>(() =>
@@ -87,6 +88,7 @@ export function A2aRemoteAgentForm({
   const [inspectionError, setInspectionError] = useState<string | null>(null);
   const [inspectionPending, setInspectionPending] = useState(false);
   const requestRef = useRef(0);
+  const refreshedAgentIdRef = useRef<string | null>(null);
   const values = form.watch();
   const keepsLegacySource = !!agent && !storedWellKnownBaseUrl(agent);
   const urlRequiredMessage = keepsLegacySource
@@ -107,14 +109,10 @@ export function A2aRemoteAgentForm({
     [onDirtyChange],
   );
 
-  if (readOnly && agent) {
-    return <ReadOnlySummary agent={agent} currentUserId={session?.user?.id} />;
-  }
-
   const invalidateSource = () => {
     requestRef.current += 1;
     form.clearErrors("url");
-    inspectMutation.reset();
+    resetRemoteAgentInspection();
     setInspection(null);
     setCapabilitiesInspected(false);
     setCompatibleStamp(null);
@@ -123,67 +121,87 @@ export function A2aRemoteAgentForm({
   };
   const invalidateCompatibility = () => {
     requestRef.current += 1;
-    inspectMutation.reset();
+    resetRemoteAgentInspection();
     setCompatibleStamp(null);
     setInspectionError(null);
     setInspectionPending(false);
   };
 
-  const inspectCompatibility = ({
-    knownInspection,
-    nextAuthType = form.getValues("authType"),
-    nextHeaderName = form.getValues("headerName"),
-  }: {
-    knownInspection: Inspection;
-    nextAuthType?: AuthType;
-    nextHeaderName?: string;
-  }) => {
-    const draft = {
-      ...form.getValues(),
-      authType: nextAuthType,
-      headerName: nextHeaderName,
-    };
-    const source = sourceForInspection(draft, agent);
-    if (!source) return;
-    if (nextAuthType === "api_key" && !nextHeaderName.trim()) {
-      form.setError("headerName", { message: "A header name is required." });
-      return;
-    }
-    form.clearErrors("headerName");
-    const requestId = ++requestRef.current;
-    setInspectionPending(true);
-    setInspectionError(null);
-    inspectMutation.mutate(
-      {
-        source,
-        auth:
-          nextAuthType === "api_key"
-            ? { type: "api_key", headerName: nextHeaderName.trim() }
-            : { type: nextAuthType },
-      },
-      {
-        onSuccess: (result) => {
-          if (requestId !== requestRef.current) return;
-          if (!result) {
-            setInspectionError("The Agent Card inspection returned no data.");
+  const inspectCompatibility = useCallback(
+    ({
+      knownInspection,
+      nextAuthType = form.getValues("authType"),
+      nextHeaderName = form.getValues("headerName"),
+    }: {
+      knownInspection: Inspection;
+      nextAuthType?: AuthType;
+      nextHeaderName?: string;
+    }) => {
+      const draft = {
+        ...form.getValues(),
+        authType: nextAuthType,
+        headerName: nextHeaderName,
+      };
+      const source = sourceForInspection(draft, agent);
+      if (!source) return;
+      if (nextAuthType === "api_key" && !nextHeaderName.trim()) {
+        form.setError("headerName", { message: "A header name is required." });
+        return;
+      }
+      form.clearErrors("headerName");
+      const requestId = ++requestRef.current;
+      setInspectionPending(true);
+      setInspectionError(null);
+      inspectRemoteAgent(
+        {
+          source,
+          auth:
+            nextAuthType === "api_key"
+              ? { type: "api_key", headerName: nextHeaderName.trim() }
+              : { type: nextAuthType },
+        },
+        {
+          onSuccess: (result) => {
+            if (requestId !== requestRef.current) return;
+            if (!result) {
+              setInspectionError("The Agent Card inspection returned no data.");
+              setInspectionPending(false);
+              return;
+            }
+            setInspection(result);
+            setCapabilitiesInspected(true);
+            setCompatibleStamp(connectionStamp(draft, agent));
             setInspectionPending(false);
-            return;
-          }
-          setInspection(result);
-          setCapabilitiesInspected(true);
-          setCompatibleStamp(connectionStamp(draft, agent));
-          setInspectionPending(false);
+          },
+          onError: (error) => {
+            if (requestId !== requestRef.current) return;
+            setInspection(knownInspection);
+            setCompatibleStamp(null);
+            setInspectionError(getApiErrorMessage(error));
+            setInspectionPending(false);
+          },
         },
-        onError: (error) => {
-          if (requestId !== requestRef.current) return;
-          setInspection(knownInspection);
-          setCompatibleStamp(null);
-          setInspectionError(getApiErrorMessage(error));
-          setInspectionPending(false);
-        },
-      },
-    );
-  };
+      );
+    },
+    [agent, form, inspectRemoteAgent],
+  );
+
+  useEffect(() => {
+    if (
+      readOnly ||
+      !agent ||
+      !storedWellKnownBaseUrl(agent) ||
+      refreshedAgentIdRef.current === agent.id
+    )
+      return;
+    refreshedAgentIdRef.current = agent.id;
+    inspectCompatibility({ knownInspection: inspectionFromAgent(agent) });
+    return () => {
+      if (refreshedAgentIdRef.current === agent.id) {
+        refreshedAgentIdRef.current = null;
+      }
+    };
+  }, [agent, inspectCompatibility, readOnly]);
 
   const inspectSource = async () => {
     if (!(await form.trigger("url"))) return;
@@ -195,7 +213,7 @@ export function A2aRemoteAgentForm({
     setInspectionError(null);
     setInspection(null);
     setCompatibleStamp(null);
-    inspectMutation.mutate(
+    inspectRemoteAgent(
       { source },
       {
         onSuccess: (result) => {
@@ -319,7 +337,7 @@ export function A2aRemoteAgentForm({
     setCompatibleStamp(agent ? connectionStamp(resetValues, agent) : null);
     setInspectionError(null);
     setInspectionPending(false);
-    inspectMutation.reset();
+    resetRemoteAgentInspection();
   };
   const submit = form.handleSubmit(() => {
     if (!validateCredential()) return;
@@ -345,6 +363,10 @@ export function A2aRemoteAgentForm({
     hasRequiredCredential &&
     hasValidAccessSelection &&
     (!agent || isDirty);
+
+  if (readOnly && agent) {
+    return <ReadOnlySummary agent={agent} currentUserId={session?.user?.id} />;
+  }
 
   return (
     <>
@@ -411,11 +433,15 @@ export function A2aRemoteAgentForm({
                 </output>
               ) : null}
               {inspectionError ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p
+                  role="alert"
+                  aria-label="Agent Card unavailable"
+                  className="text-sm text-destructive"
+                >
                   {inspectionError}
                 </p>
               ) : null}
-              {inspection ? (
+              {inspection && !inspectionError ? (
                 <output
                   aria-label="Agent Card found"
                   className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"

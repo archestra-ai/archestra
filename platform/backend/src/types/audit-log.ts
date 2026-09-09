@@ -107,6 +107,7 @@ export const AuditEventNameSchema = z.enum([
   "knowledgeDirectory.bulk_deleted",
   "knowledgeFile.created",
   "knowledgeFile.updated",
+  "knowledgeFile.content_upserted",
   "knowledgeFile.deleted",
   "knowledgeFile.bulk_updated",
   "knowledgeFile.bulk_deleted",

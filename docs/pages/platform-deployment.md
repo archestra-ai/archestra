@@ -1825,6 +1825,14 @@ See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses lo
 
 ### Knowledge Base Configuration
 
+JavaScript-rendered web crawls need Chromium on each backend worker.
+Set `ARCHESTRA_KNOWLEDGE_BASE_CRAWLER_CHROMIUM_PATH` to its executable path.
+When unset, Playwright uses its default installed Chromium location.
+The standard image does not bundle Chromium; provide it in a custom image.
+Run the browser as a non-root user with Chromium sandbox support.
+For local development, the path can point to an installed Chrome executable.
+
+
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
 
 - **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge#embedding-configuration) and [Search Ranking Configuration](/docs/platform-knowledge#search-ranking-configuration) for how to pick the key and model.

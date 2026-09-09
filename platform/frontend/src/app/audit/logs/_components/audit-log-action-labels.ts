@@ -112,6 +112,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "knowledgeDirectory.deleted": "Knowledge directory deleted",
   "knowledgeFile.created": "Knowledge file created",
   "knowledgeFile.updated": "Knowledge file updated",
+  "knowledgeFile.content_upserted": "Knowledge file content saved",
   "knowledgeFile.deleted": "Knowledge file deleted",
   // Limit
   "limit.created": "Limit created",

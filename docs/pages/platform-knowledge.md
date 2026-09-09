@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-09-08
+lastUpdated: 2026-09-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -248,6 +248,64 @@ Directories group documents and are flat — no sub-directories. Create one from
 Uploading stores a document; indexing makes it retrievable. Select documents or whole directories, choose **Add to knowledge base**, and pick an existing base or create one from the selection.
 
 A file attached to a chat belongs to that conversation. To keep it, save it to the repository — from the attachment in the message, or from the Files panel, where you can select several at once. You choose the name, directory and visibility as you save, and can index it in one step.
+
+### External Ingestion
+
+External pipelines can upload through the authenticated Knowledge Files API.
+`POST /api/knowledge-files` stores a file.
+`POST /api/knowledge-files/index` indexes uploaded file IDs into a knowledge base.
+
+For recurring imports, use `PUT /api/knowledge-files/:fileId/content`.
+Generate a UUID once for each source document and reuse it for later imports.
+The request creates or replaces the file, then indexes its content.
+Existing audiences and labels stay unchanged. New files use organization-wide visibility.
+Only the original uploader can replace a file.
+
+```python
+import base64
+import os
+import requests
+
+# Persist this UUID for this source document. Use a different UUID for each document.
+file_id = "ce4b5d70-0bab-4e83-b2cc-8c2d934c7f45"
+response = requests.put(
+    f"{os.environ['ARCHESTRA_URL']}/api/knowledge-files/{file_id}/content",
+    headers={"Authorization": os.environ["ARCHESTRA_API_KEY"]},
+    json={
+        "filename": "market-report.md",
+        "mimeType": "text/markdown",
+        "content": base64.b64encode(open("market-report.md", "rb").read()).decode(),
+        "knowledgeBaseId": os.environ["KNOWLEDGE_BASE_ID"],
+    },
+    timeout=120,
+)
+response.raise_for_status()
+for result in response.json()["results"]:
+    if result["failures"]:
+        raise RuntimeError(result["failures"])
+```
+
+Use an API key with `knowledgeSource:create` and `knowledgeSource:update` permissions.
+The key's user needs access to the target knowledge base.
+Replacement also refreshes other knowledge bases already linked to the file.
+The caller needs access to each linked base.
+
+Check every result's `failures` array, even after an HTTP success.
+Files remain stored when indexing fails; retry the same request after fixing the cause.
+Embeddings run asynchronously. Send updates for the same file sequentially.
+A different file with the same filename in the same directory causes a conflict.
+
+### Market Monitoring
+
+A marketing agent summarizes mentions of a fictional product, Northstar, each week.
+A connector crawls its configured public sites daily.
+The agent queries their shared knowledge base through a weekly schedule trigger.
+
+For pages needing custom fetching, an external pipeline imports Markdown reports instead.
+Include the source URL and capture date in each report.
+Reuse a file UUID to keep the latest content.
+Use distinct UUIDs and dated filenames to retain daily snapshots for comparisons.
+Crawler refreshes update pages; they do not retain daily versions.
 
 ### Chat, Project, and Knowledge Files
 
@@ -968,19 +1026,19 @@ Every permission sync also snapshots the org's groups and queues with their (rec
 
 ### Web Crawler
 
-Crawl static HTML pages from a documentation site or public web property.
+Crawl HTML pages from public websites. Static fetching is the default.
 
-**Indexed:** same-host HTML pages discovered from the start URL. The crawler extracts page text, removes common navigation and layout elements, and stores each page with its canonical URL when one is present.
+**Indexed:** HTML pages discovered from the configured seed URLs and allowed origins. The crawler extracts page text, removes common navigation and layout elements, and stores each page with its canonical URL when one is present.
 
 **Authentication:** none in the initial version. The crawler only fetches pages reachable over HTTP(S).
 
 Private and internal network addresses are blocked. Start URLs and discovered pages cannot resolve to loopback, link-local, RFC 1918 private ranges, cloud metadata endpoints, or other reserved address ranges. Hosts are checked before each fetch, but DNS records can change between validation and the final network request.
 
-If the start URL is the site root, such as `https://example.com/`, and no include path prefixes are configured, the crawler can discover any same-host page within the configured depth and page limits.
+If the start URL is the site root, such as `https://example.com/`, and no include path prefixes are configured, the crawler can discover any page on that origin within the configured depth and page limits.
 
 | Field                 | Description                                                                                              |
 | --------------------- | -------------------------------------------------------------------------------------------------------- |
-| Start URL             | First page to crawl. Crawling stays on the same host.                                                    |
+| Start URL             | First page to crawl. Its origin is automatically allowed.                                                    |
 | Include Path Prefixes | Comma-separated paths to crawl, such as `/docs/` or `/guides/`. Defaults to the start URL path.          |
 | Exclude Path Patterns | Comma-separated regular expressions matched against path and query, such as `/search` or `/archive/.*`. |
 | Content Selector      | CSS selector for the page content root. Leave blank to use default document selectors.                   |
@@ -990,6 +1048,27 @@ If the start URL is the site root, such as `https://example.com/`, and no includ
 | Batch Size            | Documents yielded per sync batch (default: `25`).                                                        |
 | Request Delay         | Optional delay between requests, in milliseconds.                                                        |
 | User Agent            | Optional custom User-Agent header for crawl requests.                                                    |
+
+Additional start URLs are fetched even when no other page links to them.
+Their origins are automatically allowed.
+Additional allowed origins are followed only when discovered through links.
+An origin includes the scheme, hostname, and port.
+Redirects obey the same origin and path restrictions.
+Page limits apply to the entire connector; depth starts at zero for each seed.
+
+Without explicit path prefixes, each seed limits crawling to its containing directory.
+Origins allowed without seeds have no default path restriction.
+Relative include prefixes apply to every origin.
+Absolute include-prefix URLs apply only to their own origin.
+
+Enable **Render JavaScript** for pages whose content loads in the browser.
+The server needs Chromium; see [deployment configuration](/docs/platform-deployment#knowledge-base-configuration).
+Rendering loads the page after its initial HTTP fetch.
+A configured content selector waits for that element to appear.
+Render Wait adds a bounded delay for asynchronous content.
+Rendering is slower than static fetching. It does not click buttons or scroll pages.
+Hash-only navigation links are not crawled. WebSockets and service workers are disabled.
+Public cross-origin scripts and API requests can load; private-network checks still apply.
 
 ### Perforce (Helix Core)
 

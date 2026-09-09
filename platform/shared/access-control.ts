@@ -2091,6 +2091,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetKnowledgeFileLabelValues]: { knowledgeSource: ["read"] },
   [RouteId.GetKnowledgeFileContent]: { knowledgeSource: ["read"] },
   [RouteId.GetKnowledgeDirectories]: { knowledgeSource: ["read"] },
+  [RouteId.UpsertKnowledgeFile]: { knowledgeSource: ["create", "update"] },
   [RouteId.UploadKnowledgeFile]: { knowledgeSource: ["create"] },
   [RouteId.PromoteAttachmentToKnowledgeFile]: { knowledgeSource: ["create"] },
   [RouteId.CreateKnowledgeDirectory]: { knowledgeSource: ["create"] },

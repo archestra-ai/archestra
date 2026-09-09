@@ -20,6 +20,73 @@ describe("WebCrawlerConnector", () => {
     await Promise.all(servers.splice(0).map((server) => server.close()));
   });
 
+  test("crawls multiple seeds and allowed origins but never follows an unlisted origin", async () => {
+    let blockedRequests = 0;
+    const blocked = await createTestSite({
+      "/": (_req, res) => {
+        blockedRequests++;
+        sendHtml(res, "<main>Blocked</main>");
+      },
+    });
+    const linked = await createTestSite({
+      "/": html("<main>Linked page</main>"),
+    });
+    const additional = await createTestSite({
+      "/news/": html("<main>Independent seed</main>"),
+    });
+    const primary = await createTestSite({
+      "/docs/": html(
+        `<main>Primary<a href="${linked.url}/">Allowed</a><a href="${blocked.url}/">Blocked</a></main>`,
+      ),
+    });
+    const batches = await collectBatches({
+      startUrl: `${primary.url}/docs/`,
+      additionalStartUrls: [`${additional.url}/news/`],
+      allowedOrigins: [linked.url],
+    });
+    expect(
+      batches
+        .flatMap((batch) => batch.documents)
+        .map((doc) => doc.sourceUrl)
+        .sort(),
+    ).toEqual(
+      [
+        `${primary.url}/docs/`,
+        `${additional.url}/news/`,
+        `${linked.url}/`,
+      ].sort(),
+    );
+    expect(blockedRequests).toBe(0);
+  });
+
+  test("shares the page budget across seeds", async () => {
+    const first = await createTestSite({ "/": html("<main>First</main>") });
+    const second = await createTestSite({ "/": html("<main>Second</main>") });
+    const batches = await collectBatches({
+      startUrl: first.url,
+      additionalStartUrls: [second.url],
+      maxPages: 1,
+    });
+    expect(batches.flatMap((batch) => batch.documents)).toHaveLength(1);
+  });
+
+  test("rejects additional private origins and origins containing paths", async () => {
+    const connector = new WebCrawlerConnector();
+    expect(
+      await connector.validateConfig({
+        startUrl: "https://example.com",
+        additionalStartUrls: ["http://127.0.0.1/"],
+      }),
+    ).toMatchObject({ valid: false });
+    expect(
+      await connector.validateConfig({
+        allowPrivateNetwork: true,
+        startUrl: "https://example.com",
+        allowedOrigins: ["https://example.org/private/"],
+      }),
+    ).toMatchObject({ valid: false });
+  });
+
   test("validates crawl scope and regular expression config", async () => {
     const connector = new WebCrawlerConnector();
     // The crawl-scope assertions target an unresolvable test domain, so opt into
@@ -70,8 +137,7 @@ describe("WebCrawlerConnector", () => {
     });
     expect(crossOriginPrefix).toEqual({
       valid: false,
-      error:
-        "Include path prefix URLs must use the same origin as the start URL",
+      error: "Include path prefix URLs must use an allowed origin",
     });
 
     const invalidUrl = await connector.validateConfig({

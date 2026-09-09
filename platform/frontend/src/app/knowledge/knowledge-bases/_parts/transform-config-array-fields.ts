@@ -47,6 +47,8 @@ export function transformConfigArrayFields(
     "objects",
     "collectionIds",
     "includePathPrefixes",
+    "additionalStartUrls",
+    "allowedOrigins",
     "excludePathPatterns",
     "excludeSelectors",
   ];

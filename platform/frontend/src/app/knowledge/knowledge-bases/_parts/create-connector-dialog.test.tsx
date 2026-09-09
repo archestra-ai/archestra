@@ -552,6 +552,18 @@ describe("CreateConnectorDialog", () => {
           screen.getByLabelText(/Include Path Prefixes/),
         ).toBeInTheDocument();
       });
+      fireEvent.change(screen.getByLabelText(/Additional Start URLs/), {
+        target: { value: "https://news.example.org/" },
+      });
+      fireEvent.change(screen.getByLabelText(/Additional Allowed Origins/), {
+        target: { value: "https://blog.example.org" },
+      });
+      await user.click(
+        screen.getByRole("switch", { name: "Render JavaScript" }),
+      );
+      fireEvent.change(screen.getByLabelText(/Render Wait/), {
+        target: { value: "2000" },
+      });
       fireEvent.change(screen.getByLabelText(/Include Path Prefixes/), {
         target: { value: "/docs/, /guides/" },
       });
@@ -579,6 +591,10 @@ describe("CreateConnectorDialog", () => {
       expect(call[0].config).toMatchObject({
         type: "web_crawler",
         startUrl: "https://docs.example.com/docs/",
+        additionalStartUrls: ["https://news.example.org/"],
+        allowedOrigins: ["https://blog.example.org"],
+        renderJavaScript: true,
+        renderWaitMs: 2000,
         includePathPrefixes: ["/docs/", "/guides/"],
         excludeSelectors: [".sidebar", ".toc"],
         maxPages: 100,

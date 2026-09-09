@@ -15,6 +15,16 @@ import { A2ATaskStateSchema } from "./a2a-task";
  */
 export const AgentRuntimeBackendSchema = z.enum(["kubernetes"]);
 export type AgentRuntimeBackend = z.infer<typeof AgentRuntimeBackendSchema>;
+export const AgentWorkspaceStateSchema = z.enum([
+  "active",
+  "idle",
+  "suspending",
+  "suspended",
+  "resuming",
+  "deleting",
+  "deleted",
+]);
+export type AgentWorkspaceState = z.infer<typeof AgentWorkspaceStateSchema>;
 
 export const AgentRunActorKindSchema = z.enum([
   "user",
@@ -262,6 +272,17 @@ export type AgentRunStartupProgress = z.infer<
 
 /** A single run session plus the viewer's relationship to it. */
 export const GetAgentRunResponseSchema = SelectAgentRunSessionSchema.extend({
+  workspace: z
+    .object({
+      state: AgentWorkspaceStateSchema,
+      expiresAt: z.date(),
+      idleAt: z.date().nullable(),
+      connection: z
+        .object({ hostname: z.string(), shellCommand: z.string() })
+        .nullable(),
+    })
+    .nullable()
+    .optional(),
   viewerRole: AgentRunViewerRoleSchema,
   /** Present on the detail endpoint while an owned run is starting. */
   startupProgress: AgentRunStartupProgressSchema.nullable().optional(),

@@ -181,6 +181,20 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdParam: "taskId",
     action: "agentRun.canceled",
   },
+  "/api/agent-runs/:taskId/continue": {
+    resourceType: "agentRun",
+    action: "agentRun.created",
+  },
+  "/api/agent-runs/:taskId/workspace/files": {
+    resourceType: "agentRun",
+    resourceIdParam: "taskId",
+    action: "agentRun.updated",
+  },
+  "/api/agent-runs/:taskId/workspace": {
+    resourceType: "agentRun",
+    resourceIdParam: "taskId",
+    action: "agentRun.updated",
+  },
   "/api/agent-runs/:taskId": {
     resourceType: "agentRun",
     resourceIdParam: "taskId",

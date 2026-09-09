@@ -389,6 +389,9 @@ common_args=(
   --yolo
   --accept-hooks
 )
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  common_args+=(--continue)
+fi
 
 case "${runtime_mode}" in
   interactive)

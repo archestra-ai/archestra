@@ -2243,13 +2243,56 @@ Required RBAC permission: `plugin:admin`
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
+| `delete_workspace` | Permanently delete a retained runtime workspace and all of its files. | `agent:read` |
+| `read_workspace_file` | Read a file from your Agent Runtime's retained workspace using a run ID. | `agent:read` |
+| `write_workspace_file` | Create a file in your Agent Runtime's retained workspace using a run ID. | `agent:read` |
 | `start_run` | Start long-running work on an agent as a durable run and return immediately with its id. | `agent:read` |
 | `get_run` | Read a run's state and the output it has produced so far. | `agent:read` |
 | `list_runs` | List your runs on one agent, newest activity first. | `agent:read` |
 | `list_agent_runs` | List recent runs across one or more accessible Agents for a read-only operations dashboard. | `agent:read` |
 | `steer_run` | Interject one message into a live run's container session — a course correction without stopping the work. | `agent:read` |
-| `cancel_run` | Durably cancel a run. | `agent:read` |
+| `cancel_run` | Stop an active run. | `agent:read` |
 | `post_run_file` | Upload a file into the messaging-channel thread a run reports to — a demo recording, for example — so it renders natively there (Slack plays video uploads inline). | `agent:read` |
+
+#### delete_workspace
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `run_id` | `string` | Yes |  |
+| `confirm_delete` | `boolean` | Yes |  |
+
+
+#### read_workspace_file
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `run_id` | `string` | Yes |  |
+| `path` | `string` | Yes |  |
+| `encoding` | `"utf8" \| "base64"` | No |  |
+
+
+#### write_workspace_file
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `run_id` | `string` | Yes |  |
+| `path` | `string` | Yes |  |
+| `content` | `string` | Yes |  |
+| `encoding` | `"utf8" \| "base64"` | No |  |
+| `overwrite` | `boolean` | No |  |
+
 
 #### start_run
 
@@ -2298,6 +2341,13 @@ Required RBAC permission: `agent:read`
 | `run.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
 | `output` | `string` | Yes | The run's response artifact so far (tail, capped). |
 | `output_truncated` | `boolean` | Yes |  |
+| `workspace` | `object \| null` | Yes | The owner's retained workspace, independent of the run's terminal state. |
+| `workspace.state` | `"active" \| "idle" \| "suspending" \| "suspended" \| "resuming" \| "deleting" \| "deleted"` | Yes |  |
+| `workspace.retained_until` | `string` | Yes |  |
+| `workspace.can_continue` | `boolean` | Yes |  |
+| `workspace.connection` | `object \| null` | Yes |  |
+| `workspace.connection.hostname` | `string` | Yes |  |
+| `workspace.connection.shellCommand` | `string` | Yes |  |
 | `session` | `object \| null` | Yes | The live container session, when the run uses Agent Runtime. |
 | `session.attachable` | `boolean` | Yes | Whether a live container is carrying the run right now. |
 | `session.started_at` | `string \| null` | Yes |  |

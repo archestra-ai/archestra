@@ -3,10 +3,12 @@
 import {
   Bot,
   Copy,
+  Info,
   MoreHorizontal,
   Share2,
   Square,
   TerminalSquare,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -17,6 +19,7 @@ import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
 import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
+import { ContinueAgentRunDialog } from "@/components/continue-agent-run-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExecTerminalStatus } from "@/components/exec/exec-terminal-progress";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -27,14 +30,24 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useCancelAgentRun, useMyAgentRun } from "@/lib/agent-runtime.query";
+import { WorkspaceRetention } from "@/components/workspace-retention";
+import {
+  useCancelAgentRun,
+  useDeleteAgentWorkspace,
+  useMyAgentRun,
+} from "@/lib/agent-runtime.query";
+import { useRuntimeClock } from "@/lib/agent-runtime-time";
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const query = useMyAgentRun(taskId);
   const cancelRun = useCancelAgentRun();
+  const deleteWorkspace = useDeleteAgentWorkspace();
+  const [deleteWorkspaceDialogOpen, setDeleteWorkspaceDialogOpen] =
+    useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [continueDialogOpen, setContinueDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [connectionCommand, setConnectionCommand] = useState<string | null>(
@@ -43,6 +56,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [commandCopied, setCommandCopied] = useState(false);
   const run = query.data;
   usePageTitle(run?.title ?? "Agent Runtime");
+  const now = useRuntimeClock(Boolean(run?.workspace));
 
   // Metadata and the log stream are readable by shared viewers, but attaching
   // to the live terminal runs a shell under the owner's own credentials — so it
@@ -66,7 +80,16 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   }
 
   const live = !run || run.endedAt === null;
+  const availableConnectionCommand = live
+    ? connectionCommand
+    : run?.workspace?.connection?.shellCommand;
   const showLiveTerminal = (!run && query.isPending) || (isOwner && live);
+  const canContinue =
+    isOwner &&
+    !live &&
+    run?.workspace &&
+    ["idle", "suspended"].includes(run.workspace.state) &&
+    new Date(run.workspace.expiresAt).getTime() > now;
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background">
@@ -103,6 +126,11 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {canContinue && (
+                <Button size="sm" onClick={() => setContinueDialogOpen(true)}>
+                  <span>Continue</span>
+                </Button>
+              )}
               {isOwner && live && (
                 <Button
                   variant="outline"
@@ -137,12 +165,23 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      disabled={!connectionCommand}
+                      disabled={!availableConnectionCommand}
                       onSelect={() => setConnectionDialogOpen(true)}
                     >
                       <TerminalSquare className="size-4" />
                       <span>View connection details</span>
                     </DropdownMenuItem>
+                    {run.workspace &&
+                      ["idle", "suspended", "deleting"].includes(
+                        run.workspace.state,
+                      ) && (
+                        <DropdownMenuItem
+                          onSelect={() => setDeleteWorkspaceDialogOpen(true)}
+                        >
+                          <Trash2 className="size-4" />
+                          <span>Delete workspace</span>
+                        </DropdownMenuItem>
+                      )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -153,6 +192,25 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
 
       <section className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-6">
         {run && live && <AgentRunLiveness run={run} />}
+        {isOwner && !live && run?.workspace && (
+          <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-2 sm:items-center">
+              <Info aria-hidden className="mt-0.5 size-3.5 shrink-0 sm:mt-0" />
+              <span className="font-medium text-foreground">
+                {run.workspace.state === "suspended"
+                  ? "Workspace suspended; saved files are retained."
+                  : run.workspace.state === "idle"
+                    ? "Workspace ready for a follow-up."
+                    : run.workspace.state === "deleted"
+                      ? "Workspace removed. Run history remains available."
+                      : "Workspace is in use or changing state."}
+              </span>
+            </div>
+            {run.workspace.state !== "deleted" && (
+              <WorkspaceRetention expiresAt={run.workspace.expiresAt} />
+            )}
+          </output>
+        )}
         {showLiveTerminal ? (
           <AgentRunTerminal
             taskId={taskId}
@@ -183,13 +241,31 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         open={stopDialogOpen}
         onOpenChange={setStopDialogOpen}
         title="Stop this run?"
-        description="The Agent process will stop and its terminal output will be retained."
+        description="The Agent process will stop. Its workspace, saved files, and run history will be retained so you can continue later."
         isPending={cancelRun.isPending}
         confirmLabel="Stop run"
         pendingLabel="Stopping…"
         onConfirm={() =>
           cancelRun.mutate(taskId, {
             onSuccess: () => setStopDialogOpen(false),
+          })
+        }
+      />
+      <ContinueAgentRunDialog
+        taskId={taskId}
+        open={continueDialogOpen}
+        onOpenChange={setContinueDialogOpen}
+      />
+      <DeleteConfirmDialog
+        open={deleteWorkspaceDialogOpen}
+        onOpenChange={setDeleteWorkspaceDialogOpen}
+        title="Delete this workspace?"
+        description="This permanently removes the development environment and all its files. You cannot continue it afterward. Saved run transcripts remain available."
+        confirmLabel="Delete workspace"
+        isPending={deleteWorkspace.isPending}
+        onConfirm={() =>
+          deleteWorkspace.mutate(taskId, {
+            onSuccess: () => setDeleteWorkspaceDialogOpen(false),
           })
         }
       />
@@ -202,14 +278,16 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         open={connectionDialogOpen}
         onOpenChange={setConnectionDialogOpen}
         title="Terminal connection details"
-        description="Attach to this run from a shell with access to its cluster."
+        description="Connect from a terminal with access to this workspace's cluster."
         className="max-w-3xl"
         bodyClassName="space-y-2"
       >
-        <p className="text-sm font-medium">Manual attach command</p>
+        <p className="text-sm font-medium">
+          {live ? "Manual attach command" : "Workspace shell command"}
+        </p>
         <div className="flex flex-col gap-3 rounded-md border bg-slate-950 p-3 sm:flex-row sm:items-center">
           <code className="min-w-0 flex-1 break-all font-mono text-xs text-emerald-400">
-            {connectionCommand}
+            {availableConnectionCommand}
           </code>
           <Button
             className="shrink-0 self-end sm:self-auto"
@@ -217,9 +295,9 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
             size="sm"
             aria-label="Copy terminal command"
             onClick={async () => {
-              if (!connectionCommand) return;
+              if (!availableConnectionCommand) return;
               try {
-                await copyToClipboard(connectionCommand);
+                await copyToClipboard(availableConnectionCommand);
                 setCommandCopied(true);
                 toast.success("Terminal command copied");
                 setTimeout(() => setCommandCopied(false), 2000);

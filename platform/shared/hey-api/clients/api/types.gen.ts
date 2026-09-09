@@ -17592,6 +17592,273 @@ export type UpdateMemberDefaultModelResponses = {
 
 export type UpdateMemberDefaultModelResponse = UpdateMemberDefaultModelResponses[keyof UpdateMemberDefaultModelResponses];
 
+export type ReadAgentWorkspaceFileData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query: {
+        path: string;
+    };
+    url: '/api/agent-runs/{taskId}/workspace/files';
+};
+
+export type ReadAgentWorkspaceFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReadAgentWorkspaceFileError = ReadAgentWorkspaceFileErrors[keyof ReadAgentWorkspaceFileErrors];
+
+export type ReadAgentWorkspaceFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        path: string;
+        size: number;
+        sha256: string;
+        content_base64?: string;
+    };
+};
+
+export type ReadAgentWorkspaceFileResponse = ReadAgentWorkspaceFileResponses[keyof ReadAgentWorkspaceFileResponses];
+
+export type WriteAgentWorkspaceFileData = {
+    body: {
+        path: string;
+        content_base64: string;
+        overwrite?: boolean;
+    };
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/workspace/files';
+};
+
+export type WriteAgentWorkspaceFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type WriteAgentWorkspaceFileError = WriteAgentWorkspaceFileErrors[keyof WriteAgentWorkspaceFileErrors];
+
+export type WriteAgentWorkspaceFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        path: string;
+        size: number;
+        sha256: string;
+        content_base64?: string;
+    };
+};
+
+export type WriteAgentWorkspaceFileResponse = WriteAgentWorkspaceFileResponses[keyof WriteAgentWorkspaceFileResponses];
+
+export type DeleteAgentWorkspaceData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/workspace';
+};
+
+export type DeleteAgentWorkspaceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteAgentWorkspaceError = DeleteAgentWorkspaceErrors[keyof DeleteAgentWorkspaceErrors];
+
+export type DeleteAgentWorkspaceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'deleted';
+    };
+};
+
+export type DeleteAgentWorkspaceResponse = DeleteAgentWorkspaceResponses[keyof DeleteAgentWorkspaceResponses];
+
 export type GetAgentRuntimePreflightData = {
     body?: never;
     path: {
@@ -18389,6 +18656,15 @@ export type GetMyAgentRunResponses = {
         };
         projectName: string | null;
         projectIcon: string | null;
+        workspace?: {
+            state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
+            expiresAt: string;
+            idleAt: string | null;
+            connection: {
+                hostname: string;
+                shellCommand: string;
+            } | null;
+        } | null;
         viewerRole: 'owner' | 'shared';
         startupProgress?: {
             phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';
@@ -18518,6 +18794,99 @@ export type UpdateAgentRunResponses = {
 };
 
 export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRunResponses];
+
+export type ContinueAgentRunData = {
+    body: {
+        message: string;
+    };
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/continue';
+};
+
+export type ContinueAgentRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ContinueAgentRunError = ContinueAgentRunErrors[keyof ContinueAgentRunErrors];
+
+export type ContinueAgentRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        taskId: string;
+        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+        agentId: string;
+        agentName: string;
+        prompt: string;
+        projectId: string | null;
+        createdAt: string;
+    };
+};
+
+export type ContinueAgentRunResponse = ContinueAgentRunResponses[keyof ContinueAgentRunResponses];
 
 export type CancelAgentRunData = {
     body?: never;
@@ -89471,6 +89840,15 @@ export type GetProjectRunsResponses = {
         };
         projectName: string | null;
         projectIcon: string | null;
+        workspace?: {
+            state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
+            expiresAt: string;
+            idleAt: string | null;
+            connection: {
+                hostname: string;
+                shellCommand: string;
+            } | null;
+        } | null;
         viewerRole: 'owner' | 'shared';
         startupProgress?: {
             phase: 'queued' | 'scheduling' | 'pulling' | 'starting' | 'attaching';

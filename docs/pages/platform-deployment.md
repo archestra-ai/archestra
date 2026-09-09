@@ -942,6 +942,12 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
 - **`ARCHESTRA_AGENT_RUNTIME_EPHEMERAL_STORAGE_LIMIT`** - Maximum writable scratch space for one run. Kubernetes enforces the limit on the run's `emptyDir` volume.
   - Default: `10Gi`
 
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each Agent Sandbox workspace. Stores the runtime control directory and `/home/node`, including saved client sessions and working files. This is separate from disposable Docker scratch space.
+  - Default: `20Gi`
+
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime prerequisites](/docs/platform-agent-runtime#prerequisites).
+  - Default: the cluster's default storage class
+
 - **`ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.
   - Default: `600`
 

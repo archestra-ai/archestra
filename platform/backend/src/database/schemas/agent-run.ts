@@ -88,7 +88,7 @@ const agentRunsTable = pgTable(
   },
   (table) => [
     uniqueIndex("agent_runs_task_id_uidx").on(table.taskId),
-    uniqueIndex("agent_runs_workload_name_uidx").on(table.workloadName),
+    index("agent_runs_workload_name_idx").on(table.workloadName),
     index("agent_runs_agent_id_idx").on(table.agentId),
     index("agent_runs_organization_id_idx").on(table.organizationId),
     index("agent_runs_actor_user_id_idx").on(table.actorUserId),

@@ -55,6 +55,9 @@ args=(
   --mcp-config "${mcp_config}"
   --strict-mcp-config
 )
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  args+=(--continue)
+fi
 if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
   args+=(--append-system-prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT}")
 fi

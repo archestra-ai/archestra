@@ -237,8 +237,8 @@ export default {
   register(api) {
     api.on("agent_end", async (event, context) => {
       const runtimeDir = process.env.ARCHESTRA_AGENT_RUNTIME_DIR ?? "/var/run/archestra";
-      const taskId = process.env.ARCHESTRA_AGENT_RUNTIME_TASK_ID;
-      const expectedSessionKey = taskId ? `agent:main:${taskId}` : undefined;
+      const sessionId = process.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID ?? process.env.ARCHESTRA_AGENT_RUNTIME_TASK_ID;
+      const expectedSessionKey = sessionId ? `agent:main:${sessionId}` : undefined;
       if (expectedSessionKey && context?.sessionKey !== expectedSessionKey) return;
 
       const transcript = {
@@ -396,7 +396,7 @@ else
   printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
 fi
 
-session_key="agent:main:${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
+session_key="agent:main:${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}"
 
 case "${runtime_mode}" in
   interactive)

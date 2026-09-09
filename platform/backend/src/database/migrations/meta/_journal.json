@@ -3235,6 +3235,13 @@
       "when": 1788916474000,
       "tag": "0461_worthless_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 462,
+      "version": "7",
+      "when": 1788969217005,
+      "tag": "0462_agent_workspaces",
+      "breakpoints": true
     }
   ]
 }

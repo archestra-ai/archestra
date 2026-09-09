@@ -17,6 +17,8 @@ describe("buildAgentRunLaunchSpec", () => {
   let previousPlatformBaseUrl: string;
 
   beforeEach(() => {
+    // Subscription tests must not inherit a developer's global Vertex routing.
+    config.llm.anthropic.vertexAi.enabled = false;
     previousPlatformBaseUrl = config.agentRuntime.platformBaseUrl;
     config.agentRuntime.platformBaseUrl = "https://platform.example.test";
   });

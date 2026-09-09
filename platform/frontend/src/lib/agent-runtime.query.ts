@@ -6,7 +6,9 @@ import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   cancelAgentRun,
+  continueAgentRun,
   deleteAgentRun,
+  deleteAgentWorkspace,
   deleteAgentRuntimeCredential,
   getAgentRuntimePreflight,
   getAgentRunShare,
@@ -73,7 +75,10 @@ export function useMyAgentRun(taskId: string, enabled = true) {
     },
     enabled: enabled && !!taskId,
     refetchInterval: (query) =>
-      query.state.status === "error" || query.state.data?.endedAt
+      query.state.status === "error" ||
+      (query.state.data?.endedAt &&
+        (!query.state.data.workspace ||
+          query.state.data.workspace.state === "deleted"))
         ? false
         : 2_000,
     retry: (failureCount) => failureCount < 8,
@@ -112,6 +117,28 @@ export function useStartAgentRun() {
   });
 }
 
+export function useContinueAgentRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      taskId,
+      message,
+    }: {
+      taskId: string;
+      message: string;
+    }) => {
+      const { data, error } = await continueAgentRun({
+        path: { taskId },
+        body: { message },
+      });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["agent-runs"] }),
+  });
+}
+
 export function useCancelAgentRun() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -129,6 +156,21 @@ export function useCancelAgentRun() {
           queryKey: ["agent-runs", "mine"],
         }),
       ]);
+    },
+  });
+}
+
+export function useDeleteAgentWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { data, error } = await deleteAgentWorkspace({ path: { taskId } });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: async () => {
+      toast.success("Workspace deleted. Run history is still available.");
+      await queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
     },
   });
 }

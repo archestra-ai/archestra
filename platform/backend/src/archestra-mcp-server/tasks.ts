@@ -1,11 +1,14 @@
 import {
   TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
@@ -19,6 +22,7 @@ import {
   AgentModel,
   AgentRunModel,
   AgentTeamModel,
+  AgentWorkspaceModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
@@ -28,9 +32,12 @@ import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
 } from "@/services/agent-runtime/start-task";
+import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
+import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
 import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
+  AgentWorkspaceStateSchema,
 } from "@/types";
 import {
   catchError,
@@ -197,6 +204,19 @@ const GetRunOutputSchema = z.object({
     .string()
     .describe("The run's response artifact so far (tail, capped)."),
   output_truncated: z.boolean(),
+  workspace: z
+    .object({
+      state: AgentWorkspaceStateSchema,
+      retained_until: z.string(),
+      can_continue: z.boolean(),
+      connection: z
+        .object({ hostname: z.string(), shellCommand: z.string() })
+        .nullable(),
+    })
+    .nullable()
+    .describe(
+      "The owner's retained workspace, independent of the run's terminal state.",
+    ),
   session: z
     .object({
       attachable: z
@@ -269,6 +289,102 @@ const MAX_LISTED_RUNS = 50;
 
 const registry = defineArchestraTools([
   defineArchestraTool({
+    shortName: TOOL_DELETE_WORKSPACE_SHORT_NAME,
+    title: "Delete Workspace",
+    description:
+      "Permanently delete a retained runtime workspace and all of its files. Saved run transcripts remain available. Only the owner can delete it. Cancel any active run first and wait for it to finish. Use only when the requester explicitly asks to discard the workspace, not when they only ask to stop a run.",
+    schema: z.object({
+      run_id: z.string().uuid(),
+      confirm_delete: z.literal(true),
+    }),
+    handler: async ({ args, context }) => {
+      try {
+        const result = await deleteAgentWorkspace({
+          actor: requireActor(context),
+          taskId: args.run_id,
+        });
+        return structuredSuccessResult(
+          { run_id: args.run_id, state: result.state },
+          "Workspace deleted. Its files cannot be recovered; saved transcripts are still available.",
+        );
+      } catch (error) {
+        return catchError(error, "deleting the workspace");
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
+    title: "Read Workspace File",
+    description:
+      "Read a file from your Agent Runtime's retained workspace using a run ID. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. The workspace must be running. Shared transcript access does not grant file access.",
+    schema: z.object({
+      run_id: z.string().uuid(),
+      path: z.string().min(1).max(4096),
+      encoding: z.enum(["utf8", "base64"]).default("utf8"),
+    }),
+    handler: async ({ args, context }) => {
+      try {
+        const result = await accessAgentWorkspaceFile({
+          actor: requireActor(context),
+          taskId: args.run_id,
+          request: { operation: "read", path: args.path },
+        });
+        const { content_base64, ...metadata } = result;
+        return structuredSuccessResult(
+          {
+            ...metadata,
+            encoding: args.encoding,
+            content:
+              args.encoding === "base64"
+                ? content_base64
+                : new TextDecoder("utf-8", { fatal: true }).decode(
+                    Buffer.from(content_base64 ?? "", "base64"),
+                  ),
+          },
+          "Workspace file read.",
+        );
+      } catch (error) {
+        return catchError(
+          error,
+          "reading workspace file; use base64 encoding for binary content",
+        );
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+    title: "Write Workspace File",
+    description:
+      "Create a file in your Agent Runtime's retained workspace using a run ID. Paths are relative to /home/node/workspace. Accepts UTF-8 text or base64 binary uploads, maximum 4 MiB decoded. Existing files are preserved unless overwrite=true. Parent directories must exist. This changes the runtime filesystem; it does not post a file to Slack or the conversation's skill sandbox.",
+    schema: z.object({
+      run_id: z.string().uuid(),
+      path: z.string().min(1).max(4096),
+      content: z.string().max(5_592_408),
+      encoding: z.enum(["utf8", "base64"]).default("utf8"),
+      overwrite: z.boolean().default(false),
+    }),
+    handler: async ({ args, context }) => {
+      try {
+        const result = await accessAgentWorkspaceFile({
+          actor: requireActor(context),
+          taskId: args.run_id,
+          request: {
+            operation: "write",
+            path: args.path,
+            content_base64:
+              args.encoding === "base64"
+                ? args.content
+                : Buffer.from(args.content, "utf8").toString("base64"),
+            overwrite: args.overwrite,
+          },
+        });
+        return structuredSuccessResult(result, "Workspace file written.");
+      } catch (error) {
+        return catchError(error, "writing workspace file");
+      }
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_START_RUN_SHORT_NAME,
     title: "Start Run",
     description:
@@ -322,6 +438,12 @@ const registry = defineArchestraTools([
         const truncated = text.length > MAX_INLINED_OUTPUT_CHARS;
 
         const session = await AgentRunModel.findByTaskId(task.row.id);
+        const workspace =
+          session &&
+          session.actorKind === actor.kind &&
+          session.actorId === actor.id
+            ? await AgentWorkspaceModel.findByWorkloadName(session.workloadName)
+            : null;
 
         return structuredSuccessResult(
           {
@@ -329,6 +451,22 @@ const registry = defineArchestraTools([
             // The tail: the newest output is what a poller wants to see.
             output: truncated ? text.slice(-MAX_INLINED_OUTPUT_CHARS) : text,
             output_truncated: truncated,
+            workspace: workspace
+              ? {
+                  state: workspace.state,
+                  retained_until: workspace.expiresAt.toISOString(),
+                  can_continue:
+                    ["idle", "suspended"].includes(workspace.state) &&
+                    !workspace.activeTaskId &&
+                    workspace.expiresAt.getTime() > Date.now(),
+                  connection:
+                    session && ["active", "idle"].includes(workspace.state)
+                      ? resolveAgentRuntimeBackendDriver(
+                          session.backend,
+                        ).getWorkspaceConnection(session)
+                      : null,
+                }
+              : null,
             session: session
               ? {
                   attachable: session.endedAt === null,
@@ -480,7 +618,8 @@ const registry = defineArchestraTools([
     title: "Steer Run",
     description:
       "Interject one message into a live run's container session — a course correction " +
-      "without stopping the work. Only runs using Agent Runtime can be steered.",
+      "without stopping the work. If the run has finished and its workspace is retained, " +
+      "start a continuation there with the same Agent. Only Agent Runtime runs can be steered.",
     schema: z.object({
       task_id: z.string().uuid(),
       message: z.string().trim().min(1, "message is required."),
@@ -492,9 +631,9 @@ const registry = defineArchestraTools([
         if ("error" in task) return errorResult(task.error);
 
         const session = await AgentRunModel.findByTaskId(task.row.id);
-        if (!session || session.endedAt !== null) {
+        if (!session) {
           return errorResult(
-            "This run has no live container session to steer. In-process runs cannot be steered; finished ones no longer listen.",
+            "This run has no container workspace. In-process runs cannot be steered.",
           );
         }
         // Narrower than run access on purpose: steering types into a shell
@@ -507,6 +646,27 @@ const registry = defineArchestraTools([
         if (!runtime) {
           return errorResult(
             "The Agent no longer has Agent Runtime configured.",
+          );
+        }
+
+        if (session.endedAt) {
+          const continuation = await startDetachedAgentTask({
+            actor,
+            agentId: session.agentId,
+            message: args.message,
+            systemParams: {
+              resumeFromTaskId: session.taskId,
+              completionTarget: session.completionTarget ?? undefined,
+              projectId: session.projectId ?? undefined,
+            },
+          });
+          return structuredSuccessResult(
+            {
+              success: true,
+              task_id: continuation.id,
+              previous_task_id: session.taskId,
+            },
+            "Continuation started in the retained workspace using the same Agent.",
           );
         }
 
@@ -529,7 +689,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CANCEL_RUN_SHORT_NAME,
     title: "Cancel Run",
     description:
-      "Durably cancel a run. A container session carrying it is torn down.",
+      "Stop an active run. Its workspace, saved files, and history are retained for a later continuation; this does not delete the workspace.",
     schema: z.object({
       task_id: z.string().uuid(),
     }),

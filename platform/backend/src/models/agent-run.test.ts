@@ -1,6 +1,70 @@
 import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
+test("context continuation chooses the latest run without crossing owner or Agent boundaries", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const owner = await makeUser();
+  const other = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const otherAgent = await makeAgent({ organizationId: org.id });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: owner.id,
+  });
+  const runs = [];
+  for (const [index, actorId, agentId] of [
+    [0, owner.id, agent.id],
+    [1, owner.id, agent.id],
+    [2, other.id, agent.id],
+    [3, owner.id, otherAgent.id],
+  ] as const) {
+    const task = await A2ATaskModel.createForRun({
+      contextId: context.id,
+      agentId,
+    });
+    runs.push(
+      await AgentRunModel.create({
+        organizationId: org.id,
+        taskId: task.id,
+        agentId,
+        actorKind: "user",
+        actorId,
+        actorUserId: actorId,
+        workloadName: `workspace-${task.id}`,
+        backend: "kubernetes",
+        runtimeScope: "test",
+        id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      }),
+    );
+  }
+  const lookup = {
+    contextId: context.id,
+    agentId: agent.id,
+    organizationId: org.id,
+    actorKind: "user" as const,
+    actorId: owner.id,
+  };
+  expect((await AgentRunModel.findLatestInContext(lookup))?.id).toBe(
+    runs[1].id,
+  );
+  expect(
+    await AgentRunModel.findLatestInContext({
+      ...lookup,
+      organizationId: crypto.randomUUID(),
+    }),
+  ).toBeNull();
+  expect(
+    await AgentRunModel.findLatestInContext({
+      ...lookup,
+      contextId: crypto.randomUUID(),
+    }),
+  ).toBeNull();
+});
+
 describe("AgentRunModel completion notifications", () => {
   test("only one concurrent watcher can claim an execution's completion", async ({
     makeAgent,

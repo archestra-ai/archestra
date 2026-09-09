@@ -9,6 +9,7 @@ import type {
   AgentRuntimeSteerMode,
 } from "@/types";
 import { ApiError } from "@/types";
+import type { AgentWorkspaceFileRequest } from "@/types/agent-workspace-file";
 import type {
   AgentRunAttachment,
   AgentRunAttachProgress,
@@ -19,11 +20,8 @@ import type {
 } from "./types";
 
 /**
- * Kubernetes backend: one Job per session.
- *
- * A Job rather than a Deployment because a Deployment restarts a container
- * that finished, which would re-run a task's side effects every time it
- * succeeded.
+ * Kubernetes backend: one persistent Sandbox per workspace. Its supervisor
+ * executes each run once, retaining files without replaying completed turns.
  */
 class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
   readonly name = "kubernetes" as const;
@@ -45,6 +43,54 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
 
   async launch(spec: AgentRunLaunchSpec): Promise<void> {
     await agentRuntimeManager.launch(spec);
+  }
+
+  async continueRun(params: {
+    session: AgentRunRecord;
+    spec: AgentRunLaunchSpec;
+  }): Promise<void> {
+    await agentRuntimeManager.continueRun(params);
+  }
+
+  async releaseRun(session: AgentRunRecord): Promise<void> {
+    await agentRuntimeManager.releaseRun(session);
+  }
+
+  async recoverRun(session: AgentRunRecord): Promise<void> {
+    await agentRuntimeManager.recoverRun(session);
+  }
+
+  async stopRun(session: AgentRunRecord): Promise<void> {
+    await agentRuntimeManager.stopRun(session);
+  }
+
+  getWorkspaceConnection(
+    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope">,
+  ) {
+    return agentRuntimeManager.getWorkspaceConnection(session);
+  }
+
+  async accessWorkspaceFile(params: {
+    session: AgentRunRecord;
+    request: AgentWorkspaceFileRequest;
+  }) {
+    return agentRuntimeManager.accessWorkspaceFile(params);
+  }
+
+  async suspendWorkspace(
+    session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
+  ): Promise<void> {
+    await agentRuntimeManager.suspendWorkspace(session);
+  }
+
+  async resumeWorkspace(session: AgentRunRecord): Promise<void> {
+    await agentRuntimeManager.resumeWorkspace(session);
+  }
+
+  async deleteWorkspace(
+    session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
+  ): Promise<void> {
+    await agentRuntimeManager.deleteWorkspace(session);
   }
 
   async stageInputs(params: {
@@ -77,7 +123,7 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
   }
 
   async getStartupProgress(
-    session: Pick<AgentRunRecord, "taskId" | "runtimeScope">,
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
   ): Promise<AgentRunStartupProgress> {
     return agentRuntimeManager.getStartupProgress(session);
   }

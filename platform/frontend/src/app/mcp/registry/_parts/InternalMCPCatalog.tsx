@@ -1172,9 +1172,7 @@ export function InternalMCPCatalog({
                   onChange={setSort}
                   options={sortOptions}
                 />
-                {!selectedFacet && (
-                  <TableCardViewToggle order={["table", "cards"]} />
-                )}
+                {!selectedFacet && <TableCardViewToggle />}
               </>
             }
             search={

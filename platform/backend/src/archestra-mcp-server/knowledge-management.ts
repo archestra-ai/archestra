@@ -56,6 +56,10 @@ import {
 import * as metrics from "@/observability/metrics";
 import { hiddenKnowledgeConnectorViolation } from "@/services/integration-overrides";
 import {
+  canAccessKnowledgeBase,
+  validateKnowledgeBaseAccess,
+} from "@/services/knowledge-base-access";
+import {
   type AclEntry,
   ConnectorTypeSchema,
   InsertKnowledgeBaseConnectorSchema,
@@ -68,6 +72,7 @@ import {
   UpdateKnowledgeBaseSchema,
   UuidIdSchema,
 } from "@/types";
+import { KnowledgeBaseVisibilitySchema } from "@/types/knowledge-base";
 import { archestraMcpBranding } from "./branding";
 import { dynamicAccessContext } from "./dynamic-tools";
 import {
@@ -92,6 +97,8 @@ const AUTO_SYNC_REQUIRES_PERMISSION_ERROR =
 
 const KnowledgeBaseCreateToolArgsSchema = z
   .object({
+    visibility: KnowledgeBaseVisibilitySchema.optional(),
+    teamIds: z.array(z.string()).optional(),
     name: InsertKnowledgeBaseSchema.shape.name.describe(
       "Name of the knowledge base.",
     ),
@@ -103,6 +110,8 @@ const KnowledgeBaseCreateToolArgsSchema = z
 
 const KnowledgeBaseUpdateToolArgsSchema = z
   .object({
+    visibility: KnowledgeBaseVisibilitySchema.optional(),
+    teamIds: z.array(z.string()).optional(),
     id: UuidIdSchema.describe("Knowledge base ID."),
     name: UpdateKnowledgeBaseSchema.shape.name
       .optional()
@@ -620,7 +629,7 @@ async function handleQueryKnowledgeSources(params: {
             access,
             validKbs,
           )
-        : validKbs;
+        : validKbs.filter((kb) => kb.visibility === "org-wide");
 
       const directConnectors = directConnectorIds.length
         ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
@@ -823,10 +832,27 @@ async function handleCreateKnowledgeBase(params: {
       return errorResult("Organization context not available");
     }
 
+    if (args.visibility === "private" && !context.userId) {
+      return errorResult(
+        "Personal knowledge bases require an authenticated user",
+      );
+    }
+
+    await validateKnowledgeBaseAccess({
+      organizationId: context.organizationId,
+      visibility: args.visibility ?? "org-wide",
+      teamIds: args.teamIds ?? [],
+    });
     const kb = await KnowledgeBaseModel.create(
       InsertKnowledgeBaseSchema.parse({
         organizationId: context.organizationId,
         name: args.name,
+        createdBy: context.userId ?? null,
+        visibility: args.visibility ?? "org-wide",
+        teamIds:
+          args.visibility === "team-scoped"
+            ? [...new Set(args.teamIds ?? [])]
+            : [],
         description: args.description ?? null,
       }),
     );
@@ -847,7 +873,16 @@ async function handleGetKnowledgeBases(params: { context: ArchestraContext }) {
       return errorResult("Organization context not available");
     }
 
+    const access = context.userId
+      ? await knowledgeSourceAccessControlService.buildAccessControlContext({
+          userId: context.userId,
+          organizationId: context.organizationId,
+        })
+      : null;
     const kbs = await KnowledgeBaseModel.findByOrganization({
+      canReadAll: access?.canReadAll ?? false,
+      viewerTeamIds: access?.teamIds ?? [],
+      viewerUserId: context.userId,
       organizationId: context.organizationId,
     });
     if (kbs.length === 0) {
@@ -877,7 +912,14 @@ async function handleGetKnowledgeBase(params: {
     }
 
     const kb = await KnowledgeBaseModel.findById(args.id);
-    if (!kb || kb.organizationId !== context.organizationId) {
+    if (
+      !kb ||
+      !(await canAccessKnowledgeBase({
+        knowledgeBase: kb,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      }))
+    ) {
       return knowledgeBaseNotFound(args.id);
     }
     return structuredSuccessResult(
@@ -901,6 +943,8 @@ async function handleUpdateKnowledgeBase(params: {
     }
 
     const updates: Record<string, unknown> = {};
+    if (args.visibility !== undefined) updates.visibility = args.visibility;
+    if (args.teamIds !== undefined) updates.teamIds = args.teamIds;
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
     if (Object.keys(updates).length === 0) {
@@ -908,9 +952,25 @@ async function handleUpdateKnowledgeBase(params: {
     }
 
     const existing = await KnowledgeBaseModel.findById(args.id);
-    if (!existing || existing.organizationId !== context.organizationId) {
+    if (
+      !existing ||
+      !(await canAccessKnowledgeBase({
+        knowledgeBase: existing,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      }))
+    ) {
       return knowledgeBaseNotFound(args.id);
     }
+    const visibility = args.visibility ?? existing.visibility;
+    const teamIds = args.teamIds ?? existing.teamIds;
+    await validateKnowledgeBaseAccess({
+      organizationId: context.organizationId,
+      visibility,
+      teamIds,
+      current: existing,
+    });
+    updates.teamIds = visibility === "team-scoped" ? [...new Set(teamIds)] : [];
     const kb = await KnowledgeBaseModel.update(args.id, updates);
     if (!kb) {
       return knowledgeBaseNotFound(args.id);
@@ -936,7 +996,14 @@ async function handleDeleteKnowledgeBase(params: {
     }
 
     const existing = await KnowledgeBaseModel.findById(args.id);
-    if (!existing || existing.organizationId !== context.organizationId) {
+    if (
+      !existing ||
+      !(await canAccessKnowledgeBase({
+        knowledgeBase: existing,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      }))
+    ) {
       return knowledgeBaseNotFound(args.id);
     }
     // Shared service so this MCP path runs the same side-effects (cache
@@ -1372,7 +1439,11 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
     );
     if (
       !knowledgeBase ||
-      knowledgeBase.organizationId !== context.organizationId
+      !(await canAccessKnowledgeBase({
+        knowledgeBase,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      }))
     ) {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }
@@ -1450,7 +1521,11 @@ async function handleAssignKnowledgeBaseToAgent(params: {
     );
     if (
       !knowledgeBase ||
-      knowledgeBase.organizationId !== context.organizationId
+      !(await canAccessKnowledgeBase({
+        knowledgeBase,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      }))
     ) {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }

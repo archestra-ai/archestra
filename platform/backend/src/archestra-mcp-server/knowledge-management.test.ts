@@ -17,6 +17,7 @@ import {
   AgentExcludedConnectorModel,
   KbChunkModel,
   KbDocumentModel,
+  KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -775,6 +776,45 @@ describe("knowledge-management tool execution", () => {
       querySpy.mockRestore();
     });
 
+    for (const visibility of ["team-scoped", "private"] as const) {
+      test(`a ${visibility} KB blocks curated retrieval even when its connector is org-wide`, async ({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeTeam,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+        makeAgent,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+        const team = await makeTeam(org.id, (await makeUser()).id);
+        const kb = await makeKnowledgeBase(org.id, {
+          visibility,
+          teamIds: [team.id],
+        });
+        await makeKnowledgeBaseConnector(kb.id, org.id);
+        const agent = await makeAgent({
+          organizationId: org.id,
+          knowledgeBaseIds: [kb.id],
+        });
+        const result = await executeArchestraTool(
+          t("query_knowledge_sources"),
+          { query: "test" },
+          {
+            agent: { id: agent.id, name: agent.name },
+            organizationId: org.id,
+            userId: user.id,
+          },
+        );
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as { text: string }).text).toContain(
+          "No visible knowledge sources",
+        );
+      });
+    }
+
     test("returns error when no assigned knowledge source is visible to the caller", async ({
       makeAgent,
       makeOrganization,
@@ -878,6 +918,46 @@ describe("knowledge-management tool execution", () => {
         "Knowledge base created successfully",
       );
       expect((result.content[0] as any).text).toContain("Test KB");
+    });
+
+    test("personal knowledge bases created through MCP retain their owner and reject other members", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await executeArchestraTool(
+        t("create_knowledge_base"),
+        { name: "Personal notes", visibility: "private" },
+        mockContext,
+      );
+      expect(created.isError).toBe(false);
+      const kb = (created.structuredContent as { knowledgeBase: KnowledgeBase })
+        .knowledgeBase;
+      expect((await KnowledgeBaseModel.findById(kb.id))?.createdBy).toBe(
+        mockContext.userId,
+      );
+      const member = await makeUser();
+      await makeMember(member.id, mockContext.organizationId!, {
+        role: "member",
+      });
+      const context = { ...mockContext, userId: member.id };
+      const list = await executeArchestraTool(
+        t("get_knowledge_bases"),
+        {},
+        context,
+      );
+      expect(list.structuredContent).toEqual({ knowledgeBases: [] });
+      const denied = await executeArchestraTool(
+        t("get_knowledge_base"),
+        { id: kb.id },
+        context,
+      );
+      expect(denied.isError).toBe(true);
+      const own = await executeArchestraTool(
+        t("get_knowledge_base"),
+        { id: kb.id },
+        mockContext,
+      );
+      expect(own.isError).toBe(false);
     });
 
     test("get_knowledge_bases returns empty list", async () => {

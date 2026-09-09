@@ -1325,6 +1325,48 @@ describe("authenticateMCPGatewayRequest failure reasons", () => {
 });
 
 describe("buildKnowledgeSourcesDescription", () => {
+  test("does not advertise restricted KB names to another user or an unidentified caller", async ({
+    makeAgent,
+    makeOrganization,
+    makeKnowledgeBase,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    const outsider = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+    await makeMember(outsider.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, member.id);
+    await makeTeamMember(team.id, member.id);
+    const kb = await makeKnowledgeBase(org.id, {
+      name: "Restricted handbook",
+      visibility: "team-scoped",
+      teamIds: [team.id],
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      knowledgeBaseIds: [kb.id],
+    });
+    expect(
+      await buildKnowledgeSourcesDescription(agent.id, {
+        organizationId: org.id,
+        userId: member.id,
+      }),
+    ).toContain(kb.name);
+    expect(
+      await buildKnowledgeSourcesDescription(agent.id, {
+        organizationId: org.id,
+        userId: outsider.id,
+      }),
+    ).not.toContain(kb.name);
+    expect(await buildKnowledgeSourcesDescription(agent.id)).not.toContain(
+      kb.name,
+    );
+  });
+
   test("returns null when agent has no knowledge bases and no direct connectors", async ({
     makeAgent,
   }) => {

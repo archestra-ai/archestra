@@ -1,7 +1,11 @@
 import { HttpResponse, http } from "msw";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
+import {
+  KnowledgeBaseModel,
+  LlmProviderApiKeyModel,
+  OrganizationModel,
+} from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -424,6 +428,42 @@ describe("knowledge file routes", () => {
   });
 
   describe("indexing", () => {
+    test("hides restricted knowledge bases on readable files and denies indexing into them", async ({
+      makeTeam,
+      makeUser,
+    }) => {
+      const fileId = (await upload()).json().id;
+      const indexed = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files/index",
+        payload: {
+          fileIds: [fileId],
+          newKnowledgeBaseName: "Restricted handbook",
+        },
+      });
+      expect(indexed.statusCode).toBe(200);
+      const knowledgeBaseId = indexed.json().knowledgeBaseId;
+      const team = await makeTeam(organizationId, (await makeUser()).id);
+      await KnowledgeBaseModel.update(knowledgeBaseId, {
+        visibility: "team-scoped",
+        teamIds: [team.id],
+      });
+      const listed = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-files",
+      });
+      expect(listed.statusCode).toBe(200);
+      expect(
+        listed.json().data.find((file: { id: string }) => file.id === fileId),
+      ).toMatchObject({ knowledgeBases: [] });
+      const denied = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-files/index",
+        payload: { fileIds: [fileId], knowledgeBaseId },
+      });
+      expect(denied.statusCode).toBe(404);
+    });
+
     test("creates a knowledge base from a selection and links the document", async () => {
       const uploaded = await upload();
       const fileId = uploaded.json().id;

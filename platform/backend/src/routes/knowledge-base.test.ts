@@ -65,6 +65,297 @@ describe("knowledge base routes", () => {
     await app.close();
   });
 
+  describe("knowledge base team access", () => {
+    test("personal knowledge bases belong to their creator and stay hidden from other members", async ({
+      makeMember,
+      makeUser,
+      makeKnowledgeBase,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "member" });
+      const owner = user;
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-bases",
+        payload: { name: "Research notes", visibility: "private" },
+      });
+      expect(created.statusCode).toBe(200);
+      const id = created.json().id;
+      expect(await KnowledgeBaseModel.findById(id)).toMatchObject({
+        visibility: "private",
+        createdBy: owner.id,
+        teamIds: [],
+      });
+      const hiddenOwner = await makeUser();
+      const hidden = await makeKnowledgeBase(organizationId, {
+        visibility: "private",
+        createdBy: hiddenOwner.id,
+      });
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-bases?scope=personal&limit=1",
+      });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().pagination.total).toBe(1);
+      expect(list.json().data[0].id).toBe(id);
+      for (const method of ["GET", "PUT", "DELETE"] as const) {
+        const response = await app.inject({
+          method,
+          url: `/api/knowledge-bases/${hidden.id}`,
+          ...(method === "PUT" ? { payload: { visibility: "org-wide" } } : {}),
+        });
+        expect(response.statusCode).toBe(404);
+      }
+      user = hiddenOwner;
+      await makeMember(user.id, organizationId, { role: "member" });
+      expect(
+        (await app.inject({ method: "GET", url: `/api/knowledge-bases/${id}` }))
+          .statusCode,
+      ).toBe(404);
+      user = owner;
+      const shared = await app.inject({
+        method: "PUT",
+        url: `/api/knowledge-bases/${id}`,
+        payload: { visibility: "org-wide" },
+      });
+      expect(shared.statusCode).toBe(200);
+      await expect
+        .poll(async () =>
+          (
+            await AuditLogModel.findPaginated({
+              organizationId,
+              resourceType: "knowledgeBase",
+              limit: 20,
+              offset: 0,
+            })
+          ).data.find(
+            (row) =>
+              row.resourceId === id && row.action === "knowledgeBase.updated",
+          ),
+        )
+        .toMatchObject({
+          before: { visibility: "private" },
+          after: { visibility: "org-wide" },
+        });
+      user = hiddenOwner;
+      expect(
+        (await app.inject({ method: "GET", url: `/api/knowledge-bases/${id}` }))
+          .statusCode,
+      ).toBe(200);
+    });
+
+    test("scope and owner filters agree with pagination and keep other personal bases out of the default admin view", async ({
+      makeMember,
+      makeUser,
+      makeKnowledgeBase,
+      makeTeam,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
+      const other = await makeUser();
+      const team = await makeTeam(organizationId, user.id);
+      const own = await makeKnowledgeBase(organizationId, {
+        visibility: "private",
+        createdBy: user.id,
+      });
+      const theirs = await makeKnowledgeBase(organizationId, {
+        visibility: "private",
+        createdBy: other.id,
+      });
+      const shared = await makeKnowledgeBase(organizationId, {
+        visibility: "team-scoped",
+        teamIds: [team.id],
+      });
+      const org = await makeKnowledgeBase(organizationId);
+      for (const [query, ids] of [
+        ["excludeOtherPersonal=true", [own.id, shared.id, org.id]],
+        ["excludeOtherPersonal=false", [own.id, theirs.id, shared.id, org.id]],
+        [`scope=personal&authorIds=${user.id}`, [own.id]],
+        [`scope=personal&excludeAuthorIds=${user.id}`, [theirs.id]],
+        [`scope=team&teamIds=${team.id}`, [shared.id]],
+        ["scope=org", [org.id]],
+      ] as const) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/knowledge-bases?${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json().pagination.total).toBe(ids.length);
+        expect(
+          response
+            .json()
+            .data.map((kb: { id: string }) => kb.id)
+            .sort(),
+        ).toEqual([...ids].sort());
+      }
+    });
+
+    test("persists multiple teams, preserves document ACLs, and audits sharing changes", async ({
+      makeTeam,
+      makeMember,
+      makeKnowledgeBaseConnector,
+      makeKnowledgeBase,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
+      const engineering = await makeTeam(organizationId, user.id, {
+        name: "Engineering",
+      });
+      const support = await makeTeam(organizationId, user.id, {
+        name: "Support",
+      });
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { visibility: "team-scoped", teamIds: [engineering.id] },
+      );
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/knowledge-bases/${kb.id}`,
+        payload: {
+          visibility: "team-scoped",
+          teamIds: [engineering.id, support.id],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        visibility: "team-scoped",
+        teamIds: [engineering.id, support.id],
+      });
+      expect(
+        await KnowledgeBaseConnectorModel.findById(connector.id),
+      ).toMatchObject({ teamIds: [engineering.id] });
+      await expect
+        .poll(async () => {
+          const { data } = await AuditLogModel.findPaginated({
+            organizationId,
+            resourceType: "knowledgeBase",
+            limit: 20,
+            offset: 0,
+          });
+          return data.find(
+            (row) =>
+              row.resourceId === kb.id &&
+              row.action === "knowledgeBase.updated",
+          );
+        })
+        .toMatchObject({
+          before: { visibility: "org-wide", teamIds: [] },
+          after: {
+            visibility: "team-scoped",
+            teamIds: [engineering.id, support.id],
+          },
+        });
+      const renamed = await app.inject({
+        method: "PUT",
+        url: `/api/knowledge-bases/${kb.id}`,
+        payload: { name: "Renamed" },
+      });
+      expect(renamed.json().teamIds).toEqual([engineering.id, support.id]);
+    });
+
+    test("filters before pagination, hides direct reads and mutations, and inherits parent-team access", async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeKnowledgeBase,
+      makeUser,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "member" });
+      const owner = await makeUser();
+      const parent = await makeTeam(organizationId, owner.id);
+      const child = await makeTeam(organizationId, owner.id, {
+        parentId: parent.id,
+      });
+      await makeTeamMember(child.id, user.id);
+      const sibling = await makeTeam(organizationId, owner.id);
+      const visible = await makeKnowledgeBase(organizationId, {
+        visibility: "team-scoped",
+        teamIds: [parent.id, sibling.id],
+      });
+      const hidden = await makeKnowledgeBase(organizationId, {
+        visibility: "team-scoped",
+        teamIds: [sibling.id],
+      });
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/knowledge-bases?limit=1&offset=0",
+      });
+      expect(response.json().pagination.total).toBe(1);
+      expect(response.json().data.map((kb: { id: string }) => kb.id)).toEqual([
+        visible.id,
+      ]);
+      for (const method of ["GET", "PUT", "DELETE"] as const) {
+        const denied = await app.inject({
+          method,
+          url: `/api/knowledge-bases/${hidden.id}`,
+          ...(method === "PUT" ? { payload: { name: "Changed" } } : {}),
+        });
+        expect(denied.statusCode).toBe(404);
+      }
+      expect(await KnowledgeBaseModel.findById(hidden.id)).not.toBeNull();
+    });
+
+    test("rejects empty teams, foreign teams, and unlicensed team scope", async ({
+      makeTeam,
+      makeOrganization,
+    }) => {
+      const foreign = await makeTeam((await makeOrganization()).id, user.id);
+      for (const teamIds of [[], [foreign.id]]) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/knowledge-bases",
+          payload: { name: "Restricted", visibility: "team-scoped", teamIds },
+        });
+        expect(response.statusCode).toBe(400);
+      }
+      const team = await makeTeam(organizationId, user.id);
+      config.enterpriseFeatures.knowledgeBase = false;
+      enterpriseTier.setUserCountForTesting(100);
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-bases",
+        payload: {
+          name: "Restricted",
+          visibility: "team-scoped",
+          teamIds: [team.id],
+        },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(
+        await KnowledgeBaseModel.countByOrganization({ organizationId }),
+      ).toBe(0);
+    });
+
+    test("creates a KB shared with multiple teams and clears teams when made organization-wide", async ({
+      makeTeam,
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
+      const first = await makeTeam(organizationId, user.id);
+      const second = await makeTeam(organizationId, user.id);
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/knowledge-bases",
+        payload: {
+          name: "Shared",
+          visibility: "team-scoped",
+          teamIds: [first.id, second.id],
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().teamIds).toEqual([first.id, second.id]);
+      const updated = await app.inject({
+        method: "PUT",
+        url: `/api/knowledge-bases/${response.json().id}`,
+        payload: { visibility: "org-wide" },
+      });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject({
+        visibility: "org-wide",
+        teamIds: [],
+      });
+    });
+  });
+
   // ===== Knowledge Base CRUD =====
 
   describe("POST /api/knowledge-bases", () => {

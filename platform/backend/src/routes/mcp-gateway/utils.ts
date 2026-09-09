@@ -58,6 +58,7 @@ import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -520,7 +521,15 @@ export async function createAgentServer(params: {
         TOOL_SEARCH_TOOLS_SHORT_NAME,
     );
     const [kbToolDescription, searchToolsDescription] = await Promise.all([
-      buildKnowledgeSourcesDescription(agentId),
+      buildKnowledgeSourcesDescription(
+        agentId,
+        tokenAuth?.organizationId
+          ? {
+              userId: tokenAuth.userId,
+              organizationId: tokenAuth.organizationId,
+            }
+          : undefined,
+      ),
       advertisesSearchTools
         ? buildSearchToolsDescription({
             mcpTools,
@@ -2113,16 +2122,6 @@ function getEmailFromSubject(subject: string | undefined): string | null {
   return subject;
 }
 
-/**
- * TTL cache for buildKnowledgeSourcesDescription to avoid repeated DB queries
- * on every tools/list request. Invalidated after 30 seconds.
- */
-const kbDescriptionCache = new Map<
-  string,
-  { description: string | null; expiresAt: number }
->();
-const KB_DESCRIPTION_CACHE_TTL_MS = 30_000;
-
 function getCachedTokenAuthResult(
   cacheKey: string,
 ): TokenAuthResult | null | undefined {
@@ -2225,37 +2224,43 @@ async function resolveArchestraToken(
 /**
  * Build a dynamic description for the query_knowledge_sources tool that includes
  * the agent's actual knowledge base names and connector sources.
- * Results are cached per agentId with a 30s TTL.
+ * Audience is resolved on each request so membership changes apply immediately.
  */
 export async function buildKnowledgeSourcesDescription(
   agentId: string,
+  viewer?: { userId?: string; organizationId: string },
 ): Promise<string | null> {
-  const cached = kbDescriptionCache.get(agentId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.description;
-  }
-
   const [kbAssignments, directConnectorIds] = await Promise.all([
     AgentKnowledgeBaseModel.findByAgent(agentId),
     AgentConnectorAssignmentModel.getConnectorIds(agentId),
   ]);
 
   if (kbAssignments.length === 0 && directConnectorIds.length === 0) {
-    kbDescriptionCache.set(agentId, {
-      description: null,
-      expiresAt: Date.now() + KB_DESCRIPTION_CACHE_TTL_MS,
-    });
     return null;
   }
 
   const kbIds = kbAssignments.map((a) => a.knowledgeBaseId);
 
-  const [knowledgeBases, kbConnectors, directConnectors] = await Promise.all([
-    kbIds.length > 0 ? KnowledgeBaseModel.findByIds(kbIds) : [],
-    kbIds.length > 0
-      ? // Query scope: the description lists the sources queries may span,
-        // which includes auto-sync-permissions connectors for every user.
-        KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
+  const assignedKnowledgeBases = kbIds.length
+    ? await KnowledgeBaseModel.findByIds(kbIds)
+    : [];
+  const access = viewer?.userId
+    ? await knowledgeSourceAccessControlService.buildAccessControlContext({
+        userId: viewer.userId,
+        organizationId: viewer.organizationId,
+      })
+    : null;
+  const knowledgeBases = assignedKnowledgeBases.filter(
+    (kb) =>
+      (!viewer || kb.organizationId === viewer.organizationId) &&
+      (access
+        ? knowledgeSourceAccessControlService.canAccessKnowledgeBase(access, kb)
+        : kb.visibility === "org-wide"),
+  );
+  const visibleKbIds = knowledgeBases.map((kb) => kb.id);
+  const [kbConnectors, directConnectors] = await Promise.all([
+    visibleKbIds.length
+      ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(visibleKbIds, {
           visibilityScope: "query",
         })
       : [],
@@ -2296,11 +2301,6 @@ export async function buildKnowledgeSourcesDescription(
   if (connectorTypes.length > 0) {
     description += ` Connected sources: ${connectorTypes.join(", ")}.`;
   }
-
-  kbDescriptionCache.set(agentId, {
-    description,
-    expiresAt: Date.now() + KB_DESCRIPTION_CACHE_TTL_MS,
-  });
 
   return description;
 }

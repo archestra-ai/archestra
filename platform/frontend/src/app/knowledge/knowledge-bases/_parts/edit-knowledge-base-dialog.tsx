@@ -18,18 +18,17 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useUpdateKnowledgeBase } from "@/lib/knowledge/knowledge-base.query";
+import {
+  KnowledgeBaseAccessFields,
+  type KnowledgeBaseFormValues,
+} from "./knowledge-base-access-fields";
 
 type KnowledgeBaseItem = Pick<
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number],
-  "id" | "name" | "description"
+  "id" | "name" | "description" | "visibility" | "teamIds"
 > & {
   labels?: archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number]["labels"];
 };
-
-interface EditKnowledgeBaseFormValues {
-  name: string;
-  description: string;
-}
 
 export function EditKnowledgeBaseDialog({
   knowledgeBase,
@@ -46,10 +45,12 @@ export function EditKnowledgeBaseDialog({
   );
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
-  const form = useForm<EditKnowledgeBaseFormValues>({
+  const form = useForm<KnowledgeBaseFormValues>({
     defaultValues: {
       name: knowledgeBase.name,
       description: knowledgeBase.description ?? "",
+      visibility: knowledgeBase.visibility,
+      teamIds: knowledgeBase.teamIds,
     },
   });
 
@@ -58,12 +59,14 @@ export function EditKnowledgeBaseDialog({
       form.reset({
         name: knowledgeBase.name,
         description: knowledgeBase.description ?? "",
+        visibility: knowledgeBase.visibility,
+        teamIds: knowledgeBase.teamIds,
       });
       setLabels(knowledgeBase.labels ?? []);
     }
   }, [open, knowledgeBase, form]);
 
-  const handleSubmit = async (values: EditKnowledgeBaseFormValues) => {
+  const handleSubmit = async (values: KnowledgeBaseFormValues) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const result = await updateKnowledgeBase.mutateAsync({
       id: knowledgeBase.id,
@@ -71,6 +74,8 @@ export function EditKnowledgeBaseDialog({
         name: values.name,
         description: values.description || null,
         labels: finalLabels,
+        visibility: values.visibility,
+        teamIds: values.visibility === "team-scoped" ? values.teamIds : [],
       },
     });
     if (result) {
@@ -124,6 +129,8 @@ export function EditKnowledgeBaseDialog({
                 </FormItem>
               )}
             />
+
+            <KnowledgeBaseAccessFields form={form} />
 
             <AdvancedLabelsSection
               ref={labelsRef}

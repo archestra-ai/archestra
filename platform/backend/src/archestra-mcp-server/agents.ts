@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
+import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -294,7 +295,22 @@ const registry = defineArchestraTools([
           allConnectorIds.length > 0
             ? await KnowledgeBaseConnectorModel.findByIds(allConnectorIds)
             : [];
-        const kbMap = new Map(knowledgeBases.map((kb) => [kb.id, kb]));
+        const knowledgeAccess =
+          context.userId && context.organizationId
+            ? await knowledgeSourceAccessControlService.buildAccessControlContext(
+                {
+                  userId: context.userId,
+                  organizationId: context.organizationId,
+                },
+              )
+            : null;
+        const visibleKnowledgeBases = knowledgeAccess
+          ? knowledgeSourceAccessControlService.filterKnowledgeBases(
+              knowledgeAccess,
+              knowledgeBases,
+            )
+          : knowledgeBases.filter((kb) => kb.visibility === "org-wide");
+        const kbMap = new Map(visibleKnowledgeBases.map((kb) => [kb.id, kb]));
         const connectorMap = new Map(connectors.map((c) => [c.id, c]));
 
         // HOTFIX: query_knowledge_sources is auto-injected at runtime by

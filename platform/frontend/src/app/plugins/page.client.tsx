@@ -753,11 +753,13 @@ function PluginsList() {
                       : []),
                   ]}
                   actions={<TableCardViewToggle />}
+                  search={
+                    <SearchInput
+                      paramName="search"
+                      className={filterSearchClass}
+                    />
+                  }
                 >
-                  <SearchInput
-                    paramName="search"
-                    className={filterSearchClass}
-                  />
                   <FacetSelect
                     label="Filter by client"
                     value={client}

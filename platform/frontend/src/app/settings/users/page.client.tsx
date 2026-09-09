@@ -614,14 +614,16 @@ function MembersTab({
           actions={
             <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
           }
+          search={
+            <SearchInput
+              isLoading={isFetching}
+              objectNamePlural="users"
+              searchFields={["name", "email"]}
+              paramName="name"
+              className={filterSearchClass}
+            />
+          }
         >
-          <SearchInput
-            isLoading={isFetching}
-            objectNamePlural="users"
-            searchFields={["name", "email"]}
-            paramName="name"
-            className={filterSearchClass}
-          />
           <RoleFilterDropdown />
         </FilterBar>
       </CollectionFilters>

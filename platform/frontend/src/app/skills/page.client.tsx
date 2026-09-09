@@ -837,12 +837,14 @@ function SkillsList() {
                   leading
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+                  search={
+                    <SearchInput
+                      isLoading={isFetching}
+                      paramName="search"
+                      className={filterSearchClass}
+                    />
+                  }
                 >
-                  <SearchInput
-                    isLoading={isFetching}
-                    paramName="search"
-                    className={filterSearchClass}
-                  />
                   {(mcpSkillsEnabled || pluginSkillsEnabled) &&
                     !isDeletedView && (
                       <Select value={kind} onValueChange={setKindFilter}>

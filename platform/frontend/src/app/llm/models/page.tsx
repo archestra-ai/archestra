@@ -268,7 +268,6 @@ export default function ModelsPage() {
       }),
       {
         accessorKey: "modelId",
-        size: 280,
         header: "Model ID",
         cell: ({ row }) => {
           const { modelId, provider, isFree } = row.original;
@@ -359,6 +358,7 @@ export default function ModelsPage() {
       },
       {
         accessorKey: "apiKeys",
+        size: 160,
         header: "Source",
         cell: ({ row }) => {
           const apiKeys = row.original.apiKeys;
@@ -408,7 +408,7 @@ export default function ModelsPage() {
       },
       {
         id: "pricingInputOutput",
-        size: 132,
+        size: 160,
         // Input and output prices share one column (like Cache R/W) to save
         // horizontal space, shown "$input / $output" and free to wrap onto two
         // lines when the column is narrow.
@@ -432,7 +432,7 @@ export default function ModelsPage() {
       },
       {
         id: "pricingCache",
-        size: 132,
+        size: 160,
         header: "$/M Cache R/W",
         cell: ({ row }) => {
           const { pricePerMillionCacheRead, pricePerMillionCacheWrite } =
@@ -455,7 +455,7 @@ export default function ModelsPage() {
         id: "contextLength",
         // Sorting must follow what the cell shows, not the architectural column.
         accessorFn: (row) => resolveDisplayContextLength(row).display,
-        size: 100,
+        size: 88,
         header: "Context",
         cell: ({ row }) => {
           if (hasUnknownCapabilities(row.original)) {
@@ -594,13 +594,15 @@ export default function ModelsPage() {
             <FilterBar
               leading
               onClearFilters={hasActiveFilters ? clearFilters : undefined}
+              search={
+                <SearchInput
+                  objectNamePlural="models"
+                  searchFields={["model ID"]}
+                  paramName="search"
+                  className={filterSearchClass}
+                />
+              }
             >
-              <SearchInput
-                objectNamePlural="models"
-                searchFields={["model ID"]}
-                paramName="search"
-                className={filterSearchClass}
-              />
               <LlmProviderApiKeyDropdown
                 availableKeys={apiKeys}
                 selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
@@ -735,6 +737,15 @@ export default function ModelsPage() {
 
         <DataTable
           columns={columns}
+          flexibleColumnIds={["modelId"]}
+          fixedWidthColumnIds={[
+            "apiKeys",
+            "pricingInputOutput",
+            "pricingCache",
+            "contextLength",
+            "outputLength",
+          ]}
+          tableClassName="min-w-[1000px]"
           data={filteredModels}
           getRowId={(row) => row.id}
           rowSelection={rowSelection}

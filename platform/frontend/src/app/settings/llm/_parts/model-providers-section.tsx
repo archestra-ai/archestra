@@ -119,15 +119,16 @@ export function ModelProvidersSection() {
                 <CollectionFilters>
                   <FilterBar
                     onClearFilters={search ? () => setSearch("") : undefined}
-                  >
-                    <SearchInput
-                      value={search}
-                      onSearchChange={setSearch}
-                      syncQueryParams={false}
-                      placeholder="Search providers…"
-                      className={filterSearchClass}
-                    />
-                  </FilterBar>
+                    search={
+                      <SearchInput
+                        value={search}
+                        onSearchChange={setSearch}
+                        syncQueryParams={false}
+                        placeholder="Search providers…"
+                        className={filterSearchClass}
+                      />
+                    }
+                  />
                 </CollectionFilters>
 
                 {visible.length === 0 ? (

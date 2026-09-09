@@ -366,14 +366,17 @@ function OauthClientsTable() {
   return (
     <div>
       <CollectionFilters>
-        <FilterBar>
-          <SearchInput
-            isLoading={llmQuery.isFetching || mcpQuery.isFetching}
-            objectNamePlural="OAuth clients"
-            searchFields={["name"]}
-            paramName="search"
-            className={filterSearchClass}
-          />
+        <FilterBar
+          search={
+            <SearchInput
+              isLoading={llmQuery.isFetching || mcpQuery.isFetching}
+              objectNamePlural="OAuth clients"
+              searchFields={["name"]}
+              paramName="search"
+              className={filterSearchClass}
+            />
+          }
+        >
           <FilterSelect
             value={typeFilter ?? "all"}
             onValueChange={(value) =>

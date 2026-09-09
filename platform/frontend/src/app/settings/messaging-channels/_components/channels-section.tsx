@@ -522,16 +522,17 @@ export function ChannelsSection({
                   onAssign={handleBulkAssign}
                 />
               }
+              search={
+                <SearchInput
+                  isLoading={isFetching}
+                  placeholder="Search channels..."
+                  paramName="search"
+                  className={filterSearchClass}
+                  debounceMs={300}
+                  onSearchChange={handleSearchChange}
+                />
+              }
             >
-              <SearchInput
-                isLoading={isFetching}
-                placeholder="Search channels..."
-                paramName="search"
-                className={filterSearchClass}
-                debounceMs={300}
-                onSearchChange={handleSearchChange}
-              />
-
               <Button
                 variant="ghost"
                 size="sm"

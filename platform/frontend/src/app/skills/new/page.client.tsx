@@ -203,15 +203,16 @@ function NewSkillWizard() {
                         onClearFilters={
                           search ? () => setSearch("") : undefined
                         }
-                      >
-                        <SearchInput
-                          value={search}
-                          onSearchChange={setSearch}
-                          syncQueryParams={false}
-                          placeholder="Search skills by name, repo, or use case..."
-                          className="w-full flex-1"
-                        />
-                      </FilterBar>
+                        search={
+                          <SearchInput
+                            value={search}
+                            onSearchChange={setSearch}
+                            syncQueryParams={false}
+                            placeholder="Search skills by name, repo, or use case..."
+                            className="w-full flex-1"
+                          />
+                        }
+                      />
                     </CardHeader>
                     <CardContent className="p-0">
                       {isSearchingSkills ? (

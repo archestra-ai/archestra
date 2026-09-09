@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfileCard } from "@/components/settings/profile-card";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useActiveMemberRole } from "@/lib/organization.query";
 
 const mockUpdateNameMutateAsync = vi.fn();
@@ -21,6 +21,11 @@ describe("ProfileCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateNameMutateAsync.mockResolvedValue(true);
+    // The save bar's button runs through PermissionButton; the profile edit has
+    // no RBAC gate ({} permissions), so it is always granted.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as unknown as ReturnType<typeof useHasPermissions>);
     vi.mocked(useActiveMemberRole).mockReturnValue({
       data: "admin",
       isPending: false,
@@ -101,48 +106,60 @@ describe("ProfileCard", () => {
     expect(screen.queryByText("Original Name")).toBeNull();
   });
 
-  it("keeps email and role as read-only fields", () => {
+  it("shows email and individual assigned roles without editable controls", () => {
+    vi.mocked(useActiveMemberRole).mockReturnValue({
+      data: "admin, platform_admin,custom_reviewer",
+      isPending: false,
+    } as unknown as ReturnType<typeof useActiveMemberRole>);
+
     render(<ProfileCard />);
 
-    const email = screen.getByLabelText("Email");
-    expect(email).toHaveValue("admin@example.com");
-    expect(email).toHaveAttribute("readonly");
-
-    const role = screen.getByLabelText("Role");
-    expect(role).toHaveValue("admin");
-    expect(role).toHaveAttribute("readonly");
-
+    expect(screen.getByText("admin@example.com")).toBeVisible();
+    const roles = screen.getByRole("list", { name: "Assigned roles" });
+    expect(roles).toHaveTextContent("Admin");
+    expect(roles).toHaveTextContent("Platform Admin");
+    expect(roles).toHaveTextContent("custom reviewer");
+    expect(roles.querySelectorAll("li")).toHaveLength(3);
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
     expect(screen.getByLabelText("Name")).not.toHaveAttribute("readonly");
   });
 
-  it("says why each locked field is locked", () => {
+  it("hides the save bar until the name changes, then saves through it", async () => {
     render(<ProfileCard />);
 
-    expect(
-      screen.getByText("The address you sign in with. It can't be changed."),
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        "Set by an organization admin. You can't change your own role.",
-      ),
-    ).toBeVisible();
-  });
-
-  it("submits a changed name and keeps the button idle until it changes", async () => {
-    render(<ProfileCard />);
-
-    const submit = screen.getByRole("button", { name: "Update profile" });
-    expect(submit).toBeDisabled();
+    // The footer save bar stays out of the way until there is something to
+    // save — no Save control on first paint.
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Updated Name" },
     });
-    await waitFor(() => expect(submit).toBeEnabled());
 
-    fireEvent.click(submit);
+    const save = await screen.findByRole("button", { name: "Save" });
+    expect(save).toBeEnabled();
+
+    fireEvent.click(save);
 
     await waitFor(() => {
       expect(mockUpdateNameMutateAsync).toHaveBeenCalledWith("Updated Name");
     });
+  });
+
+  it("drops the change and hides the save bar again on cancel", async () => {
+    render(<ProfileCard />);
+
+    const nameField = screen.getByLabelText("Name");
+    fireEvent.change(nameField, { target: { value: "Half-typed" } });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    // Cancel reverts to the saved name and pulls the bar back down without
+    // calling the mutation.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull(),
+    );
+    expect(nameField).toHaveValue("Original Name");
+    expect(mockUpdateNameMutateAsync).not.toHaveBeenCalled();
   });
 });

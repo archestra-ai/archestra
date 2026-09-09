@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PageHeaderBanner } from "@/components/page-header-banner";
 import { PageLayout } from "@/components/page-layout";
 
 vi.mock("next/navigation");
@@ -369,7 +370,9 @@ describe("PageLayout header", () => {
     ).toBeGreaterThan(0);
     const header = container.querySelector("[data-page-header]");
     expect(header?.parentElement).not.toHaveClass("overflow-x-auto");
-    expect(header?.nextElementSibling).toHaveClass("overflow-x-auto");
+    expect(container.querySelector("[data-page-content]")).toHaveClass(
+      "overflow-x-auto",
+    );
   });
 
   it("gives every wizard-width detail page the safe phone floor by default", () => {
@@ -382,6 +385,39 @@ describe("PageLayout header", () => {
     expect(
       container.querySelectorAll(".min-w-\\[20rem\\]").length,
     ).toBeGreaterThan(0);
+  });
+
+  it("places a page warning below the header and before the form", () => {
+    const { container } = render(
+      <PageLayout maxWidth="wizard" title="Edit agent">
+        <PageHeaderBanner>
+          <span>1 MCP server not in this environment</span>
+        </PageHeaderBanner>
+        <button type="button">Form action</button>
+      </PageLayout>,
+    );
+
+    const header = container.querySelector("[data-page-header]");
+    const banner = screen.getByText("1 MCP server not in this environment");
+    expect(header?.contains(banner)).toBe(false);
+    expect(
+      banner.compareDocumentPosition(
+        screen.getByRole("button", { name: "Form action" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("gives the content banner slot no footprint until a banner rides in", () => {
+    // `empty:hidden` keeps a page with no banner reading exactly as before.
+    const { container } = render(
+      <PageLayout maxWidth="wizard" title="Edit agent">
+        <div>form</div>
+      </PageLayout>,
+    );
+
+    const slot = container.querySelector("[data-page-banner]");
+    expect(slot).not.toBeNull();
+    expect(slot?.children).toHaveLength(0);
   });
 
   it("keeps wizard and detail header copy within one shared height contract", () => {

@@ -2,6 +2,14 @@
 import "@testing-library/jest-dom/vitest";
 import { vi } from "vitest";
 
+// JSDOM has no layout engine or ResizeObserver. Components can subscribe to
+// size changes; tests that exercise resizing supply their own observer callback.
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 // Disable Sentry for tests - prevent sending test data to Sentry
 process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN = "";
 

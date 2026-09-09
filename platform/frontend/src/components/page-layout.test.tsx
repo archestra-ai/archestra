@@ -13,14 +13,6 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
 
 describe("PageLayout tabs", () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    );
     vi.mocked(usePathname).mockReturnValue("/mcp/registry/abc");
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,

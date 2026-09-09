@@ -62,4 +62,28 @@ describe("AgentRuntimeCredentialPrompt", () => {
       expect.objectContaining({ scope: "personal" }),
     );
   });
+
+  it("shows a recovery link for an incompatible runtime", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentRuntimeCredentialPrompt
+        agentId="agent-1"
+        missing={[]}
+        declarations={[]}
+        incompatible="This Agent Runtime image expects the Anthropic API."
+        onConnected={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "This model is not supported by the runtime.",
+    );
+    const detailsLink = screen.getByRole("link", { name: "Agent details" });
+    expect(detailsLink).toHaveAttribute("href", "/agents/agent-1");
+    await user.tab();
+    expect(detailsLink).toHaveFocus();
+    expect(
+      screen.queryByText(/connections are required/),
+    ).not.toBeInTheDocument();
+  });
 });

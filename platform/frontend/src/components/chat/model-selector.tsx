@@ -124,6 +124,10 @@ interface ModelSelectorProps {
    * would fall back to the raw model UUID.
    */
   fallbackModelName?: string;
+  /** Limits selectable models without changing an existing selection. */
+  modelFilter?: (model: LlmModel) => boolean;
+  /** Names why the current selection is retained but cannot be selected again. */
+  unavailableModelHeading?: string;
 }
 
 /**
@@ -475,12 +479,17 @@ export const ModelSelector = memo(function ModelSelector({
   enabled = true,
   suppressAutoSelect = false,
   fallbackModelName,
+  modelFilter,
+  unavailableModelHeading,
 }: ModelSelectorProps) {
-  const { modelsByProvider, isLoading, isPlaceholderData } =
-    useLlmModelsByProvider({
-      apiKeyId: apiKeyId ?? undefined,
-      enabled,
-    });
+  const {
+    modelsByProvider: fetchedModelsByProvider,
+    isLoading,
+    isPlaceholderData,
+  } = useLlmModelsByProvider({
+    apiKeyId: apiKeyId ?? undefined,
+    enabled,
+  });
   const { data: availableKeys } = useAvailableLlmProviderApiKeys({
     includeKeyId: apiKeyId ?? undefined,
     toastOnError: false,
@@ -494,15 +503,28 @@ export const ModelSelector = memo(function ModelSelector({
     onOpenChangeProp?.(newOpen);
   };
 
-  // Get available providers from the fetched models
+  const modelsByProvider = useMemo(() => {
+    if (!modelFilter) return fetchedModelsByProvider;
+    return Object.fromEntries(
+      Object.entries(fetchedModelsByProvider)
+        .map(([provider, models]) => [provider, models.filter(modelFilter)])
+        .filter(([, models]) => models.length > 0),
+    ) as Record<SupportedProvider, LlmModel[]>;
+  }, [fetchedModelsByProvider, modelFilter]);
+
+  // Get available providers from the selectable models.
   const availableProviders = useMemo(() => {
     return Object.keys(modelsByProvider) as SupportedProvider[];
   }, [modelsByProvider]);
+  const fetchedProviders = useMemo(
+    () => Object.keys(fetchedModelsByProvider) as SupportedProvider[],
+    [fetchedModelsByProvider],
+  );
 
   // Find the provider for a given model
   const getProviderForModel = (model: string): SupportedProvider | null => {
-    for (const provider of availableProviders) {
-      if (modelsByProvider[provider]?.some((m) => m.dbId === model)) {
+    for (const provider of fetchedProviders) {
+      if (fetchedModelsByProvider[provider]?.some((m) => m.dbId === model)) {
         return provider;
       }
     }
@@ -517,8 +539,8 @@ export const ModelSelector = memo(function ModelSelector({
 
   // Get display name for selected model
   const selectedModelDisplayName = useMemo(() => {
-    for (const provider of availableProviders) {
-      const model = modelsByProvider[provider]?.find(
+    for (const provider of fetchedProviders) {
+      const model = fetchedModelsByProvider[provider]?.find(
         (m) => m.dbId === selectedModel,
       );
       if (model) return model.displayName;
@@ -526,7 +548,12 @@ export const ModelSelector = memo(function ModelSelector({
     // Not in the viewer's available models (e.g. a per-user model they can't
     // access): prefer the server-resolved name over the raw model UUID.
     return fallbackModelName ?? selectedModel;
-  }, [selectedModel, availableProviders, modelsByProvider, fallbackModelName]);
+  }, [
+    selectedModel,
+    fetchedModelsByProvider,
+    fetchedProviders,
+    fallbackModelName,
+  ]);
 
   const handleSelectModel = (modelValue: string) => {
     // Parse the provider:modelId format
@@ -606,8 +633,9 @@ export const ModelSelector = memo(function ModelSelector({
     );
   }
 
-  // If no providers configured, show disabled state
-  if (availableProviders.length === 0) {
+  // Keep a filtered-out current model visible as a disabled recovery choice.
+  // Without a filter, the empty state remains concise for unconfigured providers.
+  if (availableProviders.length === 0 && !(modelFilter && selectedModel)) {
     return (
       <PromptInputButton className="w-[150px]" disabled>
         <ModelSelectorName>No models available</ModelSelectorName>
@@ -689,6 +717,7 @@ export const ModelSelector = memo(function ModelSelector({
               onClear={onClear}
               onSelectModel={handleSelectModel}
               onClose={() => handleOpenChange(false)}
+              unavailableModelHeading={unavailableModelHeading}
             />
           </ModelSelectorContent>
         )}
@@ -724,6 +753,7 @@ function ModelSelectorDialogBody({
   onClear,
   onSelectModel,
   onClose,
+  unavailableModelHeading = "Current (API key missing)",
 }: {
   modelsByProvider: Record<SupportedProvider, LlmModel[]>;
   availableProviders: SupportedProvider[];
@@ -734,6 +764,7 @@ function ModelSelectorDialogBody({
   onClear?: () => void;
   onSelectModel: (modelValue: string) => void;
   onClose: () => void;
+  unavailableModelHeading?: string;
 }) {
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
   const providerCatalog = useModelProviderCatalog();
@@ -827,11 +858,11 @@ function ModelSelectorDialogBody({
 
         {/* Show current model if not in available list */}
         {!isModelAvailable && selectedModel && (
-          <ModelSelectorGroup heading="Current (API key missing)">
+          <ModelSelectorGroup heading={unavailableModelHeading}>
             <ModelSelectorItem
               disabled
               value={selectedModel}
-              className="text-yellow-600"
+              className="text-muted-foreground"
             >
               {selectedModelLogo && (
                 <ModelSelectorLogo provider={selectedModelLogo} />

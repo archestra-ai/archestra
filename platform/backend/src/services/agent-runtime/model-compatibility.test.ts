@@ -132,7 +132,7 @@ test("rejects a Bedrock model for an Anthropic runtime image", async ({
 
   await expect(
     preflightAgentRuntimeModelCompatibility({
-      runtime: { inferenceProtocol: "anthropic" },
+      runtime: { command: null, inferenceProtocol: "anthropic" },
       agent,
       organizationId: organization.id,
       userId: user.id,
@@ -144,8 +144,12 @@ test("rejects a Bedrock model for an Anthropic runtime image", async ({
 });
 
 test.for([
-  ["us.anthropic.claude-sonnet-4-6", true],
   ["anthropic.claude-sonnet-4-6", true],
+  ["us.anthropic.claude-sonnet-4-6", true],
+  [
+    "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
+    true,
+  ],
   ["amazon.nova-pro-v1:0", false],
 ] as const)("checks Claude Code compatibility for Bedrock model %s", async ([
   modelId,
@@ -227,7 +231,7 @@ test("accepts an inherited compatible organization default model", async ({
 
   await expect(
     preflightAgentRuntimeModelCompatibility({
-      runtime: { inferenceProtocol: "anthropic" },
+      runtime: { command: null, inferenceProtocol: "anthropic" },
       agent,
       organizationId: organization.id,
       userId: user.id,

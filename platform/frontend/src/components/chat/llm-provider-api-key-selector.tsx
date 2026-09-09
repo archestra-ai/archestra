@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
+import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
 import { useSession } from "@/lib/auth/auth.query";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import {
@@ -160,11 +161,6 @@ export function LlmProviderApiKeySelector({
   const [reconnectKeyId, setReconnectKeyId] = useState<string | null>(null);
   const [connectedKindToSelect, setConnectedKindToSelect] =
     useState<SubscriptionCredentialKind | null>(null);
-  const [isCreateApiKeyDialogOpen, setIsCreateApiKeyDialogOpen] =
-    useState(false);
-  const [createdKeyIdToSelect, setCreatedKeyIdToSelect] = useState<
-    string | null
-  >(null);
   const handledConnectRequestRef = useRef(0);
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
@@ -336,6 +332,16 @@ export function LlmProviderApiKeySelector({
     ],
   );
 
+  const {
+    cancelPendingCreatedKeySelection,
+    createDialog: createApiKeyDialog,
+    onAddApiKey,
+  } = useLlmProviderApiKeyCreateDialog({
+    availableKeys,
+    onSelectKey: applyKeyChange,
+    onBeforeOpen: () => handleOpenChange(false),
+  });
+
   useEffect(() => {
     if (!connectedKindToSelect) return;
     const connectedKey = availableKeys.find((key) =>
@@ -347,16 +353,8 @@ export function LlmProviderApiKeySelector({
     setConnectedKindToSelect(null);
   }, [availableKeys, applyKeyChange, connectedKindToSelect]);
 
-  useEffect(() => {
-    if (!createdKeyIdToSelect) return;
-    if (!availableKeys.some((key) => key.id === createdKeyIdToSelect)) return;
-
-    applyKeyChange(createdKeyIdToSelect);
-    setCreatedKeyIdToSelect(null);
-  }, [availableKeys, applyKeyChange, createdKeyIdToSelect]);
-
   const handleSelectKey = (keyId: string) => {
-    setCreatedKeyIdToSelect(null);
+    cancelPendingCreatedKeySelection();
     const connectOption = subscriptionOptions.find(
       (option) => option.id === keyId,
     );
@@ -408,26 +406,12 @@ export function LlmProviderApiKeySelector({
         open={open}
         onOpenChange={handleOpenChange}
         onSelectKey={handleSelectKey}
-        onAddApiKey={() => {
-          setCreatedKeyIdToSelect(null);
-          handleOpenChange(false);
-          setIsCreateApiKeyDialogOpen(true);
-        }}
+        onAddApiKey={onAddApiKey}
         currentProvider={currentProvider}
         searchPlaceholder="Search credentials..."
         showChatTestIds
       />
-      <CreateLlmProviderApiKeyDialog
-        open={isCreateApiKeyDialogOpen}
-        onOpenChange={setIsCreateApiKeyDialogOpen}
-        title="Add API Key"
-        description="Add an LLM provider API key and use it in this chat"
-        credentialMode="api-key"
-        showConsoleLink
-        onSuccess={(keyId) => {
-          if (keyId) setCreatedKeyIdToSelect(keyId);
-        }}
-      />
+      {createApiKeyDialog}
       {subscriptionToConnect && (
         <CreateLlmProviderApiKeyDialog
           open

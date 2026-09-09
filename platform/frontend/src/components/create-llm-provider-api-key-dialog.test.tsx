@@ -14,15 +14,20 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
   serializeExtraHeaders: () => null,
   PROVIDER_CONFIG: { anthropic: { name: "Anthropic" } },
   LlmProviderApiKeyForm: ({
+    allowedProviders,
     form,
     credentialMode,
     onSubscriptionCredential,
   }: {
+    allowedProviders?: string[];
     form: { register: (name: string) => Record<string, unknown> };
     credentialMode?: "api-key" | "subscription";
     onSubscriptionCredential?: (credential: string) => void | Promise<void>;
   }) => (
     <div>
+      <output data-testid="allowed-providers">
+        {allowedProviders?.join(",")}
+      </output>
       {credentialMode === "subscription" ? (
         <button
           type="button"
@@ -139,6 +144,86 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     );
   });
 
+  it("keeps form input through an equivalent allowed-provider refresh", async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        allowedProviders={["anthropic", "openai"]}
+      />,
+    );
+    await user.type(screen.getByLabelText("Name"), "Unchanged key name");
+    view.rerender(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        allowedProviders={["anthropic", "openai"]}
+      />,
+    );
+
+    expect(screen.getByLabelText("Name")).toHaveValue("Unchanged key name");
+  });
+
+  it("intersects runtime providers with organization-visible providers", async () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: { anthropic: { hidden: true } },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        allowedProviders={["anthropic", "openai"]}
+      />,
+    );
+
+    expect(screen.getByTestId("allowed-providers")).toHaveTextContent("openai");
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "openai" }),
+    );
+  });
+
+  it("does not offer a forbidden fallback provider when none are visible", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: { openai: { hidden: true } },
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        allowedProviders={["openai"]}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "No compatible LLM providers are enabled for this agent.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Add API Key" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /test & create/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("defaults the scope to org when the user has llmProviderApiKey:admin", async () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -184,6 +269,10 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         }}
       />,
     );
+
+    expect(
+      screen.getByRole("dialog", { name: "Sign in with ChatGPT" }),
+    ).toBeVisible();
 
     expect(
       screen.queryByRole("button", { name: "Test & Create" }),

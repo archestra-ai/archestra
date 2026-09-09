@@ -14,6 +14,8 @@ import {
   AgentExcludedSubagentModel,
   AgentModel,
   AgentToolModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
   OrganizationModel,
   ToolModel,
 } from "@/models";
@@ -204,6 +206,196 @@ describe("agent routes", () => {
 
         expect(response.statusCode).toBe(200);
         expect(response.json().runtime).toEqual(runtime);
+      } finally {
+        config.agentRuntime.enabled = previous;
+      }
+    });
+
+    test("rejects switching a selected Gemini model to the maintained Codex runtime", async ({
+      makeAgent,
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const previous = config.agentRuntime.enabled;
+      config.agentRuntime.enabled = true;
+      try {
+        const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+        const providerKey = await makeLlmProviderApiKey(
+          organizationId,
+          secret.id,
+          { provider: "gemini" },
+        );
+        const model = await ModelModel.create({
+          externalId: "gemini/runtime-form-test",
+          provider: "gemini",
+          modelId: "runtime-form-test",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        });
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          providerKey.id,
+          [model.id],
+        );
+        const agent = await makeAgent({
+          organizationId,
+          authorId: user.id,
+          agentType: "agent",
+          scope: "personal",
+          llmApiKeyId: providerKey.id,
+          modelId: model.id,
+        });
+
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: {
+            runtime: {
+              image: "example.com/coding-agent:latest",
+              command: ["archestra-codex"],
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              maxCostUsd: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expect(response.json().error.message).toContain(
+          "Codex runtime requires an OpenAI",
+        );
+        expect((await AgentModel.findById(agent.id))?.runtime).toBeNull();
+      } finally {
+        config.agentRuntime.enabled = previous;
+      }
+    });
+
+    test("rejects creating the maintained Codex runtime with a Gemini model", async ({
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const previous = config.agentRuntime.enabled;
+      config.agentRuntime.enabled = true;
+      try {
+        const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+        const providerKey = await makeLlmProviderApiKey(
+          organizationId,
+          secret.id,
+          { provider: "gemini" },
+        );
+        const model = await ModelModel.create({
+          externalId: "gemini/runtime-create-test",
+          provider: "gemini",
+          modelId: "runtime-create-test",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        });
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+          providerKey.id,
+          [model.id],
+        );
+
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Codex Gemini ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            llmApiKeyId: providerKey.id,
+            modelId: model.id,
+            runtime: {
+              image: "example.com/coding-agent:latest",
+              command: ["archestra-codex"],
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              maxCostUsd: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expect(response.json().error.message).toContain(
+          "Codex runtime requires an OpenAI",
+        );
+      } finally {
+        config.agentRuntime.enabled = previous;
+      }
+    });
+
+    test("rejects an unlinked submitted model and key before resolving runtime compatibility", async ({
+      makeAgent,
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const previous = config.agentRuntime.enabled;
+      config.agentRuntime.enabled = true;
+      try {
+        const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+        const providerKey = await makeLlmProviderApiKey(
+          organizationId,
+          secret.id,
+          { provider: "gemini" },
+        );
+        const unlinkedModel = await ModelModel.create({
+          externalId: "gemini/unlinked-runtime-model",
+          provider: "gemini",
+          modelId: "unlinked-runtime-model",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        });
+        const agent = await makeAgent({
+          organizationId,
+          authorId: user.id,
+          agentType: "agent",
+          scope: "personal",
+          llmApiKeyId: providerKey.id,
+          modelId: unlinkedModel.id,
+        });
+
+        const response = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: {
+            runtime: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              inferenceProtocol: "anthropic",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              maxCostUsd: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.message).toContain("linked and available");
       } finally {
         config.agentRuntime.enabled = previous;
       }

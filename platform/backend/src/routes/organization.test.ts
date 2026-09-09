@@ -138,6 +138,196 @@ describe("organization routes", () => {
 
       expect(response.statusCode).toBe(200);
     });
+
+    test("accepts a complete linked default model and API key", async ({
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "openai",
+      });
+      const model = await ModelModel.create({
+        externalId: "openai/organization-default-linked-test",
+        provider: "openai",
+        modelId: "organization-default-linked-test",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: model.id, defaultLlmApiKeyId: key.id },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        defaultModelId: model.id,
+        defaultLlmApiKeyId: key.id,
+      });
+    });
+
+    test("rejects a complete but unlinked default model and API key", async ({
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "openai",
+      });
+      const model = await ModelModel.create({
+        externalId: "openai/organization-default-unlinked-test",
+        provider: "openai",
+        modelId: "organization-default-unlinked-test",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: model.id, defaultLlmApiKeyId: key.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("must be linked");
+    });
+
+    test("rejects a non-OpenAI default for Codex runtime Agents that inherit it", async ({
+      makeAgent,
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "gemini",
+      });
+      const model = await ModelModel.create({
+        externalId: "gemini/organization-default-runtime-test",
+        provider: "gemini",
+        modelId: "organization-default-runtime-test",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+      await makeAgent({
+        organizationId,
+        authorId: user.id,
+        agentType: "agent",
+        scope: "personal",
+        runtime: {
+          image: "example.com/coding-agent:latest",
+          command: ["archestra-codex"],
+          inferenceProtocol: "openai_responses",
+          backend: "kubernetes",
+          steerMode: "pipe",
+          privileged: false,
+          resources: null,
+          environment: null,
+          credentials: null,
+          ttlHours: null,
+          maxCostUsd: null,
+          idleTimeoutMinutes: null,
+        },
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultModelId: model.id, defaultLlmApiKeyId: key.id },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.message).toContain("incompatible");
+    });
+
+    test("does not apply the default compatibility check to explicit runtime overrides", async ({
+      makeAgent,
+      makeLlmProviderApiKey,
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const geminiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "gemini",
+      });
+      const geminiModel = await ModelModel.create({
+        externalId: "gemini/organization-default-explicit-test",
+        provider: "gemini",
+        modelId: "organization-default-explicit-test",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(geminiKey.id, [
+        geminiModel.id,
+      ]);
+      const anthropicKey = await makeLlmProviderApiKey(
+        organizationId,
+        secret.id,
+        {
+          provider: "anthropic",
+        },
+      );
+      const anthropicModel = await ModelModel.create({
+        externalId: "anthropic/organization-explicit-runtime-test",
+        provider: "anthropic",
+        modelId: "organization-explicit-runtime-test",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+        anthropicKey.id,
+        [anthropicModel.id],
+      );
+      await makeAgent({
+        organizationId,
+        authorId: user.id,
+        agentType: "agent",
+        scope: "personal",
+        llmApiKeyId: anthropicKey.id,
+        modelId: anthropicModel.id,
+        runtime: {
+          image: "example.com/coding-agent:latest",
+          command: null,
+          inferenceProtocol: "anthropic",
+          backend: "kubernetes",
+          steerMode: "pipe",
+          privileged: false,
+          resources: null,
+          environment: null,
+          credentials: null,
+          ttlHours: null,
+          maxCostUsd: null,
+          idleTimeoutMinutes: null,
+        },
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: {
+          defaultModelId: geminiModel.id,
+          defaultLlmApiKeyId: geminiKey.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
   });
 
   describe("PATCH /api/organization/auth-settings - default member role", () => {

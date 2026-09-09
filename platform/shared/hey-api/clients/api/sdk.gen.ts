@@ -598,7 +598,7 @@ export const updateMemberDefaultModel = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Report credentials the current user still needs before this Agent can execute delegated work in its runtime
+ * Report credentials and model compatibility the current user needs before this Agent can execute delegated work in its runtime
  *
  * Authentication:
  *

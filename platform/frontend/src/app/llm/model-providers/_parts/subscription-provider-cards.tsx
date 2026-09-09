@@ -1,7 +1,7 @@
 "use client";
 
 import { E2eTestId, SUBSCRIPTION_CREDENTIALS } from "@archestra/shared";
-import { CheckCircle2, Unplug } from "lucide-react";
+import { CheckCircle2, TriangleAlert, Unplug } from "lucide-react";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { Button } from "@/components/ui/button";
@@ -109,15 +109,27 @@ function SubscriptionProviderCard({
         </span>
       </div>
       <p className="text-sm text-muted-foreground">
-        {credential ? copy.connectedDescription : copy.signInDescription}
+        {credential?.requiresReauthentication
+          ? "Your sign-in expired or was revoked. Sign in again to use this subscription."
+          : credential
+            ? copy.connectedDescription
+            : copy.signInDescription}
       </p>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         {isLoading ? (
           <Skeleton className="h-4 w-24" />
         ) : credential ? (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
-            <span>Connected</span>
+            {credential.requiresReauthentication ? (
+              <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+            )}
+            <span>
+              {credential.requiresReauthentication
+                ? "Reconnect required"
+                : "Connected"}
+            </span>
           </span>
         ) : (
           <span className="text-sm text-muted-foreground">Not connected</span>
@@ -126,14 +138,24 @@ function SubscriptionProviderCard({
           <Skeleton className="h-8 w-20" />
         ) : credential ? (
           <div className="flex shrink-0 items-center gap-1">
-            <PermissionButton
-              permissions={{ llmProviderApiKey: ["update"] }}
-              variant="outline"
-              size="sm"
-              onClick={() => onManage(credential)}
-            >
-              <span>Manage</span>
-            </PermissionButton>
+            {credential.requiresReauthentication ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onConnect(offer)}
+              >
+                <span>Reconnect</span>
+              </Button>
+            ) : (
+              <PermissionButton
+                permissions={{ llmProviderApiKey: ["update"] }}
+                variant="outline"
+                size="sm"
+                onClick={() => onManage(credential)}
+              >
+                <span>Manage</span>
+              </PermissionButton>
+            )}
             {/* Icon-only: the card is narrow enough at four across that a
                 second worded button would be clipped. */}
             <PermissionButton

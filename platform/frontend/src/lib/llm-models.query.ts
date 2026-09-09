@@ -245,7 +245,19 @@ export function useSyncLlmModels() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      toast.success("Models synced");
+      if (data.success) {
+        toast.success("Models refreshed");
+      } else {
+        toast.error("Some models could not be refreshed", {
+          description: data.failures
+            .map(
+              (failure) =>
+                `${failure.name}: ${failure.requiresReauthentication ? "reconnect required" : "refresh failed; try again"}`,
+            )
+            .join("; "),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
     },

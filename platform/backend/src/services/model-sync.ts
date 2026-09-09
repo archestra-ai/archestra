@@ -1,4 +1,7 @@
 import {
+  ApiError,
+  ArchestraInternalErrorCode,
+  credentialRequiresPerUserScope,
   isSelfHostedProvider,
   isSmallModel,
   MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
@@ -22,6 +25,7 @@ import { findVertexMultimodalEmbeddingModel } from "@/knowledge-base/embedding-c
 import { findVoyageEmbeddingModel } from "@/knowledge-base/embedding-clients/voyage-models";
 import logger from "@/logging";
 import {
+  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
@@ -97,6 +101,11 @@ class ModelSyncService {
       return 0;
     }
 
+    const credentialRow = await LlmProviderApiKeyModel.findById(apiKeyId);
+    const isSubscription = credentialRequiresPerUserScope({
+      provider,
+      apiKey: apiKeyValue,
+    });
     try {
       assertSubscriptionCredentialForProvider({
         apiKey: apiKeyValue,
@@ -107,6 +116,13 @@ class ModelSyncService {
       const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders, {
         providerApiKeyId: apiKeyId,
       });
+      if (credentialRow?.requiresReauthentication) {
+        await LlmProviderApiKeyModel.setRequiresReauthentication({
+          id: apiKeyId,
+          requiresReauthentication: false,
+          expectedUpdatedAt: credentialRow.updatedAt,
+        });
+      }
 
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");
@@ -182,6 +198,20 @@ class ModelSyncService {
 
       return modelsWithIds.length;
     } catch (error) {
+      if (
+        credentialRow &&
+        isSubscription &&
+        error instanceof ApiError &&
+        (error.internalCode ===
+          ArchestraInternalErrorCode.ProviderAuthRequired ||
+          error.statusCode === 401)
+      ) {
+        await LlmProviderApiKeyModel.setRequiresReauthentication({
+          id: apiKeyId,
+          requiresReauthentication: true,
+          expectedUpdatedAt: credentialRow.updatedAt,
+        });
+      }
       logger.error(
         {
           provider,

@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -175,6 +176,91 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
+  it("reports partial refresh failures and updates the persistent reconnect state", async () => {
+    keyCreated = true;
+    let rejected = false;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          {
+            ...providerKey,
+            provider: "openai",
+            subscriptionKind: "chatgpt",
+            requiresReauthentication: rejected,
+          },
+        ]),
+      ),
+      http.post(`${API_ORIGIN}/api/llm-models/sync`, () => {
+        rejected = true;
+        return HttpResponse.json({
+          success: false,
+          failures: [
+            {
+              apiKeyId: providerKey.id,
+              name: providerKey.name,
+              provider: providerKey.provider,
+              requiresReauthentication: true,
+            },
+          ],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(model.modelId);
+    await user.click(screen.getByRole("button", { name: "Refresh Models" }));
+    expect(
+      await screen.findByText("Some models could not be refreshed"),
+    ).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: "Reconnect" }),
+    ).toBeVisible();
+    expect(screen.getByText(model.modelId)).toBeVisible();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["openai", "chatgpt", "ChatGPT", "Sign in with ChatGPT"],
+    [
+      "github-copilot",
+      "github-copilot",
+      "GitHub Copilot",
+      "Sign in with GitHub",
+    ],
+    [
+      "microsoft-365-copilot",
+      "microsoft-365-copilot",
+      "Microsoft 365 Copilot",
+      "Sign in with Microsoft",
+    ],
+    ["xai", "x-premium", "SuperGrok", "Sign in with Grok"],
+  ])("opens %s reconnect in place", async (provider, subscriptionKind, name, signInLabel) => {
+    keyCreated = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          {
+            ...providerKey,
+            provider,
+            subscriptionKind,
+            name,
+            requiresReauthentication: true,
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Reconnect" }));
+    expect(
+      await screen.findByRole("heading", { name: `Reconnect ${name}` }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: signInLabel })).toBeVisible();
+    expect(screen.queryByText("Advanced settings")).not.toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it("adds a provider key from the empty state and loads its models", async () => {
     const user = userEvent.setup();
     renderPage();

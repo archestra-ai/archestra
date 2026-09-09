@@ -127,13 +127,15 @@ class SystemKeyManager {
    *
    * @param organizationId - The organization to create system keys for
    */
-  async syncSystemKeys(organizationId: string): Promise<void> {
+  async syncSystemKeys(organizationId: string): Promise<SupportedProvider[]> {
+    const failedProviders: SupportedProvider[] = [];
     logger.info({ organizationId }, "Starting system API keys sync");
 
     for (const providerConfig of this.keylessProviders) {
       try {
         await this.syncProviderSystemKey(organizationId, providerConfig);
       } catch (error) {
+        failedProviders.push(providerConfig.provider);
         logger.error(
           {
             provider: providerConfig.provider,
@@ -147,6 +149,7 @@ class SystemKeyManager {
     }
 
     logger.info({ organizationId }, "Completed system API keys sync");
+    return failedProviders;
   }
 
   /**
@@ -221,6 +224,7 @@ class SystemKeyManager {
         },
         "Failed to sync models for system key",
       );
+      throw error;
     }
   }
 

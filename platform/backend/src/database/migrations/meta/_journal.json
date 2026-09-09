@@ -3228,6 +3228,13 @@
       "when": 1788906087569,
       "tag": "0460_wet_arclight",
       "breakpoints": true
+    },
+    {
+      "idx": 461,
+      "version": "7",
+      "when": 1788916474000,
+      "tag": "0461_worthless_christian_walker",
+      "breakpoints": true
     }
   ]
 }

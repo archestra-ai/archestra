@@ -393,6 +393,11 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (agentKey) {
           apiKeys.push({
             ...agentKey,
+            // The viewer authenticates with their own subscription, never this owner's.
+            requiresReauthentication:
+              agentKey.scope === "personal" && agentKey.userId !== user.id
+                ? undefined
+                : agentKey.requiresReauthentication,
             createdBy: await CreatedByModel.resolveOne(agentKey.createdBy),
             teamName: null,
             userName: null,
@@ -1222,6 +1227,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body.apiKey) {
+        await LlmProviderApiKeyModel.setRequiresReauthentication({
+          id: params.id,
+          requiresReauthentication: false,
+        });
+      }
+
       // Only touch labels when the caller sent them, so an update that omits
       // the field leaves existing labels alone.
       if (body.labels !== undefined) {
@@ -1349,6 +1361,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      await LlmProviderApiKeyModel.setRequiresReauthentication({
+        id: keyRow.id,
+        requiresReauthentication: false,
+      });
       const updated = await LlmProviderApiKeyModel.findById(keyRow.id);
       if (!updated) {
         throw new ApiError(404, "LLM provider API key not found");

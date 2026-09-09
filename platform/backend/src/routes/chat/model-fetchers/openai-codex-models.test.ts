@@ -32,6 +32,13 @@ describe("fetchOpenAiModels with a ChatGPT-subscription credential", () => {
       OPENAI_CODEX_MODELS.map((model) => model.id),
     );
     expect(models.every((model) => model.provider === "openai")).toBe(true);
+    // Subscription discovery must expose the current model using the upstream
+    // request ID, so it can be selected and sent through the Codex adapter.
+    expect(models).toContainEqual({
+      id: "gpt-6-astra",
+      displayName: "GPT-6 Astra",
+      provider: "openai",
+    });
     // The only network call is the OAuth redemption — never a models listing.
     expect(vi.mocked(fetch)).toHaveBeenCalledOnce();
     expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain("/oauth/token");

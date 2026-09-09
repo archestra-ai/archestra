@@ -59,6 +59,7 @@ function Harness({
   progressive,
   allowPersonalSubscriptions,
   requiresExactSubscriptionCredential,
+  withLabels,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
@@ -67,6 +68,7 @@ function Harness({
   progressive?: boolean;
   allowPersonalSubscriptions?: boolean;
   requiresExactSubscriptionCredential?: boolean;
+  withLabels?: boolean;
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -82,6 +84,8 @@ function Harness({
       progressive={progressive}
       allowPersonalSubscriptions={allowPersonalSubscriptions}
       requiresExactSubscriptionCredential={requiresExactSubscriptionCredential}
+      labels={withLabels ? [] : undefined}
+      onLabelsChange={withLabels ? () => {} : undefined}
     />
   );
 }
@@ -94,6 +98,7 @@ function renderForm(options?: {
   progressive?: boolean;
   allowPersonalSubscriptions?: boolean;
   requiresExactSubscriptionCredential?: boolean;
+  withLabels?: boolean;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -106,6 +111,7 @@ function renderForm(options?: {
         defaults={options?.defaults}
         credentialMode={options?.credentialMode}
         progressive={options?.progressive}
+        withLabels={options?.withLabels}
         allowPersonalSubscriptions={options?.allowPersonalSubscriptions}
         requiresExactSubscriptionCredential={
           options?.requiresExactSubscriptionCredential
@@ -136,6 +142,27 @@ beforeEach(() => {
 });
 
 describe("LlmProviderApiKeyForm", () => {
+  it.each([
+    "openai",
+    "github-copilot",
+    "microsoft-365-copilot",
+    "xai",
+  ] as const)("hides advanced settings and labels in the %s subscription dialog", (provider) => {
+    renderForm({
+      defaults: { provider, authMethod: "subscription" },
+      credentialMode: "subscription",
+      progressive: true,
+      withLabels: true,
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Advanced settings" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Labels", { exact: true }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows only sign-in content for a focused subscription flow", () => {
     renderForm({
       credentialMode: "subscription",
@@ -419,11 +446,19 @@ describe("LlmProviderApiKeyForm", () => {
     renderForm({
       existingKey,
       defaults: { authMethod: "subscription" },
+      progressive: true,
+      withLabels: true,
     });
 
     await waitFor(() => {
       expect(screen.getByText("ChatGPT account connected")).toBeInTheDocument();
     });
+    expect(
+      screen.queryByRole("button", { name: "Advanced settings" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Labels", { exact: true }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not show the connected card when editing a plain OpenAI key on the subscription tab", async () => {

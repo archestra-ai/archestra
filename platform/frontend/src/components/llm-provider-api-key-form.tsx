@@ -510,7 +510,6 @@ export function LlmProviderApiKeyForm({
   const isSubscriptionFlow = credentialMode === "subscription";
   const hasLabelsEditor = labels !== undefined && onLabelsChange !== undefined;
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
-  const showAdvancedSettings = !progressive || advancedSettingsOpen;
 
   const provider = form.watch("provider");
   const apiKey = form.watch("apiKey");
@@ -791,6 +790,9 @@ export function LlmProviderApiKeyForm({
   // OpenAI "ChatGPT subscription" auth mode is the same shape.
   const isPerUserProvider = providerRequiresPerUserCredential(provider);
   const isPerUserCredential = isPerUserProvider || isCredentialSubscriptionMode;
+  const hasAdvancedSettings = !isSubscriptionFlow && !isPerUserCredential;
+  const showAdvancedSettings =
+    hasAdvancedSettings && (!progressive || advancedSettingsOpen);
   // The subscription this form is currently connecting, if any: implied by the
   // provider when it is per-user outright, chosen by the auth-method tabs when
   // the provider also accepts API keys. Drives every piece of vendor copy below.
@@ -1602,7 +1604,7 @@ export function LlmProviderApiKeyForm({
 
         {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
 
-        {progressive && (!isSubscriptionFlow || hasLabelsEditor) && (
+        {progressive && hasAdvancedSettings && (
           <Button
             type="button"
             variant="ghost"

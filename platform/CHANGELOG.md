@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.4.0-beta.2](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.1...platform-v1.4.0-beta.2) (2026-09-09)
+
+
+### Features
+
+* **costs:** add proxy cost attribution by credential ([#7723](https://github.com/archestra-ai/archestra/issues/7723)) ([c1b8c4d](https://github.com/archestra-ai/archestra/commit/c1b8c4dfed1a9bebe61a396bf5c032c94c9262fa))
+* **frontend:** show my teams and streamline personal settings ([#7760](https://github.com/archestra-ai/archestra/issues/7760)) ([fca43e2](https://github.com/archestra-ai/archestra/commit/fca43e2f34c3a775e1a99d18656d847ca80baacb))
+* **knowledge:** add personal and team sharing for knowledge bases ([#7743](https://github.com/archestra-ai/archestra/issues/7743)) ([4e15ec2](https://github.com/archestra-ai/archestra/commit/4e15ec2fbce5a0e0e6dc258f4586fc7d7d250eeb))
+* **rbac:** support multiple roles, team inheritance, and SSO defaults ([#7724](https://github.com/archestra-ai/archestra/issues/7724)) ([dc4885e](https://github.com/archestra-ai/archestra/commit/dc4885e66d494ffac6b0efdca032ed8453366264))
+
+
+### Bug Fixes
+
+* **agent-runtime:** preflight incompatible model selections ([#7748](https://github.com/archestra-ai/archestra/issues/7748)) ([dc71329](https://github.com/archestra-ai/archestra/commit/dc71329d04dd1cd95545e07e1a5e642b08e85d9c))
+* **agent-runtime:** prevent Hermes startup dependency installs ([#7755](https://github.com/archestra-ai/archestra/issues/7755)) ([97cafdf](https://github.com/archestra-ai/archestra/commit/97cafdf91226bcfda56510444f453ead123c3999))
+* **agent-runtime:** reject incompatible models before accepting runs ([#7740](https://github.com/archestra-ai/archestra/issues/7740)) ([0d62b7c](https://github.com/archestra-ai/archestra/commit/0d62b7caef397042bf52b50bf7bb82b8872b29f4))
+* **agent-runtime:** support Claude Code with Bedrock and Vertex AI ([#7741](https://github.com/archestra-ai/archestra/issues/7741)) ([911d496](https://github.com/archestra-ai/archestra/commit/911d4966bdfbb9c4dc36af2f130e0baf77d1f845))
+* **chat:** defer Bedrock IAM authentication to the proxy ([#7732](https://github.com/archestra-ai/archestra/issues/7732)) ([6f90d33](https://github.com/archestra-ai/archestra/commit/6f90d33594d77176c25e87598aec7239837041bb))
+* **deps:** patch platform image security vulnerabilities ([#7744](https://github.com/archestra-ai/archestra/issues/7744)) ([7066309](https://github.com/archestra-ai/archestra/commit/70663092e576d121fb1c322ff07eeac8371d6d78))
+* **llm:** surface subscription reconnect and model refresh failures ([#7758](https://github.com/archestra-ai/archestra/issues/7758)) ([a5df8b8](https://github.com/archestra-ai/archestra/commit/a5df8b83da272761f68c9faab3dacad3f8883db6))
+* **subscriptions:** add Astra and simplify credential dialogs ([#7752](https://github.com/archestra-ai/archestra/issues/7752)) ([83a3976](https://github.com/archestra-ai/archestra/commit/83a39761c7e1e79c8ebd3a0571359422b06a1609))
+
+
+### Documentation
+
+* **apps:** clarify who can edit shared MCP Apps ([#7736](https://github.com/archestra-ai/archestra/issues/7736)) ([12fca6b](https://github.com/archestra-ai/archestra/commit/12fca6b3aa821a5bbd25b8e82b0127beb83ba84b))
+* **releases:** make stable-line cutovers end-to-end ([#7728](https://github.com/archestra-ai/archestra/issues/7728)) ([0de0287](https://github.com/archestra-ai/archestra/commit/0de0287ccbd4b3c83811e3684e9504de70305bd8))
+
+
+### Code Refactoring
+
+* **apps:** align settings with team dialogs and move creator into header ([#7739](https://github.com/archestra-ai/archestra/issues/7739)) ([1c5c34f](https://github.com/archestra-ai/archestra/commit/1c5c34fb589d1141b3d6c7a8fd84b0f05b7214ba))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump hono from 4.13.0 to 4.13.7 in /platform/mcp_server_docker_image ([#7746](https://github.com/archestra-ai/archestra/issues/7746)) ([9e00988](https://github.com/archestra-ai/archestra/commit/9e00988a6af56f5185579417437d835a823ea114))
+
 ## [1.4.0-beta.1](https://github.com/archestra-ai/archestra/compare/platform-v1.3.51...platform-v1.4.0-beta.1) (2026-09-08)
 
 

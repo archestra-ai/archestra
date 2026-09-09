@@ -119,7 +119,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-beta.1" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-beta.2" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -921,7 +921,7 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.1` <!-- x-release-please-version -->
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.2` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`

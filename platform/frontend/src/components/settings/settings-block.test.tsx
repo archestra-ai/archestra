@@ -3,12 +3,46 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
+  FloatingActionBar,
   SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "./settings-block";
 
 vi.mock("@/lib/auth/auth.query");
+
+describe("FloatingActionBar", () => {
+  it("floats its actions in a sticky bar when there is no stack to portal into", () => {
+    // The shape the agent, skill and plugin detail pages render it in: on their
+    // own, not inside a SettingsSectionStack, so the bar sticks from where it
+    // stands instead of riding away at the foot of a long form.
+    render(
+      <FloatingActionBar>
+        <button type="button">Save changes</button>
+      </FloatingActionBar>,
+    );
+
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expect(save.closest(".sticky")).not.toBeNull();
+  });
+
+  it("moves into the stack's slot when rendered inside one", () => {
+    const { container } = render(
+      <SettingsSectionStack>
+        <FloatingActionBar>
+          <button type="button">Save changes</button>
+        </FloatingActionBar>
+      </SettingsSectionStack>,
+    );
+
+    const stack = container.firstElementChild as HTMLElement;
+    const slot = stack.lastElementChild as HTMLElement;
+    expect(slot.className).toContain("sticky");
+    expect(slot).toContainElement(
+      screen.getByRole("button", { name: "Save changes" }),
+    );
+  });
+});
 
 describe("SettingsBlock", () => {
   it("renders a semantic section with an accessible heading", () => {

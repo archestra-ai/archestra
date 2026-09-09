@@ -2,7 +2,7 @@
 
 import type { Permissions } from "@archestra/shared";
 import type { ReactNode } from "react";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -61,6 +61,124 @@ export function SettingsBlock({
   );
 }
 
+/**
+ * The floating card the save rows across the app ride in: a settings page's
+ * Save/Cancel, and the Save/Discard rows on the agent, MCP gateway, skill and
+ * plugin detail pages. It keeps the actions in reach at the foot of a long
+ * form without the reader scrolling to the bottom for them.
+ *
+ * Inside a {@link SettingsSectionStack} the card belongs to the stack's slot,
+ * not to wherever the page declared it (see that component for why).
+ *
+ * Outside a stack it has to float on its own. A plain `position: sticky` bar
+ * declared in the page content is enough on a settings page, but a detail page
+ * asks {@link PageLayout} for a `min-width` floor, which wraps its content in
+ * an `overflow-x` box — and that box is itself a scroll container, so a sticky
+ * bar inside it pins to the foot of the *content* (scrolled past with it)
+ * rather than to the viewport. To float for the whole page regardless, the bar
+ * portals up to the page's real scroll container and borrows the content
+ * column's horizontal box from an in-flow anchor left where it was declared.
+ * With no such container to find (a bare unit test, or a surface that never
+ * sets one) it falls back to sticking from where it stands.
+ */
+export function FloatingActionBar({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const slot = useContext(SaveBarSlotContext);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  // The scroll container to portal into, plus the content column's offset and
+  // width within it, so the floating card lines up with the form above it.
+  const [portal, setPortal] = useState<{
+    target: HTMLElement;
+    left: number;
+    width: number;
+  } | null>(null);
+
+  useEffect(() => {
+    // A stack owns placement through its slot; nothing to measure or portal.
+    if (slot) return;
+    const anchor = anchorRef.current;
+    const target = anchor?.closest<HTMLElement>("[data-page-scroll-container]");
+    if (!anchor || !target) return;
+
+    const measure = () => {
+      const box = anchor.getBoundingClientRect();
+      // Hidden (display:none ancestor) — keep the last good measurement rather
+      // than snapping the bar to the top-left corner.
+      if (box.width === 0) return;
+      const targetBox = target.getBoundingClientRect();
+      const left = box.left - targetBox.left;
+      const width = box.width;
+      // Skip no-op updates: this also runs on every scroll (below), and a fresh
+      // object each time would re-render the card on plain vertical scroll.
+      setPortal((prev) =>
+        prev && prev.left === left && prev.width === width
+          ? prev
+          : { target, left, width },
+      );
+    };
+
+    measure();
+    // Re-measure when the column reflows: a sidebar collapse/expand, a window
+    // resize, the content growing a scrollbar.
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(measure);
+    observer?.observe(anchor);
+    observer?.observe(target);
+    window.addEventListener("resize", measure);
+    // On a viewport narrower than the content column, PageLayout's `overflow-x`
+    // box scrolls the form sideways under the bar; that moves the anchor's left
+    // edge without resizing anything, so track scroll too. Capture phase, since
+    // scroll does not bubble from the inner container.
+    document.addEventListener("scroll", measure, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+      document.removeEventListener("scroll", measure, true);
+    };
+  }, [slot]);
+
+  const bar = (
+    <div
+      className={cn(
+        "flex flex-wrap gap-3 bg-background p-4 rounded-lg border border-border shadow-lg",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+
+  if (slot) return createPortal(bar, slot);
+
+  return (
+    <>
+      {/* Left where the bar was declared, so its geometry tracks the content
+          column even as the portaled card floats elsewhere. */}
+      <div ref={anchorRef} aria-hidden className="h-0" />
+      {portal ? (
+        createPortal(
+          <div
+            className="sticky bottom-4 z-10"
+            style={{ marginLeft: portal.left, width: portal.width }}
+          >
+            {bar}
+          </div>,
+          portal.target,
+        )
+      ) : (
+        <div className="sticky bottom-4 z-10">{bar}</div>
+      )}
+    </>
+  );
+}
+
 interface SettingsSaveBarProps {
   hasChanges: boolean;
   isSaving: boolean;
@@ -78,12 +196,10 @@ export function SettingsSaveBar({
   onCancel,
   disabledSave,
 }: SettingsSaveBarProps) {
-  const slot = useContext(SaveBarSlotContext);
-
   if (!hasChanges) return null;
 
-  const bar = (
-    <div className="flex gap-3 bg-background p-4 rounded-lg border border-border shadow-lg">
+  return (
+    <FloatingActionBar>
       <PermissionButton
         permissions={permissions}
         onClick={onSave}
@@ -94,16 +210,7 @@ export function SettingsSaveBar({
       <Button variant="outline" onClick={onCancel} disabled={isSaving}>
         Cancel
       </Button>
-    </div>
-  );
-
-  // Inside a stack the bar belongs to the stack's slot, not to wherever the
-  // page declared it. Outside one there is nothing to move it into, so it
-  // sticks from where it stands.
-  return slot ? (
-    createPortal(bar, slot)
-  ) : (
-    <div className="sticky bottom-4 z-10">{bar}</div>
+    </FloatingActionBar>
   );
 }
 

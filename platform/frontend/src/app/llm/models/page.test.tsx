@@ -280,6 +280,87 @@ describe("ModelsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders the provider icon inline before the model ID", async () => {
+    keyCreated = true;
+    renderPage();
+
+    expect(await screen.findByText(model.modelId)).toBeVisible();
+    // The icon moved out of its own column and now sits in the Model ID cell.
+    expect(screen.getByRole("img", { name: "Anthropic" })).toBeVisible();
+  });
+
+  it("shows input and output prices in one combined column", async () => {
+    keyCreated = true;
+    renderPage();
+
+    expect(await screen.findByText(model.modelId)).toBeVisible();
+    // Input ($3) and output ($15) share a single cell, like Cache R/W.
+    expect(screen.getByText("$3.00 / $15.00")).toBeVisible();
+    expect(screen.getByText("$/M In/Out")).toBeVisible();
+    expect(screen.queryByText("$/M Input")).not.toBeInTheDocument();
+    expect(screen.queryByText("$/M Output")).not.toBeInTheDocument();
+  });
+
+  it("hydrates filter state from the URL query params", async () => {
+    keyCreated = true;
+    // A chat model filtered to embedding-only should drop out entirely.
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("modelType=embedding") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText("No models match your filters"),
+    ).toBeVisible();
+    expect(screen.queryByText(model.modelId)).not.toBeInTheDocument();
+  });
+
+  it("syncs the search filter to the URL query params", async () => {
+    keyCreated = true;
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      await screen.findByPlaceholderText(/search models/i),
+      "claude",
+    );
+
+    await waitFor(() =>
+      expect(routerPush).toHaveBeenCalledWith(
+        expect.stringContaining("search=claude"),
+        { scroll: false },
+      ),
+    );
+  });
+
+  it("keeps a free-only deep link while the provider keys load", async () => {
+    keyCreated = true;
+    // An OpenRouter key makes the free-only filter valid — but it resolves
+    // after first render, when apiKeys is still empty.
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          { ...providerKey, provider: "openrouter", name: "OpenRouter" },
+        ]),
+      ),
+    );
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("freeOnly=true") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    renderPage();
+
+    // The toggle hydrates from the URL and stays on once keys resolve...
+    const toggle = await screen.findByRole("switch", { name: /free only/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    // ...and the deep link is never stripped while keys were loading.
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it("clears an active label filter from the model collection", async () => {
     keyCreated = true;
     vi.mocked(useSearchParams).mockReturnValue(

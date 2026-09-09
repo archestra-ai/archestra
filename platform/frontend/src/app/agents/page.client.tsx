@@ -468,17 +468,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           }),
         ]),
     {
-      id: "icon",
-      size: 40,
-      enableSorting: false,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <AgentIcon icon={row.original.icon} size={20} />
-        </div>
-      ),
-    },
-    {
       id: "name",
       accessorKey: "name",
       size: 240,
@@ -497,6 +486,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
+            icon={<AgentIcon icon={agent.icon} size={20} />}
             // A trashed agent has no detail page: `GET /api/agents/:id`
             // filters deleted rows, so the link would land on "not found".
             href={

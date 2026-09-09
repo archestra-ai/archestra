@@ -83,7 +83,7 @@ export function useCreateA2aRemoteAgent() {
   });
 }
 
-export function useDeleteA2aRemoteAgent() {
+export function useDeleteA2aRemoteAgent(options?: { notify?: boolean }) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
@@ -95,7 +95,9 @@ export function useDeleteA2aRemoteAgent() {
       return response.data;
     },
     onSuccess: () => {
-      toast.success("External A2A agent removed");
+      if (options?.notify !== false) {
+        toast.success("External A2A agent removed");
+      }
       queryClient.invalidateQueries({ queryKey: a2aRemoteAgentQueryKeys.all });
     },
   });

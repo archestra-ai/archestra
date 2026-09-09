@@ -289,6 +289,18 @@ describe("ModelsPage", () => {
     expect(screen.getByRole("img", { name: "Anthropic" })).toBeVisible();
   });
 
+  it("shows input and output prices in one combined column", async () => {
+    keyCreated = true;
+    renderPage();
+
+    expect(await screen.findByText(model.modelId)).toBeVisible();
+    // Input ($3) and output ($15) share a single cell, like Cache R/W.
+    expect(screen.getByText("$3.00 / $15.00")).toBeVisible();
+    expect(screen.getByText("$/M In/Out")).toBeVisible();
+    expect(screen.queryByText("$/M Input")).not.toBeInTheDocument();
+    expect(screen.queryByText("$/M Output")).not.toBeInTheDocument();
+  });
+
   it("hydrates filter state from the URL query params", async () => {
     keyCreated = true;
     // A chat model filtered to embedding-only should drop out entirely.

@@ -403,34 +403,26 @@ export default function ModelsPage() {
         },
       },
       {
-        id: "pricingInput",
-        size: 104,
-        header: "$/M Input",
+        id: "pricingInputOutput",
+        size: 132,
+        // Input and output prices share one column (like Cache R/W) to save
+        // horizontal space, shown "$input / $output" and free to wrap onto two
+        // lines when the column is narrow.
+        header: "$/M In/Out",
         cell: ({ row }) => {
-          const price = row.original.pricePerMillionInput;
+          const { pricePerMillionInput, pricePerMillionOutput } = row.original;
           if (hasUnknownCapabilities(row.original)) return null;
-          return price ? (
-            <span className="text-sm font-mono">
-              ${formatPricePerMillion(price)}
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">-</span>
-          );
-        },
-      },
-      {
-        id: "pricingOutput",
-        size: 104,
-        header: "$/M Output",
-        cell: ({ row }) => {
-          const price = row.original.pricePerMillionOutput;
-          if (hasUnknownCapabilities(row.original)) return null;
-          return price ? (
-            <span className="text-sm font-mono">
-              ${formatPricePerMillion(price)}
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">-</span>
+          if (!pricePerMillionInput && !pricePerMillionOutput) {
+            return <span className="text-sm text-muted-foreground">-</span>;
+          }
+          const input = pricePerMillionInput
+            ? `$${formatPricePerMillion(pricePerMillionInput)}`
+            : "-";
+          const output = pricePerMillionOutput
+            ? `$${formatPricePerMillion(pricePerMillionOutput)}`
+            : "-";
+          return (
+            <span className="text-sm font-mono">{`${input} / ${output}`}</span>
           );
         },
       },

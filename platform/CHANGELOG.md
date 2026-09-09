@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.54](https://github.com/archestra-ai/archestra/compare/platform-v1.3.53...platform-v1.3.54) (2026-09-09)
+
+
+### Features
+
+* **frontend:** backport personal settings improvements to 1.3 ([#7761](https://github.com/archestra-ai/archestra/issues/7761)) ([77a20a9](https://github.com/archestra-ai/archestra/commit/77a20a91a82a759da9ab3ab75dca5ef2e4528f97))
+
+
+### Bug Fixes
+
+* **agent-runtime:** backport Claude Code cloud provider support to 1.3 ([#7742](https://github.com/archestra-ai/archestra/issues/7742)) ([29d4952](https://github.com/archestra-ai/archestra/commit/29d4952d674b79599f0e52e4121bfcbdd2116320))
+* **agent-runtime:** backport Hermes startup fix to 1.3 ([#7756](https://github.com/archestra-ai/archestra/issues/7756)) ([bdca1c8](https://github.com/archestra-ai/archestra/commit/bdca1c873d29c9841c8580387b4af6b9e6617e11))
+* **agent-runtime:** backport model compatibility validation to 1.3 ([#7754](https://github.com/archestra-ai/archestra/issues/7754)) ([b7981a7](https://github.com/archestra-ai/archestra/commit/b7981a798d7941de79614ba4890e4fbb582ae36f))
+* **deps:** backport platform image CVE fixes to 1.3 ([#7747](https://github.com/archestra-ai/archestra/issues/7747)) ([b963be6](https://github.com/archestra-ai/archestra/commit/b963be6ea42dadd240296af96e7005087ca7e471))
+* **llm:** backport subscription reconnect and refresh feedback to 1.3 ([#7759](https://github.com/archestra-ai/archestra/issues/7759)) ([676bcf2](https://github.com/archestra-ai/archestra/commit/676bcf27dcdda2bf227b66e0d940569295705737))
+* **subscriptions:** backport Astra and simplified dialogs to 1.3 ([#7753](https://github.com/archestra-ai/archestra/issues/7753)) ([904bd1d](https://github.com/archestra-ai/archestra/commit/904bd1d45012ba459c66b6bd414d8bdc4b39bae7))
+
 ## [1.3.53](https://github.com/archestra-ai/archestra/compare/platform-v1.3.52...platform-v1.3.53) (2026-09-08)
 
 

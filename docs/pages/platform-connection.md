@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-08
+lastUpdated: 2026-09-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,6 +14,7 @@ The Connection page provides a prompt for your coding agent.
 Your agent prepares the connection; you review and approve it in your browser.
 
 **Other ways to connect** opens manual setup for Claude Desktop, Cursor, n8n, and other clients.
+Refreshing returns to the prompt.
 Client-specific links still open their setup instructions directly.
 
 On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.

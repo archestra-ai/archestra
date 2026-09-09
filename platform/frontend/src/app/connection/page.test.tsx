@@ -29,7 +29,9 @@ describe("ConnectionPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("mode=manual") as ReturnType<typeof useSearchParams>,
+      new URLSearchParams("clientId=claude-code") as ReturnType<
+        typeof useSearchParams
+      >,
     );
     refetchOrganizationMock.mockResolvedValue({});
     vi.mocked(useDefaultMcpGateway).mockReturnValue({
@@ -51,9 +53,34 @@ describe("ConnectionPage", () => {
     render(<ConnectionPage />);
     expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "Other ways to connect" }),
-    ).toHaveAttribute("href", "/connection?mode=manual");
+      screen.getByRole("button", { name: "Other ways to connect" }),
+    ).toBeVisible();
     expect(connectionFlowMock).not.toHaveBeenCalled();
+  });
+
+  it("returns to the prompt after remounting a temporary manual setup", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {},
+      isFetchedAfterMount: true,
+      isFetching: false,
+      isError: false,
+      refetch: refetchOrganizationMock,
+    } as unknown as ReturnType<typeof useOrganization>);
+    const view = render(<ConnectionPage />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Other ways to connect" }),
+    );
+    expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Connect with your AI" }),
+    ).toBeNull();
+    expect(connectionFlowMock).toHaveBeenCalled();
+    view.unmount();
+    render(<ConnectionPage />);
+    expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
   });
 
   it.each([

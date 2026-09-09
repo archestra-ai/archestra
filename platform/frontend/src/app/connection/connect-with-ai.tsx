@@ -1,13 +1,16 @@
 "use client";
 
 import { ArrowRight, Check, Copy, Terminal } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
 
-export function ConnectWithAi() {
+export function ConnectWithAi({
+  onManualSetup,
+}: {
+  onManualSetup: () => void;
+}) {
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
   useEffect(() => setOrigin(window.location.origin), []);
@@ -81,14 +84,15 @@ export function ConnectWithAi() {
         <p className="mt-1 text-xs text-muted-foreground/70">
           Claude Code, Codex, or Copilot CLI · Node.js 18+
         </p>
-        <div className="mt-9">
-          <Link
-            href="/connection?mode=manual"
-            className="group inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        <div className="mt-6">
+          <Button
+            variant="link"
+            onClick={onManualSetup}
+            className="h-auto gap-1.5 p-0 text-xs text-primary underline underline-offset-4 hover:text-primary/80 has-[>svg]:px-0"
           >
             <span>Other ways to connect</span>
-            <ArrowRight className="size-3.5" />
-          </Link>
+            <ArrowRight className="size-3" />
+          </Button>
           <p className="mt-2 text-xs text-muted-foreground/70">
             Claude Desktop, Cursor, n8n, and manual setup
           </p>

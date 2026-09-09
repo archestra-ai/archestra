@@ -100,7 +100,12 @@ export function ConnectionFlow({
   const selectClient = (id: string) => {
     setClientId(id);
     // Providers vary per client, so clear any bookmarked provider on switch.
-    updateUrlParams({ clientId: id, providerId: null });
+    // Keep ordinary manual setup transient so refresh returns to the prompt.
+    // Explicit client links retain their bookmarkable selection.
+    updateUrlParams({
+      ...(urlClientId ? { clientId: id } : {}),
+      providerId: null,
+    });
   };
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);

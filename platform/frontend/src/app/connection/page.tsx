@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -16,6 +15,7 @@ import { getConnectableProviders } from "./connection-flow.utils";
 
 export default function ConnectionPage() {
   const searchParams = useSearchParams();
+  const [showManualSetup, setShowManualSetup] = useState(false);
   const isApproval = !!searchParams.get("connectRequest");
   const requestedClient = CONNECT_CLIENTS.find(
     (client) => client.id === searchParams.get("clientId"),
@@ -56,12 +56,8 @@ export default function ConnectionPage() {
     organization?.connectionDefaultMcpGatewayId ?? null;
   const adminDefaultClientId = organization?.connectionDefaultClientId ?? null;
 
-  if (
-    !isApproval &&
-    !searchParams.get("clientId") &&
-    searchParams.get("mode") !== "manual"
-  ) {
-    return <ConnectWithAi />;
+  if (!isApproval && !searchParams.get("clientId") && !showManualSetup) {
+    return <ConnectWithAi onManualSetup={() => setShowManualSetup(true)} />;
   }
 
   return (
@@ -88,16 +84,6 @@ export default function ConnectionPage() {
         isApproval
           ? `Connect ${requestedClient?.label ?? "your client"}`
           : "Connection"
-      }
-      actionButton={
-        !isApproval ? (
-          <Link
-            href="/connection"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Connect with your AI
-          </Link>
-        ) : undefined
       }
       maxWidth="wizard"
     >

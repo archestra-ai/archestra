@@ -322,13 +322,16 @@ export function TeamsList() {
     <>
       <BulkActionsScope>
         <CollectionFilters>
-          <FilterBar>
-            <SearchInput
-              isLoading={isLoading}
-              objectNamePlural="teams"
-              searchFields={["name"]}
-              className={filterSearchClass}
-            />
+          <FilterBar
+            search={
+              <SearchInput
+                isLoading={isLoading}
+                objectNamePlural="teams"
+                searchFields={["name"]}
+                className={filterSearchClass}
+              />
+            }
+          >
             <LabelSelect
               labelKeys={labelKeys}
               LabelKeyRowComponent={TeamLabelKeyRow}

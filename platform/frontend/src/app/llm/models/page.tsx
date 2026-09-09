@@ -594,13 +594,15 @@ export default function ModelsPage() {
             <FilterBar
               leading
               onClearFilters={hasActiveFilters ? clearFilters : undefined}
+              search={
+                <SearchInput
+                  objectNamePlural="models"
+                  searchFields={["model ID"]}
+                  paramName="search"
+                  className={filterSearchClass}
+                />
+              }
             >
-              <SearchInput
-                objectNamePlural="models"
-                searchFields={["model ID"]}
-                paramName="search"
-                className={filterSearchClass}
-              />
               <LlmProviderApiKeyDropdown
                 availableKeys={apiKeys}
                 selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}

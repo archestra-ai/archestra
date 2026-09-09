@@ -284,20 +284,23 @@ export function ConnectorDocumentsTable({
   return (
     <BulkActionsScope>
       <CollectionFilters>
-        <FilterBar>
-          <SearchInput
-            isLoading={isFetching}
-            value={search}
-            syncQueryParams={false}
-            placeholder="Search documents by title"
-            className={filterSearchClass}
-            onSearchChange={(nextValue) =>
-              updateQueryParams({
-                search: nextValue || null,
-                page: "1",
-              })
-            }
-          />
+        <FilterBar
+          search={
+            <SearchInput
+              isLoading={isFetching}
+              value={search}
+              syncQueryParams={false}
+              placeholder="Search documents by title"
+              className={filterSearchClass}
+              onSearchChange={(nextValue) =>
+                updateQueryParams({
+                  search: nextValue || null,
+                  page: "1",
+                })
+              }
+            />
+          }
+        >
           {showGroupFilter && (
             <Select
               value={group || "all"}

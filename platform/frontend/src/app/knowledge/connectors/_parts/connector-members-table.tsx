@@ -302,14 +302,17 @@ export function ConnectorMembersTable({
     <div>
       {members.length > 0 && (
         <CollectionFilters>
-          <FilterBar>
-            <SearchInput
-              value={search}
-              syncQueryParams={false}
-              placeholder={`Search by ID, email, name, or ${noun.singular}`}
-              className={filterSearchClass}
-              onSearchChange={setSearch}
-            />
+          <FilterBar
+            search={
+              <SearchInput
+                value={search}
+                syncQueryParams={false}
+                placeholder={`Search by ID, email, name, or ${noun.singular}`}
+                className={filterSearchClass}
+                onSearchChange={setSearch}
+              />
+            }
+          >
             <Select
               value={filter}
               onValueChange={(value) => setFilter(value as MemberFilter)}

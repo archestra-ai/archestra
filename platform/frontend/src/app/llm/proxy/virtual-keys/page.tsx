@@ -353,14 +353,19 @@ function VirtualKeysTable() {
     <TableCardView storageKey="archestra-llm-virtual-keys-view">
       <div>
         <CollectionFilters>
-          <FilterBar leading actions={<TableCardViewToggle />}>
-            <SearchInput
-              isLoading={query.isFetching}
-              objectNamePlural="keys"
-              searchFields={["name"]}
-              paramName="search"
-              className={filterSearchClass}
-            />
+          <FilterBar
+            leading
+            actions={<TableCardViewToggle />}
+            search={
+              <SearchInput
+                isLoading={query.isFetching}
+                objectNamePlural="keys"
+                searchFields={["name"]}
+                paramName="search"
+                className={filterSearchClass}
+              />
+            }
+          >
             <FilterSelect
               value={keyTypeFilter ?? "all"}
               onValueChange={(value) =>

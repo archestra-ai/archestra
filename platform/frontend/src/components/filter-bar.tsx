@@ -1,7 +1,13 @@
 "use client";
 
-import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
-import { type ComponentProps, Fragment, type ReactNode } from "react";
+import { ChevronDown, Funnel, SlidersHorizontal, X } from "lucide-react";
+import {
+  Children,
+  type ComponentProps,
+  Fragment,
+  type ReactNode,
+  useSyncExternalStore,
+} from "react";
 import {
   ContextualActionsPortal,
   useBulkActionsScope,
@@ -72,11 +78,15 @@ export function CollectionFilters({
  * and truncated their labels ("All Agents & LLM Pr…") while leaving dead space
  * inside the shorter ones.
  *
+ * Below the lg breakpoint, search stays inline and all filters share a funnel
+ * popover. Desktop keeps the primary controls and active secondary filters inline.
+ *
+ * @param search - The search input (or its hint wrapper), kept outside the popover.
  * @param onClearFilters - When provided, a "Clear" button is appended after the
  * filters. Pass it only while some filter is actually applied; the button is
  * the bar's only affordance for resetting them all at once.
  * @param moreFilters - Secondary filters, for pages with more of them than fit
- * a row. An entry is shown inline while it is `active` and tucked into a "More
+ * a row. On desktop, an entry is inline while `active` and tucked into a "More
  * filters" popover while it is not, so the bar always states every filter
  * currently narrowing the table — a hidden active filter reads as an empty
  * table with no explanation.
@@ -99,6 +109,7 @@ export function CollectionFilters({
  */
 export function FilterBar({
   children,
+  search,
   className,
   contextualActions,
   contextualActionsClassName,
@@ -109,6 +120,8 @@ export function FilterBar({
   leading = false,
 }: {
   children?: ReactNode;
+  /** Search stays visible beside the filter popover on compact screens. */
+  search?: ReactNode;
   className?: string;
   contextualActions?: ReactNode;
   contextualActionsClassName?: string;
@@ -118,6 +131,15 @@ export function FilterBar({
   actions?: ReactNode;
   leading?: boolean;
 }) {
+  const compact = useSyncExternalStore(
+    subscribeToCompactFilters,
+    getCompactFiltersSnapshot,
+    () => false,
+  );
+  const hasFilters =
+    Children.toArray(children).length > 0 || !!moreFilters?.length;
+  const hasActiveFilters =
+    !!onClearFilters || !!moreFilters?.some((filter) => filter.active);
   const bulkActionsScope = useBulkActionsScope();
   const actionsTargetId =
     contextualActionsTargetId ?? bulkActionsScope?.targetId;
@@ -146,36 +168,42 @@ export function FilterBar({
           className,
         )}
       >
-        {children}
-        {appliedOverflow.map((filter) => (
-          // Fragment rather than a wrapper element: the control has to be the
-          // bar's own flex item for its sizing to behave like the inline ones'.
-          <Fragment key={filter.key}>{filter.control}</Fragment>
-        ))}
-        {tuckedAway.length > 0 && (
+        {search && (
+          <div className="min-w-0 flex-1 max-lg:max-w-[20rem] lg:contents max-lg:[&>*]:min-w-0 max-lg:[&>*]:w-full max-lg:[&>*]:basis-auto">
+            {search}
+          </div>
+        )}
+        {compact && hasFilters ? (
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className={filterControlClass()}>
-                <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
-                <span>More filters</span>
-                <ChevronDown
-                  aria-hidden
-                  className="h-4 w-4 text-muted-foreground"
-                />
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label={hasActiveFilters ? "Filters (active)" : "Filters"}
+                className={filterControlClass({
+                  active: hasActiveFilters,
+                  className: "relative size-8 shrink-0 px-0",
+                })}
+              >
+                <Funnel aria-hidden className="size-4" />
+                {hasActiveFilters && (
+                  <span
+                    aria-hidden
+                    className="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
+                  />
+                )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-72 space-y-3">
-              {tuckedAway.map((filter) => (
+            <PopoverContent
+              align={search ? "end" : "start"}
+              aria-label="Table filters"
+              className="flex max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto [&>button]:w-full [&>button]:max-w-none"
+            >
+              <span className="text-sm font-medium">Filters</span>
+              {children}
+              {moreFilters?.map((filter) => (
                 <div
                   key={filter.key}
-                  // The control is the same compact trigger used in the bar,
-                  // stretched to the popover width so this reads as a small form
-                  // rather than a second filter bar. Scoped to the row's direct
-                  // child so a control that renders buttons of its own inside
-                  // itself keeps their widths, and matched by element rather than
-                  // by `[data-slot=button]`: a trigger reaches its <button>
-                  // through a Radix `asChild` wrapper, which overwrites Button's
-                  // `data-slot` with its own (`popover-trigger`/`select-trigger`).
                   className="space-y-1.5 [&>button]:w-full [&>button]:max-w-none"
                 >
                   <span className="block text-xs font-medium">
@@ -184,19 +212,69 @@ export function FilterBar({
                   {filter.control}
                 </div>
               ))}
+              {onClearFilters && (
+                <Button variant="ghost" size="sm" onClick={onClearFilters}>
+                  <X aria-hidden className="size-3.5" />
+                  <span>Clear</span>
+                </Button>
+              )}
             </PopoverContent>
           </Popover>
-        )}
-        {onClearFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClearFilters}
-            className="h-8 gap-1.5 px-2"
-          >
-            <X className="h-3.5 w-3.5" />
-            <span>Clear</span>
-          </Button>
+        ) : (
+          <>
+            {children}
+            {appliedOverflow.map((filter) => (
+              // Fragment rather than a wrapper element: the control has to be the
+              // bar's own flex item for its sizing to behave like the inline ones'.
+              <Fragment key={filter.key}>{filter.control}</Fragment>
+            ))}
+            {tuckedAway.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={filterControlClass()}>
+                    <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
+                    <span>More filters</span>
+                    <ChevronDown
+                      aria-hidden
+                      className="h-4 w-4 text-muted-foreground"
+                    />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-72 space-y-3">
+                  {tuckedAway.map((filter) => (
+                    <div
+                      key={filter.key}
+                      // The control is the same compact trigger used in the bar,
+                      // stretched to the popover width so this reads as a small form
+                      // rather than a second filter bar. Scoped to the row's direct
+                      // child so a control that renders buttons of its own inside
+                      // itself keeps their widths, and matched by element rather than
+                      // by `[data-slot=button]`: a trigger reaches its <button>
+                      // through a Radix `asChild` wrapper, which overwrites Button's
+                      // `data-slot` with its own (`popover-trigger`/`select-trigger`).
+                      className="space-y-1.5 [&>button]:w-full [&>button]:max-w-none"
+                    >
+                      <span className="block text-xs font-medium">
+                        {filter.label}
+                      </span>
+                      {filter.control}
+                    </div>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            )}
+            {onClearFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClearFilters}
+                className="h-8 gap-1.5 px-2"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span>Clear</span>
+              </Button>
+            )}
+          </>
         )}
         {actions && (
           <div className="flex basis-full items-center justify-start gap-1.5 md:ml-auto md:basis-auto">
@@ -317,5 +395,20 @@ export function FilterSelect({
         contentClassName,
       )}
     />
+  );
+}
+
+// Keep this breakpoint aligned with Tailwind's lg layout.
+function subscribeToCompactFilters(onChange: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia("(max-width: 1023px)");
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function getCompactFiltersSnapshot() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(max-width: 1023px)").matches
   );
 }

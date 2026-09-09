@@ -2611,6 +2611,7 @@ export function AgentForm({
     scope,
     assignedTeamIds,
     hasCompleteLlmSelection,
+    llmApiKeyId,
     channelAssignmentsDirty,
     performSave,
   ]);

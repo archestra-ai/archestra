@@ -235,6 +235,16 @@ import { AgentRuntimeCredentialCard } from "./agent-pages/agent-runtime-credenti
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
+type A2aRemoteAgent =
+  archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number];
+type A2aDelegation =
+  archestraApiTypes.GetAgentA2aDelegationsResponses["200"][number];
+type A2aSubagentTarget = {
+  connectionId: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+};
 
 /** The API caps `limit` at 100, which is as much as the skill picker can load. */
 const SKILL_PICKER_PAGE_SIZE = 100;
@@ -383,6 +393,7 @@ interface SubagentPillProps {
   agent: Agent;
   isSelected: boolean;
   onToggle: (agentId: string) => void;
+  readOnly?: boolean;
   // "delegate" pills read as an active delegation target (green); "exclude"
   // pills read as a target removed from the Auto surface (red).
   tone?: "delegate" | "exclude";
@@ -392,6 +403,7 @@ function SubagentPill({
   agent,
   isSelected,
   onToggle,
+  readOnly = false,
   tone = "delegate",
 }: SubagentPillProps) {
   const [open, setOpen] = useState(false);
@@ -418,17 +430,22 @@ function SubagentPill({
             )}
             <Bot className="h-3 w-3 shrink-0" />
             <span className="font-medium truncate">{agent.name}</span>
+            <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+              Local
+            </span>
           </Button>
         </PopoverTrigger>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
-          onClick={() => onToggle(agent.id)}
-          aria-label="Remove agent"
-        >
-          <X className="h-3 w-3" />
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
+            onClick={() => onToggle(agent.id)}
+            aria-label={`Remove agent ${agent.name}`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
       </div>
       <PopoverContent
         className="w-[350px] p-0"
@@ -467,165 +484,309 @@ function SubagentPill({
   );
 }
 
-// Component to edit subagents (delegations)
+// Component to display and edit local delegation targets.
 interface SubagentsEditorProps {
+  agentId?: string;
+  readOnly: boolean;
+  localMode: "all" | "selected";
   availableAgents: Agent[];
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
-  currentAgentId?: string;
-  placeholder?: string;
-  // The "delegate" role offers a shortcut to create a new agent; the "exclude"
-  // (disabled-subagents) role only narrows an existing set, so it omits it.
-  showCreateAction?: boolean;
-  tone?: "delegate" | "exclude";
-  /**
-   * What an empty delegation set means for this record. An agent runs the task
-   * itself; a gateway simply advertises no delegation tool, and never had a
-   * task of its own to hand on.
-   */
+  disabledAgentIds: string[];
+  onDisabledSelectionChange: (ids: string[]) => void;
   emptyDescription?: string;
 }
 
 function SubagentsEditor({
+  agentId,
+  readOnly,
+  localMode,
   availableAgents,
   selectedAgentIds,
   onSelectionChange,
-  currentAgentId,
-  placeholder = "Search agents...",
-  showCreateAction = true,
-  tone = "delegate",
+  disabledAgentIds,
+  onDisabledSelectionChange,
   emptyDescription = "Every task is handled here, with nothing handed on.",
 }: SubagentsEditorProps) {
-  // Filter out the current agent, and the advisor: its own switch below owns
-  // that decision, and listing it here would offer a second way to change the
-  // same thing — one that reads as the opposite in Auto mode, where this list
-  // is what an agent may *not* delegate to.
+  // The advisor has a dedicated switch below. Keeping it out of both the
+  // local list and the switch prevents two controls from changing one grant.
   const filteredAgents = availableAgents.filter(
-    (a) =>
-      a.id !== currentAgentId &&
-      a.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
+    (agent) =>
+      agent.id !== agentId &&
+      agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
   );
 
+  const items: AssignmentComboboxItem[] = filteredAgents.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    description: agent.description || undefined,
+    badge: localMode === "all" ? "Exclude" : "Local",
+    icon: <Bot className="h-4 w-4" />,
+  }));
+  const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
   const handleToggle = (agentId: string) => {
-    if (selectedAgentIds.includes(agentId)) {
-      onSelectionChange(selectedAgentIds.filter((id) => id !== agentId));
-    } else {
-      onSelectionChange([...selectedAgentIds, agentId]);
-    }
+    if (readOnly) return;
+    const ids = localMode === "all" ? disabledAgentIds : selectedAgentIds;
+    const setIds =
+      localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
+    setIds(
+      ids.includes(agentId)
+        ? ids.filter((id) => id !== agentId)
+        : [...ids, agentId],
+    );
   };
 
-  const comboboxItems: AssignmentComboboxItem[] = filteredAgents.map((a) => ({
-    id: a.id,
-    name: a.name,
-    description: a.description || undefined,
-  }));
-
-  const selectedAgents = filteredAgents.filter((a) =>
-    selectedAgentIds.includes(a.id),
+  const selectedLocalAgents = filteredAgents.filter((agent) =>
+    selectedAgentIds.includes(agent.id),
   );
-
-  // Same rule as the knowledge editor: nothing excluded is a complete answer,
-  // nothing delegated is a state worth naming.
-  const isEmpty = tone === "delegate" && selectedAgents.length === 0;
+  const excludedLocalAgents = filteredAgents.filter((agent) =>
+    disabledAgentIds.includes(agent.id),
+  );
+  const hasSelectedTargets = selectedLocalAgents.length > 0;
 
   return (
-    <div
-      className={cn(
-        "flex flex-wrap gap-2",
-        isEmpty &&
-          "flex-col items-center rounded-md border border-dashed px-4 py-6 text-center",
-      )}
-    >
-      {isEmpty && (
-        <div className="space-y-0.5">
+    <div className="space-y-3">
+      <p className="text-sm font-medium">Assigned</p>
+      {localMode === "all" ? (
+        <div className="rounded-md border bg-muted/20 px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm font-medium">All local agents</span>
+            <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+              Local
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {excludedLocalAgents.length === 0
+              ? "Every local agent you can access may be delegated to."
+              : `${excludedLocalAgents.length} local ${excludedLocalAgents.length === 1 ? "agent is" : "agents are"} excluded below.`}
+          </p>
+        </div>
+      ) : !hasSelectedTargets ? (
+        <div className="flex flex-col items-center rounded-md border border-dashed px-4 py-6 text-center">
           <p className="text-sm font-medium">No subagents assigned</p>
           <p className="text-xs text-muted-foreground">{emptyDescription}</p>
         </div>
+      ) : null}
+
+      {localMode === "all" && excludedLocalAgents.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">
+            Local exceptions
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {excludedLocalAgents.map((agent) => (
+              <SubagentPill
+                key={agent.id}
+                agent={agent}
+                isSelected={true}
+                readOnly={readOnly}
+                onToggle={() =>
+                  onDisabledSelectionChange(
+                    disabledAgentIds.filter((id) => id !== agent.id),
+                  )
+                }
+                tone="exclude"
+              />
+            ))}
+          </div>
+        </div>
       )}
-      {selectedAgents.map((agent) => (
-        <SubagentPill
-          key={agent.id}
-          agent={agent}
-          isSelected={true}
-          onToggle={handleToggle}
-          tone={tone}
-        />
-      ))}
-      <AssignmentCombobox
-        items={comboboxItems}
-        selectedIds={selectedAgentIds}
-        onToggle={handleToggle}
-        // Without this the exclude side inherited the default "Add", so Auto
-        // mode offered to add an agent and then disabled whichever was picked.
-        label={tone === "exclude" ? "Disable subagents" : "Add"}
-        placeholder={placeholder}
-        emptyMessage="No agents found."
-        createAction={
-          showCreateAction
-            ? {
-                label: "Create a New Agent",
-                href: "/agents/new",
+
+      {localMode === "selected" && selectedLocalAgents.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {selectedLocalAgents.map((agent) => (
+            <SubagentPill
+              key={agent.id}
+              agent={agent}
+              isSelected={true}
+              readOnly={readOnly}
+              onToggle={() =>
+                onSelectionChange(
+                  selectedAgentIds.filter((id) => id !== agent.id),
+                )
               }
-            : undefined
-        }
-      />
+            />
+          ))}
+        </div>
+      )}
+
+      {!readOnly && (
+        <AssignmentCombobox
+          items={items}
+          selectedIds={selectedIds}
+          onToggle={handleToggle}
+          label="Add subagent"
+          placeholder={
+            localMode === "all"
+              ? "Search agents to exclude..."
+              : "Search agents..."
+          }
+          emptyMessage="No agents found."
+          createAction={
+            localMode === "selected"
+              ? {
+                  label: "Create a New Agent",
+                  href: "/agents/new",
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }
 
-function ExternalA2aSubagentsEditor({
+function OutboundAgentPill({
+  target,
+  readOnly,
+  onRemove,
+}: {
+  target: A2aSubagentTarget;
+  readOnly: boolean;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal>
+      <div className="flex items-center">
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 max-w-[200px] gap-1.5 rounded-r-none border-r-0 px-3 text-xs"
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+            <Globe className="h-3 w-3 shrink-0" />
+            <span className="truncate font-medium">{target.name}</span>
+            <span className="rounded border px-1 text-[9px] uppercase tracking-wide text-muted-foreground">
+              A2A
+            </span>
+          </Button>
+        </PopoverTrigger>
+        {!readOnly && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+            aria-label={`Remove ${target.name}`}
+            onClick={onRemove}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+      <PopoverContent
+        className="w-[350px] p-0"
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        avoidCollisions
+      >
+        <div className="flex items-start justify-between gap-2 border-b p-4">
+          <div className="min-w-0 flex-1">
+            <h4 className="truncate font-semibold">{target.name}</h4>
+            {target.description && (
+              <ExpandableText
+                text={target.description}
+                maxLines={2}
+                className="mt-1 text-sm text-muted-foreground"
+              />
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 shrink-0 p-0"
+            onClick={() => setOpen(false)}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="p-4">
+          <p className="text-sm text-muted-foreground">External A2A agent</p>
+          {!target.enabled && (
+            <p className="mt-1 text-sm text-destructive">Connection disabled</p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function OutboundAgentsEditor({
   agentId,
   readOnly,
+  availableA2aAgents,
+  currentA2aDelegations,
   selectedConnectionIds,
   onSelectionChange,
   assignmentsLoaded,
   assignmentsError,
+  agentsPending,
+  agentsError,
 }: {
   agentId?: string;
   readOnly: boolean;
+  availableA2aAgents: A2aRemoteAgent[];
+  currentA2aDelegations: A2aDelegation[];
   selectedConnectionIds: string[];
   onSelectionChange: (ids: string[]) => void;
   assignmentsLoaded: boolean;
   assignmentsError: boolean;
+  agentsPending: boolean;
+  agentsError: boolean;
 }) {
-  const registry = useA2aRemoteAgents({ enabled: Boolean(agentId) });
+  // Preserve assigned rows even if the registry response is briefly behind the
+  // assignment response. This also keeps a disabled or removed connection
+  // visible and removable instead of turning it into an invisible id.
+  const targets = useMemo(() => {
+    const byConnectionId = new Map<string, A2aSubagentTarget>();
+    for (const remoteAgent of availableA2aAgents) {
+      byConnectionId.set(remoteAgent.connection.id, {
+        connectionId: remoteAgent.connection.id,
+        name: remoteAgent.name,
+        description: remoteAgent.description ?? undefined,
+        enabled: remoteAgent.connection.enabled,
+      });
+    }
+    for (const delegation of currentA2aDelegations) {
+      if (byConnectionId.has(delegation.connectionId)) continue;
+      byConnectionId.set(delegation.connectionId, {
+        connectionId: delegation.connectionId,
+        name: delegation.name,
+        description: delegation.description ?? undefined,
+        enabled: delegation.enabled,
+      });
+    }
+    return [...byConnectionId.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [availableA2aAgents, currentA2aDelegations]);
 
-  if (!agentId) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Save this agent before assigning an external A2A subagent.
-      </p>
-    );
-  }
-  if (assignmentsError || registry.isError) {
-    return (
-      <p role="alert" className="text-xs text-destructive">
-        External A2A assignments could not be loaded. Reload before changing
-        them.
-      </p>
-    );
-  }
-  if (!assignmentsLoaded || registry.isPending) {
-    return (
-      <p className="text-xs text-muted-foreground">Loading external agents…</p>
-    );
-  }
-
-  const selected = (registry.data ?? []).filter((item) =>
-    selectedConnectionIds.includes(item.connection.id),
+  const selectedTargets = targets.filter((target) =>
+    selectedConnectionIds.includes(target.connectionId),
   );
-  const items: AssignmentComboboxItem[] = (registry.data ?? []).map((item) => ({
-    id: item.connection.id,
-    name: item.name,
-    description: item.description ?? undefined,
-    badge: "External A2A",
-    disabled: readOnly || !item.connection.enabled,
-    disabledReason: !item.connection.enabled
-      ? "Connection disabled"
-      : undefined,
+  const canEditAssignments =
+    Boolean(agentId) &&
+    assignmentsLoaded &&
+    !assignmentsError &&
+    !agentsPending &&
+    !agentsError;
+  const items: AssignmentComboboxItem[] = targets.map((target) => ({
+    id: target.connectionId,
+    name: target.name,
+    description: target.description,
+    badge: "A2A",
+    disabled: !target.enabled,
+    disabledReason: !target.enabled ? "Connection disabled" : undefined,
+    icon: <Globe className="h-4 w-4" />,
   }));
-  const toggle = (connectionId: string) => {
-    if (readOnly) return;
+  const handleToggle = (connectionId: string) => {
+    if (readOnly || !canEditAssignments) return;
     onSelectionChange(
       selectedConnectionIds.includes(connectionId)
         ? selectedConnectionIds.filter((id) => id !== connectionId)
@@ -634,54 +795,68 @@ function ExternalA2aSubagentsEditor({
   };
 
   return (
-    <div className="space-y-2 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium">External A2A</p>
-          <p className="text-xs text-muted-foreground">
-            Always explicitly assigned, including when local subagents use All
-            mode.
+    <div className="flex items-start gap-3 border-t pt-4">
+      <SettingIcon tone={selectedTargets.length > 0 ? "on" : "off"}>
+        <Globe className="h-4 w-4" />
+      </SettingIcon>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <Label>Outbound Agents</Label>
+        <p className="text-xs text-muted-foreground">
+          External A2A agents this one may delegate work to. They are always
+          assigned explicitly.
+        </p>
+        {selectedTargets.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {selectedTargets.map((target) => (
+              <OutboundAgentPill
+                key={target.connectionId}
+                target={target}
+                readOnly={readOnly || !canEditAssignments}
+                onRemove={() =>
+                  onSelectionChange(
+                    selectedConnectionIds.filter(
+                      (id) => id !== target.connectionId,
+                    ),
+                  )
+                }
+              />
+            ))}
+          </div>
+        )}
+        {!agentId && (
+          <p className="pt-1 text-xs text-muted-foreground">
+            Save this agent before assigning an outbound A2A agent.
           </p>
-        </div>
-        <Button type="button" variant="outline" size="sm" asChild>
-          <Link href="/a2a/agents" target="_blank" rel="noopener noreferrer">
-            Manage connections
-          </Link>
-        </Button>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {selected.map((item) => (
-          <Badge
-            key={item.connection.id}
-            variant="secondary"
-            className="gap-1.5 py-1"
-          >
-            {item.name}
-            <span className="rounded border px-1 text-[9px] uppercase tracking-wide">
-              A2A
-            </span>
-            {!readOnly && (
-              <button
-                type="button"
-                aria-label={`Remove ${item.name}`}
-                className="rounded-sm hover:bg-muted"
-                onClick={() => toggle(item.connection.id)}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </Badge>
-        ))}
-        {!readOnly && (
+        )}
+        {agentId && (assignmentsError || agentsError) && (
+          <p role="alert" className="pt-1 text-xs text-destructive">
+            Outbound A2A agents could not be loaded. Reload before changing
+            them.
+          </p>
+        )}
+        {agentId &&
+          !assignmentsError &&
+          !agentsError &&
+          (agentsPending || !assignmentsLoaded) && (
+            <p className="pt-1 text-xs text-muted-foreground">
+              Loading outbound agents…
+            </p>
+          )}
+        {agentId && canEditAssignments && selectedTargets.length === 0 && (
+          <p className="pt-1 text-xs text-muted-foreground">
+            No outbound agents assigned.
+          </p>
+        )}
+        {!readOnly && canEditAssignments && (
           <AssignmentCombobox
             items={items}
             selectedIds={selectedConnectionIds}
-            onToggle={toggle}
-            label="Add external"
-            placeholder="Search external A2A agents..."
+            onToggle={handleToggle}
+            label="Add outbound agent"
+            placeholder="Search outbound agents..."
             emptyMessage="No external A2A agents connected."
             createAction={{
-              label: "Connect an External A2A Agent",
+              label: "Manage external agents",
               href: "/a2a/agents",
             }}
           />
@@ -1125,6 +1300,9 @@ export function AgentForm({
     isSuccess: a2aDelegationsLoaded,
     isError: a2aDelegationsError,
   } = useAgentA2aDelegations(supportsSubagents ? agent?.id : undefined);
+  const a2aRemoteAgents = useA2aRemoteAgents({
+    enabled: supportsSubagents && Boolean(agent?.id) && !agent?.builtIn,
+  });
   const syncA2aDelegations = useSyncAgentA2aDelegations();
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
   const syncKnowledgeSourceExclusions =
@@ -3612,7 +3790,7 @@ export function AgentForm({
                   // "hands a task over" would describe the wrong actor.
                   description={
                     isInternalAgent
-                      ? "Other agents this one may hand a task to."
+                      ? "Agents this one may delegate work to, locally or over A2A."
                       : `Agents this ${agentTypeDisplayName[agentType] || "agent"} offers its clients as delegation tools.`
                   }
                 >
@@ -3638,33 +3816,33 @@ export function AgentForm({
                           </TabsList>
                         </Tabs>
                       </div>
-                      {accessAllSubagents ? (
-                        <div className="space-y-1.5">
-                          <SubagentsEditor
-                            availableAgents={allInternalAgents}
-                            selectedAgentIds={disabledSubagentIds}
-                            onSelectionChange={setDisabledSubagentIds}
-                            currentAgentId={agent?.id}
-                            placeholder="Search agents to disable..."
-                            showCreateAction={false}
-                            tone="exclude"
-                          />
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <SubagentsEditor
-                            availableAgents={allInternalAgents}
-                            selectedAgentIds={selectedDelegationTargetIds}
-                            onSelectionChange={setSelectedDelegationTargetIds}
-                            currentAgentId={agent?.id}
-                            emptyDescription={
-                              isInternalAgent
-                                ? undefined
-                                : "No delegation tools appear in this gateway's tool list."
-                            }
-                          />
-                        </div>
-                      )}
+                      <SubagentsEditor
+                        agentId={agent?.id}
+                        readOnly={readOnly}
+                        localMode={accessAllSubagents ? "all" : "selected"}
+                        availableAgents={allInternalAgents}
+                        selectedAgentIds={selectedDelegationTargetIds}
+                        onSelectionChange={setSelectedDelegationTargetIds}
+                        disabledAgentIds={disabledSubagentIds}
+                        onDisabledSelectionChange={setDisabledSubagentIds}
+                        emptyDescription={
+                          isInternalAgent
+                            ? undefined
+                            : "No delegation tools appear in this gateway's tool list."
+                        }
+                      />
+                      <OutboundAgentsEditor
+                        agentId={agent?.id}
+                        readOnly={readOnly}
+                        availableA2aAgents={a2aRemoteAgents.data ?? []}
+                        currentA2aDelegations={currentA2aDelegations}
+                        selectedConnectionIds={selectedA2aConnectionIds}
+                        onSelectionChange={setSelectedA2aConnectionIds}
+                        assignmentsLoaded={a2aDelegationsLoaded}
+                        assignmentsError={a2aDelegationsError}
+                        agentsPending={a2aRemoteAgents.isPending}
+                        agentsError={!!a2aRemoteAgents.isError}
+                      />
                       {/* Outside the Auto/Custom split on purpose: whether this
                         agent can consult the advisor is one decision, even
                         though the two modes record it differently. */}
@@ -3751,14 +3929,6 @@ export function AgentForm({
                           />
                         </div>
                       )}
-                      <ExternalA2aSubagentsEditor
-                        agentId={agent?.id}
-                        readOnly={readOnly}
-                        selectedConnectionIds={selectedA2aConnectionIds}
-                        onSelectionChange={setSelectedA2aConnectionIds}
-                        assignmentsLoaded={a2aDelegationsLoaded}
-                        assignmentsError={a2aDelegationsError}
-                      />
                     </div>
                   )}
                 </SettingsSection>

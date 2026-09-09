@@ -641,14 +641,17 @@ vi.mock("@/components/ui/assignment-combobox", () => ({
     onSearchChange,
     placeholder,
     isSearching,
+    label,
   }: {
     items: Array<{ id: string; name: string }>;
     onToggle: (id: string) => void;
     onSearchChange?: (query: string) => void;
     placeholder?: string;
     isSearching?: boolean;
+    label?: string;
   }) => (
     <div>
+      <button type="button">{label ?? "Add"}</button>
       <input
         aria-label={placeholder ?? "Search"}
         onChange={(e) => onSearchChange?.(e.target.value)}
@@ -1048,7 +1051,7 @@ describe("AgentForm delegation state", () => {
     );
   });
 
-  it("assigns an external A2A subagent explicitly even while local subagents use All mode", async () => {
+  it("assigns an outbound A2A agent explicitly even while local subagents use All mode", async () => {
     const user = userEvent.setup();
     const syncExternal = vi.fn();
     const autoAgent = { ...baseAgent, accessAllSubagents: true };
@@ -1071,14 +1074,21 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    expect(
-      screen.getByText(
-        "Always explicitly assigned, including when local subagents use All mode.",
-      ),
-    ).toBeInTheDocument();
+    const picker = screen.getByRole("button", {
+      name: "Add outbound agent",
+    });
+    expect(picker).toBeInTheDocument();
+    expect(screen.getByText("Outbound Agents")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: "Add External Compliance Agent" }),
+      screen.getByRole("button", {
+        name: /External Compliance Agent/,
+      }),
     );
+    expect(
+      screen.getByRole("button", {
+        name: /External Compliance Agent.*A2A/,
+      }),
+    ).toBeInTheDocument();
     expect(syncExternal).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /update/i }));
 
@@ -1107,13 +1117,65 @@ describe("AgentForm delegation state", () => {
 
     expect(
       screen.getByText(
-        "Save this agent before assigning an external A2A subagent.",
+        "Save this agent before assigning an outbound A2A agent.",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Add External Compliance Agent" }),
+      screen.getByRole("button", { name: "Add subagent" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add outbound agent" }),
     ).not.toBeInTheDocument();
     expect(useAgentA2aDelegationsMock).toHaveBeenCalledWith(undefined);
+  });
+
+  it("shows local and outbound A2A assignments in their separate sections", async () => {
+    const customAgent = { ...baseAgent, accessAllSubagents: false };
+    useProfileMock.mockReturnValue({ data: customAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
+    useAgentDelegationsMock.mockReturnValue({
+      data: [targetAgent],
+      isSuccess: true,
+    });
+    useA2aRemoteAgentsMock.mockReturnValue({
+      data: [
+        {
+          id: "remote-agent-1",
+          name: "External Research Agent",
+          description: "Researches remote systems",
+          connection: { id: "connection-1", enabled: true },
+        },
+      ],
+      isPending: false,
+    });
+    useAgentA2aDelegationsMock.mockReturnValue({
+      data: [
+        {
+          remoteAgentId: "remote-agent-1",
+          connectionId: "connection-1",
+          toolId: "tool-1",
+          name: "External Research Agent",
+          description: "Researches remote systems",
+          enabled: true,
+        },
+      ],
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={customAgent} />);
+
+    expect(
+      await screen.findByRole("button", { name: /Target AgentLocal/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Outbound Agents")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /External Research Agent.*A2A/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 subagent assigned.")).toBeInTheDocument();
   });
 
   it("does not replace external assignments after their read fails", async () => {
@@ -1133,10 +1195,10 @@ describe("AgentForm delegation state", () => {
     render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "External A2A assignments could not be loaded.",
+      "Outbound A2A agents could not be loaded.",
     );
     expect(
-      screen.queryByRole("button", { name: /add external/i }),
+      screen.queryByRole("button", { name: /add outbound agent/i }),
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /update/i }));
     await waitFor(() => expect(syncExternal).not.toHaveBeenCalled());
@@ -1247,7 +1309,7 @@ describe("AgentForm delegation state", () => {
     });
     expect(screen.queryByText(advisorAgent.name)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Every subagent, with no exceptions\./),
+      screen.getByText(/Every local agent, with no exceptions\./),
     ).toBeInTheDocument();
   });
 
@@ -1345,7 +1407,7 @@ describe("AgentForm delegation state", () => {
     await user.click(subagentModeTab("All"));
 
     expect(
-      screen.getByText(/Every subagent, with no exceptions\./),
+      screen.getByText(/Every local agent, with no exceptions\./),
     ).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),

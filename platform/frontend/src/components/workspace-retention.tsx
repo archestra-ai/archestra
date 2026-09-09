@@ -8,6 +8,9 @@ import {
 export function WorkspaceRetention({ expiresAt }: { expiresAt: string }) {
   const now = useRuntimeClock(true);
   const deadline = new Date(expiresAt);
+  if (Number.isNaN(deadline.getTime())) {
+    return <span>Retention unavailable</span>;
+  }
   const remaining = deadline.getTime() - now;
   return (
     <time

@@ -4,6 +4,11 @@ import { WorkspaceRetention } from "./workspace-retention";
 
 afterEach(() => vi.useRealTimers());
 
+it("keeps the run readable when its retention deadline is malformed", () => {
+  render(<WorkspaceRetention expiresAt="invalid" />);
+  expect(screen.getByText("Retention unavailable")).toBeInTheDocument();
+});
+
 it("shows a compact countdown and retains the exact deadline on hover", () => {
   vi.useFakeTimers();
   vi.setSystemTime("2026-09-09T12:00:00Z");

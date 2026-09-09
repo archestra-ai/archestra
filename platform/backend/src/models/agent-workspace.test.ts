@@ -73,7 +73,18 @@ describe("Agent workspace ownership", () => {
     expect(await AgentWorkspaceModel.listForReaping(1)).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: workspace.id })]),
     );
-    expect(await AgentWorkspaceModel.recordActivity(workspace.id)).toBe(true);
+    const latestActivity = new Date();
+    expect(
+      await AgentWorkspaceModel.recordActivity(workspace.id, latestActivity),
+    ).toBe(true);
+    // A delayed event from another replica must not move activity backwards.
+    expect(await AgentWorkspaceModel.recordActivity(workspace.id, stale)).toBe(
+      true,
+    );
+    expect(
+      (await AgentWorkspaceModel.findByWorkloadName(workspace.workloadName))
+        ?.lastActivityAt,
+    ).toEqual(latestActivity);
     expect(
       await AgentWorkspaceModel.transition({
         id: workspace.id,

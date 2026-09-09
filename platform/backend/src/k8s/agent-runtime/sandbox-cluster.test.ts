@@ -129,6 +129,30 @@ describe.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
             )
           );
         });
+        // Retain applies to shutdown, not explicit deletion: foreground GC
+        // must remove the workspace PVC when the Sandbox is deleted.
+        const pvcName = `workspace-${name}`;
+        expect(kubectl(["get", "pvc", pvcName, "-o", "name"]).trim()).toBe(
+          `persistentvolumeclaim/${pvcName}`,
+        );
+        kubectl([
+          "delete",
+          "sandbox",
+          name,
+          "--cascade=foreground",
+          "--wait=false",
+        ]);
+        await until(
+          () =>
+            kubectl([
+              "get",
+              "pvc",
+              pvcName,
+              "--ignore-not-found",
+              "-o",
+              "name",
+            ]).trim() === "",
+        );
       } catch (error) {
         // This disposable fixture contains no credentials or user content.
         const diagnostics = podName()

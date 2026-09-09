@@ -53,11 +53,12 @@ while :; do
     fi
     touch "$turn.started"
     touch "$turn.log"
+    tmux set-option -t agent @archestra_retained_task ""
     tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
     tmux pipe-pane -t agent
     tmux pipe-pane -t agent "tee -a '$turn.log' >> /proc/1/fd/1"
     rm -f ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE}
-    printf '%s\n' "touch '$turn.running'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
+    printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
     tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
     startup_polls=0
     dead_polls=0

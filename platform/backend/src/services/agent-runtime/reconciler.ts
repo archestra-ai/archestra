@@ -144,7 +144,7 @@ class AgentRunReconciler {
           }
           // Capture the supervisor's final output while its volume still exists.
           // A failed capture/cleanup leaves the deleting intent for retry.
-          if (!run.endedAt) {
+          if (!run.endedAt || run.virtualApiKeyId) {
             await cleanupAgentRun(run, { requireTranscript: true });
           } else {
             await backend.releaseRun(run);
@@ -157,6 +157,9 @@ class AgentRunReconciler {
           to: "deleted",
         });
       } else {
+        const run = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+        if (run?.virtualApiKeyId)
+          await cleanupAgentRun(run, { requireTranscript: true });
         await backend.suspendWorkspace(workspace);
         await AgentWorkspaceModel.transition({
           id: workspace.id,

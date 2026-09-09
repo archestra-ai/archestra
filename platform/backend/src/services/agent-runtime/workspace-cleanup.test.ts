@@ -268,7 +268,9 @@ test.for([
   await cleanupAgentRun(run);
   expect(teardown).not.toHaveBeenCalled();
   expect(stop).toHaveBeenCalledTimes(state === "TASK_STATE_COMPLETED" ? 0 : 1);
-  expect(release).toHaveBeenCalledWith(run);
+  expect(release).toHaveBeenCalledWith(run, {
+    retainInteractiveSession: state === "TASK_STATE_COMPLETED",
+  });
   expect(
     (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,
   ).toBe(suspended ? "suspended" : "idle");

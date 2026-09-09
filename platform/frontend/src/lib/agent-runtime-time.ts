@@ -4,8 +4,16 @@ export function useRuntimeClock(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!active) return;
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
+    const update = () => setNow(Date.now());
+    const onVisible = () => {
+      if (document.visibilityState === "visible") update();
+    };
+    const timer = setInterval(update, 30_000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [active]);
   return now;
 }

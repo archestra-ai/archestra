@@ -76,6 +76,44 @@ describe("AgentRunChatSession", () => {
     };
   });
 
+  it("reattaches to a completed live session and detaches back to its recording", async () => {
+    const user = userEvent.setup();
+    queryState.value.data = run({
+      endedAt: new Date().toISOString(),
+      state: "TASK_STATE_COMPLETED",
+      workspace: {
+        state: "idle",
+        terminalAvailable: true,
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        idleAt: null,
+        connection: null,
+      },
+    });
+    const { rerender } = render(<AgentRunChatSession taskId="task-1" />);
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
+    expect(screen.queryByText("Retained run output")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Detach" }));
+    expect(screen.getByText("Retained run output")).toBeInTheDocument();
+    queryState.value.data = {
+      ...queryState.value.data,
+      workspace: {
+        state: "suspended",
+        terminalAvailable: false,
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        idleAt: null,
+        connection: null,
+      },
+    };
+    rerender(<AgentRunChatSession taskId="task-1" />);
+    expect(
+      screen.queryByRole("button", { name: "Continue" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Resume conversation" }),
+    ).toBeInTheDocument();
+  });
+
   it("opens the shared terminal while the session is being created", () => {
     queryState.value.isPending = true;
 

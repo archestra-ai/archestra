@@ -21,6 +21,7 @@ import {
   AgentModel,
   AgentRunInputModel,
   AgentRunModel,
+  AgentWorkspaceModel,
   OrganizationModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -460,8 +461,38 @@ class AgentRuntimeManager {
     });
   }
 
-  async releaseRun(session: AgentRunRecord): Promise<void> {
-    await this.revokeVirtualKey(session);
+  async hasRetainedTerminal(
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
+  ): Promise<boolean> {
+    const pod = await this.findPod(session);
+    if (pod?.status?.phase !== "Running" || !pod.metadata?.name) return false;
+    const output = await execAgentRuntimeCommand({
+      exec: this.requireClients().exec,
+      namespace: session.runtimeScope,
+      podName: pod.metadata.name,
+      container: AGENT_RUNTIME_CONTAINER_NAME,
+      command: [
+        "tmux",
+        "display-message",
+        "-p",
+        "-t",
+        "agent",
+        "#{pane_dead}:#{@archestra_retained_task}",
+      ],
+    }).catch(() => "");
+    return output.trim() === `0:${session.taskId}`;
+  }
+
+  async releaseRun(
+    session: AgentRunRecord,
+    options?: { retainInteractiveSession?: boolean },
+  ): Promise<void> {
+    if (
+      !options?.retainInteractiveSession ||
+      !(await this.hasRetainedTerminal(session))
+    ) {
+      await this.revokeVirtualKey(session);
+    }
     const clients = this.requireClients();
     // Keep the names for continuation's inherited-env unset list, but prevent
     // replacement Pods and their exec shells from receiving stale credentials.
@@ -699,6 +730,24 @@ class AgentRuntimeManager {
     /** Called as the attach moves through its waits; see `startup-phase`. */
     onProgress?: AgentRuntimeStartupProgressReporter;
   }): Promise<{ podName: string; command: string; socket: WebSocket }> {
+    if (params.session.endedAt) {
+      const workspace = await AgentWorkspaceModel.findByWorkloadName(
+        params.session.workloadName,
+      );
+      if (
+        !workspace ||
+        workspace.state !== "idle" ||
+        workspace.lastTaskId !== params.session.taskId ||
+        workspace.expiresAt.getTime() <= Date.now() ||
+        !(await this.hasRetainedTerminal(params.session))
+      ) {
+        throw new ApiError(
+          409,
+          "The original terminal is no longer running. Resume the saved conversation instead.",
+        );
+      }
+      await AgentWorkspaceModel.recordActivity(workspace.id, new Date());
+    }
     const clients = this.requireClients();
     // A2A marks the durable task working before Kubernetes necessarily has a
     // Running pod. Chat can therefore open the terminal during image pull or

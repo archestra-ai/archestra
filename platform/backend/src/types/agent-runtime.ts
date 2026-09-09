@@ -277,6 +277,7 @@ export const GetAgentRunResponseSchema = SelectAgentRunSessionSchema.extend({
       state: AgentWorkspaceStateSchema,
       expiresAt: z.date(),
       idleAt: z.date().nullable(),
+      terminalAvailable: z.boolean().optional(),
       connection: z
         .object({ hostname: z.string(), shellCommand: z.string() })
         .nullable(),

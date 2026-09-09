@@ -18660,6 +18660,7 @@ export type GetMyAgentRunResponses = {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;
             idleAt: string | null;
+            terminalAvailable?: boolean;
             connection: {
                 hostname: string;
                 shellCommand: string;
@@ -89849,6 +89850,7 @@ export type GetProjectRunsResponses = {
             state: 'active' | 'idle' | 'suspending' | 'suspended' | 'resuming' | 'deleting' | 'deleted';
             expiresAt: string;
             idleAt: string | null;
+            terminalAvailable?: boolean;
             connection: {
                 hostname: string;
                 shellCommand: string;

@@ -279,10 +279,11 @@ interactive mode, but they will not provide a useful Chat terminal.
 
 ### Workspace Continuations
 
-A completed run and its workspace have different lifetimes. A follow-up creates
-a new run using the same Agent and workspace; it does not reopen the completed
-A2A task. Only the workspace's original actor can continue it, and only one turn
-can own it at a time.
+A completed task can retain its interactive session. Reattaching preserves that
+process, terminal history, and conversation. When the process has ended, resuming
+creates a new run in the same workspace. The completed A2A task stays completed.
+Only the workspace's original actor can continue it, and only one turn can own it
+at a time.
 
 The supervisor keeps the Pod available after a successful turn. After the idle
 timeout, Archestra suspends the Sandbox to release compute while retaining its
@@ -305,7 +306,9 @@ On a continuation, `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` asks the client to resto
 its prior session before handling the new `ARCHESTRA_AGENT_RUNTIME_TASK`.
 `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` stays stable across turns, while
 `ARCHESTRA_AGENT_RUNTIME_TASK_ID` identifies the current run. Re-read injected
-credentials on every invocation: a finished turn's virtual key is revoked.
+credentials on every invocation. A retained interactive CLI keeps its virtual key until
+suspension, replacement by another turn, or workspace deletion. Other completed
+processes release their virtual keys immediately.
 Archestra clears the initial Kubernetes credential Secret when a turn finishes,
 so replacement Pods do not inherit those earlier credential values.
 
@@ -597,6 +600,10 @@ the run.
 
 An Agent with Agent Runtime configured has a **Runs** tab. A running run opens
 its live terminal. Completed runs open their retained terminal recording.
+Continue reattaches to the original interactive CLI while it remains alive.
+Detach returns to the recording without stopping that session.
+After suspension or Pod replacement, Resume conversation restores the saved conversation in a new process.
+The resumed terminal stays interactive after answering your follow-up.
 Recording navigation lets you revisit earlier screens, including output replaced by terminal redraws.
 Structured transcripts remain available to integrations. Use this tab to:
 

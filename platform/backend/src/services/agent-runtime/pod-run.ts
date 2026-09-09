@@ -190,6 +190,9 @@ async function startAgentRunSession(params: {
           "This workspace is already in use or its retention deadline has passed",
         );
       claimedWorkspace = true;
+      const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+      if (previous?.virtualApiKeyId)
+        await cleanupAgentRun(previous, { requireTranscript: true });
       await backend.continueRun({ session, spec });
     } else {
       createdWorkspace = await AgentWorkspaceModel.create({
@@ -366,7 +369,12 @@ export async function cleanupAgentRun(
     output,
     required: options?.requireTranscript || workspace?.state === "deleting",
   });
-  await backend.releaseRun(session);
+  await backend.releaseRun(session, {
+    retainInteractiveSession:
+      !options?.requireTranscript &&
+      task?.state === "TASK_STATE_COMPLETED" &&
+      ["active", "idle"].includes(workspace?.state ?? ""),
+  });
   await AgentWorkspaceModel.release({
     workloadName: session.workloadName,
     taskId: session.taskId,
@@ -480,7 +488,9 @@ async function followAgentRun(params: {
           AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS),
         );
       }
-      await backend.releaseRun(session);
+      await backend.releaseRun(session, {
+        retainInteractiveSession: outcome === "succeeded",
+      });
     })().catch((error) => {
       cleanupSucceeded = false;
       logger.warn(

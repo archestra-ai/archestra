@@ -24,8 +24,8 @@ export function ContinueAgentRunDialog({
     <StandardFormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Continue in this workspace"
-      description="Start another turn with the same Agent and saved files. A suspended workspace starts up first."
+      title="Resume conversation"
+      description="Reopen the saved conversation in an interactive terminal. A suspended workspace starts up first."
       onSubmit={form.handleSubmit(({ message }) =>
         continuation.mutate(
           { taskId, message },

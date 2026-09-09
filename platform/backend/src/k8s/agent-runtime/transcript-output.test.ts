@@ -4,7 +4,12 @@ import { Writable } from "node:stream";
 import { CoreV1Api, Exec, KubeConfig } from "@kubernetes/client-node";
 import { vi } from "vitest";
 import type WebSocket from "ws";
-import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { expect, test } from "@/test";
 import manager from "./manager";
 
@@ -109,3 +114,86 @@ for (const outcome of ["success", "disconnect", "failure", "abort"] as const) {
     }
   });
 }
+
+test("retains access only for the same live CLI and revokes it on workspace cleanup", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  vi.spyOn(manager, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
+    function (this: KubeConfig) {
+      this.loadFromOptions({
+        clusters: [{ name: "test", server: "https://kubernetes.example.test" }],
+        users: [{ name: "test" }],
+        contexts: [{ name: "test", cluster: "test", user: "test" }],
+        currentContext: "test",
+      });
+    },
+  );
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: user.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_COMPLETED",
+  });
+  const key = await VirtualApiKeyModel.create({
+    organizationId: organization.id,
+    name: "retained-terminal",
+    keyType: "passthrough",
+  });
+  const run = await AgentRunModel.create({
+    taskId: task.id,
+    agentId: agent.id,
+    organizationId: organization.id,
+    actorKind: "user",
+    actorId: user.id,
+    actorUserId: user.id,
+    backend: "kubernetes",
+    runtimeScope: "archestra-dev",
+    workloadName: `retained-${randomUUID()}`,
+    virtualApiKeyId: key.virtualKey.id,
+  });
+  const pods = vi
+    .spyOn(CoreV1Api.prototype, "listNamespacedPod")
+    .mockResolvedValue({
+      items: [
+        { metadata: { name: run.workloadName }, status: { phase: "Running" } },
+      ],
+    });
+  vi.spyOn(CoreV1Api.prototype, "readNamespacedSecret").mockResolvedValue({
+    data: {},
+  });
+  vi.spyOn(CoreV1Api.prototype, "deleteNamespacedSecret").mockResolvedValue({});
+  let pane = `0:${run.taskId}`;
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    args[4]?.write(pane);
+    setTimeout(() => args[8]?.({ status: "Success" }), 0);
+    return Object.assign(new EventEmitter(), {
+      close: vi.fn(),
+      terminate: vi.fn(),
+    }) as unknown as WebSocket;
+  });
+  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(true);
+  pane = `1:${run.taskId}`;
+  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
+  pane = `0:${randomUUID()}`;
+  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
+  pane = `0:${run.taskId}`;
+  await manager.releaseRun(run, { retainInteractiveSession: true });
+  expect((await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId).toBe(
+    key.virtualKey.id,
+  );
+  pods.mockResolvedValue({ items: [] });
+  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
+  await manager.releaseRun(run, { retainInteractiveSession: true });
+  expect(
+    (await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId,
+  ).toBeNull();
+});

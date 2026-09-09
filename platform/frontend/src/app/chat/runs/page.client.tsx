@@ -48,6 +48,8 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [continueDialogOpen, setContinueDialogOpen] = useState(false);
+  const [reattachedTaskId, setReattachedTaskId] = useState<string | null>(null);
+  const reattached = reattachedTaskId === taskId;
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [connectionCommand, setConnectionCommand] = useState<string | null>(
@@ -83,7 +85,10 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const availableConnectionCommand = live
     ? connectionCommand
     : run?.workspace?.connection?.shellCommand;
-  const showLiveTerminal = (!run && query.isPending) || (isOwner && live);
+  const canReattach = Boolean(isOwner && run?.workspace?.terminalAvailable);
+  const showLiveTerminal =
+    (!run && query.isPending) ||
+    (isOwner && (live || (reattached && canReattach)));
   const canContinue =
     isOwner &&
     !live &&
@@ -126,9 +131,27 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {canContinue && (
-                <Button size="sm" onClick={() => setContinueDialogOpen(true)}>
-                  <span>Continue</span>
+              {canContinue && !showLiveTerminal && (
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    canReattach
+                      ? setReattachedTaskId(taskId)
+                      : setContinueDialogOpen(true)
+                  }
+                >
+                  <span>
+                    {canReattach ? "Continue" : "Resume conversation"}
+                  </span>
+                </Button>
+              )}
+              {reattached && showLiveTerminal && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setReattachedTaskId(null)}
+                >
+                  <span>Detach</span>
                 </Button>
               )}
               {isOwner && live && (
@@ -200,7 +223,9 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                 {run.workspace.state === "suspended"
                   ? "Workspace suspended; saved files are retained."
                   : run.workspace.state === "idle"
-                    ? "Workspace ready for a follow-up."
+                    ? canReattach
+                      ? "Session running; Continue reopens its terminal."
+                      : "Session ended; resume the saved conversation."
                     : run.workspace.state === "deleted"
                       ? "Workspace removed. Run history remains available."
                       : "Workspace is in use or changing state."}
@@ -219,8 +244,14 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
             showManualCommand={false}
             showDisconnectedStatus={false}
             onCommandChange={setConnectionCommand}
-            onError={() => void query.refetch()}
-            onClosed={() => void query.refetch()}
+            onError={() => {
+              setReattachedTaskId(null);
+              void query.refetch();
+            }}
+            onClosed={() => {
+              setReattachedTaskId(null);
+              void query.refetch();
+            }}
           />
         ) : run ? (
           <>

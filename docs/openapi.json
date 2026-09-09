@@ -65517,6 +65517,9 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "terminalAvailable": {
+                          "type": "boolean"
+                        },
                         "connection": {
                           "nullable": true,
                           "type": "object",
@@ -349456,6 +349459,9 @@
                             "nullable": true,
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "terminalAvailable": {
+                            "type": "boolean"
                           },
                           "connection": {
                             "nullable": true,

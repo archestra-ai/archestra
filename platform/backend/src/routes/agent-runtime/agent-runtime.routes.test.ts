@@ -1186,7 +1186,13 @@ describe("Agent Runtime routes", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json().taskId).toBe(next.id);
     expect(startDetachedAgentTask).toHaveBeenCalledWith(
-      expect.objectContaining({ attachments }),
+      expect.objectContaining({
+        attachments,
+        systemParams: expect.objectContaining({
+          runtimeMode: "interactive",
+          resumeFromTaskId: task.id,
+        }),
+      }),
     );
     const audits = await db
       .select()

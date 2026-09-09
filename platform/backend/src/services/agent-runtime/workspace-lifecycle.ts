@@ -3,6 +3,7 @@ import logger from "@/logging";
 import { AgentRunModel, AgentWorkspaceModel } from "@/models";
 import { ApiError } from "@/types";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
+import { cleanupAgentRun } from "./pod-run";
 
 /** Deletion is intentionally separate from cancellation: files are not recoverable. */
 export async function deleteAgentWorkspace(params: {
@@ -47,7 +48,9 @@ export async function deleteAgentWorkspace(params: {
   try {
     const backend = resolveAgentRuntimeBackendDriver(workspace.backend);
     const latestRun = await AgentRunModel.findByTaskId(workspace.lastTaskId);
-    if (latestRun) await backend.releaseRun(latestRun);
+    if (latestRun?.virtualApiKeyId)
+      await cleanupAgentRun(latestRun, { requireTranscript: true });
+    else if (latestRun) await backend.releaseRun(latestRun);
     await backend.deleteWorkspace(workspace);
     await AgentWorkspaceModel.transition({
       id: workspace.id,

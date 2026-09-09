@@ -75,13 +75,14 @@ class AgentWorkspaceModel {
     suspended?: boolean;
   }): Promise<void> {
     const table = schema.agentWorkspacesTable;
+    const now = new Date();
     await db
       .update(table)
       .set({
         state: params.suspended ? "suspended" : "idle",
         activeTaskId: null,
-        idleAt: new Date(),
-        lastActivityAt: new Date(),
+        idleAt: now,
+        lastActivityAt: now,
       })
       .where(
         and(

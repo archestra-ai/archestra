@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 
@@ -7,6 +8,40 @@ import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
   "sandbox supervisor",
   () => {
+    it("keeps the same CLI and tmux contents interactive after completing a turn", () => {
+      const result = runInContainer(`
+mkdir -p /var/run/archestra/turns
+cat > /tmp/interactive.py <<'PYTHON'
+import os
+from pathlib import Path
+Path('/tmp/original-pid').write_text(str(os.getpid()))
+print('First answer', flush=True)
+Path('/tmp/answer').write_text('First answer')
+Path('/tmp/done').touch()
+message = input()
+print('Follow-up: ' + message, flush=True)
+Path('/tmp/followup-pid').write_text(str(os.getpid()))
+input()
+PYTHON
+printf 'archestra-tui-run /tmp/done /tmp/answer python3 /tmp/interactive.py\\n' > /var/run/archestra/turns/1.request
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 0
+test "$(tmux display-message -p -t agent '#{pane_dead}:#{@archestra_retained_task}')" = '0:1'
+tmux capture-pane -p -t agent | grep -q 'First answer'
+tmux send-keys -t agent 'hello again' Enter
+wait_for /tmp/followup-pid
+test "$(cat /tmp/original-pid)" = "$(cat /tmp/followup-pid)"
+tmux capture-pane -p -t agent | grep -q 'Follow-up: hello again'
+printf 'echo next-turn\\n' > /var/run/archestra/turns/2.request
+wait_for /var/run/archestra/turns/2.exit
+! kill -0 "$(cat /tmp/original-pid)" 2>/dev/null
+test "$(tmux show-option -v -t agent @archestra_retained_task)" = ''
+echo VERIFIED
+`);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
     it("records terminal input and detachment without treating daemon output as activity", () => {
       const result = runInContainer(`
 python3 - <<'PY'
@@ -116,6 +151,8 @@ function runInContainer(assertions: string) {
       "--rm",
       "-i",
       "--network=none",
+      "-v",
+      `${path.resolve("../agent_images/bin")}:/usr/local/bin:ro`,
       "--entrypoint=/bin/sh",
       process.env.ARCHESTRA_TEST_SANDBOX_IMAGE ?? "",
       "-s",

@@ -488,6 +488,14 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 state: workspace.state,
                 expiresAt: workspace.expiresAt,
                 idleAt: workspace.idleAt,
+                terminalAvailable:
+                  workspace.state === "idle" &&
+                  workspace.lastTaskId === owned.taskId &&
+                  workspace.expiresAt.getTime() > Date.now()
+                    ? await resolveAgentRuntimeBackendDriver(
+                        owned.backend,
+                      ).hasRetainedTerminal(owned)
+                    : false,
                 connection: ["active", "idle"].includes(workspace.state)
                   ? resolveAgentRuntimeBackendDriver(
                       owned.backend,
@@ -579,6 +587,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         attachments: request.body.attachments,
         systemParams: {
           resumeFromTaskId: run.taskId,
+          runtimeMode: "interactive",
           completionTarget: session?.completionTarget ?? undefined,
           projectId: run.projectId ?? undefined,
         },

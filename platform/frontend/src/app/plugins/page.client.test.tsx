@@ -107,34 +107,25 @@ describe("PluginsPage", () => {
   });
 
   it("groups related facts into a compact table", () => {
-    const { container } = render(<PluginsPage />);
+    render(<PluginsPage />);
 
-    for (const name of [
-      "Plugin",
-      "Compatibility",
-      "Visibility",
-      "Source",
-      "Activity",
-      "Actions",
-    ]) {
+    for (const name of ["Plugin", "Details", "Visibility", "Actions"]) {
       expect(screen.getByRole("columnheader", { name })).toBeInTheDocument();
     }
-    for (const removed of ["Client", "Platforms", "Files", "Updated"]) {
+    for (const removed of [
+      "Client",
+      "Platforms",
+      "Compatibility",
+      "Source",
+      "Activity",
+    ]) {
       expect(
         screen.queryByRole("columnheader", { name: removed }),
       ).not.toBeInTheDocument();
     }
-    expect(screen.getByText("13 files")).toBeVisible();
-    expect(container.querySelector('th[data-column-id="source"]')).toHaveStyle({
-      width: "180px",
-    });
-    expect(
-      (
-        container.querySelector(
-          'th[data-column-id="displayName"]',
-        ) as HTMLElement
-      ).style.width,
-    ).toBe("");
+    const pluginRow = screen.getByText("Policy Runtime").closest("tr");
+    expect(pluginRow).toHaveTextContent("13 files · Updated");
+    expect(screen.getByText("synced")).toBeVisible();
   });
 
   it("attributes the vendor's own plugin to its author, not the deployment", () => {

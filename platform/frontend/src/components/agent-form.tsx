@@ -91,6 +91,8 @@ import {
   KnowledgeSourcesEditor,
 } from "@/components/knowledge-sources-editor";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { McpConflictServerList } from "@/components/mcp-conflict-server-list";
+import { PageHeaderBanner } from "@/components/page-header-banner";
 import {
   formatPermissionRequirement,
   PermissionRequirementHint,
@@ -113,6 +115,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  CompactWarning,
+  CompactWarningText,
+} from "@/components/ui/compact-warning";
 import { ExpandableText } from "@/components/ui/expandable-text";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
@@ -4069,80 +4075,84 @@ export function AgentForm({
           )}
         </div>
       </fieldset>
-      {!readOnly && environmentConflicts.conflicts.length > 0 && (
-        <Alert variant="warning" className="mt-4">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>
-            {environmentConflicts.conflicts.length} MCP server
-            {environmentConflicts.conflicts.length === 1 ? null : (
-              <span>s</span>
-            )}{" "}
-            not in this environment
-          </AlertTitle>
-          <AlertDescription>
-            <p>
-              This agent&apos;s tools from{" "}
-              <span className="font-medium text-foreground">
-                {environmentConflicts.conflicts.map((c) => c.name).join(", ")}
-              </span>{" "}
-              stop working once it moves. Remove them or put the environment
-              back before saving.
-            </p>
+      {/* Environment warnings appear above the form, below the page tabs. */}
+      <PageHeaderBanner>
+        {!readOnly && environmentConflicts.conflicts.length > 0 && (
+          <CompactWarning className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+            <AlertTriangle className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <span className="block font-medium">
+                {environmentConflicts.conflicts.length} MCP server
+                {environmentConflicts.conflicts.length === 1 ? null : (
+                  <span>s</span>
+                )}{" "}
+                not in this environment
+              </span>
+              <CompactWarningText className="mt-1 block">
+                Tools from{" "}
+                <McpConflictServerList
+                  names={environmentConflicts.conflicts.map((c) => c.name)}
+                />{" "}
+                stop working once it moves.
+              </CompactWarningText>
+            </div>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="mt-2"
+              className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
               disabled={environmentConflicts.isRemoving || isSaving}
               onClick={() => void handleRemoveEnvironmentConflicts()}
             >
               <span>{removeConflictingToolsLabel}</span>
             </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-      {!readOnly &&
-        environmentConflicts.blocksSave &&
-        environmentConflicts.conflicts.length === 0 && (
-          <Alert variant="warning" className="mt-4">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              {environmentConflicts.isVerifying
-                ? "Checking which of this agent's tools work in the new environment…"
-                : "Could not check which of this agent's tools work in the new environment, so the change cannot be saved yet."}
-            </AlertDescription>
-          </Alert>
+          </CompactWarning>
         )}
-      {!readOnly && mcpEnvConflicts.length > 0 && (
-        <Alert variant="warning" className="mt-4">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>
-            {mcpEnvConflicts.length} MCP server
-            {mcpEnvConflicts.length === 1 ? null : <span>s</span>} not in this
-            environment
-          </AlertTitle>
-          <AlertDescription>
-            <p>
-              Remove {mcpEnvConflicts.length === 1 ? "it" : "them"} or change
-              the environment before saving:{" "}
-              <span className="font-medium text-foreground">
-                {mcpEnvConflicts.map((c) => c.name).join(", ")}
+        {!readOnly &&
+          environmentConflicts.blocksSave &&
+          environmentConflicts.conflicts.length === 0 && (
+            <CompactWarning className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+              <AlertTriangle className="mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <CompactWarningText className="text-amber-900 dark:text-amber-200">
+                  {environmentConflicts.isVerifying
+                    ? "Checking which of this agent's tools work in the new environment…"
+                    : "Could not check which of this agent's tools work in the new environment, so the change cannot be saved yet."}
+                </CompactWarningText>
+              </div>
+            </CompactWarning>
+          )}
+        {!readOnly && mcpEnvConflicts.length > 0 && (
+          <CompactWarning className="flex-nowrap items-start gap-x-3 bg-amber-50/90 shadow-sm backdrop-blur-md dark:bg-amber-950/60">
+            <AlertTriangle className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <span className="block font-medium">
+                {mcpEnvConflicts.length} MCP server
+                {mcpEnvConflicts.length === 1 ? null : <span>s</span>} not in
+                this environment
               </span>
-            </p>
+              <CompactWarningText className="mt-1 block">
+                Remove {mcpEnvConflicts.length === 1 ? "it" : "them"} or change
+                the environment before saving:{" "}
+                <McpConflictServerList
+                  names={mcpEnvConflicts.map((c) => c.name)}
+                />
+              </CompactWarningText>
+            </div>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="mt-2"
+              className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
               onClick={() =>
                 agentToolsEditorRef.current?.removeIncompatibleTools()
               }
             >
               Remove incompatible
             </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+          </CompactWarning>
+        )}
+      </PageHeaderBanner>
       {!readOnly &&
         runtimeModelIncompatibility &&
         (!showConfigurationSections || !isActiveSection("configuration")) && (

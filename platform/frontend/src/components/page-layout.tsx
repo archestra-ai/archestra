@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { PageHeaderBannerSlotContext } from "@/components/page-header-banner";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -139,6 +140,23 @@ export function PageLayout({
     minWidthKey === "none" && maxWidthKey === "wizard" ? "phone" : minWidthKey;
   const minWidth = MIN_WIDTH_CLASSES[resolvedMinWidthKey];
   const [overflowOpen, setOverflowOpen] = useState(false);
+  // The top of the content area, into which PageHeaderBanner portals a
+  // page-level notice without changing the header or tab layout.
+  const [bannerSlot, setBannerSlot] = useState<HTMLDivElement | null>(null);
+  const [headerElement, setHeaderElement] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    if (!headerElement) return;
+    const measure = () =>
+      setHeaderHeight(headerElement.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(headerElement);
+    return () => observer.disconnect();
+  }, [headerElement]);
 
   // Split tabs for mobile: visible vs overflow
   const mobileVisibleTabs = tabs.slice(0, mobileVisibleCount);
@@ -157,29 +175,34 @@ export function PageLayout({
       : undefined;
 
   return (
-    <div className="flex min-h-full w-full min-w-0 flex-col">
-      <div
-        data-page-header
-        className="border-b border-border bg-background md:sticky md:top-0 md:z-20"
-      >
-        <div className={cn("mx-auto", minWidth, maxWidth, "px-6 pt-6 md:px-6")}>
-          {backLink && <div className="mb-2">{backLink}</div>}
-          {/* Below sm the action buttons drop under the title/description
-              instead of squeezing them into a sliver beside the buttons. */}
+    <PageHeaderBannerSlotContext.Provider value={bannerSlot}>
+      <div className="flex min-h-full w-full min-w-0 flex-col">
+        <div
+          ref={setHeaderElement}
+          data-page-header
+          className="border-b border-border bg-background md:sticky md:top-0 md:z-20"
+        >
           <div
-            className={cn(
-              "mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
-              maxWidthKey === "wizard" && "min-h-[5.75rem] sm:min-h-[3.75rem]",
-            )}
+            className={cn("mx-auto", minWidth, maxWidth, "px-6 pt-6 md:px-6")}
           >
+            {backLink && <div className="mb-2">{backLink}</div>}
+            {/* Below sm the action buttons drop under the title/description
+              instead of squeezing them into a sliver beside the buttons. */}
             <div
               className={cn(
-                "min-w-0 sm:flex-1",
+                "mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
                 maxWidthKey === "wizard" &&
-                  "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
+                  "min-h-[5.75rem] sm:min-h-[3.75rem]",
               )}
             >
-              {/* Sibling pages of a tabbed section render PageLayout at the
+              <div
+                className={cn(
+                  "min-w-0 sm:flex-1",
+                  maxWidthKey === "wizard" &&
+                    "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
+                )}
+              >
+                {/* Sibling pages of a tabbed section render PageLayout at the
                   same tree position, so React reconciles it across
                   client-side navigations instead of remounting. A rich
                   description (text mixed with links, like the Costs page)
@@ -188,182 +211,200 @@ export function PageLayout({
                   page-translate has re-parented them into <font> wrappers
                   (facebook/react#11538). Keying the wrappers by pathname
                   swaps a whole element per page instead. */}
-              {/* The status pill is a sibling of the heading, not part of it:
+                {/* The status pill is a sibling of the heading, not part of it:
                   detail titles already compose an icon, a name and badges
                   inside `title`, and folding a live state into the accessible
                   heading name would make the heading change every time the
                   probe does. */}
-              <div
-                className={cn(
-                  "flex min-w-0 items-center gap-2",
-                  maxWidthKey === "wizard"
-                    ? "flex-nowrap overflow-hidden"
-                    : "flex-wrap",
-                  description && maxWidthKey !== "wizard" && "mb-2",
-                )}
-              >
-                <h1
-                  className={cn(
-                    "min-w-0 text-2xl font-semibold tracking-tight",
-                    maxWidthKey === "wizard" && "max-h-10 overflow-hidden",
-                  )}
-                >
-                  <span key={pathname}>{title}</span>
-                </h1>
-                {status && <div className="shrink-0">{status}</div>}
-              </div>
-              {description && (
                 <div
-                  data-page-description
                   className={cn(
-                    "text-sm text-muted-foreground",
-                    maxWidthKey === "wizard" &&
-                      "hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:line-clamp-1",
+                    "flex min-w-0 items-center gap-2",
+                    maxWidthKey === "wizard"
+                      ? "flex-nowrap overflow-hidden"
+                      : "flex-wrap",
+                    description && maxWidthKey !== "wizard" && "mb-2",
                   )}
                 >
-                  <span key={pathname}>{description}</span>
+                  <h1
+                    className={cn(
+                      "min-w-0 text-2xl font-semibold tracking-tight",
+                      maxWidthKey === "wizard" && "max-h-10 overflow-hidden",
+                    )}
+                  >
+                    <span key={pathname}>{title}</span>
+                  </h1>
+                  {status && <div className="shrink-0">{status}</div>}
                 </div>
-              )}
-            </div>
-            {actionButton && <div className="shrink-0">{actionButton}</div>}
-          </div>
-          {tabs.length > 0 && (
-            <>
-              {/* Desktop: Show all tabs */}
-              <div className="hidden md:flex gap-4 mb-0 overflow-x-auto whitespace-nowrap">
-                {tabs.map((tab) => {
-                  const isSelected = tab === selectedTab;
-                  return (
-                    <Link
-                      key={tab.href}
-                      href={tab.href}
-                      aria-current={isSelected ? "page" : undefined}
-                      // Only this copy carries the test id — see the `tabs` prop.
-                      data-testid={tab.testId}
-                      className={cn(
-                        "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
-                        isSelected
-                          ? "text-foreground"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {tab.label}
-                      {isSelected && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                      )}
-                    </Link>
-                  );
-                })}
+                {description && (
+                  <div
+                    data-page-description
+                    className={cn(
+                      "text-sm text-muted-foreground",
+                      maxWidthKey === "wizard" &&
+                        "hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:line-clamp-1",
+                    )}
+                  >
+                    <span key={pathname}>{description}</span>
+                  </div>
+                )}
               </div>
+              {actionButton && <div className="shrink-0">{actionButton}</div>}
+            </div>
+            {tabs.length > 0 && (
+              <>
+                {/* Desktop: Show all tabs */}
+                <div className="hidden md:flex gap-4 mb-0 overflow-x-auto whitespace-nowrap">
+                  {tabs.map((tab) => {
+                    const isSelected = tab === selectedTab;
+                    return (
+                      <Link
+                        key={tab.href}
+                        href={tab.href}
+                        aria-current={isSelected ? "page" : undefined}
+                        // Only this copy carries the test id — see the `tabs` prop.
+                        data-testid={tab.testId}
+                        className={cn(
+                          "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
+                          isSelected
+                            ? "text-foreground"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {tab.label}
+                        {isSelected && (
+                          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
 
-              {/* Mobile: Show first N tabs + overflow dropdown */}
-              <div className="flex md:hidden gap-3 mb-0 items-center whitespace-nowrap overflow-x-auto">
-                {mobileVisibleTabs.map((tab) => {
-                  const isSelected = tab === selectedTab;
-                  return (
-                    <Link
-                      key={tab.href}
-                      href={tab.href}
-                      aria-current={isSelected ? "page" : undefined}
-                      className={cn(
-                        "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
-                        isSelected
-                          ? "text-foreground"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {tab.label}
-                      {isSelected && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                      )}
-                    </Link>
-                  );
-                })}
+                {/* Mobile: Show first N tabs + overflow dropdown */}
+                <div className="flex md:hidden gap-3 mb-0 items-center whitespace-nowrap overflow-x-auto">
+                  {mobileVisibleTabs.map((tab) => {
+                    const isSelected = tab === selectedTab;
+                    return (
+                      <Link
+                        key={tab.href}
+                        href={tab.href}
+                        aria-current={isSelected ? "page" : undefined}
+                        className={cn(
+                          "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
+                          isSelected
+                            ? "text-foreground"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {tab.label}
+                        {isSelected && (
+                          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                        )}
+                      </Link>
+                    );
+                  })}
 
-                {mobileOverflowTabs.length > 0 && (
-                  <>
-                    <div className="h-5 w-px bg-border shrink-0" />
-                    <Popover open={overflowOpen} onOpenChange={setOverflowOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          className={cn(
-                            "relative h-auto cursor-pointer rounded-none px-1 pb-3 text-sm font-medium transition-colors hover:bg-transparent hover:text-foreground flex items-center gap-1",
-                            selectedOverflowTab
-                              ? "text-foreground"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          {/* Distinct keyed spans so switching between the
+                  {mobileOverflowTabs.length > 0 && (
+                    <>
+                      <div className="h-5 w-px bg-border shrink-0" />
+                      <Popover
+                        open={overflowOpen}
+                        onOpenChange={setOverflowOpen}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className={cn(
+                              "relative h-auto cursor-pointer rounded-none px-1 pb-3 text-sm font-medium transition-colors hover:bg-transparent hover:text-foreground flex items-center gap-1",
+                              selectedOverflowTab
+                                ? "text-foreground"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {/* Distinct keyed spans so switching between the
                               label (an element) and "More" (a string) swaps
                               elements instead of deleting a bare text node —
                               Chrome page-translate re-parents text nodes into
                               <font> wrappers and React crashes removing a
                               re-parented text node (facebook/react#11538). */}
-                          {selectedOverflowTab ? (
-                            <span key="selected-tab">
-                              {selectedOverflowTab.label}
-                            </span>
-                          ) : (
-                            <span key="more">More</span>
-                          )}
-                          <ChevronDown className="h-3.5 w-3.5" />
-                          {selectedOverflowTab && (
-                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        className="w-auto p-1 flex flex-col"
-                        align="end"
-                      >
-                        {mobileOverflowTabs.map((tab) => {
-                          const isSelected = tab === selectedTab;
-                          return (
-                            <Link
-                              key={tab.href}
-                              href={tab.href}
-                              aria-current={isSelected ? "page" : undefined}
-                              onClick={() => setOverflowOpen(false)}
-                              className={cn(
-                                "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
-                                isSelected
-                                  ? "font-medium text-foreground bg-muted"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              {tab.label}
-                            </Link>
-                          );
-                        })}
-                      </PopoverContent>
-                    </Popover>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-          {!tabs.length && <div className="mb-6" />}
+                            {selectedOverflowTab ? (
+                              <span key="selected-tab">
+                                {selectedOverflowTab.label}
+                              </span>
+                            ) : (
+                              <span key="more">More</span>
+                            )}
+                            <ChevronDown className="h-3.5 w-3.5" />
+                            {selectedOverflowTab && (
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          className="w-auto p-1 flex flex-col"
+                          align="end"
+                        >
+                          {mobileOverflowTabs.map((tab) => {
+                            const isSelected = tab === selectedTab;
+                            return (
+                              <Link
+                                key={tab.href}
+                                href={tab.href}
+                                aria-current={isSelected ? "page" : undefined}
+                                onClick={() => setOverflowOpen(false)}
+                                className={cn(
+                                  "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
+                                  isSelected
+                                    ? "font-medium text-foreground bg-muted"
+                                    : "text-muted-foreground",
+                                )}
+                              >
+                                {tab.label}
+                              </Link>
+                            );
+                          })}
+                        </PopoverContent>
+                      </Popover>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+            {!tabs.length && <div className="mb-6" />}
+          </div>
         </div>
-      </div>
-      {/* `flex-1`, not `min-h-full`: a full viewport *below* a header that is
+        <div
+          ref={setBannerSlot}
+          data-page-banner
+          style={
+            {
+              "--page-banner-top": `${headerHeight + 12}px`,
+            } as React.CSSProperties
+          }
+          className={cn(
+            "sticky top-3 z-10 mx-auto mt-6 w-full space-y-2 px-6 empty:hidden md:top-[var(--page-banner-top)]",
+            maxWidth,
+          )}
+        />
+        {/* `flex-1`, not `min-h-full`: a full viewport *below* a header that is
           already on screen made every page scroll by the header's height, so
           the bottom of even a short one had a band of nothing under it. */}
-      <div
-        className={cn("w-full flex-1", minWidth && "min-w-0 overflow-x-auto")}
-      >
         <div
-          className={cn(
-            "mx-auto w-full",
-            minWidth || "min-w-0",
-            maxWidth,
-            "px-6 py-6 md:px-6",
-          )}
+          data-page-content
+          className={cn("w-full flex-1", minWidth && "min-w-0 overflow-x-auto")}
         >
-          {children}
+          <div
+            className={cn(
+              "mx-auto w-full",
+              minWidth || "min-w-0",
+              maxWidth,
+              "px-6 py-6 md:px-6",
+            )}
+          >
+            {children}
+          </div>
         </div>
       </div>
-    </div>
+    </PageHeaderBannerSlotContext.Provider>
   );
 }
 

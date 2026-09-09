@@ -62170,7 +62170,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Report credentials the current user still needs before this Agent can execute delegated work in its runtime\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Report credentials and model compatibility the current user needs before this Agent can execute delegated work in its runtime\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
         "parameters": [
           {
             "schema": {
@@ -62249,13 +62249,18 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "incompatible": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "ready",
                     "configured",
                     "missing",
-                    "misconfigured"
+                    "misconfigured",
+                    "incompatible"
                   ],
                   "additionalProperties": false
                 }
@@ -270348,6 +270353,17 @@
                           "supportsReasoningEffort": {
                             "nullable": true,
                             "type": "boolean"
+                          },
+                          "supportedEndpoints": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "/chat/completions",
+                                "/responses"
+                              ]
+                            }
                           },
                           "recommendedForAgents": {
                             "nullable": true,

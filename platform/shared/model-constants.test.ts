@@ -3,6 +3,8 @@ import {
   anthropicEffortForThinkingEffort,
   anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
+  getAgentRuntimeModelCompatibility,
+  getAgentRuntimeProviderCompatibility,
   getProvidersWithOptionalApiKey,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
@@ -119,6 +121,142 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("babbage-002")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.61")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-5.3-codexical")).toBe(false);
+  });
+});
+
+describe("getAgentRuntimeModelCompatibility", () => {
+  test("applies maintained runtime provider requirements before protocol constraints", () => {
+    expect(
+      getAgentRuntimeModelCompatibility({
+        inferenceProtocol: "anthropic",
+        runtimeCommand: ["archestra-claude-code"],
+        provider: "openai",
+        modelId: "gpt-4o",
+      }),
+    ).toMatchObject({
+      compatible: false,
+      message: expect.stringContaining(
+        "Claude Code runtime requires an Anthropic",
+      ),
+    });
+    expect(
+      getAgentRuntimeModelCompatibility({
+        inferenceProtocol: "anthropic",
+        runtimeCommand: ["archestra-claude-code"],
+        provider: "anthropic",
+        modelId: "claude-sonnet",
+      }),
+    ).toEqual({ compatible: true });
+    expect(
+      getAgentRuntimeModelCompatibility({
+        inferenceProtocol: "openai_responses",
+        runtimeCommand: ["archestra-codex"],
+        provider: "gemini",
+        modelId: "gemini-2.5-pro",
+      }),
+    ).toMatchObject({
+      compatible: false,
+      message: expect.stringContaining("Codex runtime requires an OpenAI"),
+    });
+  });
+
+  test("allows only Claude Bedrock models for the maintained Claude Code runtime", () => {
+    const runtime = {
+      inferenceProtocol: "anthropic" as const,
+      runtimeCommand: ["archestra-claude-code"],
+      provider: "bedrock" as const,
+    };
+
+    // Key filtering has no selected model yet, so Bedrock remains available
+    // until its model-specific eligibility is evaluated.
+    expect(getAgentRuntimeProviderCompatibility(runtime)).toEqual({
+      compatible: true,
+    });
+    for (const modelId of [
+      "anthropic.claude-sonnet-4-6",
+      "us.anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
+    ]) {
+      expect(
+        getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
+      ).toEqual({ compatible: true });
+    }
+    for (const modelId of ["amazon.nova-pro-v1:0", "google.gemini-2.5-pro"]) {
+      expect(
+        getAgentRuntimeModelCompatibility({ ...runtime, modelId }),
+      ).toMatchObject({
+        compatible: false,
+        message: expect.stringContaining("requires a Claude model"),
+      });
+    }
+  });
+
+  test("leaves built-in and non-vendor maintained runtimes on protocol compatibility", () => {
+    for (const { runtimeCommand, inferenceProtocol } of [
+      { runtimeCommand: null, inferenceProtocol: "openai_responses" },
+      {
+        runtimeCommand: ["archestra-opencode"],
+        inferenceProtocol: "openai_responses",
+      },
+      {
+        runtimeCommand: ["archestra-hermes"],
+        inferenceProtocol: "openai_chat",
+      },
+      {
+        runtimeCommand: ["archestra-openclaw"],
+        inferenceProtocol: "openai_chat",
+      },
+    ] as const) {
+      expect(
+        getAgentRuntimeModelCompatibility({
+          inferenceProtocol,
+          runtimeCommand,
+          provider: "gemini",
+          modelId: "gemini-2.5-pro",
+        }),
+      ).toEqual({ compatible: true });
+    }
+  });
+
+  test("matches Anthropic, router-provider, and endpoint constraints", () => {
+    expect(
+      getAgentRuntimeModelCompatibility({
+        inferenceProtocol: "anthropic",
+        provider: "gemini",
+        modelId: "gemini-2.5-pro",
+      }),
+    ).toMatchObject({
+      compatible: false,
+      message: expect.stringContaining("Anthropic API"),
+    });
+    expect(
+      getAgentRuntimeModelCompatibility({
+        inferenceProtocol: "openai_responses",
+        provider: "ollama-native",
+        modelId: "local-model",
+      }),
+    ).toMatchObject({
+      compatible: false,
+      message: expect.stringContaining("model router"),
+    });
+    expect(
+      getAgentRuntimeModelCompatibility({
+        inferenceProtocol: "openai_chat",
+        provider: "github-copilot",
+        modelId: "copilot-responses-only",
+        supportedEndpoints: ["/responses"],
+      }),
+    ).toMatchObject({
+      compatible: false,
+      message: expect.stringContaining("Responses API"),
+    });
+    expect(
+      getAgentRuntimeModelCompatibility({
+        inferenceProtocol: "openai_chat",
+        provider: "anthropic",
+        modelId: "claude-sonnet",
+      }),
+    ).toEqual({ compatible: true });
   });
 });
 

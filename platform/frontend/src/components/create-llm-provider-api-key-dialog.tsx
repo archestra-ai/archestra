@@ -6,7 +6,7 @@ import {
   subscriptionKindForProvider,
 } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { FormDialog } from "@/components/form-dialog";
@@ -27,10 +27,13 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
+  type LlmProviderApiKey,
   useCreateLlmProviderApiKey,
   useLlmProviderApiKeys,
   useReconnectLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
+
+const EMPTY_EXISTING_KEYS: LlmProviderApiKey[] = [];
 
 export type CreateLlmProviderApiKeyDialogProps = {
   open: boolean;
@@ -70,7 +73,7 @@ export function CreateLlmProviderApiKeyDialog({
 }: CreateLlmProviderApiKeyDialogProps) {
   const createMutation = useCreateLlmProviderApiKey();
   const reconnectMutation = useReconnectLlmProviderApiKey();
-  const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
+  const { data: existingKeys } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicKeylessAuthEnabled = useFeature("anthropicKeylessAuthEnabled");
@@ -82,34 +85,69 @@ export function CreateLlmProviderApiKeyDialog({
   const providerCatalog = useModelProviderCatalog();
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const lastResetKeyRef = useRef<string | null>(null);
+  const visibleProviderIdsKey = providerCatalog.visibleIds.join(",");
+  const allowedProviderIdsKey = allowedProviders?.join(",") ?? null;
+  const availableProviders = useMemo(() => {
+    const visibleProviders = visibleProviderIdsKey
+      ? (visibleProviderIdsKey.split(
+          ",",
+        ) as LlmProviderApiKeyFormValues["provider"][])
+      : [];
+    const allowedProviderIds = allowedProviderIdsKey
+      ? (allowedProviderIdsKey.split(
+          ",",
+        ) as LlmProviderApiKeyFormValues["provider"][])
+      : visibleProviders;
+    const visibleProviderSet = new Set(visibleProviders);
+    return allowedProviderIds.filter((provider) =>
+      visibleProviderSet.has(provider),
+    );
+  }, [allowedProviderIdsKey, visibleProviderIdsKey]);
+  const onlyAvailableProvider =
+    availableProviders.length === 1 ? availableProviders[0] : undefined;
+  const dialogTitle =
+    title === "Add API Key" && onlyAvailableProvider
+      ? `Add ${providerCatalog.label(onlyAvailableProvider)} API Key`
+      : title;
+  const defaultFormValues = useMemo(
+    () =>
+      availableProviders.length > 0
+        ? getDefaultFormValues({
+            defaultValues,
+            canCreateOrgScopedKey: canCreateOrgScopedKey === true,
+            availableProviders,
+          })
+        : null,
+    [availableProviders, canCreateOrgScopedKey, defaultValues],
+  );
+  const resetKey = JSON.stringify(defaultFormValues);
 
   const form = useForm<LlmProviderApiKeyFormValues>({
-    defaultValues: getDefaultFormValues({
-      defaultValues,
-      canCreateOrgScopedKey: canCreateOrgScopedKey === true,
-      availableProviders: providerCatalog.visibleIds,
-    }),
+    defaultValues: defaultFormValues ?? undefined,
   });
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      lastResetKeyRef.current = null;
+      return;
+    }
+    if (!defaultFormValues || lastResetKeyRef.current === resetKey) return;
+
+    lastResetKeyRef.current = resetKey;
     setLabels([]);
-    form.reset(
-      getDefaultFormValues({
-        defaultValues,
-        canCreateOrgScopedKey: canCreateOrgScopedKey === true,
-        availableProviders: providerCatalog.visibleIds,
-      }),
-    );
-  }, [canCreateOrgScopedKey, defaultValues, form, open, providerCatalog]);
+    form.reset(defaultFormValues);
+  }, [defaultFormValues, form, open, resetKey]);
 
   const formValues = form.watch();
-  const isValid = getIsCreateFormValid({
-    azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-    anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
-    byosEnabled: Boolean(byosEnabled),
-    values: formValues,
-  });
+  const isValid =
+    availableProviders.length > 0 &&
+    getIsCreateFormValid({
+      azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+      anthropicKeylessAuthEnabled: anthropicKeylessAuthEnabled === true,
+      byosEnabled: Boolean(byosEnabled),
+      values: formValues,
+    });
 
   const createCredential = async (values: LlmProviderApiKeyFormValues) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
@@ -192,11 +230,31 @@ export function CreateLlmProviderApiKeyDialog({
     }
   };
 
+  if (availableProviders.length === 0) {
+    return (
+      <FormDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title={dialogTitle}
+        description={description}
+        size="small"
+        className="sm:max-w-xl"
+      >
+        <DialogBody>
+          <p>No compatible LLM providers are enabled for this agent.</p>
+        </DialogBody>
+        <DialogStickyFooter className="mt-0">
+          <DialogCancelButton>Cancel</DialogCancelButton>
+        </DialogStickyFooter>
+      </FormDialog>
+    );
+  }
+
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={title}
+      title={dialogTitle}
       description={description}
       size="small"
       className="sm:max-w-xl"
@@ -211,9 +269,10 @@ export function CreateLlmProviderApiKeyDialog({
             mode="full"
             showConsoleLink={showConsoleLink}
             form={form}
-            existingKeys={existingKeys}
+            existingKeys={existingKeys ?? EMPTY_EXISTING_KEYS}
             isPending={createMutation.isPending}
-            allowedProviders={allowedProviders}
+            allowedProviders={availableProviders}
+            hideUnavailableProviders
             credentialMode={credentialMode}
             requiresExactSubscriptionCredential={
               requiresExactSubscriptionCredential
@@ -254,13 +313,15 @@ function getDefaultFormValues(params: {
   availableProviders: LlmProviderApiKeyFormValues["provider"][];
 }): LlmProviderApiKeyFormValues {
   const { defaultValues, canCreateOrgScopedKey, availableProviders } = params;
+  const provider =
+    defaultValues?.provider &&
+    availableProviders.includes(defaultValues.provider)
+      ? defaultValues.provider
+      : availableProviders.includes("anthropic")
+        ? "anthropic"
+        : availableProviders[0];
   return {
     name: "",
-    // Anthropic unless the admins turned it off — the dialog must never open
-    // on a provider its own picker refuses to offer.
-    provider: availableProviders.includes("anthropic")
-      ? "anthropic"
-      : (availableProviders[0] ?? "anthropic"),
     apiKey: null,
     baseUrl: null,
     inferenceBaseUrl: null,
@@ -276,6 +337,8 @@ function getDefaultFormValues(params: {
     awsSessionToken: null,
     authMethod: "api-key",
     ...defaultValues,
+    // Anthropic unless the compatible provider list excludes it.
+    provider,
   };
 }
 

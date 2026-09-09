@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound } from "lucide-react";
+import { InfoIcon, KeyRound } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -31,11 +31,13 @@ export function AgentRuntimeCredentialPrompt({
   agentId,
   missing,
   declarations,
+  incompatible,
   onConnected,
 }: {
   agentId: string;
   missing: MissingCredential[];
   declarations: CredentialDeclaration[];
+  incompatible?: string | null;
   onConnected: () => void;
 }) {
   const definitions = useRuntimeCredentials();
@@ -63,6 +65,26 @@ export function AgentRuntimeCredentialPrompt({
     : firstDeclaration?.scope === "shared"
       ? "An admin must configure this organization connection."
       : "Add this personal secret from the Agent details page.";
+
+  if (incompatible) {
+    return (
+      <output
+        aria-live="polite"
+        className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground"
+      >
+        <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+        <span>
+          This model is not supported by the runtime.{" "}
+          <Link
+            href={`/agents/${agentId}`}
+            className="whitespace-nowrap rounded-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            Agent details
+          </Link>
+        </span>
+      </output>
+    );
+  }
 
   return (
     <>

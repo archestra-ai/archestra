@@ -177,13 +177,6 @@ export async function buildAgentRunLaunchSpec(params: {
       "A Claude Code subscription token can only be injected into the Claude Code catalog runtime.",
     );
   }
-  if (isCodexRuntime && llm.selectedProvider !== "openai") {
-    throw new ApiError(
-      409,
-      "The maintained Codex runtime requires an OpenAI model from your ChatGPT subscription.",
-    );
-  }
-
   // Most runtimes receive a standard virtual key mapped to the provider/model
   // selected on the Agent. The resolver substitutes the acting user's own
   // matching subscription (for example ChatGPT/Codex) when the selected key

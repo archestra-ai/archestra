@@ -11,6 +11,8 @@ import {
   DocsPage,
   DUAL_LLM_DEFAULT_MAX_ROUNDS,
   E2eTestId,
+  getAgentRuntimeModelCompatibility,
+  getAgentRuntimeProviderCompatibility,
   getDocsUrl,
   getResourceForAgentType,
   HEADER_NAME_REGEX,
@@ -22,6 +24,7 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  SupportedProviders,
 } from "@archestra/shared";
 import {
   AlertTriangle,
@@ -135,6 +138,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
+import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
 import {
   UserShareField,
   useUserShareChoice,
@@ -163,6 +167,7 @@ import {
   useAgentKnowledgeSourceExclusions,
   useUpdateAgentKnowledgeSourceExclusions,
 } from "@/lib/agent-knowledge-source-exclusions.query";
+import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import {
   useAgentSkillExclusions,
   useAgentSkills,
@@ -194,7 +199,7 @@ import {
   useKnowledgeBases,
 } from "@/lib/knowledge/knowledge-base.query";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
-import { useLlmModelsByProvider } from "@/lib/llm-models.query";
+import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -1117,9 +1122,10 @@ export function AgentForm({
     includeKeyId: agentLlmApiKeyId ?? undefined,
     enabled: shouldLoadLlmConfiguration && !!canReadLlmProviderApiKeys,
   });
-  const { modelsByProvider } = useLlmModelsByProvider({
+  const llmModelsQuery = useLlmModelsByProvider({
     enabled: shouldLoadLlmConfiguration && !!canReadLlmModels,
   });
+  const { modelsByProvider } = llmModelsQuery;
 
   // Fetch fresh agent data on mount, so a stale row from a list is not what
   // the form is seeded from.
@@ -1352,6 +1358,10 @@ export function AgentForm({
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  const runtimePreflight = useAgentRuntimePreflight(
+    agent?.id ?? "",
+    agentRuntimeEnabled && !!agent?.runtime,
+  );
   // "Auto" (implicit access to all tools) is the default for new agents; admins
   // can switch an agent to "Custom" (explicitly assigned tools). Implicit access
   // is scoped to tools/knowledge visible to the user AND in the agent's
@@ -1861,6 +1871,60 @@ export function AgentForm({
   const currentLlmProvider: SupportedProvider | null =
     selectedLlmModelRow?.provider ?? null;
 
+  const runtimeModelFilter = useCallback(
+    (model: LlmModel) =>
+      !runtime ||
+      getAgentRuntimeModelCompatibility({
+        inferenceProtocol: runtime.inferenceProtocol,
+        runtimeCommand: runtime.command,
+        provider: model.provider,
+        modelId: model.id,
+        supportedEndpoints: model.capabilities?.supportedEndpoints,
+      }).compatible,
+    [runtime],
+  );
+  const runtimeProviderFilter = useCallback(
+    (provider: SupportedProvider) =>
+      !runtime ||
+      getAgentRuntimeProviderCompatibility({
+        inferenceProtocol: runtime.inferenceProtocol,
+        runtimeCommand: runtime.command,
+        provider,
+      }).compatible,
+    [runtime],
+  );
+  const allowedApiKeyProviders = useMemo(
+    () =>
+      runtime ? SupportedProviders.filter(runtimeProviderFilter) : undefined,
+    [runtime, runtimeProviderFilter],
+  );
+  // A runtime with no explicit model inherits the organization default. Validate
+  // that effective model locally before allowing a create or runtime change.
+  const effectiveLlmModelRow =
+    selectedLlmModelRow ?? organizationDefaultModel.model;
+  const effectiveRuntimeModelCompatibility =
+    runtime && effectiveLlmModelRow
+      ? getAgentRuntimeModelCompatibility({
+          inferenceProtocol: runtime.inferenceProtocol,
+          runtimeCommand: runtime.command,
+          provider: effectiveLlmModelRow.provider,
+          modelId: effectiveLlmModelRow.id,
+          supportedEndpoints:
+            effectiveLlmModelRow.capabilities?.supportedEndpoints,
+        })
+      : null;
+  const runtimeHasLocalChanges =
+    JSON.stringify(runtime) !== JSON.stringify(agent?.runtime ?? null);
+  const runtimeModelIncompatibility = !runtime
+    ? null
+    : effectiveRuntimeModelCompatibility
+      ? effectiveRuntimeModelCompatibility.compatible
+        ? null
+        : effectiveRuntimeModelCompatibility.message
+      : !runtimeHasLocalChanges
+        ? (runtimePreflight.data?.incompatible ?? null)
+        : null;
+
   // Pairing a no-tools model (e.g. Microsoft 365 Copilot) with a tooled
   // agent is allowed — chat omits the tools for that model — but the user
   // must learn that before the first message, not from a silent no-op.
@@ -1871,6 +1935,13 @@ export function AgentForm({
   // Track the provider that was active when auto-selection last ran,
   // so we only auto-select when the provider actually changes (not when the user clears the key).
   const lastAutoSelectedProviderRef = useRef<string | null>(null);
+  const pendingModelAutoSelectionRef = useRef<{
+    keyId: string;
+    modelId: string | null;
+  } | null>(null);
+  const modelCatalogLoaded =
+    llmModelsQuery.data !== undefined ||
+    Object.keys(modelsByProvider).length > 0;
 
   // Reactive Model → Key: auto-select key when provider changes
   // (mirrors LlmProviderApiKeySelector's auto-select useEffect in prompt input)
@@ -1906,36 +1977,71 @@ export function AgentForm({
     lastAutoSelectedProviderRef.current = currentLlmProvider;
   }, [currentLlmProvider, availableApiKeys, selectedApiKey]);
 
-  // Model change handler - just sets model, key auto-selection is reactive via useEffect above
-  const handleLlmModelChange = useCallback((modelId: string | null) => {
-    setLlmModel(modelId);
-    // Reset auto-select tracking so provider change triggers key selection
-    lastAutoSelectedProviderRef.current = null;
-  }, []);
-
-  // Key change handler - imperatively auto-selects model (like prompt input's onProviderChange)
+  // A missing catalog is not evidence that a key has no compatible model. Keep
+  // this pending until the selected key's model rows have arrived.
   const handleLlmApiKeyChange = useCallback(
     (keyId: string | null) => {
       setLlmApiKeyId(keyId);
-      if (!keyId) return;
-
-      const key = availableApiKeys.find((k) => k.id === keyId);
-      if (!key) return;
-
-      // Auto-select model: always prefer bestModelId, fall back to first model when switching providers
-      const bestModelId = key.bestModelId;
-      if (bestModelId) {
-        setLlmModel(bestModelId);
-      } else if (currentLlmProvider !== key.provider) {
-        // Only fall back to first model when switching providers (no bestModelId available)
-        const providerModels = modelsByProvider[key.provider];
-        if (providerModels?.length) {
-          setLlmModel(providerModels[0].dbId);
-        }
+      if (!keyId) {
+        pendingModelAutoSelectionRef.current = null;
+        return;
       }
+      if (!availableApiKeys.some((key) => key.id === keyId)) return;
+      pendingModelAutoSelectionRef.current = { keyId, modelId: llmModel };
     },
-    [availableApiKeys, currentLlmProvider, modelsByProvider],
+    [availableApiKeys, llmModel],
   );
+  const {
+    cancelPendingCreatedKeySelection,
+    createDialog: createApiKeyDialog,
+    onAddApiKey,
+  } = useLlmProviderApiKeyCreateDialog({
+    availableKeys: availableApiKeys,
+    onSelectKey: handleLlmApiKeyChange,
+    onBeforeOpen: () => setApiKeySelectorOpen(false),
+    allowedProviders: allowedApiKeyProviders,
+  });
+
+  // A manual choice wins if it races a deferred model or newly-created-key selection.
+  const handleLlmModelChange = useCallback(
+    (modelId: string | null) => {
+      cancelPendingCreatedKeySelection();
+      pendingModelAutoSelectionRef.current = null;
+      setLlmModel(modelId);
+      // Reset auto-select tracking so provider change triggers key selection.
+      lastAutoSelectedProviderRef.current = null;
+    },
+    [cancelPendingCreatedKeySelection],
+  );
+
+  useEffect(() => {
+    const pending = pendingModelAutoSelectionRef.current;
+    if (!pending || pending.keyId !== llmApiKeyId || !modelCatalogLoaded)
+      return;
+    if (pending.modelId !== llmModel) {
+      pendingModelAutoSelectionRef.current = null;
+      return;
+    }
+    const key = availableApiKeys.find(
+      (candidate) => candidate.id === pending.keyId,
+    );
+    if (!key) return;
+    const compatibleModels = (modelsByProvider[key.provider] ?? []).filter(
+      runtimeModelFilter,
+    );
+    const bestCompatibleModel = compatibleModels.find(
+      (model) => model.dbId === key.bestModelId,
+    );
+    setLlmModel(bestCompatibleModel?.dbId ?? compatibleModels[0]?.dbId ?? null);
+    pendingModelAutoSelectionRef.current = null;
+  }, [
+    availableApiKeys,
+    llmApiKeyId,
+    llmModel,
+    modelCatalogLoaded,
+    modelsByProvider,
+    runtimeModelFilter,
+  ]);
 
   // A maintained catalog runtime can require the vendor's own subscription
   // rather than merely prefer the most highly ranked key. Apply the connected
@@ -1976,6 +2082,7 @@ export function AgentForm({
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
       (llmModel ?? null) !== (persistedAgent.modelId ?? null));
+  const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
 
   // Moving an agent out of the environment its tools belong to strands them.
   // The tools editor refuses that itself, but the Configuration step does not
@@ -2471,6 +2578,10 @@ export function AgentForm({
       toast.error("Please select at least one team");
       return;
     }
+    if (!hasCompleteLlmSelection) {
+      toast.error("Select a model for the selected API key");
+      return;
+    }
     // Edit mode writes the assignments first, against an id that already
     // exists. On create there is no id yet, so `performSave` writes them after
     // the record lands, under the same rollback as the other staged editors.
@@ -2495,6 +2606,7 @@ export function AgentForm({
     isAdmin,
     scope,
     assignedTeamIds,
+    hasCompleteLlmSelection,
     channelAssignmentsDirty,
     performSave,
   ]);
@@ -2606,6 +2718,8 @@ export function AgentForm({
     !updateAgent.isPending &&
     !requiresTeamSelection &&
     requiredSubscriptionSatisfied &&
+    hasCompleteLlmSelection &&
+    !runtimeModelIncompatibility &&
     mcpEnvConflicts.length === 0 &&
     !environmentConflicts.blocksSave &&
     !(scope === "team" && hasNoAvailableTeams);
@@ -2753,10 +2867,15 @@ export function AgentForm({
                               open={apiKeySelectorOpen}
                               onOpenChange={setApiKeySelectorOpen}
                               onSelectKey={(keyId) => {
+                                cancelPendingCreatedKeySelection();
                                 handleLlmApiKeyChange(keyId);
                                 setApiKeySelectorOpen(false);
                               }}
+                              onAddApiKey={onAddApiKey}
                               currentProvider={currentLlmProvider ?? undefined}
+                              providerFilter={
+                                runtime ? runtimeProviderFilter : undefined
+                              }
                               triggerVariant="button"
                               triggerClassName="h-8 max-w-[250px] text-xs"
                               popoverClassName="w-96"
@@ -2765,12 +2884,14 @@ export function AgentForm({
                               allowOrganizationDefault
                               organizationDefaultSelected={!llmApiKeyId}
                               onSelectOrganizationDefault={() => {
+                                cancelPendingCreatedKeySelection();
                                 setLlmApiKeyId(null);
                                 setLlmModel(null);
                                 lastAutoSelectedProviderRef.current = null;
                                 setApiKeySelectorOpen(false);
                               }}
                             />
+                            {createApiKeyDialog}
                             {!llmApiKeyId ? (
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
@@ -2814,9 +2935,35 @@ export function AgentForm({
                                 variant="outline"
                                 apiKeyId={llmApiKeyId}
                                 enabled={!!canReadLlmModels}
+                                modelFilter={
+                                  runtime ? runtimeModelFilter : undefined
+                                }
+                                suppressAutoSelect={!!agent}
+                                fallbackModelName={
+                                  selectedLlmModelRow?.displayName
+                                }
+                                unavailableModelHeading={
+                                  runtime
+                                    ? "Current model (unavailable)"
+                                    : undefined
+                                }
                               />
                             )}
                           </div>
+                          {runtimeModelIncompatibility && (
+                            <output
+                              aria-live="polite"
+                              className="flex items-start gap-1.5 text-xs text-muted-foreground"
+                            >
+                              <InfoIcon
+                                className="mt-0.5 size-3 shrink-0"
+                                aria-hidden="true"
+                              />
+                              <span>
+                                Choose a compatible model or runtime to save.
+                              </span>
+                            </output>
+                          )}
                           {showNoToolsModelNotice && (
                             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                               <InfoIcon
@@ -3723,10 +3870,10 @@ export function AgentForm({
                     value={runtime}
                     onChange={setAgentRuntime}
                   />
-                  {agent?.runtime?.credentials && (
+                  {agent?.runtime && runtime && (
                     <AgentRuntimeCredentialCard
                       agentId={agent.id}
-                      credentials={agent.runtime.credentials}
+                      credentials={agent.runtime.credentials ?? []}
                     />
                   )}
                 </SettingsSection>
@@ -3979,6 +4126,17 @@ export function AgentForm({
           </AlertDescription>
         </Alert>
       )}
+      {!readOnly &&
+        runtimeModelIncompatibility &&
+        (!showConfigurationSections || !isActiveSection("configuration")) && (
+          <output
+            aria-live="polite"
+            className="mt-4 flex items-start gap-1.5 text-xs text-muted-foreground"
+          >
+            <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+            <span>Choose a compatible model or runtime to save.</span>
+          </output>
+        )}
       {footer(footerState)}
     </form>
   );

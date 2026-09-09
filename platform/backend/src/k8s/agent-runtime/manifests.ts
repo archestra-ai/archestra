@@ -401,7 +401,10 @@ export function buildAgentRuntimeSecret(
  * network is the environment's decision to make, not this policy's.
  */
 export function buildAgentRuntimePlatformEgressPolicy(params: {
-  spec: KubernetesAgentRunLaunchSpec;
+  spec: Pick<
+    KubernetesAgentRunLaunchSpec,
+    "frozenName" | "namespace" | "taskId" | "agentRuntimeId" | "ownerReferences"
+  >;
   platformNamespace: string;
   platformPodLabels: Record<string, string>;
   platformPorts: number[];

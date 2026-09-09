@@ -565,4 +565,5 @@ export function extractFinalAnswer(transcript: string): string {
 }
 
 const LOG_DRAIN_GRACE_MS = 2_000;
-const OUTPUT_SNAPSHOT_TIMEOUT_MS = 10_000;
+// A retained PVC may need attachment to a temporary recovery Pod first.
+const OUTPUT_SNAPSHOT_TIMEOUT_MS = 120_000;

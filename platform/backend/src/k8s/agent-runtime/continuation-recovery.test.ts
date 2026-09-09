@@ -1,9 +1,21 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { CustomObjectsApi, KubeConfig } from "@kubernetes/client-node";
+import { Writable } from "node:stream";
+import {
+  CustomObjectsApi,
+  KubeConfig,
+  NetworkingV1Api,
+} from "@kubernetes/client-node";
 import config from "@/config";
-import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  OrganizationModel,
+} from "@/models";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
+import { cleanupAgentRun } from "@/services/agent-runtime/pod-run";
+import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { expect, test, vi } from "@/test";
 import manager from "./manager";
 import { buildAgentRuntimeSandbox } from "./manifests";
@@ -251,7 +263,41 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
             "name",
           ]).trim(),
       );
+      await OrganizationModel.patch(org.id, {
+        defaultNetworkPolicy: {
+          egressMode: "restricted",
+          domainPreset: "none",
+          allowedDomains: [],
+          allowedCidrs: ["198.51.100.0/24"],
+        },
+      });
+      const deniedWakePolicy = vi
+        .spyOn(NetworkingV1Api.prototype, "createNamespacedNetworkPolicy")
+        .mockRejectedValueOnce(new Error("Policy update denied"));
+      await expect(manager.resumeWorkspace(run)).rejects.toThrow(
+        "Policy update denied",
+      );
+      expect(
+        kubectl([
+          "get",
+          "pod",
+          name,
+          "--ignore-not-found",
+          "-o",
+          "name",
+        ]).trim(),
+      ).toBe("");
+      deniedWakePolicy.mockRestore();
       await manager.resumeWorkspace(run);
+      const resumedPolicy = JSON.parse(
+        kubectl(["get", "networkpolicy", `${name}-egress`, "-o", "json"]),
+      );
+      expect(JSON.stringify(resumedPolicy.spec.egress)).toContain(
+        '"cidr":"198.51.100.0/24"',
+      );
+      expect(JSON.stringify(resumedPolicy.spec.egress)).not.toContain(
+        '"cidr":"0.0.0.0/0"',
+      );
       expect(exec("cat /home/node/recovery-result")).toBe("initialcontinued");
       expect(exec(`cat /var/run/archestra/turns/${task.id}.exit`).trim()).toBe(
         "0",
@@ -269,6 +315,102 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       ).toBe("");
       await manager.recoverRun(run);
       expect(exec("cat /home/node/recovery-result")).toBe("initialcontinued");
+      // Archive after the controller independently removes the workload Pod.
+      // Recovery must not wake the workspace or change the hard deadline.
+      exec(
+        `printf 'complete transcript\\n' > /var/run/archestra/turns/${task.id}.log`,
+      );
+      const shutdownTime = new Date(Date.now() - 1000).toISOString();
+      kubectl([
+        "patch",
+        "sandbox",
+        name,
+        "--type=merge",
+        "-p",
+        JSON.stringify({ spec: { shutdownTime } }),
+      ]);
+      await until(() =>
+        JSON.parse(
+          kubectl(["get", "sandbox", name, "-o", "json"]),
+        ).status?.conditions?.some(
+          (condition: { reason?: string }) =>
+            condition.reason === "SandboxExpired",
+        ),
+      );
+      await until(
+        () =>
+          !kubectl([
+            "get",
+            "pod",
+            name,
+            "--ignore-not-found",
+            "-o",
+            "name",
+          ]).trim(),
+      );
+      let recovered = "";
+      await manager.snapshotLogs({
+        session: run,
+        lines: 1,
+        destination: new Writable({
+          write(chunk, _encoding, callback) {
+            recovered += chunk.toString();
+            callback();
+          },
+        }),
+      });
+      expect(recovered).toBe("complete transcript\n");
+      await cleanupAgentRun(run, { requireTranscript: true });
+      expect(
+        (await AgentRunModel.findByTaskId(task.id))?.endedAt,
+      ).not.toBeNull();
+      expect(
+        kubectl([
+          "get",
+          "pod",
+          name,
+          "--ignore-not-found",
+          "-o",
+          "name",
+        ]).trim(),
+      ).toBe("");
+      expect(
+        JSON.parse(kubectl(["get", "sandbox", name, "-o", "json"])).spec
+          .shutdownTime,
+      ).toBe(shutdownTime);
+      await until(
+        () =>
+          JSON.parse(
+            kubectl([
+              "get",
+              "pods",
+              "-l",
+              "archestra.io/transcript-recovery",
+              "-o",
+              "json",
+            ]),
+          ).items.length === 0,
+      );
+      await manager.deleteWorkspace(run);
+      await until(
+        () =>
+          !kubectl([
+            "get",
+            "pvc",
+            `workspace-${name}`,
+            "--ignore-not-found",
+            "-o",
+            "name",
+          ]).trim(),
+      );
+      let archived = "";
+      await agentRunTranscriptStore.stream({
+        runId: run.id,
+        onChunk: (chunk) => {
+          archived += chunk.toString();
+        },
+      });
+      expect(archived).toBe("complete transcript\n");
     } finally {
       vi.restoreAllMocks();
       kubectl([

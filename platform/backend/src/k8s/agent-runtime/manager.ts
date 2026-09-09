@@ -16,7 +16,12 @@ import {
   withK8sApiRetry,
 } from "@/k8s/shared";
 import logger from "@/logging";
-import { AgentRunModel, VirtualApiKeyModel } from "@/models";
+import {
+  AgentModel,
+  AgentRunModel,
+  OrganizationModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
@@ -28,6 +33,7 @@ import {
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_INPUTS_READY_FILE,
 } from "@/services/agent-runtime/runtime-contract";
+import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
   AgentRunInput,
   AgentRunRecord,
@@ -70,6 +76,7 @@ import {
   describeAgentRuntimeStartupProgress,
   isSameAgentRuntimeStartupProgress,
 } from "./startup-phase";
+import { withTranscriptRecoveryPod } from "./transcript-recovery";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
 type K8sClients = ReturnType<typeof createK8sClients>;
@@ -533,6 +540,28 @@ class AgentRuntimeManager {
     ) {
       throw new ApiError(409, "The workspace retention deadline has passed");
     }
+    const agent = await AgentModel.findById(session.agentId);
+    if (!agent || agent.organizationId !== session.organizationId) {
+      throw new ApiError(404, "Workspace Agent not found");
+    }
+    const organization = await OrganizationModel.getById(
+      session.organizationId,
+    );
+    const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
+      organizationId: session.organizationId,
+      environmentId: agent.environmentId,
+      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
+    });
+    await this.refreshWorkspaceEgress({
+      sandbox,
+      spec: {
+        taskId: session.taskId,
+        agentRuntimeId: session.agentId,
+        frozenName: session.workloadName,
+        runtimeScope: session.runtimeScope,
+        effectiveNetworkPolicy,
+      },
+    });
     await clients.customObjectsApi.patchNamespacedCustomObject(
       {
         ...AGENT_SANDBOX_API,
@@ -956,7 +985,14 @@ class AgentRuntimeManager {
 
   private async refreshWorkspaceEgress(params: {
     sandbox: AgentSandbox;
-    spec: AgentRunLaunchSpec;
+    spec: Pick<
+      AgentRunLaunchSpec,
+      | "taskId"
+      | "agentRuntimeId"
+      | "frozenName"
+      | "runtimeScope"
+      | "effectiveNetworkPolicy"
+    >;
   }): Promise<void> {
     const clients = this.requireClients();
     // The retained Pod keeps its original selector even though this turn has
@@ -967,7 +1003,7 @@ class AgentRuntimeManager {
       ];
     if (!taskId)
       throw new Error("Workspace is missing its network policy selector");
-    const spec: KubernetesAgentRunLaunchSpec = {
+    const spec = {
       ...params.spec,
       taskId,
       frozenName: params.sandbox.metadata.name ?? params.spec.frozenName,
@@ -1115,15 +1151,29 @@ class AgentRuntimeManager {
     destination: Writable;
     follow: boolean;
     abortSignal?: AbortSignal;
+    podName?: string;
   }): Promise<void> {
     if (params.abortSignal?.aborted) {
       params.destination.end();
+      if (!params.follow)
+        throw new Error("Agent Runtime transcript snapshot aborted");
       return;
     }
-    const pod = await this.findPodPhase(params.session);
-    if (!pod) throw new Error("This session has no pod to read output from");
     if (!/^[a-zA-Z0-9-]+$/.test(params.session.taskId))
       throw new Error("Invalid Agent Runtime turn identifier");
+    const pod = params.podName
+      ? { name: params.podName, phase: "Running" }
+      : await this.findPodPhase(params.session);
+    if (!pod || pod.phase !== "Running") {
+      if (params.follow)
+        throw new Error("This session has no running pod to read output from");
+      return withTranscriptRecoveryPod({
+        clients: this.requireClients(),
+        session: params.session,
+        abortSignal: params.abortSignal,
+        read: (podName) => this.readTurnOutput({ ...params, podName }),
+      });
+    }
     const path = `/var/run/archestra/turns/${params.session.taskId}`;
     // Read fixed byte ranges so growing output cannot duplicate bytes between
     // polls. The exit marker ends the remote process even after a disconnect.
@@ -1145,14 +1195,29 @@ done`
       const finish = (error?: Error) => {
         if (settled) return;
         settled = true;
+        if (timer) clearTimeout(timer);
         params.abortSignal?.removeEventListener("abort", abort);
+        params.destination.removeListener("error", finish);
         socket?.close();
         params.destination.end();
         if (error) reject(error);
         else resolve();
       };
-      const abort = () => finish();
+      const timer = params.follow
+        ? undefined
+        : setTimeout(
+            () =>
+              finish(new Error("Agent Runtime transcript snapshot timed out")),
+            30_000,
+          );
+      const abort = () =>
+        finish(
+          params.follow
+            ? undefined
+            : new Error("Agent Runtime transcript snapshot aborted"),
+        );
       params.abortSignal?.addEventListener("abort", abort, { once: true });
+      params.destination.on("error", finish);
       clients.exec
         .exec(
           params.session.runtimeScope,
@@ -1167,7 +1232,7 @@ done`
             finish(
               status.status === "Success"
                 ? undefined
-                : new Error(status.message || "Could not read turn output"),
+                : new Error("Could not read turn output"),
             ),
         )
         .then((connected) => {
@@ -1178,7 +1243,13 @@ done`
             return;
           }
           connected.on("error", finish);
-          connected.on("close", () => finish());
+          connected.on("close", () =>
+            finish(
+              new Error(
+                "Agent Runtime transcript disconnected before completion",
+              ),
+            ),
+          );
         })
         .catch(finish);
     });

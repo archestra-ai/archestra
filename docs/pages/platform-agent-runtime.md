@@ -309,6 +309,8 @@ because its external side effects may already have happened.
 
 External clients can read and write retained files without starting another Agent turn.
 File access wakes a suspended workspace and refreshes its activity timer.
+Wake-up applies the current Environment egress policy before starting the Pod.
+If that policy cannot be applied, the workspace stays suspended.
 The retention deadline remains fixed.
 
 `read_workspace_file` and `write_workspace_file` accept a run ID and a workspace-relative path.
@@ -609,6 +611,12 @@ period, which is 90 days by default. Set
 uncompressed transcript size accepted from one run. A run beyond that ceiling
 keeps its final 1 MiB instead, and the terminal labels the recording
 **Retained tail only** so the missing history is never silent.
+
+After workspace expiry, a temporary recovery Pod reads output from retained storage.
+It mounts only runtime storage, read-only, and receives no platform credentials.
+It never starts an agent process.
+A NetworkPolicy denies its network traffic. Recovery does not extend the workspace deadline.
+Failed or interrupted captures preserve storage for another attempt.
 
 Only the user whose credentials started a run can attach to its live
 shell. Agent administrators cannot enter another user's shell. There is no

@@ -1,0 +1,86 @@
+import { randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
+import { Writable } from "node:stream";
+import { CoreV1Api, Exec } from "@kubernetes/client-node";
+import type WebSocket from "ws";
+import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
+import { expect, test, vi } from "@/test";
+import manager from "./manager";
+
+for (const outcome of ["success", "disconnect", "failure", "abort"] as const) {
+  test(`transcript snapshots require confirmed completion: ${outcome}`, async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: organization.id });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const run = await AgentRunModel.create({
+      taskId: task.id,
+      agentId: agent.id,
+      organizationId: organization.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      workloadName: `snapshot-${randomUUID()}`,
+    });
+    vi.spyOn(CoreV1Api.prototype, "listNamespacedPod").mockResolvedValue({
+      items: [
+        { metadata: { name: run.workloadName }, status: { phase: "Running" } },
+      ],
+    });
+    const socket = Object.assign(new EventEmitter(), {
+      close: vi.fn(),
+    }) as unknown as WebSocket;
+    const abort = new AbortController();
+    vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+      args[4]?.write("partial output");
+      setTimeout(() => {
+        if (outcome === "disconnect") socket.emit("close");
+        else if (outcome === "abort") abort.abort();
+        else
+          args[8]?.({
+            status: outcome === "success" ? "Success" : "Failure",
+            message: "private diagnostic",
+          });
+      }, 0);
+      return socket;
+    });
+    let output = "";
+    const result = manager.snapshotLogs({
+      session: run,
+      lines: 1,
+      abortSignal: abort.signal,
+      destination: new Writable({
+        write(chunk, _encoding, callback) {
+          output += chunk.toString();
+          callback();
+        },
+      }),
+    });
+    if (outcome === "success") {
+      await expect(result).resolves.toBeUndefined();
+      expect(output).toBe("partial output");
+    } else {
+      await expect(result).rejects.toThrow(
+        outcome === "disconnect"
+          ? "disconnected before completion"
+          : outcome === "abort"
+            ? "snapshot aborted"
+            : /^Could not read turn output$/,
+      );
+    }
+  });
+}

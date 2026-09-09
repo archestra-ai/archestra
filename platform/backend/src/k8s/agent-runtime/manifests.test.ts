@@ -1,8 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildAgentRuntimePlatformEgressPolicy,
   buildAgentRuntimeSandbox,
   buildAgentRuntimeSecret,
+  buildAgentRuntimeTurnScript,
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
 import {
@@ -34,6 +36,36 @@ const SPEC: KubernetesAgentRunLaunchSpec = {
 };
 
 describe("buildAgentRuntimeSandbox", () => {
+  it("does not inherit removed credentials or settings in a subsequent turn", () => {
+    const script = buildAgentRuntimeTurnScript(
+      {
+        ...SPEC,
+        runtimeScope: SPEC.namespace,
+        env: { CURRENT_SETTING: "new-value" },
+        secretEnv: { CLAUDE_CODE_OAUTH_TOKEN: "new-test-token" },
+        command: [
+          "/bin/sh",
+          "-c",
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion
+          'printf "%s|%s|%s|%s|%s" "${OPENAI_API_KEY-unset}" "${REMOVED_SETTING-unset}" "$CLAUDE_CODE_OAUTH_TOKEN" "$CURRENT_SETTING" "$IMAGE_SETTING"',
+        ],
+      },
+      ["OPENAI_API_KEY", "REMOVED_SETTING", "CURRENT_SETTING"],
+    );
+    expect(
+      execFileSync("/bin/sh", ["-c", script], {
+        encoding: "utf8",
+        env: {
+          PATH: "/usr/bin:/bin",
+          OPENAI_API_KEY: "revoked-test-key",
+          REMOVED_SETTING: "old",
+          CURRENT_SETTING: "old",
+          IMAGE_SETTING: "preserved",
+        },
+      }),
+    ).toBe("unset|unset|new-test-token|new-value|preserved");
+  });
+
   it("runs to completion instead of restarting a finished session", () => {
     const job = buildAgentRuntimeSandbox(SPEC);
 

@@ -58,7 +58,8 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
       command: [
         "/bin/sh",
         "-c",
-        "printf continued >> /home/node/recovery-result",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion
+        'test -z "${OPENAI_API_KEY+x}" && printf continued >> /home/node/recovery-result',
       ],
       privileged: false,
       resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
@@ -76,12 +77,22 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
     try {
       kubectl(
         ["apply", "-f", "-"],
+        JSON.stringify({
+          apiVersion: "v1",
+          kind: "Secret",
+          metadata: { name: `${name}-env` },
+          stringData: { OPENAI_API_KEY: "revoked-test-key" },
+        }),
+      );
+      kubectl(
+        ["apply", "-f", "-"],
         JSON.stringify(
           buildAgentRuntimeSandbox({
             ...manifestSpec,
             namespace: runtimeScope,
             taskId: initialTaskId,
             env: { ARCHESTRA_AGENT_RUNTIME_TASK_ID: initialTaskId },
+            secretEnv: { OPENAI_API_KEY: "revoked-test-key" },
             command: [
               "/bin/sh",
               "-c",
@@ -180,6 +191,7 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         "--ignore-not-found",
         "--wait=false",
       ]);
+      kubectl(["delete", "secret", `${name}-env`, "--ignore-not-found"]);
     }
     function exec(command: string) {
       return kubectl([

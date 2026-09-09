@@ -301,6 +301,21 @@ class AgentRuntimeManager {
     }
     // Keep the pending handoff outside this process before waiting for compute.
     // It contains credentials, so use a Secret, not annotations or task logs.
+    const initialSecretName = agentRuntimeNames(
+      params.session.workloadName,
+    ).secret;
+    const initialSecret = container.envFrom?.some(
+      ({ secretRef }) => secretRef?.name === initialSecretName,
+    )
+      ? await clients.coreApi.readNamespacedSecret({
+          namespace: params.session.runtimeScope,
+          name: initialSecretName,
+        })
+      : null;
+    const inheritedVariableNames = [
+      ...(container.env ?? []).map(({ name }) => name),
+      ...Object.keys(initialSecret?.data ?? {}),
+    ];
     await clients.coreApi
       .createNamespacedSecret({
         namespace: params.session.runtimeScope,
@@ -322,7 +337,12 @@ class AgentRuntimeManager {
               : undefined,
           },
           type: "Opaque",
-          stringData: { request: buildAgentRuntimeTurnScript(params.spec) },
+          stringData: {
+            request: buildAgentRuntimeTurnScript(
+              params.spec,
+              inheritedVariableNames,
+            ),
+          },
         },
       })
       .catch((error) => {

@@ -62,14 +62,34 @@ export interface AgentSandbox {
 }
 
 /** Render a turn request without interpolating credentials into exec arguments. */
-export function buildAgentRuntimeTurnScript(spec: AgentRunLaunchSpec): string {
+export function buildAgentRuntimeTurnScript(
+  spec: AgentRunLaunchSpec,
+  inheritedVariableNames: string[] = [],
+): string {
   const variables = {
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    TERM: "xterm-256color",
+    ENV: AGENT_RUNTIME_SHELL_INIT_SCRIPT,
+    PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
+    ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",
+    ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT: "0",
+    ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR: AGENT_RUNTIME_ATTACHMENTS_DIR,
+    ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST:
+      AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
     ...spec.env,
     ...spec.secretEnv,
     ARCHESTRA_AGENT_RUNTIME_CONTINUE: "1",
   };
   return [
     "set -eu",
+    // A retained tmux server inherits the initial Pod environment. Remove its
+    // managed variables before applying this turn, including removed credentials.
+    ...inheritedVariableNames.map((name) => {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
+        throw new Error("Invalid runtime environment variable name");
+      return `unset ${name}`;
+    }),
     ...Object.entries(variables).map(([name, value]) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
         throw new Error("Invalid runtime environment variable name");

@@ -146,6 +146,10 @@ for (const finalState of [
       expiresAt: new Date(Date.now() + 3_600_000),
     });
     const waiting: Array<() => void> = [];
+    let notifyFirstStarted: () => void = () => undefined;
+    const firstStarted = new Promise<void>((resolve) => {
+      notifyFirstStarted = resolve;
+    });
     let bothStarted: () => void = () => undefined;
     const started = new Promise<void>((resolve) => {
       bothStarted = resolve;
@@ -154,6 +158,7 @@ for (const finalState of [
       () =>
         new Promise<void>((resolve) => {
           waiting.push(resolve);
+          if (waiting.length === 1) notifyFirstStarted();
           if (waiting.length === 2) bothStarted();
         }),
     );
@@ -170,13 +175,17 @@ for (const finalState of [
         request: { operation: "read", path: "notes.txt" },
       });
     const first = access();
+    // Database queries may complete out of call order. Establish which request
+    // reaches the external resume first before assigning its completion gate.
+    const firstResult = Promise.allSettled([first]);
+    await firstStarted;
     const second = access();
     // Register rejection handlers before allowing either external resume to finish.
     const results = Promise.allSettled([first, second]);
     await started;
     expect(read).not.toHaveBeenCalled();
     waiting[0]();
-    await first;
+    expect((await firstResult)[0].status).toBe("fulfilled");
     expect(read).toHaveBeenCalledTimes(1);
     if (finalState === "expired") {
       vi.useFakeTimers({ toFake: ["Date"] });

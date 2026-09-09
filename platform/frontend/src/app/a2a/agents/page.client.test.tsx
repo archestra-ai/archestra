@@ -1,6 +1,12 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -15,13 +21,14 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganizationMembers } from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 import OutboundA2aAgentsPage from "./page.client";
 
 const API_ORIGIN = "http://localhost:9000";
 const REGISTRY_URL = `${API_ORIGIN}/api/a2a/remote-agents`;
-const INSPECT_URL = `${REGISTRY_URL}/inspect`;
 
 const remoteAgent = {
   id: "remote-agent-1",
@@ -38,6 +45,11 @@ const remoteAgent = {
   discoveryError: null,
   createdAt: "2026-09-08T12:00:00.000Z",
   updatedAt: "2026-09-08T12:00:00.000Z",
+  scope: "personal",
+  authorId: "user-1",
+  authorName: "Test User",
+  teams: [],
+  users: [],
   connection: {
     id: "connection-1",
     remoteAgentId: "remote-agent-1",
@@ -58,45 +70,56 @@ const remoteAgent = {
     hasCredential: false,
   },
   toolId: "tool-1",
-} satisfies archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number];
+} satisfies archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number] & {
+  scope: "personal";
+  authorId: string;
+  authorName: string;
+  teams: [];
+  users: [];
+};
 
-const secondRemoteAgent = {
+const teamRemoteAgent = {
   ...remoteAgent,
   id: "remote-agent-2",
   name: "Reporting Agent",
-  description: "Answers reporting questions",
+  scope: "team",
+  authorId: "user-2",
+  authorName: "Other User",
+  teams: [{ id: "team-1", name: "Finance" }],
   connection: {
     ...remoteAgent.connection,
     id: "connection-2",
     remoteAgentId: "remote-agent-2",
-    selectedInterface: {
-      ...remoteAgent.connection.selectedInterface,
-      url: "https://reporting.example.com/a2a",
-    },
   },
-} satisfies archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number];
+} as const;
 
-const inspection = {
-  name: "Fixture Agent",
-  description: "A deterministic external agent",
-  agentCard: remoteAgent.agentCard,
-  cardHash: remoteAgent.cardHash,
-  selectedInterface: remoteAgent.connection.selectedInterface,
-  supportedAuthTypes: ["none"],
-  selectedSecurityRequirement: null,
-} satisfies archestraApiTypes.InspectA2aRemoteAgentResponses["200"];
+const otherPersonalRemoteAgent = {
+  ...remoteAgent,
+  id: "remote-agent-3",
+  name: "Other Personal Agent",
+  authorId: "user-2",
+  authorName: "Other User",
+  connection: {
+    ...remoteAgent.connection,
+    id: "connection-3",
+    remoteAgentId: "remote-agent-3",
+  },
+} as const;
 
 const server = setupServer();
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/organization.query");
+vi.mock("@/lib/teams/team.query");
 vi.mock("sonner");
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
   vi.mocked(usePathname).mockReturnValue("/a2a/agents");
   vi.mocked(useRouter).mockReturnValue({
@@ -109,7 +132,17 @@ beforeEach(() => {
   vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
+    isPending: false,
   } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as ReturnType<typeof useSession>);
+  vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
+    typeof useTeams
+  >);
+  vi.mocked(useOrganizationMembers).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useOrganizationMembers>);
   server.use(http.get(`${REGISTRY_URL}/:id/runs`, () => HttpResponse.json([])));
 });
 
@@ -121,73 +154,95 @@ afterAll(() => {
 });
 
 describe("OutboundA2aAgentsPage", () => {
-  it("tests discovery and then connects the external agent with the same source", async () => {
+  it("routes connect, card, Edit, and table-row actions to full pages", async () => {
     const user = userEvent.setup();
-    let configuredAgents: (typeof remoteAgent)[] = [];
-    let inspectedBody: unknown;
-    let createdBody: unknown;
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    server.use(http.get(REGISTRY_URL, () => HttpResponse.json([remoteAgent])));
 
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Connect agent" }),
+    );
+    expect(push).toHaveBeenCalledWith("/a2a/agents/new");
+
+    const card = screen.getByTestId("a2a-remote-agent-card-remote-agent-1");
+    fireEvent.click(card);
+    expect(push).toHaveBeenCalledWith("/a2a/agents/remote-agent-1");
+
+    await user.click(
+      within(card).getByRole("button", { name: "Edit Payments Agent" }),
+    );
+    expect(push).toHaveBeenLastCalledWith("/a2a/agents/remote-agent-1");
+
+    await user.click(screen.getByRole("button", { name: "View as table" }));
+    const row = screen.getByRole("row", { name: /Payments Agent/ });
+    fireEvent.click(row);
+    expect(push).toHaveBeenLastCalledWith("/a2a/agents/remote-agent-1");
+  });
+
+  it("shows visibility badges and applies URL-backed scope filtering", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("scope=team") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useTeams).mockReturnValue({
+      data: [{ id: "team-1", name: "Finance" }],
+    } as unknown as ReturnType<typeof useTeams>);
     server.use(
-      http.get(REGISTRY_URL, () => HttpResponse.json(configuredAgents)),
-      http.post(INSPECT_URL, async ({ request }) => {
-        inspectedBody = await request.json();
-        return HttpResponse.json(inspection);
-      }),
-      http.post(REGISTRY_URL, async ({ request }) => {
-        createdBody = await request.json();
-        configuredAgents = [remoteAgent];
-        return HttpResponse.json(remoteAgent);
-      }),
+      http.get(REGISTRY_URL, () =>
+        HttpResponse.json([remoteAgent, teamRemoteAgent]),
+      ),
     );
 
     renderPage();
 
-    expect(
-      await screen.findByText("No external A2A agents connected"),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Connect agent" }));
-
-    const dialog = screen.getByRole("dialog", {
-      name: "Connect external A2A agent",
-    });
-    await user.type(
-      within(dialog).getByLabelText("Agent base URL"),
-      "https://agent.example.com",
-    );
-    await user.type(
-      within(dialog).getByLabelText("Display name (optional)"),
-      "Payments Agent",
-    );
-    await user.click(
-      within(dialog).getByRole("button", { name: "Validate Agent Card" }),
-    );
-
-    expect(
-      await within(dialog).findByText("Fixture Agent"),
-    ).toBeInTheDocument();
-    expect(inspectedBody).toEqual({
-      source: { type: "well_known", url: "https://agent.example.com" },
-      auth: { type: "none" },
-    });
-
-    await user.click(
-      within(dialog).getByRole("button", { name: "Connect agent" }),
-    );
-
-    expect(await screen.findByText("Payments Agent")).toBeInTheDocument();
-    expect(createdBody).toEqual({
-      source: { type: "well_known", url: "https://agent.example.com" },
-      auth: { type: "none" },
-      name: "Payments Agent",
-      connectionName: "Default",
-    });
+    expect(await screen.findByText("Reporting Agent")).toBeInTheDocument();
+    expect(screen.queryByText("Payments Agent")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Finance")).toHaveTextContent("Team");
   });
 
-  it("removes a configured external agent after confirmation", async () => {
-    const user = userEvent.setup();
-    let configuredAgents: (typeof remoteAgent)[] = [remoteAgent];
-    let deletedId: string | undefined;
+  it("hides other users' personal agents by default and shows them with the Other users filter", async () => {
+    server.use(
+      http.get(REGISTRY_URL, () =>
+        HttpResponse.json([
+          remoteAgent,
+          otherPersonalRemoteAgent,
+          teamRemoteAgent,
+        ]),
+      ),
+    );
 
+    const defaultView = renderPage();
+
+    expect(await screen.findByText("Payments Agent")).toBeInTheDocument();
+    expect(screen.getByText("Reporting Agent")).toBeInTheDocument();
+    expect(screen.queryByText("Other Personal Agent")).not.toBeInTheDocument();
+
+    defaultView.unmount();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        "scope=personal&excludeAuthorIds=user-1",
+      ) as ReturnType<typeof useSearchParams>,
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Other Personal Agent")).toBeInTheDocument();
+    expect(screen.queryByText("Payments Agent")).not.toBeInTheDocument();
+    expect(screen.queryByText("Reporting Agent")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Filter by owner" }),
+    ).toHaveTextContent("Other users");
+  });
+
+  it("keeps Delete inside the overflow menu and confirms before removing", async () => {
+    const user = userEvent.setup();
+    let deletedId: string | undefined;
+    let configuredAgents = [remoteAgent];
     server.use(
       http.get(REGISTRY_URL, () => HttpResponse.json(configuredAgents)),
       http.delete(`${REGISTRY_URL}/:id`, ({ params }) => {
@@ -198,223 +253,50 @@ describe("OutboundA2aAgentsPage", () => {
     );
 
     renderPage();
-
-    expect(await screen.findByText("Payments Agent")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Delete Payments Agent" }),
-    );
-    const dialog = screen.getByRole("dialog", {
-      name: "Remove external A2A agent?",
-    });
-    expect(dialog).toHaveTextContent(
-      "This removes Payments Agent and its stored connection credential.",
-    );
-    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
-
-    await waitFor(() => expect(deletedId).toBe(remoteAgent.id));
-    expect(
-      await screen.findByText("No external A2A agents connected"),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Payments Agent")).not.toBeInTheDocument();
-  });
-
-  it("uses the agent card layout with delete as its only card action", async () => {
-    server.use(http.get(REGISTRY_URL, () => HttpResponse.json([remoteAgent])));
-    renderPage();
-
     const card = await screen.findByTestId(
       "a2a-remote-agent-card-remote-agent-1",
     );
-
-    expect(
-      within(card).getByRole("heading", { name: "Payments Agent" }),
-    ).toBeInTheDocument();
-    expect(within(card).getByText("A2A 1.x")).toBeInTheDocument();
-    expect(within(card).getAllByRole("button")).toHaveLength(1);
-    expect(
-      within(card).getByRole("button", { name: "Delete Payments Agent" }),
-    ).toBeInTheDocument();
-  });
-
-  it("deletes all selected external agents from the bulk action", async () => {
-    const user = userEvent.setup();
-    let configuredAgents = [remoteAgent, secondRemoteAgent];
-    const deletedIds: string[] = [];
-
-    server.use(
-      http.get(REGISTRY_URL, () => HttpResponse.json(configuredAgents)),
-      http.delete(`${REGISTRY_URL}/:id`, ({ params }) => {
-        const id = String(params.id);
-        deletedIds.push(id);
-        configuredAgents = configuredAgents.filter((agent) => agent.id !== id);
-        return HttpResponse.json({ success: true });
-      }),
-    );
-    renderPage();
-
+    expect(within(card).queryByRole("button", { name: /Delete/ })).toBeNull();
     await user.click(
-      await screen.findByRole("checkbox", {
-        name: "Select Payments Agent",
-      }),
+      within(card).getByRole("button", { name: "More actions Payments Agent" }),
     );
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select Reporting Agent" }),
-    );
-    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
-
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     const dialog = screen.getByRole("dialog", {
-      name: "Delete external A2A agents",
+      name: "Remove external A2A agent?",
     });
-    expect(dialog).toHaveTextContent(
-      "Delete 2 external A2A agents? This cannot be undone.",
-    );
-    await user.click(
-      within(dialog).getByRole("button", {
-        name: "Delete external A2A agents",
-      }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
-    await waitFor(() =>
-      expect(deletedIds.sort()).toEqual(["remote-agent-1", "remote-agent-2"]),
-    );
-    expect(
-      await screen.findByText("No external A2A agents connected"),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(deletedId).toBe(remoteAgent.id));
   });
 
-  it("supports search, sorting, and switching between card and table views", async () => {
+  it("renders accessible agents as read-only for users without management permission", async () => {
     const user = userEvent.setup();
     const push = vi.fn();
     vi.mocked(useRouter).mockReturnValue({
       push,
       replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
-    server.use(
-      http.get(REGISTRY_URL, () =>
-        HttpResponse.json([remoteAgent, secondRemoteAgent]),
-      ),
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !Object.hasOwn(permissions, "agentSettings"),
+          isPending: false,
+        }) as ReturnType<typeof useHasPermissions>,
     );
+    server.use(http.get(REGISTRY_URL, () => HttpResponse.json([remoteAgent])));
 
     renderPage();
-
-    expect(await screen.findByText("Payments Agent")).toBeInTheDocument();
-    expect(screen.getByText("Reporting Agent")).toBeInTheDocument();
-
-    const search = screen.getByPlaceholderText(
-      "Search external A2A agents by name",
+    const card = await screen.findByTestId(
+      "a2a-remote-agent-card-remote-agent-1",
     );
-    await user.type(search, "Payments");
-    await waitFor(() =>
-      expect(
-        push.mock.calls.some(([path]) =>
-          String(path).includes("name=Payments"),
-        ),
-      ).toBe(true),
-    );
-
-    await user.click(screen.getByRole("button", { name: "View as table" }));
-    expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Name" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Name" }));
+    expect(screen.queryByRole("button", { name: "Connect agent" })).toBeNull();
     expect(
-      push.mock.calls.some(([path]) => String(path).includes("sortBy=name")),
-    ).toBe(true);
-
-    await user.click(screen.getByRole("button", { name: "View as cards" }));
-    expect(
-      screen.getByTestId("a2a-remote-agent-card-remote-agent-1"),
-    ).toBeInTheDocument();
-  });
-
-  it("clears a successful connection test when connection details change", async () => {
-    const user = userEvent.setup();
-    server.use(
-      http.get(REGISTRY_URL, () => HttpResponse.json([])),
-      http.post(INSPECT_URL, () => HttpResponse.json(inspection)),
-    );
-    renderPage();
-
+      within(card).queryByRole("button", { name: /More actions/ }),
+    ).toBeNull();
     await user.click(
-      await screen.findByRole("button", { name: "Connect agent" }),
+      within(card).getByRole("button", { name: "View Payments Agent" }),
     );
-    const dialog = screen.getByRole("dialog", {
-      name: "Connect external A2A agent",
-    });
-    const urlInput = within(dialog).getByLabelText("Agent base URL");
-    await user.type(urlInput, "https://agent.example.com");
-    await user.click(
-      within(dialog).getByRole("button", { name: "Validate Agent Card" }),
-    );
-    expect(
-      await within(dialog).findByText("Fixture Agent"),
-    ).toBeInTheDocument();
-
-    await user.type(urlInput, "/changed");
-    expect(within(dialog).queryByText("Fixture Agent")).not.toBeInTheDocument();
-  });
-
-  it("announces a failed connection test", async () => {
-    const user = userEvent.setup();
-    server.use(
-      http.get(REGISTRY_URL, () => HttpResponse.json([])),
-      http.post(INSPECT_URL, () =>
-        HttpResponse.json({ message: "invalid card" }, { status: 400 }),
-      ),
-    );
-    renderPage();
-
-    await user.click(
-      await screen.findByRole("button", { name: "Connect agent" }),
-    );
-    const dialog = screen.getByRole("dialog", {
-      name: "Connect external A2A agent",
-    });
-    await user.type(
-      within(dialog).getByLabelText("Agent base URL"),
-      "https://invalid.example.com",
-    );
-    await user.click(
-      within(dialog).getByRole("button", { name: "Validate Agent Card" }),
-    );
-
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "The Agent Card could not be reached or validated.",
-    );
-  });
-
-  it("shows the latest monitored outbound run to administrators", async () => {
-    server.use(
-      http.get(REGISTRY_URL, () => HttpResponse.json([remoteAgent])),
-      http.get(`${REGISTRY_URL}/:id/runs`, () =>
-        HttpResponse.json([
-          {
-            id: "run-1",
-            parentAgentId: "parent-1",
-            connectionId: remoteAgent.connection.id,
-            toolId: remoteAgent.toolId,
-            userId: "user-1",
-            conversationId: "conversation-1",
-            toolCallId: "call-1",
-            messageId: "message-1",
-            remoteTaskId: "task-1",
-            remoteContextId: "context-1",
-            state: "completed",
-            targetNameSnapshot: remoteAgent.name,
-            interfaceSnapshot: remoteAgent.connection.selectedInterface,
-            errorCode: null,
-            statusReason: null,
-            startedAt: "2026-09-08T12:00:00.000Z",
-            completedAt: "2026-09-08T12:00:01.000Z",
-          },
-        ]),
-      ),
-    );
-
-    renderPage();
-
-    expect(await screen.findByText("Recent activity")).toBeInTheDocument();
-    expect(await screen.findByText(/completed ·/)).toBeInTheDocument();
+    expect(push).toHaveBeenCalledWith("/a2a/agents/remote-agent-1");
   });
 });
 
@@ -422,7 +304,7 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <OutboundA2aAgentsPage />
     </QueryClientProvider>,

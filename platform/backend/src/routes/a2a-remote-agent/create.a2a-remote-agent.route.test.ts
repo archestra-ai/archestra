@@ -24,6 +24,11 @@ describe("POST /api/a2a/remote-agents", () => {
     const body = response.json();
     expect(body).toMatchObject({
       name: "External researcher",
+      authorId: ctx.user.id,
+      authorName: ctx.user.name,
+      scope: "personal",
+      teams: [],
+      users: [],
       discoveryMode: "inline_card",
       discoveryUrl: null,
       connection: {
@@ -55,6 +60,59 @@ describe("POST /api/a2a/remote-agents", () => {
     });
     expect(auditSnapshot).not.toHaveProperty("secretId");
     expect(JSON.stringify(auditSnapshot)).not.toContain("a2a-super-secret");
+  });
+
+  test("round-trips team visibility and rejects invalid team audiences", async ({
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const team = await makeTeam(ctx.organizationId, ctx.user.id, {
+      name: "Research Team",
+    });
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        scope: "team",
+        teams: [team.id],
+      },
+    });
+
+    expect(created.statusCode).toBe(200);
+    expect(created.json()).toMatchObject({
+      authorId: ctx.user.id,
+      scope: "team",
+      teams: [{ id: team.id, name: "Research Team" }],
+      users: [],
+    });
+
+    const noTeam = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        scope: "team",
+        teams: [],
+      },
+    });
+    expect(noTeam.statusCode).toBe(400);
+
+    const foreignOrganization = await makeOrganization();
+    const foreignTeam = await makeTeam(foreignOrganization.id, ctx.user.id);
+    const foreign = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        scope: "team",
+        teams: [foreignTeam.id],
+      },
+    });
+    expect(foreign.statusCode).toBe(400);
   });
 
   test("rejects an auth method the Agent Card does not advertise", async () => {

@@ -8,11 +8,13 @@ import { ApiError } from "@/types";
 export async function listA2aDelegations(
   agentId: string,
   organizationId: string,
+  access?: { userId: string },
 ): Promise<A2aDelegationTarget[]> {
   const rows = await A2aConnectionModel.findAssignedTargets(
     agentId,
     organizationId,
     true,
+    access,
   );
   return rows.map(({ remoteAgent, connection, tool }) => ({
     remoteAgentId: remoteAgent.id,
@@ -27,20 +29,29 @@ export async function listA2aDelegations(
 export async function syncA2aDelegations(params: {
   agentId: string;
   organizationId: string;
+  userId?: string;
   connectionIds: string[];
 }): Promise<{ added: string[]; removed: string[] }> {
   const requestedIds = [...new Set(params.connectionIds)];
-  const [requestedTargets, currentTargets] = await Promise.all([
-    A2aConnectionModel.findTargetsByIdsForOrganization({
-      ids: requestedIds,
-      organizationId: params.organizationId,
-    }),
-    A2aConnectionModel.findAssignedTargets(
-      params.agentId,
-      params.organizationId,
-      true,
-    ),
-  ]);
+  const [requestedTargets, currentTargets, accessibleCurrentTargets] =
+    await Promise.all([
+      A2aConnectionModel.findTargetsByIdsForOrganization({
+        ids: requestedIds,
+        organizationId: params.organizationId,
+        userId: params.userId,
+      }),
+      A2aConnectionModel.findAssignedTargets(
+        params.agentId,
+        params.organizationId,
+        true,
+      ),
+      A2aConnectionModel.findAssignedTargets(
+        params.agentId,
+        params.organizationId,
+        true,
+        params.userId ? { userId: params.userId } : undefined,
+      ),
+    ]);
 
   if (requestedTargets.length !== requestedIds.length) {
     throw new ApiError(
@@ -94,9 +105,9 @@ export async function syncA2aDelegations(params: {
   const requestedByConnectionId = new Map(
     requestedTargets.map((target) => [target.connection.id, target]),
   );
-  const removed = [...currentByConnectionId.keys()].filter(
-    (id) => !requestedByConnectionId.has(id),
-  );
+  const removed = accessibleCurrentTargets
+    .map((target) => target.connection.id)
+    .filter((id) => !requestedByConnectionId.has(id));
   const added = [...requestedByConnectionId.keys()].filter(
     (id) => !currentByConnectionId.has(id),
   );

@@ -674,13 +674,14 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
-  // Outbound A2A definitions are organization-wide, credential-bearing egress
-  // configuration. Until they gain agent-style owner/team scopes, only an
-  // administrator may inspect or mutate them. The public summaries remain
-  // readable so members can assign an approved target to agents they manage.
+  // Inspecting or mutating arbitrary outbound destinations can configure
+  // credential-bearing egress, so those operations remain settings-manager
+  // only. Credential-redacted registry summaries and run history require Agent
+  // read, with their handlers enforcing the configured visibility boundary.
   [RouteId.InspectA2aRemoteAgent]: { agentSettings: ["update"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
-  [RouteId.ListA2aRemoteAgentRuns]: { agentSettings: ["read"] },
+  [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
   [RouteId.CreateA2aRemoteAgent]: { agentSettings: ["update"] },
   [RouteId.UpdateA2aRemoteAgent]: { agentSettings: ["update"] },
   [RouteId.DeleteA2aRemoteAgent]: { agentSettings: ["update"] },

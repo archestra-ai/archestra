@@ -1,4 +1,14 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import type { ResourceVisibilityScope } from "@archestra/shared";
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNull,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   A2aConnection,
@@ -20,9 +30,27 @@ class A2aRemoteAgentModel {
     if (!result) return null;
 
     const { remoteAgent, connection, toolId } = result;
+    const [teamRows, userRows] = await Promise.all([
+      db
+        .select({ id: schema.a2aRemoteAgentTeamsTable.teamId })
+        .from(schema.a2aRemoteAgentTeamsTable)
+        .where(
+          eq(schema.a2aRemoteAgentTeamsTable.remoteAgentId, remoteAgent.id),
+        ),
+      db
+        .select({ id: schema.a2aRemoteAgentUsersTable.userId })
+        .from(schema.a2aRemoteAgentUsersTable)
+        .where(
+          eq(schema.a2aRemoteAgentUsersTable.remoteAgentId, remoteAgent.id),
+        ),
+    ]);
     return {
       id: remoteAgent.id,
       organizationId: remoteAgent.organizationId,
+      authorId: remoteAgent.authorId,
+      scope: remoteAgent.scope,
+      teamIds: teamRows.map((row) => row.id).sort(),
+      userIds: userRows.map((row) => row.id).sort(),
       name: remoteAgent.name,
       description: remoteAgent.description,
       discoveryMode: remoteAgent.discoveryMode,
@@ -49,6 +77,89 @@ class A2aRemoteAgentModel {
       toolId: string;
     }>
   > {
+    return A2aRemoteAgentModel.findAll({ organizationId });
+  }
+
+  static async findAllVisible(params: {
+    organizationId: string;
+    userId: string;
+    canManage: boolean;
+    accessibleOnly?: boolean;
+    scope?: ResourceVisibilityScope;
+    teamId?: string;
+    authorId?: string;
+  }): Promise<
+    Array<{
+      remoteAgent: A2aRemoteAgent;
+      connection: A2aConnection;
+      toolId: string;
+    }>
+  > {
+    return A2aRemoteAgentModel.findAll(params);
+  }
+
+  static async findByIdVisible(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    canManage: boolean;
+  }): Promise<{
+    remoteAgent: A2aRemoteAgent;
+    connection: A2aConnection;
+    toolId: string;
+  } | null> {
+    const [result] = await A2aRemoteAgentModel.findAll(params, params.id);
+    return result ?? null;
+  }
+
+  private static async findAll(
+    params: {
+      organizationId: string;
+      userId?: string;
+      canManage?: boolean;
+      accessibleOnly?: boolean;
+      scope?: ResourceVisibilityScope;
+      teamId?: string;
+      authorId?: string;
+    },
+    id?: string,
+  ): Promise<
+    Array<{
+      remoteAgent: A2aRemoteAgent;
+      connection: A2aConnection;
+      toolId: string;
+    }>
+  > {
+    const conditions: Array<SQL | undefined> = [
+      eq(schema.a2aRemoteAgentsTable.organizationId, params.organizationId),
+      id ? eq(schema.a2aRemoteAgentsTable.id, id) : undefined,
+      params.scope
+        ? eq(schema.a2aRemoteAgentsTable.scope, params.scope)
+        : undefined,
+      params.authorId
+        ? eq(schema.a2aRemoteAgentsTable.authorId, params.authorId)
+        : undefined,
+      params.teamId
+        ? exists(
+            db
+              .select({ value: sql`1` })
+              .from(schema.a2aRemoteAgentTeamsTable)
+              .where(
+                and(
+                  eq(
+                    schema.a2aRemoteAgentTeamsTable.remoteAgentId,
+                    schema.a2aRemoteAgentsTable.id,
+                  ),
+                  eq(schema.a2aRemoteAgentTeamsTable.teamId, params.teamId),
+                ),
+              ),
+          )
+        : undefined,
+      params.userId && (params.accessibleOnly || !params.canManage)
+        ? A2aRemoteAgentModel.visibilityCondition(params.userId)
+        : undefined,
+    ];
+
     return db
       .select({
         remoteAgent: schema.a2aRemoteAgentsTable,
@@ -70,7 +181,7 @@ class A2aRemoteAgentModel {
           schema.a2aConnectionsTable.id,
         ),
       )
-      .where(eq(schema.a2aRemoteAgentsTable.organizationId, organizationId))
+      .where(and(...conditions))
       .orderBy(desc(schema.a2aRemoteAgentsTable.updatedAt));
   }
 
@@ -149,6 +260,46 @@ class A2aRemoteAgentModel {
       .where(eq(schema.agentToolsTable.toolId, toolId));
     return rows.length;
   }
+
+  static visibilityCondition(userId: string): SQL {
+    return sql<boolean>`(
+      ${schema.a2aRemoteAgentsTable.scope} = 'org'
+      OR (
+        ${schema.a2aRemoteAgentsTable.scope} = 'personal'
+        AND (
+          ${schema.a2aRemoteAgentsTable.authorId} = ${userId}
+          OR EXISTS (
+            SELECT 1 FROM ${schema.a2aRemoteAgentUsersTable} grants
+            WHERE grants.user_id = ${userId}
+              AND grants.remote_agent_id = ${schema.a2aRemoteAgentsTable.id}
+          )
+        )
+      )
+      OR (
+        ${schema.a2aRemoteAgentsTable.scope} = 'team'
+        AND EXISTS (
+          SELECT 1 FROM ${schema.a2aRemoteAgentTeamsTable} grants
+          WHERE grants.remote_agent_id = ${schema.a2aRemoteAgentsTable.id}
+            AND grants.team_id IN (
+              WITH RECURSIVE effective_teams(team_id, organization_id) AS (
+                SELECT tm.team_id, direct_team.organization_id
+                FROM team_member tm
+                INNER JOIN team direct_team ON direct_team.id = tm.team_id
+                WHERE tm.user_id = ${userId}
+                UNION
+                SELECT parent_team.id, parent_team.organization_id
+                FROM team child_team
+                INNER JOIN effective_teams et ON child_team.id = et.team_id
+                INNER JOIN team parent_team
+                  ON parent_team.id = child_team.parent_team_id
+                  AND parent_team.organization_id = et.organization_id
+              )
+              SELECT team_id FROM effective_teams
+            )
+        )
+      )
+    )`;
+  }
 }
 
 class A2aConnectionModel {
@@ -156,6 +307,7 @@ class A2aConnectionModel {
     agentId: string,
     organizationId: string,
     includeDisabled = false,
+    access?: { userId: string },
   ): Promise<
     Array<{
       remoteAgent: A2aRemoteAgent;
@@ -196,6 +348,9 @@ class A2aConnectionModel {
             ? undefined
             : eq(schema.a2aConnectionsTable.enabled, true),
           isNull(schema.toolsTable.deletedAt),
+          access
+            ? A2aRemoteAgentModel.visibilityCondition(access.userId)
+            : undefined,
         ),
       );
   }
@@ -204,6 +359,7 @@ class A2aConnectionModel {
     agentId: string;
     organizationId: string;
     toolName: string;
+    userId?: string;
   }): Promise<{
     remoteAgent: A2aRemoteAgent;
     connection: A2aConnection;
@@ -241,6 +397,9 @@ class A2aConnectionModel {
           eq(schema.toolsTable.name, params.toolName),
           eq(schema.a2aConnectionsTable.enabled, true),
           isNull(schema.toolsTable.deletedAt),
+          params.userId
+            ? A2aRemoteAgentModel.visibilityCondition(params.userId)
+            : undefined,
         ),
       )
       .limit(1);
@@ -278,6 +437,7 @@ class A2aConnectionModel {
   static async findTargetsByIdsForOrganization(params: {
     ids: string[];
     organizationId: string;
+    userId?: string;
   }): Promise<
     Array<{
       remoteAgent: A2aRemoteAgent;
@@ -313,6 +473,9 @@ class A2aConnectionModel {
           eq(schema.a2aRemoteAgentsTable.organizationId, params.organizationId),
           eq(schema.a2aConnectionsTable.enabled, true),
           isNull(schema.toolsTable.deletedAt),
+          params.userId
+            ? A2aRemoteAgentModel.visibilityCondition(params.userId)
+            : undefined,
         ),
       );
   }

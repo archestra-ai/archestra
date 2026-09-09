@@ -1,4 +1,4 @@
-import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { getAgentTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
@@ -474,5 +474,110 @@ describe("outbound A2A subagent assignments", () => {
       .where(eq(schema.toolsTable.id, unassignedRemote.toolId));
     expect(toolNames).toContain(assignedRemoteTool[0].name);
     expect(toolNames).not.toContain(unassignedRemoteTool[0].name);
+  });
+
+  test("rejects assigning a remote target the caller cannot access", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = ctx.user;
+    const viewer = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
+    await makeMember(viewer.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const parent = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: viewer.id,
+      agentType: "agent",
+      scope: "personal",
+    });
+    const remote = await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      input: {
+        name: "Private external target",
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        connectionName: "Default",
+        scope: "personal",
+      },
+    });
+    ctx.user = viewer;
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/agents/${parent.id}/a2a-delegations`,
+      payload: { connectionIds: [remote.connection.id] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(await assignedToolIds(parent.id)).toEqual([]);
+  });
+
+  test("preserves hidden assignments when a settings manager replaces visible assignments", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = ctx.user;
+    const manager = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
+    await makeMember(manager.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const parent = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: manager.id,
+      agentType: "agent",
+      scope: "personal",
+    });
+    const hidden = await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      input: {
+        name: "Hidden existing target",
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        connectionName: "Default",
+        scope: "personal",
+      },
+    });
+    const previousVisible = await createRemoteAgent(
+      ctx.organizationId,
+      "Previous visible target",
+    );
+    const nextVisible = await createRemoteAgent(
+      ctx.organizationId,
+      "Next visible target",
+    );
+    await AgentToolModel.createIfNotExists(parent.id, hidden.toolId);
+    await AgentToolModel.createIfNotExists(parent.id, previousVisible.toolId);
+    ctx.user = manager;
+
+    const listed = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agents/${parent.id}/a2a-delegations`,
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(
+      listed.json().map((item: { connectionId: string }) => item.connectionId),
+    ).toEqual([previousVisible.connection.id]);
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/agents/${parent.id}/a2a-delegations`,
+      payload: { connectionIds: [nextVisible.connection.id] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      added: [nextVisible.connection.id],
+      removed: [previousVisible.connection.id],
+    });
+    expect(new Set(await assignedToolIds(parent.id))).toEqual(
+      new Set([hidden.toolId, nextVisible.toolId]),
+    );
   });
 });

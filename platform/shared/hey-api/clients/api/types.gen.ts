@@ -12782,11 +12782,9 @@ export type InspectA2aRemoteAgentData = {
             type: 'none';
         } | {
             type: 'bearer';
-            credential: string;
         } | {
             type: 'api_key';
             headerName: string;
-            credential: string;
         };
     };
     path?: never;
@@ -12888,7 +12886,12 @@ export type InspectA2aRemoteAgentResponse = InspectA2aRemoteAgentResponses[keyof
 export type ListA2aRemoteAgentsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        scope?: 'personal' | 'team' | 'org';
+        teamId?: string;
+        authorId?: string;
+        accessibleOnly?: boolean;
+    };
     url: '/api/a2a/remote-agents';
 };
 
@@ -12964,6 +12967,8 @@ export type ListA2aRemoteAgentsResponses = {
     200: Array<{
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13003,6 +13008,16 @@ export type ListA2aRemoteAgentsResponses = {
             hasCredential: boolean;
         };
         toolId: string;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
     }>;
 };
 
@@ -13035,6 +13050,9 @@ export type CreateA2aRemoteAgentData = {
         name?: string;
         description?: string | null;
         connectionName?: string;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
+        users?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -13113,6 +13131,8 @@ export type CreateA2aRemoteAgentResponses = {
     200: {
         id: string;
         organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13152,10 +13172,409 @@ export type CreateA2aRemoteAgentResponses = {
             hasCredential: boolean;
         };
         toolId: string;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
     };
 };
 
 export type CreateA2aRemoteAgentResponse = CreateA2aRemoteAgentResponses[keyof CreateA2aRemoteAgentResponses];
+
+export type DeleteA2aRemoteAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/a2a/remote-agents/{id}';
+};
+
+export type DeleteA2aRemoteAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteA2aRemoteAgentError = DeleteA2aRemoteAgentErrors[keyof DeleteA2aRemoteAgentErrors];
+
+export type DeleteA2aRemoteAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteA2aRemoteAgentResponse = DeleteA2aRemoteAgentResponses[keyof DeleteA2aRemoteAgentResponses];
+
+export type GetA2aRemoteAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/a2a/remote-agents/{id}';
+};
+
+export type GetA2aRemoteAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetA2aRemoteAgentError = GetA2aRemoteAgentErrors[keyof GetA2aRemoteAgentErrors];
+
+export type GetA2aRemoteAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        description: string | null;
+        discoveryMode: 'well_known' | 'card_url' | 'inline_card';
+        discoveryUrl: string | null;
+        agentCard: {
+            [key: string]: unknown;
+        };
+        cardHash: string;
+        etag: string | null;
+        lastModified: string | null;
+        lastDiscoveredAt: string;
+        discoveryError: string | null;
+        createdAt: string;
+        updatedAt: string;
+        connection: {
+            id: string;
+            remoteAgentId: string;
+            name: string;
+            selectedInterface: {
+                url: string;
+                protocolBinding: 'JSONRPC' | 'HTTP+JSON';
+                protocolVersion: string;
+                tenant?: string;
+            };
+            securityRequirement: {
+                [key: string]: Array<string>;
+            } | null;
+            authType: 'none' | 'bearer' | 'api_key';
+            authConfig: {
+                headerName?: string;
+            };
+            enabled: boolean;
+            lastVerifiedAt: string | null;
+            lastVerificationError: string | null;
+            createdAt: string;
+            updatedAt: string;
+            hasCredential: boolean;
+        };
+        toolId: string;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+    };
+};
+
+export type GetA2aRemoteAgentResponse = GetA2aRemoteAgentResponses[keyof GetA2aRemoteAgentResponses];
+
+export type UpdateA2aRemoteAgentData = {
+    body: {
+        name?: string;
+        description?: string | null;
+        source?: {
+            type: 'well_known';
+            url: string;
+        } | {
+            type: 'card_url';
+            url: string;
+        } | {
+            type: 'inline_card';
+            agentCard: {
+                [key: string]: unknown;
+            };
+        };
+        auth?: {
+            type: 'none';
+        } | {
+            type: 'bearer';
+            credential: string;
+        } | {
+            type: 'api_key';
+            headerName: string;
+            credential: string;
+        };
+        enabled?: boolean;
+        connectionName?: string;
+        scope?: 'personal' | 'team' | 'org';
+        teams?: Array<string>;
+        users?: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/a2a/remote-agents/{id}';
+};
+
+export type UpdateA2aRemoteAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateA2aRemoteAgentError = UpdateA2aRemoteAgentErrors[keyof UpdateA2aRemoteAgentErrors];
+
+export type UpdateA2aRemoteAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        description: string | null;
+        discoveryMode: 'well_known' | 'card_url' | 'inline_card';
+        discoveryUrl: string | null;
+        agentCard: {
+            [key: string]: unknown;
+        };
+        cardHash: string;
+        etag: string | null;
+        lastModified: string | null;
+        lastDiscoveredAt: string;
+        discoveryError: string | null;
+        createdAt: string;
+        updatedAt: string;
+        connection: {
+            id: string;
+            remoteAgentId: string;
+            name: string;
+            selectedInterface: {
+                url: string;
+                protocolBinding: 'JSONRPC' | 'HTTP+JSON';
+                protocolVersion: string;
+                tenant?: string;
+            };
+            securityRequirement: {
+                [key: string]: Array<string>;
+            } | null;
+            authType: 'none' | 'bearer' | 'api_key';
+            authConfig: {
+                headerName?: string;
+            };
+            enabled: boolean;
+            lastVerifiedAt: string | null;
+            lastVerificationError: string | null;
+            createdAt: string;
+            updatedAt: string;
+            hasCredential: boolean;
+        };
+        toolId: string;
+        authorName: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+    };
+};
+
+export type UpdateA2aRemoteAgentResponse = UpdateA2aRemoteAgentResponses[keyof UpdateA2aRemoteAgentResponses];
 
 export type ListA2aRemoteAgentRunsData = {
     body?: never;
@@ -13264,242 +13683,6 @@ export type ListA2aRemoteAgentRunsResponses = {
 };
 
 export type ListA2aRemoteAgentRunsResponse = ListA2aRemoteAgentRunsResponses[keyof ListA2aRemoteAgentRunsResponses];
-
-export type DeleteA2aRemoteAgentData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/a2a/remote-agents/{id}';
-};
-
-export type DeleteA2aRemoteAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteA2aRemoteAgentError = DeleteA2aRemoteAgentErrors[keyof DeleteA2aRemoteAgentErrors];
-
-export type DeleteA2aRemoteAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteA2aRemoteAgentResponse = DeleteA2aRemoteAgentResponses[keyof DeleteA2aRemoteAgentResponses];
-
-export type UpdateA2aRemoteAgentData = {
-    body: {
-        name?: string;
-        description?: string | null;
-        source?: {
-            type: 'well_known';
-            url: string;
-        } | {
-            type: 'card_url';
-            url: string;
-        } | {
-            type: 'inline_card';
-            agentCard: {
-                [key: string]: unknown;
-            };
-        };
-        auth?: {
-            type: 'none';
-        } | {
-            type: 'bearer';
-            credential: string;
-        } | {
-            type: 'api_key';
-            headerName: string;
-            credential: string;
-        };
-        enabled?: boolean;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/a2a/remote-agents/{id}';
-};
-
-export type UpdateA2aRemoteAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateA2aRemoteAgentError = UpdateA2aRemoteAgentErrors[keyof UpdateA2aRemoteAgentErrors];
-
-export type UpdateA2aRemoteAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        description: string | null;
-        discoveryMode: 'well_known' | 'card_url' | 'inline_card';
-        discoveryUrl: string | null;
-        agentCard: {
-            [key: string]: unknown;
-        };
-        cardHash: string;
-        etag: string | null;
-        lastModified: string | null;
-        lastDiscoveredAt: string;
-        discoveryError: string | null;
-        createdAt: string;
-        updatedAt: string;
-        connection: {
-            id: string;
-            remoteAgentId: string;
-            name: string;
-            selectedInterface: {
-                url: string;
-                protocolBinding: 'JSONRPC' | 'HTTP+JSON';
-                protocolVersion: string;
-                tenant?: string;
-            };
-            securityRequirement: {
-                [key: string]: Array<string>;
-            } | null;
-            authType: 'none' | 'bearer' | 'api_key';
-            authConfig: {
-                headerName?: string;
-            };
-            enabled: boolean;
-            lastVerifiedAt: string | null;
-            lastVerificationError: string | null;
-            createdAt: string;
-            updatedAt: string;
-            hasCredential: boolean;
-        };
-        toolId: string;
-    };
-};
-
-export type UpdateA2aRemoteAgentResponse = UpdateA2aRemoteAgentResponses[keyof UpdateA2aRemoteAgentResponses];
 
 export type GetV1A2aByAgentIdWellKnownAgentJsonData = {
     body?: never;

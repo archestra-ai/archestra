@@ -1,5 +1,6 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { ToolModel, TrustedDataPolicyModel } from "@/models";
@@ -7,6 +8,7 @@ import { syncA2aDelegations } from "@/services/a2a-outbound-assignments";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { expect, test } from "@/test";
 import { executeArchestraTool } from ".";
+import { getAgentTools, handleDelegation } from "./delegation";
 
 // Keep the dependency-free fixture as plain JavaScript while avoiding a
 // production declaration solely for a test helper.
@@ -184,6 +186,84 @@ test("stamps guardrail defaults from the owning organization", async ({
 
   expect(invocationPolicy.action).toBe("allow_when_context_is_untrusted");
   expect(resultPolicy.action).toBe("mark_as_trusted");
+});
+
+test("hides and rejects an inaccessible external target for a real user while preserving headless execution", async ({
+  makeAgent,
+  makeMember,
+  makeOrganization,
+  makeUser,
+}) => {
+  await withFixture(async ({ baseUrl, journal }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    await makeMember(owner.id, organization.id);
+    await makeMember(viewer.id, organization.id, { role: ADMIN_ROLE_NAME });
+    const parent = await makeAgent({
+      name: "Visibility parent",
+      organizationId: organization.id,
+    });
+    const remote = await createA2aRemoteAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      input: {
+        source: { type: "inline_card", agentCard: makeAgentCard(baseUrl) },
+        auth: { type: "none" },
+        connectionName: "Default",
+        scope: "personal",
+      },
+    });
+    await syncA2aDelegations({
+      agentId: parent.id,
+      organizationId: organization.id,
+      connectionIds: [remote.connection.id],
+    });
+    const tool = await ToolModel.findById(remote.toolId);
+    if (!tool) throw new Error("expected synthetic outbound A2A tool");
+
+    const advertised = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: viewer.id,
+    });
+    expect(advertised.map((item) => item.name)).not.toContain(tool.name);
+
+    const advertisedWithLocalBypass = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: viewer.id,
+      skipAccessCheck: true,
+    });
+    expect(advertisedWithLocalBypass.map((item) => item.name)).not.toContain(
+      tool.name,
+    );
+
+    const denied = await handleDelegation(
+      tool.name,
+      { message: "private" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: viewer.id,
+      },
+    );
+    expect(denied.isError).toBe(true);
+    expect((await journal()).requests).toEqual([]);
+
+    const headless = await handleDelegation(
+      tool.name,
+      { message: "headless" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+      },
+    );
+    expect(headless.isError).not.toBe(true);
+    expect((await journal()).requests).toHaveLength(1);
+  });
 });
 
 function makeAgentCard(baseUrl: string) {

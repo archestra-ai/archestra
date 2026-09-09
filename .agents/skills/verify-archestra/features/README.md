@@ -18,12 +18,14 @@ This index is the source of truth for the currently mapped Archestra agent and c
 | --- | --- | --- | --- |
 | `AGENT-CONFIG` | Create and configure an agent | Agents list, agent detail, legacy edit deep link | [Agent configuration](agent-configuration.md) |
 | `AGENT-CHAT` | Start and continue a browser chat with an agent | New Chat, agent Chat action, persisted conversation URL | [Chat with an agent](chat-with-agent.md) |
+| `A2A-OUTBOUND-CONFIG` | Connect and configure an external A2A agent | External Agents list, create, and detail pages | [External A2A agent configuration](external-a2a-agent-configuration.md) |
 
 Every feature file appears exactly once above. Every run report must include feature/sub-feature ID, entry-point ID, status, observed result, evidence path, and revision/build.
 
 ## Known user surfaces not yet mapped
 
-- Agent import, export, clone, version-history restore, trash restore, permanent delete, bulk visibility, pin-as-default, conversion to skill, A2A calls, runtime execution, and fully configured messaging-channel delivery.
+- Agent import, export, clone, version-history restore, trash restore, permanent delete, bulk visibility, pin-as-default, conversion to skill, and fully configured messaging-channel delivery.
+- External A2A credential variants, live remote-agent interoperability beyond the deterministic fixture, disabled-connection behavior, and exhaustive visibility/RBAC matrices.
 - MCP Gateway configuration and connection behavior.
 - Chat attachments, voice input, locked chats, apps, browser panel, tool approval, message queue, context compaction, projects, sharing, feedback, fork, delete/restore, and external ChatOps/email/A2A entry points.
 - RBAC matrices beyond the prerequisite permissions stated in each recipe, multi-browser coverage, mobile behavior, and provider parity beyond the existing provider-loop tests.

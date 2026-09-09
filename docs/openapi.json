@@ -42433,9 +42433,6 @@
                     ]
                   },
                   "auth": {
-                    "default": {
-                      "type": "none"
-                    },
                     "oneOf": [
                       {
                         "type": "object",
@@ -42459,16 +42456,10 @@
                             "enum": [
                               "bearer"
                             ]
-                          },
-                          "credential": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 20000
                           }
                         },
                         "required": [
-                          "type",
-                          "credential"
+                          "type"
                         ]
                       },
                       {
@@ -42485,17 +42476,11 @@
                             "minLength": 1,
                             "maxLength": 256,
                             "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
-                          },
-                          "credential": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 20000
                           }
                         },
                         "required": [
                           "type",
-                          "headerName",
-                          "credential"
+                          "headerName"
                         ]
                       }
                     ]
@@ -42839,6 +42824,45 @@
           "Outbound A2A Agents"
         ],
         "description": "List configured outbound A2A agents.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "teamId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "authorId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "accessibleOnly",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -42856,6 +42880,18 @@
                       },
                       "organizationId": {
                         "type": "string"
+                      },
+                      "authorId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ]
                       },
                       "name": {
                         "type": "string"
@@ -43025,11 +43061,59 @@
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "authorName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "teams": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "users": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "email"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
                       "id",
                       "organizationId",
+                      "authorId",
+                      "scope",
                       "name",
                       "description",
                       "discoveryMode",
@@ -43043,7 +43127,10 @@
                       "createdAt",
                       "updatedAt",
                       "connection",
-                      "toolId"
+                      "toolId",
+                      "authorName",
+                      "teams",
+                      "users"
                     ],
                     "additionalProperties": false
                   }
@@ -43444,6 +43531,29 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 255
+                  },
+                  "scope": {
+                    "default": "personal",
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teams": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "users": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -43468,6 +43578,18 @@
                     },
                     "organizationId": {
                       "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
                     },
                     "name": {
                       "type": "string"
@@ -43637,11 +43759,59 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
+                    "authorId",
+                    "scope",
                     "name",
                     "description",
                     "discoveryMode",
@@ -43655,7 +43825,10 @@
                     "createdAt",
                     "updatedAt",
                     "connection",
-                    "toolId"
+                    "toolId",
+                    "authorName",
+                    "teams",
+                    "users"
                   ],
                   "additionalProperties": false
                 }
@@ -43899,25 +44072,14 @@
         }
       }
     },
-    "/api/a2a/remote-agents/{id}/runs": {
+    "/api/a2a/remote-agents/{id}": {
       "get": {
-        "operationId": "listA2aRemoteAgentRuns",
+        "operationId": "getA2aRemoteAgent",
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:read`: View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Get one configured outbound A2A agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
         "parameters": [
-          {
-            "schema": {
-              "default": 50,
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100
-            },
-            "in": "query",
-            "name": "limit",
-            "required": false
-          },
           {
             "schema": {
               "type": "string",
@@ -43935,144 +44097,268 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "discoveryMode": {
+                      "type": "string",
+                      "enum": [
+                        "well_known",
+                        "card_url",
+                        "inline_card"
+                      ]
+                    },
+                    "discoveryUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentCard": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "cardHash": {
+                      "type": "string"
+                    },
+                    "etag": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastModified": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastDiscoveredAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "discoveryError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "connection": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "remoteAgentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "selectedInterface": {
+                          "type": "object",
+                          "properties": {
+                            "url": {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "protocolBinding": {
+                              "type": "string",
+                              "enum": [
+                                "JSONRPC",
+                                "HTTP+JSON"
+                              ]
+                            },
+                            "protocolVersion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "tenant": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "url",
+                            "protocolBinding",
+                            "protocolVersion"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "securityRequirement": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "authType": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "bearer",
+                            "api_key"
+                          ]
+                        },
+                        "authConfig": {
+                          "type": "object",
+                          "properties": {
+                            "headerName": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "lastVerifiedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "lastVerificationError": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "hasCredential": {
+                          "type": "boolean"
+                        }
                       },
-                      "parentAgentId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "connectionId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "toolId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "userId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "conversationId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "toolCallId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "messageId": {
-                        "type": "string"
-                      },
-                      "remoteTaskId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "remoteContextId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "state": {
-                        "type": "string",
-                        "enum": [
-                          "pending",
-                          "submitted",
-                          "working",
-                          "completed",
-                          "failed",
-                          "canceled",
-                          "input_required",
-                          "auth_required",
-                          "rejected",
-                          "unknown"
-                        ]
-                      },
-                      "targetNameSnapshot": {
-                        "type": "string"
-                      },
-                      "interfaceSnapshot": {
+                      "required": [
+                        "id",
+                        "remoteAgentId",
+                        "name",
+                        "selectedInterface",
+                        "securityRequirement",
+                        "authType",
+                        "authConfig",
+                        "enabled",
+                        "lastVerifiedAt",
+                        "lastVerificationError",
+                        "createdAt",
+                        "updatedAt",
+                        "hasCredential"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "toolId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
-                          "url": {
-                            "type": "string",
-                            "format": "uri"
+                          "id": {
+                            "type": "string"
                           },
-                          "protocolBinding": {
-                            "type": "string",
-                            "enum": [
-                              "JSONRPC",
-                              "HTTP+JSON"
-                            ]
-                          },
-                          "protocolVersion": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tenant": {
+                          "name": {
                             "type": "string"
                           }
                         },
                         "required": [
-                          "url",
-                          "protocolBinding",
-                          "protocolVersion"
+                          "id",
+                          "name"
                         ],
                         "additionalProperties": false
-                      },
-                      "errorCode": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "statusReason": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "startedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "completedAt": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "date-time"
                       }
                     },
-                    "required": [
-                      "id",
-                      "parentAgentId",
-                      "connectionId",
-                      "toolId",
-                      "userId",
-                      "conversationId",
-                      "toolCallId",
-                      "messageId",
-                      "remoteTaskId",
-                      "remoteContextId",
-                      "state",
-                      "targetNameSnapshot",
-                      "interfaceSnapshot",
-                      "errorCode",
-                      "statusReason",
-                      "startedAt",
-                      "completedAt"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "authorId",
+                    "scope",
+                    "name",
+                    "description",
+                    "discoveryMode",
+                    "discoveryUrl",
+                    "agentCard",
+                    "cardHash",
+                    "etag",
+                    "lastModified",
+                    "lastDiscoveredAt",
+                    "discoveryError",
+                    "createdAt",
+                    "updatedAt",
+                    "connection",
+                    "toolId",
+                    "authorName",
+                    "teams",
+                    "users"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -44309,12 +44595,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:read"
+            "agent:read"
           ]
         }
-      }
-    },
-    "/api/a2a/remote-agents/{id}": {
+      },
       "put": {
         "operationId": "updateA2aRemoteAgent",
         "tags": [
@@ -44466,6 +44750,31 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "connectionName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "org"
+                    ]
+                  },
+                  "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "users": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -44499,6 +44808,18 @@
                     },
                     "organizationId": {
                       "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
                     },
                     "name": {
                       "type": "string"
@@ -44668,11 +44989,59 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
+                    "authorId",
+                    "scope",
                     "name",
                     "description",
                     "discoveryMode",
@@ -44686,7 +45055,10 @@
                     "createdAt",
                     "updatedAt",
                     "connection",
-                    "toolId"
+                    "toolId",
+                    "authorName",
+                    "teams",
+                    "users"
                   ],
                   "additionalProperties": false
                 }
@@ -45200,6 +45572,421 @@
           "kind": "static",
           "permissions": [
             "agentSettings:update"
+          ]
+        }
+      }
+    },
+    "/api/a2a/remote-agents/{id}/runs": {
+      "get": {
+        "operationId": "listA2aRemoteAgentRuns",
+        "tags": [
+          "Outbound A2A Agents"
+        ],
+        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "parameters": [
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "parentAgentId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "connectionId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "toolId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "userId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "conversationId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "toolCallId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "messageId": {
+                        "type": "string"
+                      },
+                      "remoteTaskId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "remoteContextId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "submitted",
+                          "working",
+                          "completed",
+                          "failed",
+                          "canceled",
+                          "input_required",
+                          "auth_required",
+                          "rejected",
+                          "unknown"
+                        ]
+                      },
+                      "targetNameSnapshot": {
+                        "type": "string"
+                      },
+                      "interfaceSnapshot": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "protocolBinding": {
+                            "type": "string",
+                            "enum": [
+                              "JSONRPC",
+                              "HTTP+JSON"
+                            ]
+                          },
+                          "protocolVersion": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "tenant": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "protocolBinding",
+                          "protocolVersion"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "errorCode": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "statusReason": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "startedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "completedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parentAgentId",
+                      "connectionId",
+                      "toolId",
+                      "userId",
+                      "conversationId",
+                      "toolCallId",
+                      "messageId",
+                      "remoteTaskId",
+                      "remoteContextId",
+                      "state",
+                      "targetNameSnapshot",
+                      "interfaceSnapshot",
+                      "errorCode",
+                      "statusReason",
+                      "startedAt",
+                      "completedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read"
           ]
         }
       }

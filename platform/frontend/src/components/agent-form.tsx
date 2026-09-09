@@ -800,7 +800,7 @@ function OutboundAgentsEditor({
         <Globe className="h-4 w-4" />
       </SettingIcon>
       <div className="min-w-0 flex-1 space-y-1.5">
-        <Label>Outbound Agents</Label>
+        <Label>External Agents</Label>
         <p className="text-xs text-muted-foreground">
           External A2A agents this one may delegate work to. They are always
           assigned explicitly.
@@ -1302,6 +1302,7 @@ export function AgentForm({
   } = useAgentA2aDelegations(supportsSubagents ? agent?.id : undefined);
   const a2aRemoteAgents = useA2aRemoteAgents({
     enabled: supportsSubagents && Boolean(agent?.id) && !agent?.builtIn,
+    accessibleOnly: true,
   });
   const syncA2aDelegations = useSyncAgentA2aDelegations();
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
@@ -3783,7 +3784,18 @@ export function AgentForm({
               {/* Section 4: Subagents */}
               {showSubagents && (
                 <SettingsSection
-                  title="Subagents"
+                  title={
+                    <span className="inline-flex items-center gap-2">
+                      <span>Subagents</span>
+                      <Badge
+                        aria-hidden="true"
+                        variant="secondary"
+                        className="px-1.5 py-0 text-[10px]"
+                      >
+                        Beta
+                      </Badge>
+                    </span>
+                  }
                   // An agent hands the task over itself. A gateway does not
                   // run anything — it advertises each subagent as a delegation
                   // tool and its client decides when to call one — so saying it

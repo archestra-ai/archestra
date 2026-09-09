@@ -1,3 +1,4 @@
+import { ResourceVisibilityScopeSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -76,6 +77,26 @@ const FORBIDDEN_A2A_AUTH_HEADERS = new Set([
   "upgrade",
 ]);
 
+const A2aApiKeyHeaderNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(256)
+  .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, "API-key header name is invalid")
+  .refine(
+    (name) => !FORBIDDEN_A2A_AUTH_HEADERS.has(name.toLowerCase()),
+    "API-key header name is reserved and cannot carry credentials",
+  );
+
+const A2aConnectionAuthSelectionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("none") }),
+  z.object({ type: z.literal("bearer") }),
+  z.object({
+    type: z.literal("api_key"),
+    headerName: A2aApiKeyHeaderNameSchema,
+  }),
+]);
+
 export const A2aConnectionAuthInputSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("none") }),
   z.object({
@@ -84,31 +105,26 @@ export const A2aConnectionAuthInputSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("api_key"),
-    headerName: z
-      .string()
-      .trim()
-      .min(1)
-      .max(256)
-      .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, "API-key header name is invalid")
-      .refine(
-        (name) => !FORBIDDEN_A2A_AUTH_HEADERS.has(name.toLowerCase()),
-        "API-key header name is reserved and cannot carry credentials",
-      ),
+    headerName: A2aApiKeyHeaderNameSchema,
     credential: z.string().trim().min(1).max(20_000),
   }),
 ]);
 
 export const InspectA2aRemoteAgentRequestSchema = z.object({
   source: A2aRemoteAgentSourceSchema,
-  auth: A2aConnectionAuthInputSchema.default({ type: "none" }),
+  auth: A2aConnectionAuthSelectionSchema.optional(),
 });
 
-export const CreateA2aRemoteAgentRequestSchema =
-  InspectA2aRemoteAgentRequestSchema.extend({
-    name: z.string().trim().min(1).max(255).optional(),
-    description: z.string().trim().max(2_000).nullable().optional(),
-    connectionName: z.string().trim().min(1).max(255).default("Default"),
-  });
+export const CreateA2aRemoteAgentRequestSchema = z.object({
+  source: A2aRemoteAgentSourceSchema,
+  auth: A2aConnectionAuthInputSchema.default({ type: "none" }),
+  name: z.string().trim().min(1).max(255).optional(),
+  description: z.string().trim().max(2_000).nullable().optional(),
+  connectionName: z.string().trim().min(1).max(255).default("Default"),
+  scope: ResourceVisibilityScopeSchema.default("personal"),
+  teams: z.array(z.string()).default([]),
+  users: z.array(z.string()).default([]),
+});
 
 export const UpdateA2aRemoteAgentRequestSchema = z
   .object({
@@ -117,6 +133,10 @@ export const UpdateA2aRemoteAgentRequestSchema = z
     source: A2aRemoteAgentSourceSchema.optional(),
     auth: A2aConnectionAuthInputSchema.optional(),
     enabled: z.boolean().optional(),
+    connectionName: z.string().trim().min(1).max(255).optional(),
+    scope: ResourceVisibilityScopeSchema.optional(),
+    teams: z.array(z.string()).optional(),
+    users: z.array(z.string()).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",
@@ -138,6 +158,7 @@ export const SelectA2aRemoteAgentSchema = createSelectSchema(
   {
     discoveryMode: A2aDiscoveryModeSchema,
     agentCard: A2aAgentCardJsonSchema,
+    scope: ResourceVisibilityScopeSchema,
   },
 );
 export const InsertA2aRemoteAgentSchema = createInsertSchema(
@@ -145,6 +166,7 @@ export const InsertA2aRemoteAgentSchema = createInsertSchema(
   {
     discoveryMode: A2aDiscoveryModeSchema,
     agentCard: A2aAgentCardJsonSchema,
+    scope: ResourceVisibilityScopeSchema,
   },
 );
 export const SelectA2aConnectionSchema = createSelectSchema(
@@ -196,6 +218,18 @@ export const PublicA2aConnectionSchema = SelectA2aConnectionSchema.omit({
 export const PublicA2aRemoteAgentSchema = SelectA2aRemoteAgentSchema.extend({
   connection: PublicA2aConnectionSchema,
   toolId: z.string().uuid(),
+  authorName: z.string().nullable(),
+  teams: z.array(z.object({ id: z.string(), name: z.string() })),
+  users: z.array(
+    z.object({ id: z.string(), name: z.string(), email: z.string() }),
+  ),
+});
+
+export const ListA2aRemoteAgentsQuerySchema = z.object({
+  scope: ResourceVisibilityScopeSchema.optional(),
+  teamId: z.string().optional(),
+  authorId: z.string().optional(),
+  accessibleOnly: z.stringbool().meta({ type: "boolean" }).optional(),
 });
 
 export const A2aRemoteAgentInspectionSchema = z.object({
@@ -253,7 +287,7 @@ export type A2aConnectionAuthInput = z.infer<
 export type InspectA2aRemoteAgentRequest = z.infer<
   typeof InspectA2aRemoteAgentRequestSchema
 >;
-export type CreateA2aRemoteAgentRequest = z.infer<
+export type CreateA2aRemoteAgentRequest = z.input<
   typeof CreateA2aRemoteAgentRequestSchema
 >;
 export type UpdateA2aRemoteAgentRequest = z.infer<

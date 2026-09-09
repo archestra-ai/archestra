@@ -2,6 +2,7 @@ export const RouteId = {
   // Outbound A2A Agent Routes
   InspectA2aRemoteAgent: "inspectA2aRemoteAgent",
   ListA2aRemoteAgents: "listA2aRemoteAgents",
+  GetA2aRemoteAgent: "getA2aRemoteAgent",
   ListA2aRemoteAgentRuns: "listA2aRemoteAgentRuns",
   CreateA2aRemoteAgent: "createA2aRemoteAgent",
   UpdateA2aRemoteAgent: "updateA2aRemoteAgent",

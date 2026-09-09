@@ -6,6 +6,7 @@ import {
   isAgentTypeAdmin,
   requireAgentModifyPermission,
   requireAgentTypePermission,
+  userHasPermission,
 } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import {
@@ -21,6 +22,7 @@ import {
 import {
   createA2aRemoteAgent,
   deleteA2aRemoteAgent,
+  getA2aRemoteAgent,
   inspectA2aRemoteAgent,
   listA2aRemoteAgents,
   updateA2aRemoteAgent,
@@ -34,6 +36,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   InspectA2aRemoteAgentRequestSchema,
+  ListA2aRemoteAgentsQuerySchema,
   PublicA2aRemoteAgentSchema,
   SyncA2aDelegationsRequestSchema,
   SyncA2aDelegationsResponseSchema,
@@ -84,7 +87,9 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
       return reply.send(
-        await listA2aDelegations(params.agentId, organizationId),
+        await listA2aDelegations(params.agentId, organizationId, {
+          userId: user.id,
+        }),
       );
     },
   );
@@ -134,6 +139,7 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await syncA2aDelegations({
         agentId: params.agentId,
         organizationId,
+        userId: user.id,
         connectionIds: body.connectionIds,
       });
       clearChatMcpClient(params.agentId);
@@ -163,11 +169,47 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ListA2aRemoteAgents,
         description: "List configured outbound A2A agents.",
         tags: ["Outbound A2A Agents"],
+        querystring: ListA2aRemoteAgentsQuerySchema,
         response: constructResponseSchema(z.array(PublicA2aRemoteAgentSchema)),
       },
     },
-    async ({ organizationId }, reply) =>
-      reply.send(await listA2aRemoteAgents(organizationId)),
+    async ({ organizationId, user, query }, reply) =>
+      reply.send(
+        await listA2aRemoteAgents({
+          organizationId,
+          userId: user.id,
+          canManage: await canManageRemoteAgents({
+            userId: user.id,
+            organizationId,
+          }),
+          ...query,
+        }),
+      ),
+  );
+
+  fastify.get(
+    "/api/a2a/remote-agents/:id",
+    {
+      schema: {
+        operationId: RouteId.GetA2aRemoteAgent,
+        description: "Get one configured outbound A2A agent.",
+        tags: ["Outbound A2A Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(PublicA2aRemoteAgentSchema),
+      },
+    },
+    async ({ organizationId, user, params }, reply) =>
+      reply.send(
+        await getA2aRemoteAgent({
+          id: params.id,
+          organizationId,
+          userId: user.id,
+          canManage: await canManageRemoteAgents({
+            userId: user.id,
+            organizationId,
+          }),
+        }),
+      ),
   );
 
   fastify.get(
@@ -185,10 +227,12 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(A2aOutboundRunSummarySchema)),
       },
     },
-    async ({ organizationId, params, query }, reply) => {
-      const remoteAgent = await A2aRemoteAgentModel.findByIdForOrganization({
+    async ({ organizationId, user, params, query }, reply) => {
+      const remoteAgent = await A2aRemoteAgentModel.findByIdVisible({
         id: params.id,
         organizationId,
+        userId: user.id,
+        canManage: false,
       });
       if (!remoteAgent) {
         throw new ApiError(404, "Outbound A2A agent not found");
@@ -215,8 +259,14 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicA2aRemoteAgentSchema),
       },
     },
-    async ({ organizationId, body }, reply) =>
-      reply.send(await createA2aRemoteAgent({ organizationId, input: body })),
+    async ({ organizationId, user, body }, reply) =>
+      reply.send(
+        await createA2aRemoteAgent({
+          organizationId,
+          authorId: user.id,
+          input: body,
+        }),
+      ),
   );
 
   fastify.put(
@@ -232,11 +282,12 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PublicA2aRemoteAgentSchema),
       },
     },
-    async ({ organizationId, params, body }, reply) =>
+    async ({ organizationId, user, params, body }, reply) =>
       reply.send(
         await updateA2aRemoteAgent({
           id: params.id,
           organizationId,
+          actorUserId: user.id,
           input: body,
         }),
       ),
@@ -262,3 +313,15 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default a2aRemoteAgentRoutes;
+
+async function canManageRemoteAgents(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  return userHasPermission(
+    params.userId,
+    params.organizationId,
+    "agentSettings",
+    "update",
+  );
+}

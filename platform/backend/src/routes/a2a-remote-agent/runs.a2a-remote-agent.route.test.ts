@@ -71,4 +71,32 @@ describe("GET /api/a2a/remote-agents/:id/runs", () => {
 
     expect(response.statusCode).toBe(404);
   });
+
+  test("does not expose runs for an inaccessible personal target", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = ctx.user;
+    const viewer = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
+    await makeMember(viewer.id, ctx.organizationId);
+    const remote = await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      input: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        connectionName: "Default",
+        scope: "personal",
+      },
+    });
+
+    ctx.user = viewer;
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/a2a/remote-agents/${remote.id}/runs`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
 });

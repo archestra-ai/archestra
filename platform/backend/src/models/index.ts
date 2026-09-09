@@ -10,6 +10,8 @@ export {
   A2aConnectionModel,
   default as A2aRemoteAgentModel,
 } from "./a2a-remote-agent";
+export { default as A2aRemoteAgentTeamModel } from "./a2a-remote-agent-team";
+export { default as A2aRemoteAgentUserModel } from "./a2a-remote-agent-user";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";

@@ -82,9 +82,15 @@ export async function getAgentTools(context: {
   // External A2A currently executes from the backend process, outside the
   // per-environment network-policy runtime. Fail closed for environment-bound
   // agents until connections can be bound to and dialed through that runtime.
+  const realUserId = userId && userId !== "system" ? userId : undefined;
   const outboundTargets = environmentId
     ? []
-    : await A2aConnectionModel.findAssignedTargets(agentId, organizationId);
+    : await A2aConnectionModel.findAssignedTargets(
+        agentId,
+        organizationId,
+        false,
+        realUserId ? { userId: realUserId } : undefined,
+      );
   const outboundTools = outboundTargets.map((target) =>
     buildDelegationToolDescriptor({
       name: target.tool.name,
@@ -98,13 +104,11 @@ export async function getAgentTools(context: {
   // Auto mode only expands for a real authenticated user; system/token flows
   // (chatops, scheduled triggers, A2A) fall back to explicit delegations. This
   // fail-closed gate mirrors the Auto-tool `dynamicAccessContext` gate.
-  const isRealUser = Boolean(userId) && userId !== "system";
-  if (isRealUser && (await AgentModel.getAccessAllSubagents(agentId))) {
+  if (realUserId && (await AgentModel.getAccessAllSubagents(agentId))) {
     const localTools = await buildAutoDelegationTools({
       agentId,
       organizationId,
-      // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
-      userId: userId!,
+      userId: realUserId,
       environmentId,
     });
     return dedupeDelegationTools([...outboundTools, ...localTools]);
@@ -183,7 +187,7 @@ export async function handleDelegation(
   // The caller user can be present even when the selected gateway token is
   // team/org scoped.
   const userId = context.userId ?? tokenAuth?.userId;
-  const isRealUser = Boolean(userId) && userId !== "system";
+  const realUserId = userId && userId !== "system" ? userId : undefined;
 
   const environmentId = await AgentModel.findEnvironmentId(agentId);
 
@@ -191,6 +195,7 @@ export async function handleDelegation(
     agentId,
     organizationId,
     toolName,
+    ...(realUserId ? { userId: realUserId } : {}),
   });
   if (outboundTarget) {
     if (environmentId) {
@@ -240,12 +245,11 @@ export async function handleDelegation(
   // mode resolves against explicit delegation rows. Keeping resolution symmetric
   // with the advertised surface means a caller can only dispatch what it saw.
   const target =
-    isRealUser && (await AgentModel.getAccessAllSubagents(agentId))
+    realUserId && (await AgentModel.getAccessAllSubagents(agentId))
       ? await resolveAutoDelegationTarget({
           agentId,
           organizationId,
-          // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
-          userId: userId!,
+          userId: realUserId,
           environmentId,
           targetAgentSlug,
         })

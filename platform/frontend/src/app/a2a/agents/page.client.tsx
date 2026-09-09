@@ -1,6 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -9,23 +8,37 @@ import type {
 import {
   Activity,
   Bot,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
+import { A2aBulkVisibilityDialog } from "@/components/a2a-remote-agent-bulk-visibility-dialog";
 import { AgentIcon } from "@/components/agent-icon";
+import {
+  openRowOnPlainClick,
+  RowClickShield,
+} from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
   FilterBar,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { FormDialog } from "@/components/form-dialog";
 import { PageLayout } from "@/components/page-layout";
+import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ActiveFilterBadges,
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -39,38 +52,18 @@ import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  type A2aRemoteAgent,
   useA2aRemoteAgentRuns,
   useA2aRemoteAgents,
-  useCreateA2aRemoteAgent,
   useDeleteA2aRemoteAgent,
-  useInspectA2aRemoteAgent,
 } from "@/lib/a2a-remote-agents.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome, runBulkAction } from "@/lib/bulk-action";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 
-type DiscoveryMode = "well_known" | "card_url" | "inline_card";
-type AuthType = "none" | "bearer" | "api_key";
-type RemoteAgent =
-  archestraApiTypes.ListA2aRemoteAgentsResponses["200"][number];
 type A2aSortBy = "name" | "createdAt" | "updatedAt";
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
@@ -91,8 +84,8 @@ function isA2aSortBy(value: string | null): value is A2aSortBy {
 }
 
 function compareRemoteAgents(
-  left: RemoteAgent,
-  right: RemoteAgent,
+  left: A2aRemoteAgent,
+  right: A2aRemoteAgent,
   sorting: SortingState,
 ) {
   const activeSort = sorting[0];
@@ -123,16 +116,21 @@ export default function OutboundA2aAgentsPage() {
     updateQueryParams,
     setPagination,
   } = useDataTableQueryParams();
+  const router = useRouter();
   const query = useA2aRemoteAgents();
   const { data: canManage } = useHasPermissions({
     agentSettings: ["update"],
   });
-  const [createOpen, setCreateOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<RemoteAgent | null>(null);
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+  const scopeFilter = useScopeFilterParams();
+  const [deleteTarget, setDeleteTarget] = useState<A2aRemoteAgent | null>(null);
   const deleteMutation = useDeleteA2aRemoteAgent();
   const bulkDeleteMutation = useDeleteA2aRemoteAgent({ notify: false });
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const remoteAgents = query.data ?? [];
 
   const nameFilter = searchParams.get("name") || "";
@@ -181,13 +179,46 @@ export default function OutboundA2aAgentsPage() {
   const filteredAgents = useMemo(() => {
     const normalizedFilter = nameFilter.trim().toLocaleLowerCase();
     return remoteAgents
-      .filter(
-        (agent) =>
-          !normalizedFilter ||
-          agent.name.toLocaleLowerCase().includes(normalizedFilter),
-      )
+      .filter((agent) => {
+        if (
+          normalizedFilter &&
+          !agent.name.toLocaleLowerCase().includes(normalizedFilter)
+        ) {
+          return false;
+        }
+        if (scopeFilter.scope && agent.scope !== scopeFilter.scope)
+          return false;
+        if (
+          scopeFilter.teamIds?.length &&
+          !agent.teams.some((team) => scopeFilter.teamIds?.includes(team.id))
+        ) {
+          return false;
+        }
+        if (
+          scopeFilter.authorIds?.length &&
+          (!agent.authorId || !scopeFilter.authorIds.includes(agent.authorId))
+        ) {
+          return false;
+        }
+        if (
+          scopeFilter.excludeAuthorIds?.length &&
+          agent.authorId &&
+          scopeFilter.excludeAuthorIds.includes(agent.authorId)
+        ) {
+          return false;
+        }
+        if (
+          scopeFilter.excludeOtherPersonal &&
+          agent.scope === "personal" &&
+          currentUserId &&
+          agent.authorId !== currentUserId
+        ) {
+          return false;
+        }
+        return true;
+      })
       .sort((left, right) => compareRemoteAgents(left, right, sorting));
-  }, [nameFilter, remoteAgents, sorting]);
+  }, [currentUserId, nameFilter, remoteAgents, scopeFilter, sorting]);
 
   const totalPages = Math.max(Math.ceil(filteredAgents.length / pageSize), 1);
   useEffect(() => {
@@ -218,15 +249,39 @@ export default function OutboundA2aAgentsPage() {
     [setPagination],
   );
 
+  const hasActiveFilters = !!(nameFilter || scopeFilter.hasActiveScopeFilters);
   const clearFilters = useCallback(() => {
-    updateQueryParams({ page: "1", name: null });
+    updateQueryParams({
+      page: "1",
+      name: null,
+      scope: null,
+      teamIds: null,
+      authorIds: null,
+      excludeAuthorIds: null,
+    });
   }, [updateQueryParams]);
 
-  const columns = useMemo<ColumnDef<RemoteAgent>[]>(
+  const openAgent = useCallback(
+    (agent: A2aRemoteAgent) => router.push(`/a2a/agents/${agent.id}`),
+    [router],
+  );
+  const renderActions = useCallback(
+    (agent: A2aRemoteAgent) => (
+      <A2aRemoteAgentActions
+        agent={agent}
+        canManage={!!canManage}
+        onOpen={() => openAgent(agent)}
+        onDelete={() => setDeleteTarget(agent)}
+      />
+    ),
+    [canManage, openAgent],
+  );
+
+  const columns = useMemo<ColumnDef<A2aRemoteAgent>[]>(
     () => [
       ...(canManage
         ? [
-            createSelectColumn<RemoteAgent>({
+            createSelectColumn<A2aRemoteAgent>({
               rowLabel: (agent) => `Select ${agent.name}`,
               allLabel: "Select all external A2A agents on this page",
             }),
@@ -258,22 +313,37 @@ export default function OutboundA2aAgentsPage() {
           </Button>
         ),
         cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="truncate font-medium">{row.original.name}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              {row.original.description || "External A2A agent"}
+          <RowClickShield>
+            <div className="min-w-0">
+              <Link
+                href={`/a2a/agents/${row.original.id}`}
+                className="truncate font-medium"
+              >
+                {row.original.name}
+              </Link>
+              <div className="truncate text-xs text-muted-foreground">
+                {row.original.description || "External A2A agent"}
+              </div>
             </div>
-          </div>
+          </RowClickShield>
         ),
       },
       {
-        id: "protocol",
-        header: "Protocol",
+        id: "visibility",
+        header: "Accessible to",
         enableSorting: false,
         cell: ({ row }) => (
-          <Badge variant="outline">
-            {row.original.connection.selectedInterface.protocolBinding}
-          </Badge>
+          <RowClickShield>
+            <ResourceVisibilityBadge
+              scope={row.original.scope}
+              teams={row.original.teams}
+              users={row.original.users}
+              authorId={row.original.authorId}
+              authorName={row.original.authorName}
+              currentUserId={currentUserId}
+              showSelfAsMe
+            />
+          </RowClickShield>
         ),
       },
       {
@@ -288,44 +358,27 @@ export default function OutboundA2aAgentsPage() {
           </Badge>
         ),
       },
-      {
-        id: "endpoint",
-        header: "Endpoint",
-        enableSorting: false,
-        cell: ({ row }) => (
-          <span
-            className="block max-w-64 truncate text-sm"
-            title={row.original.connection.selectedInterface.url}
-          >
-            {row.original.connection.selectedInterface.url}
-          </span>
-        ),
-      },
-      {
-        id: "activity",
-        header: "Recent activity",
-        enableSorting: false,
-        cell: ({ row }) => <RecentRun remoteAgentId={row.original.id} />,
-      },
+      ...(canManage
+        ? [
+            {
+              id: "activity",
+              header: "Recent activity",
+              enableSorting: false,
+              cell: ({ row }) => <RecentRun remoteAgentId={row.original.id} />,
+            } satisfies ColumnDef<A2aRemoteAgent>,
+          ]
+        : []),
       {
         id: "actions",
         header: "Actions",
         enableHiding: false,
-        size: 88,
-        cell: ({ row }) =>
-          canManage ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`Delete ${row.original.name}`}
-              onClick={() => setDeleteTarget(row.original)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          ) : null,
+        size: 120,
+        cell: ({ row }) => (
+          <RowClickShield>{renderActions(row.original)}</RowClickShield>
+        ),
       },
     ],
-    [canManage],
+    [canManage, currentUserId, renderActions],
   );
 
   const showLoading = query.isPending && remoteAgents.length === 0;
@@ -353,13 +406,13 @@ export default function OutboundA2aAgentsPage() {
 
   return (
     <PageLayout
-      title="External A2A agents"
+      title="External Agents"
       description="Connect Agent2Agent-compatible systems, then assign them from an agent's Subagents section."
       actionButton={
         canManage ? (
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => router.push("/a2a/agents/new")}>
             <Plus className="h-4 w-4" />
-            Connect agent
+            <span>Connect agent</span>
           </Button>
         ) : undefined
       }
@@ -381,7 +434,21 @@ export default function OutboundA2aAgentsPage() {
                 paramName="name"
                 className={filterSearchClass}
               />
+              <ResourceScopeFilter
+                ownerLabelPlural="external A2A agents"
+                allLabel="All visibilities"
+                adminPermission={{ agentSettings: ["update"] }}
+              />
             </FilterBar>
+            {!canReadTeams ? (
+              <PermissionRequirementHint
+                message="Team-based filters and sharing details are unavailable without"
+                permissions={[{ resource: "team", action: "read" }]}
+              />
+            ) : null}
+            <ActiveFilterBadges
+              adminPermission={{ agentSettings: ["update"] }}
+            />
           </CollectionFilters>
 
           <BulkActions
@@ -390,16 +457,26 @@ export default function OutboundA2aAgentsPage() {
             onClear={clearSelection}
             busy={bulkDeleteMutation.isPending}
           >
-            {canManage && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setBulkDeleteOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Delete</span>
-              </Button>
-            )}
+            {canManage ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkVisibilityOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Edit visibility</span>
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </Button>
+              </>
+            ) : null}
           </BulkActions>
 
           <TableCardViewContent
@@ -410,8 +487,8 @@ export default function OutboundA2aAgentsPage() {
                 emptyIcon={Bot}
                 emptyMessage="No external A2A agents connected"
                 emptyDescription="Start with a well-known Agent Card URL or paste a card manually."
-                hasActiveFilters={!!nameFilter}
-                filteredEmptyMessage="No external A2A agents match your search"
+                hasActiveFilters={hasActiveFilters}
+                filteredEmptyMessage="No external A2A agents match your filters"
                 onClearFilters={clearFilters}
                 pagination={pagination}
                 onPaginationChange={handlePaginationChange}
@@ -423,18 +500,8 @@ export default function OutboundA2aAgentsPage() {
                     icon={<AgentIcon size={20} />}
                     title={agent.name}
                     description={agent.description || "External A2A agent"}
-                    actions={
-                      canManage ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Delete ${agent.name}`}
-                          onClick={() => setDeleteTarget(agent)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      ) : undefined
-                    }
+                    actions={renderActions(agent)}
+                    onNavigate={() => openAgent(agent)}
                     footer={
                       canManage ? (
                         <RecentRun remoteAgentId={agent.id} />
@@ -445,6 +512,16 @@ export default function OutboundA2aAgentsPage() {
                   >
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-2">
+                        <ResourceVisibilityBadge
+                          scope={agent.scope}
+                          teams={agent.teams}
+                          users={agent.users}
+                          authorId={agent.authorId}
+                          authorName={agent.authorName}
+                          currentUserId={currentUserId}
+                          showSelfAsMe
+                          compact
+                        />
                         <Badge variant="secondary">A2A 1.x</Badge>
                         <Badge variant="outline">
                           {agent.connection.selectedInterface.protocolBinding}
@@ -496,11 +573,14 @@ export default function OutboundA2aAgentsPage() {
                 manualPagination
                 pagination={pagination}
                 onPaginationChange={handlePaginationChange}
+                onRowClick={(row, event) =>
+                  openRowOnPlainClick(event, () => openAgent(row))
+                }
                 emptyIcon={Bot}
                 emptyMessage="No external A2A agents connected"
                 emptyDescription="Start with a well-known Agent Card URL or paste a card manually."
-                hasActiveFilters={!!nameFilter}
-                filteredEmptyMessage="No external A2A agents match your search"
+                hasActiveFilters={hasActiveFilters}
+                filteredEmptyMessage="No external A2A agents match your filters"
                 onClearFilters={clearFilters}
               />
             }
@@ -508,7 +588,6 @@ export default function OutboundA2aAgentsPage() {
         </TableCardView>
       )}
 
-      <ConnectA2aAgentDialog open={createOpen} onOpenChange={setCreateOpen} />
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
@@ -536,12 +615,18 @@ export default function OutboundA2aAgentsPage() {
             : "external A2A agents"
         }? This cannot be undone.`}
         isPending={bulkDeleteMutation.isPending}
-        onConfirm={() => {
-          void handleBulkDelete();
-        }}
+        onConfirm={() => void handleBulkDelete()}
         confirmLabel="Delete external A2A agents"
         pendingLabel="Deleting..."
       />
+      {bulkVisibilityOpen ? (
+        <A2aBulkVisibilityDialog
+          agents={selectedRemoteAgents}
+          open={bulkVisibilityOpen}
+          onOpenChange={setBulkVisibilityOpen}
+          onComplete={clearSelection}
+        />
+      ) : null}
     </PageLayout>
   );
 }
@@ -568,250 +653,5 @@ function RecentRun({ remoteAgentId }: { remoteAgentId: string }) {
         <span className="text-muted-foreground">No runs yet</span>
       )}
     </div>
-  );
-}
-
-function ConnectA2aAgentDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [mode, setMode] = useState<DiscoveryMode>("well_known");
-  const [url, setUrl] = useState("");
-  const [agentCard, setAgentCard] = useState("");
-  const [name, setName] = useState("");
-  const [authType, setAuthType] = useState<AuthType>("none");
-  const [headerName, setHeaderName] = useState("X-API-Key");
-  const [credential, setCredential] = useState("");
-  const [parseError, setParseError] = useState<string | null>(null);
-  const inspectMutation = useInspectA2aRemoteAgent();
-  const createMutation = useCreateA2aRemoteAgent();
-
-  const buildBody = () => {
-    let source: archestraApiTypes.InspectA2aRemoteAgentData["body"]["source"];
-    if (mode === "inline_card") {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(agentCard);
-      } catch {
-        setParseError("Agent Card must be valid JSON.");
-        return null;
-      }
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        setParseError("Agent Card must be a JSON object.");
-        return null;
-      }
-      source = {
-        type: "inline_card",
-        agentCard: parsed as Record<string, unknown>,
-      };
-    } else {
-      source = { type: mode, url };
-    }
-    setParseError(null);
-    const auth =
-      authType === "none"
-        ? ({ type: "none" } as const)
-        : authType === "bearer"
-          ? ({ type: "bearer", credential } as const)
-          : ({ type: "api_key", headerName, credential } as const);
-    return { source, auth };
-  };
-
-  const reset = () => {
-    setMode("well_known");
-    setUrl("");
-    setAgentCard("");
-    setName("");
-    setAuthType("none");
-    setHeaderName("X-API-Key");
-    setCredential("");
-    setParseError(null);
-    inspectMutation.reset();
-  };
-
-  return (
-    <FormDialog
-      open={open}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        if (!next) reset();
-      }}
-      title="Connect external A2A agent"
-      description="Discover a protocol endpoint from its Agent Card. Credentials are stored separately from the card."
-      size="medium"
-    >
-      <DialogForm
-        onSubmit={(event) => {
-          event.preventDefault();
-          const body = buildBody();
-          if (!body) return;
-          createMutation.mutate(
-            { ...body, name: name || undefined, connectionName: "Default" },
-            {
-              onSuccess: () => {
-                onOpenChange(false);
-                reset();
-              },
-            },
-          );
-        }}
-      >
-        <DialogBody className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="a2a-discovery-mode">Agent Card source</Label>
-            <Select
-              value={mode}
-              onValueChange={(value) => {
-                setMode(value as DiscoveryMode);
-                inspectMutation.reset();
-              }}
-            >
-              <SelectTrigger id="a2a-discovery-mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="well_known">Well-known URL</SelectItem>
-                <SelectItem value="card_url">Direct Agent Card URL</SelectItem>
-                <SelectItem value="inline_card">
-                  Paste Agent Card JSON
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {mode === "inline_card" ? (
-            <div className="space-y-2">
-              <Label htmlFor="a2a-agent-card">Agent Card JSON</Label>
-              <Textarea
-                id="a2a-agent-card"
-                rows={9}
-                value={agentCard}
-                onChange={(event) => {
-                  setAgentCard(event.target.value);
-                  inspectMutation.reset();
-                }}
-                placeholder='{"name":"My agent", ...}'
-                required
-              />
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="a2a-url">
-                {mode === "well_known" ? "Agent base URL" : "Agent Card URL"}
-              </Label>
-              <Input
-                id="a2a-url"
-                type="url"
-                value={url}
-                onChange={(event) => {
-                  setUrl(event.target.value);
-                  inspectMutation.reset();
-                }}
-                placeholder="https://agent.example.com"
-                required
-              />
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="a2a-name">Display name (optional)</Label>
-            <Input
-              id="a2a-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Uses the Agent Card name"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="a2a-auth">Authentication</Label>
-            <Select
-              value={authType}
-              onValueChange={(value) => {
-                setAuthType(value as AuthType);
-                inspectMutation.reset();
-              }}
-            >
-              <SelectTrigger id="a2a-auth">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="bearer">Bearer token</SelectItem>
-                <SelectItem value="api_key">API key header</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {authType === "api_key" && (
-            <div className="space-y-2">
-              <Label htmlFor="a2a-header">Header name</Label>
-              <Input
-                id="a2a-header"
-                value={headerName}
-                onChange={(event) => {
-                  setHeaderName(event.target.value);
-                  inspectMutation.reset();
-                }}
-                required
-              />
-            </div>
-          )}
-          {authType !== "none" && (
-            <div className="space-y-2">
-              <Label htmlFor="a2a-credential">Credential</Label>
-              <Input
-                id="a2a-credential"
-                type="password"
-                value={credential}
-                onChange={(event) => {
-                  setCredential(event.target.value);
-                  inspectMutation.reset();
-                }}
-                autoComplete="new-password"
-                required
-              />
-            </div>
-          )}
-          {parseError && (
-            <p role="alert" className="text-sm text-destructive">
-              {parseError}
-            </p>
-          )}
-          {inspectMutation.isError && (
-            <p role="alert" className="text-sm text-destructive">
-              The Agent Card could not be reached or validated.
-            </p>
-          )}
-          {inspectMutation.data && (
-            <output className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
-              <div>
-                <p className="font-medium">{inspectMutation.data.name}</p>
-                <p className="text-muted-foreground">
-                  {inspectMutation.data.selectedInterface.protocolBinding} ·{" "}
-                  {inspectMutation.data.selectedInterface.protocolVersion}
-                </p>
-              </div>
-            </output>
-          )}
-        </DialogBody>
-        <DialogStickyFooter>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={inspectMutation.isPending || createMutation.isPending}
-            onClick={() => {
-              const body = buildBody();
-              if (body) inspectMutation.mutate(body);
-            }}
-          >
-            {inspectMutation.isPending ? "Checking…" : "Validate Agent Card"}
-          </Button>
-          <Button type="submit" disabled={createMutation.isPending}>
-            {createMutation.isPending ? "Connecting…" : "Connect agent"}
-          </Button>
-        </DialogStickyFooter>
-      </DialogForm>
-    </FormDialog>
   );
 }

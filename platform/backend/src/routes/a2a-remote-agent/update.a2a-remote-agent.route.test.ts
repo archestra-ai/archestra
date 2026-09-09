@@ -3,6 +3,7 @@ import db, { schema } from "@/database";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentToolModel from "@/models/agent-tool";
 import { secretManager } from "@/secrets-manager";
+import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
@@ -64,6 +65,88 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
     const rotated = await secretManager().getSecret(after.connection.secretId);
     expect(rotated?.secret).toEqual({ credential: "credential-v2" });
     await expect(secretManager().getSecret(secretId)).resolves.toBeNull();
+  });
+
+  test("persists editable fields and visibility without rotating an omitted credential", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(ctx.organizationId, ctx.user.id, {
+      name: "Edited Audience",
+    });
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        name: "Before edit",
+        source: { type: "inline_card", agentCard: makeAgentCard("bearer") },
+        auth: { type: "bearer", credential: "credential-kept" },
+      },
+    });
+    const before = await A2aRemoteAgentModel.findByIdForOrganization({
+      id: created.json().id,
+      organizationId: ctx.organizationId,
+    });
+
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/a2a/remote-agents/${created.json().id}`,
+      payload: {
+        name: "After edit",
+        description: "Edited description",
+        connectionName: "Production",
+        enabled: false,
+        scope: "team",
+        teams: [team.id],
+        users: [ctx.user.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: "After edit",
+      description: "Edited description",
+      scope: "team",
+      teams: [{ id: team.id, name: "Edited Audience" }],
+      users: [],
+      connection: {
+        name: "Production",
+        enabled: false,
+        authType: "bearer",
+        hasCredential: true,
+      },
+    });
+    const after = await A2aRemoteAgentModel.findByIdForOrganization({
+      id: created.json().id,
+      organizationId: ctx.organizationId,
+    });
+    expect(after?.connection.secretId).toBe(before?.connection.secretId);
+  });
+
+  test("adopts an author when a migrated organization row becomes personal", async () => {
+    const legacy = await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      input: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        connectionName: "Default",
+      },
+    });
+    expect(legacy.authorId).toBeNull();
+    expect(legacy.scope).toBe("org");
+
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/a2a/remote-agents/${legacy.id}`,
+      payload: { scope: "personal" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: legacy.id,
+      scope: "personal",
+      authorId: ctx.user.id,
+      authorName: ctx.user.name,
+    });
   });
 
   test("returns 404 for an agent outside the current organization", async ({

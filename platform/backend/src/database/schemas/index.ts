@@ -47,6 +47,8 @@ export { default as a2aMessagesTable } from "./a2a-message";
 export { default as a2aOutboundRunsTable } from "./a2a-outbound-run";
 export { default as a2aPushNotificationConfigsTable } from "./a2a-push-notification-config";
 export { default as a2aRemoteAgentsTable } from "./a2a-remote-agent";
+export { default as a2aRemoteAgentTeamsTable } from "./a2a-remote-agent-team";
+export { default as a2aRemoteAgentUsersTable } from "./a2a-remote-agent-user";
 export { default as a2aTasksTable } from "./a2a-task";
 export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-request";
 export { default as a2aTaskEventsTable } from "./a2a-task-event";

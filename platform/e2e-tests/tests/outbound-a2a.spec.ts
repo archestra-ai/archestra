@@ -54,41 +54,42 @@ test("delegates from a parent agent to an external A2A agent", async ({
   try {
     await resetA2aFixture(request);
 
-    // Connect the remote protocol endpoint through the same dedicated screen a
-    // user sees. Testing before saving exercises Agent Card discovery without
-    // creating a half-configured connection.
+    // Connect the remote protocol endpoint through the same routed screen a
+    // user sees. Pasting the base URL automatically exercises Agent Card
+    // discovery without creating a half-configured connection.
     await goToPage(page, "/a2a/agents");
     await page
       .getByRole("button", { name: "Connect agent", exact: true })
       .first()
       .click();
-    const connectDialog = page.getByRole("dialog", {
-      name: "Connect external A2A agent",
-    });
-    await expect(connectDialog).toBeVisible();
-    await connectDialog.getByLabel("Agent base URL").fill(A2A_FIXTURE_BASE_URL);
-    await connectDialog.getByLabel("Display name (optional)").fill(remoteName);
-    await connectDialog
-      .getByRole("button", { name: "Validate Agent Card" })
-      .click();
+    await expect(page).toHaveURL(/\/a2a\/agents\/new$/);
     await expect(
-      connectDialog.getByText("Deterministic A2A Test Agent"),
-    ).toBeVisible({ timeout: 30_000 });
+      page.getByRole("heading", {
+        name: "Connect external A2A agent",
+        level: 1,
+      }),
+    ).toBeVisible();
+    await page.getByLabel("Agent base URL").fill(A2A_FIXTURE_BASE_URL);
+    await page.getByLabel("Display name (optional)").fill(remoteName);
+    await expect(
+      page.getByRole("status", { name: "Agent Card found" }),
+    ).toContainText("Deterministic A2A Test Agent", { timeout: 30_000 });
 
     const createRemoteResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/a2a/remote-agents") &&
         response.request().method() === "POST",
     );
-    await connectDialog
+    await page
       .getByRole("button", { name: "Connect agent", exact: true })
       .click();
     const createdResponse = await createRemoteResponse;
     expect(createdResponse.ok()).toBe(true);
     remoteAgent = (await createdResponse.json()) as RemoteAgent;
-    await expect(page.getByText(remoteName, { exact: true })).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(page).toHaveURL(new RegExp(`/a2a/agents/${remoteAgent.id}$`));
+    await expect(
+      page.getByRole("heading", { name: remoteName, level: 1 }),
+    ).toBeVisible({ timeout: 15_000 });
 
     const parentResponse = await makeApiRequest({
       request,

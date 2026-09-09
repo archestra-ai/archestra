@@ -49,7 +49,7 @@ For model persistence, choose the API key first when the UI presents separate ke
 
 ### Save Tools & Knowledge and prove persistence
 
-1. Open Tools & Knowledge and scope all locators under `E2eTestId.AgentToolsSection`.
+1. Open Tools & Knowledge and scope all locators under `E2eTestId.AgentToolsSection`. Require the **Subagents** heading and its **Beta** badge.
 2. Capture whether the Tools control is on **All** or **Manual** and the visible enabled/disabled count.
 3. Switch to the other tab. In Manual mode, assign one known fixture tool; in All mode, disable one known fixture tool. Avoid tools owned by another concurrent run.
 4. Save, require **Agent updated successfully**, and reload `?section=tools`.

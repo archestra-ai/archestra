@@ -88,6 +88,14 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
   a2aRemoteAgentsTable: { audited: true, model: A2aRemoteAgentModel },
+  a2aRemoteAgentTeamsTable: {
+    audited: false,
+    reason: "Association changes are captured on the parent outbound A2A agent",
+  },
+  a2aRemoteAgentUsersTable: {
+    audited: false,
+    reason: "Association changes are captured on the parent outbound A2A agent",
+  },
   a2aConnectionsTable: {
     audited: false,
     reason:

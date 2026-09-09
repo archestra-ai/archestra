@@ -667,9 +667,7 @@ vi.mock("@/components/ui/assignment-combobox", () => ({
 }));
 
 vi.mock("@/components/ui/badge", () => ({
-  Badge: ({ children }: { children?: React.ReactNode }) => (
-    <span>{children}</span>
-  ),
+  Badge: (props: React.ComponentProps<"span">) => <span {...props} />,
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -1074,11 +1072,16 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
+    expect(useA2aRemoteAgentsMock).toHaveBeenCalledWith({
+      enabled: true,
+      accessibleOnly: true,
+    });
+
     const picker = screen.getByRole("button", {
       name: "Add outbound agent",
     });
     expect(picker).toBeInTheDocument();
-    expect(screen.getByText("Outbound Agents")).toBeInTheDocument();
+    expect(screen.getByText("External Agents")).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", {
         name: /External Compliance Agent/,
@@ -1169,7 +1172,7 @@ describe("AgentForm delegation state", () => {
     expect(
       await screen.findByRole("button", { name: /Target AgentLocal/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Outbound Agents")).toBeInTheDocument();
+    expect(screen.getByText("External Agents")).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: /External Research Agent.*A2A/,

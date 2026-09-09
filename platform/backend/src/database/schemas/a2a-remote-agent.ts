@@ -1,3 +1,4 @@
+import type { ResourceVisibilityScope } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -10,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { A2aDiscoveryMode } from "@/types/a2a-outbound";
 import organizationsTable from "./organization";
+import usersTable from "./user";
 
 /**
  * An external agent identity and its last accepted public Agent Card.
@@ -24,6 +26,13 @@ const a2aRemoteAgentsTable = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    authorId: text("author_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    scope: text("scope")
+      .$type<ResourceVisibilityScope>()
+      .notNull()
+      .default("org"),
     name: text("name").notNull(),
     description: text("description"),
     discoveryMode: text("discovery_mode").$type<A2aDiscoveryMode>().notNull(),
@@ -56,6 +65,7 @@ const a2aRemoteAgentsTable = pgTable(
       sql`(${table.discoveryMode} = 'inline_card' and ${table.discoveryUrl} is null) or (${table.discoveryMode} <> 'inline_card' and ${table.discoveryUrl} is not null)`,
     ),
     index("a2a_remote_agents_organization_id_idx").on(table.organizationId),
+    index("a2a_remote_agents_author_id_idx").on(table.authorId),
   ],
 );
 

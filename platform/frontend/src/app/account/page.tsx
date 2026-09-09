@@ -34,7 +34,7 @@ export default function AccountProfilePage() {
   if (legacyHref && legacyHref !== "/account") return null;
 
   return (
-    <SettingsSectionStack>
+    <SettingsSectionStack className="space-y-5">
       <ProfileCard />
       <MyTeamsCard />
     </SettingsSectionStack>

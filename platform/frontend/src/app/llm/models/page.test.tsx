@@ -335,6 +335,32 @@ describe("ModelsPage", () => {
     );
   });
 
+  it("keeps a free-only deep link while the provider keys load", async () => {
+    keyCreated = true;
+    // An OpenRouter key makes the free-only filter valid — but it resolves
+    // after first render, when apiKeys is still empty.
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          { ...providerKey, provider: "openrouter", name: "OpenRouter" },
+        ]),
+      ),
+    );
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("freeOnly=true") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    renderPage();
+
+    // The toggle hydrates from the URL and stays on once keys resolve...
+    const toggle = await screen.findByRole("switch", { name: /free only/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    // ...and the deep link is never stripped while keys were loading.
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it("clears an active label filter from the model collection", async () => {
     keyCreated = true;
     vi.mocked(useSearchParams).mockReturnValue(

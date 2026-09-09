@@ -265,6 +265,8 @@ if [[ -n "${answer}" ]]; then
 fi
 HOOK
 chmod 0700 "${completion_hook}"
+# Tool discovery must not install optional dependencies: an unreachable package
+# index can block agent construction past the native TUI's initialization limit.
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" \
@@ -282,6 +284,7 @@ jq -n \
       transport:"openai_chat"
     }},
     agent:{system_prompt:$system_prompt},
+    security:{allow_lazy_installs:false},
     plugins:{enabled:["archestra-attention"]},
     model:{
       max_tokens:16384,

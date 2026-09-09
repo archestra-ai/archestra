@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated runtime
-lastUpdated: "2026-09-08"
+lastUpdated: "2026-09-09"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -343,21 +343,21 @@ gateway and sends the run headers described above.
 
 Give the coordinator Agent access to the specialist under **Tools & Knowledge → Subagents**. The coordinator delegates through the specialist's ordinary Agent tool. If the specialist has Agent Runtime configured, Archestra automatically turns that delegation into a durable task in its dedicated runtime and returns immediately. There is no separate invocation syntax.
 
-Assign `start_task` when the coordinator should choose a target by Agent ID
-instead of using a specialist's Agent tool. Any gateway that can start a task
-automatically exposes `get_task`, `list_tasks`, `steer_task`, and `cancel_task`;
+Assign `start_run` when the coordinator should choose a target by Agent ID
+instead of using a specialist's Agent tool. Any gateway that can start a run
+automatically exposes `get_run`, `list_runs`, `steer_run`, and `cancel_run`;
 these lifecycle controls do not require separate assignment. They are also the
 generic interface for external Agent clients. The coordinator can continue
-answering other messages while the task works.
+answering other messages while the run works.
 
 ### External Agent clients
 
-An Agent running on a developer machine or another system uses the same task interface as an Archestra coordinator. Connect it to the Agent's MCP Gateway, then use:
+An Agent running on a developer machine or another system uses the same run interface as an Archestra coordinator. Connect it to the Agent's MCP Gateway, then use:
 
 1. `list_agents` to discover an accessible Agent.
-2. `start_task` to schedule durable work on it.
-3. `get_task` or `list_tasks` to read status and results.
-4. `steer_task` or `cancel_task` when the task needs intervention.
+2. `start_run` to schedule durable work on it.
+3. `get_run` or `list_runs` to read status and results.
+4. `steer_run` or `cancel_run` when the run needs intervention.
 
 These tools use Archestra's A2A task state machine underneath. A client that supports A2A can drive the same lifecycle directly. The client never needs a Claude-to-Claude, Codex-to-Codex, or other runtime-specific integration: it asks Archestra to run an Agent, and Archestra selects that Agent's configured runtime. `SendMessage` to an Agent with a dedicated runtime returns a durable A2A Task; the same method returns a Message for an Agent without Agent Runtime unless the caller explicitly requests a task.
 

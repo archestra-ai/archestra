@@ -1,8 +1,8 @@
 import {
-  TOOL_GET_TASK_FULL_NAME,
+  TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
-  TOOL_POST_TASK_FILE_FULL_NAME,
-  TOOL_START_TASK_FULL_NAME,
+  TOOL_POST_RUN_FILE_FULL_NAME,
+  TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
@@ -21,7 +21,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
-describe("task tools", () => {
+describe("run tools", () => {
   let callingAgent: Agent;
   let actorId: string;
   let organizationId: string;
@@ -72,7 +72,7 @@ describe("task tools", () => {
     await AgentTeamModel.syncAgentTeams(target.id, [team.id]);
 
     const result = await executeArchestraTool(
-      TOOL_START_TASK_FULL_NAME,
+      TOOL_START_RUN_FULL_NAME,
       { agent_id: target.id, message: "Do the restricted work" },
       context,
     );
@@ -83,7 +83,7 @@ describe("task tools", () => {
     );
   });
 
-  test("task controls remain callable without individual assignment", async ({
+  test("run controls remain callable without individual assignment", async ({
     makeAgent,
   }) => {
     const unassignedAgent = await makeAgent({
@@ -94,7 +94,7 @@ describe("task tools", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_GET_TASK_FULL_NAME,
+      TOOL_GET_RUN_FULL_NAME,
       { task_id: crypto.randomUUID() },
       {
         ...context,
@@ -105,14 +105,14 @@ describe("task tools", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain(
-      "Task not found",
+      "Run not found",
     );
     expect((result.content[0] as { text: string }).text).not.toContain(
       "not assigned",
     );
   });
 
-  test("preserves the originating chat thread on a delegated task", async ({
+  test("preserves the originating chat thread on a delegated run", async ({
     makeAgent,
   }) => {
     const target = await makeAgent({
@@ -140,7 +140,7 @@ describe("task tools", () => {
     };
 
     const result = await executeArchestraTool(
-      TOOL_START_TASK_FULL_NAME,
+      TOOL_START_RUN_FULL_NAME,
       { agent_id: target.id, message: "Do the work" },
       chatContext,
     );
@@ -290,7 +290,7 @@ describe("task tools", () => {
     expect(JSON.stringify(result.content)).toContain("Agent not found");
   });
 
-  test("post_task_file uploads into the task's chatops thread", async () => {
+  test("post_run_file uploads into the run's chatops thread", async () => {
     const task = await seedChatopsTask({
       actorUserId: actorId,
       withTarget: true,
@@ -300,7 +300,7 @@ describe("task tools", () => {
       .mockResolvedValue();
 
     const result = await executeArchestraTool(
-      TOOL_POST_TASK_FILE_FULL_NAME,
+      TOOL_POST_RUN_FILE_FULL_NAME,
       {
         task_id: task.id,
         filename: "demo.mp4",
@@ -321,7 +321,7 @@ describe("task tools", () => {
     upload.mockRestore();
   });
 
-  test("post_task_file refuses a task with no messaging-channel thread", async () => {
+  test("post_run_file refuses a run with no messaging-channel thread", async () => {
     const task = await seedChatopsTask({
       actorUserId: actorId,
       withTarget: false,
@@ -331,7 +331,7 @@ describe("task tools", () => {
       .mockResolvedValue();
 
     const result = await executeArchestraTool(
-      TOOL_POST_TASK_FILE_FULL_NAME,
+      TOOL_POST_RUN_FILE_FULL_NAME,
       {
         task_id: task.id,
         filename: "demo.mp4",
@@ -348,7 +348,7 @@ describe("task tools", () => {
     upload.mockRestore();
   });
 
-  test("post_task_file only serves the person the run acts as", async ({
+  test("post_run_file only serves the person the run acts as", async ({
     makeUser,
     makeMember,
   }) => {
@@ -363,7 +363,7 @@ describe("task tools", () => {
       .mockResolvedValue();
 
     const result = await executeArchestraTool(
-      TOOL_POST_TASK_FILE_FULL_NAME,
+      TOOL_POST_RUN_FILE_FULL_NAME,
       {
         task_id: task.id,
         filename: "demo.mp4",

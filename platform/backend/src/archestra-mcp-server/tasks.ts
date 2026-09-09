@@ -1,11 +1,11 @@
 import {
-  TOOL_CANCEL_TASK_SHORT_NAME,
-  TOOL_GET_TASK_SHORT_NAME,
+  TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
-  TOOL_LIST_TASKS_SHORT_NAME,
-  TOOL_POST_TASK_FILE_SHORT_NAME,
-  TOOL_START_TASK_SHORT_NAME,
-  TOOL_STEER_TASK_SHORT_NAME,
+  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_POST_RUN_FILE_SHORT_NAME,
+  TOOL_START_RUN_SHORT_NAME,
+  TOOL_STEER_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
@@ -42,9 +42,9 @@ import {
 import type { ArchestraContext } from "./types";
 
 /**
- * Start a durable delegated task through the same lifecycle used by the MCP
- * task tool. Agent delegation uses this when the target has Background
- * run configured, so every delegation surface selects the same runtime.
+ * Start a durable delegated run through the same lifecycle used by the MCP
+ * run tools. Agent delegation uses this when the target has Background run
+ * configured, so every delegation surface selects the same runtime.
  */
 export async function startDelegatedTask(params: {
   agentId: string;
@@ -140,35 +140,36 @@ export async function startDelegatedTask(params: {
 
     return structuredSuccessResult(
       {
-        task: taskRowSummary(taskRow),
+        run: runSummary(taskRow),
         runtime: runtime ? "dedicated" : "foreground",
       },
-      `Task ${taskRow.id} started on ${agent.name}` +
+      `Run ${taskRow.id} started on ${agent.name}` +
         (runtime ? " (Agent Runtime)" : " (foreground)") +
-        ". Poll get_task for progress.",
+        ". Poll get_run for progress.",
     );
   } catch (error) {
     const needed = missingCredentialsFrom(error);
     if (needed) {
       return credentialsNeededResult(needed.agentId, needed.missing);
     }
-    return catchError(error, "starting the task");
+    return catchError(error, "starting the run");
   }
 }
 
 /**
- * The MCP face of the A2A task lifecycle: start long-running work on another
- * agent, then observe, steer and cancel it — the same durable machinery the
- * A2A v2 protocol drives, so a client speaking either surface sees the same
- * tasks in the same states.
+ * The MCP face of the Agent Runtime run lifecycle: start long-running work on
+ * another agent, then observe, steer and cancel it — the same durable machinery
+ * the A2A v2 protocol drives (each run is tracked as an A2A task, keyed by its
+ * `task_id`), so a client speaking either surface sees the same runs in the
+ * same states.
  *
- * When the target Agent has Agent Runtime configured, delegated work
- * runs in its runtime; otherwise it runs in-process. This task interface is
- * independent of foreground message handling.
+ * When the target Agent has Agent Runtime configured, delegated work runs in
+ * its runtime; otherwise it runs in-process. This run interface is independent
+ * of foreground message handling.
  */
 
-const TaskSummarySchema = z.object({
-  task_id: z.string().describe("Pass to get_task / steer_task / cancel_task."),
+const RunSummarySchema = z.object({
+  task_id: z.string().describe("Pass to get_run / steer_run / cancel_run."),
   state: z
     .string()
     .describe(
@@ -178,37 +179,37 @@ const TaskSummarySchema = z.object({
   status_reason: z
     .string()
     .nullable()
-    .describe("Why the task is in its state, when there is something to say."),
+    .describe("Why the run is in its state, when there is something to say."),
   created_at: z.string().describe("ISO 8601."),
   state_changed_at: z.string().describe("ISO 8601 of the last transition."),
 });
 
-const StartTaskOutputSchema = z.object({
-  task: TaskSummarySchema,
+const StartRunOutputSchema = z.object({
+  run: RunSummarySchema,
   runtime: z
     .enum(["dedicated", "foreground"])
-    .describe("Where the delegated task executes."),
+    .describe("Where the delegated run executes."),
 });
 
-const GetTaskOutputSchema = z.object({
-  task: TaskSummarySchema,
+const GetRunOutputSchema = z.object({
+  run: RunSummarySchema,
   output: z
     .string()
-    .describe("The task's response artifact so far (tail, capped)."),
+    .describe("The run's response artifact so far (tail, capped)."),
   output_truncated: z.boolean(),
   session: z
     .object({
       attachable: z
         .boolean()
-        .describe("Whether a live container is carrying the task right now."),
+        .describe("Whether a live container is carrying the run right now."),
       started_at: z.string().nullable(),
     })
     .nullable()
-    .describe("The Agent run, when the task uses Agent Runtime."),
+    .describe("The live container session, when the run uses Agent Runtime."),
 });
 
-const ListTasksOutputSchema = z.object({
-  tasks: z.array(TaskSummarySchema),
+const ListRunsOutputSchema = z.object({
+  runs: z.array(RunSummarySchema),
   total: z.number().int().nonnegative(),
 });
 
@@ -262,18 +263,18 @@ const ListAgentRunsOutputSchema = z.object({
   }),
 });
 
-/** How much artifact text get_task inlines; the tail is the useful end. */
+/** How much artifact text get_run inlines; the tail is the useful end. */
 const MAX_INLINED_OUTPUT_CHARS = 20_000;
-const MAX_LISTED_TASKS = 50;
+const MAX_LISTED_RUNS = 50;
 
 const registry = defineArchestraTools([
   defineArchestraTool({
-    shortName: TOOL_START_TASK_SHORT_NAME,
-    title: "Start Task",
+    shortName: TOOL_START_RUN_SHORT_NAME,
+    title: "Start Run",
     description:
-      "Start long-running work on an agent as a durable task and return immediately with its id. " +
+      "Start long-running work on an agent as a durable run and return immediately with its id. " +
       "If the Agent has Agent Runtime configured, the work executes in its runtime. " +
-      "Poll get_task for progress, steer_task to interject, cancel_task to stop.",
+      "Poll get_run for progress, steer_run to interject, cancel_run to stop.",
     schema: z.object({
       agent_id: z.string().describe("The agent to do the work."),
       message: z
@@ -282,7 +283,7 @@ const registry = defineArchestraTools([
         .min(1, "message is required.")
         .describe("What the agent should do."),
     }),
-    outputSchema: StartTaskOutputSchema,
+    outputSchema: StartRunOutputSchema,
     handler: ({ args, context }) =>
       startDelegatedTask({
         agentId: args.agent_id,
@@ -292,15 +293,15 @@ const registry = defineArchestraTools([
   }),
 
   defineArchestraTool({
-    shortName: TOOL_GET_TASK_SHORT_NAME,
-    title: "Get Task",
+    shortName: TOOL_GET_RUN_SHORT_NAME,
+    title: "Get Run",
     description:
-      "Read a task's state and the output it has produced so far. " +
-      "A task in state 'working' is still going — poll again rather than assuming it stalled.",
+      "Read a run's state and the output it has produced so far. " +
+      "A run in state 'working' is still going — poll again rather than assuming it stalled.",
     schema: z.object({
-      task_id: z.string().uuid().describe("From start_task or list_tasks."),
+      task_id: z.string().uuid().describe("From start_run or list_runs."),
     }),
-    outputSchema: GetTaskOutputSchema,
+    outputSchema: GetRunOutputSchema,
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
@@ -324,7 +325,7 @@ const registry = defineArchestraTools([
 
         return structuredSuccessResult(
           {
-            task: taskRowSummary(task.row),
+            run: runSummary(task.row),
             // The tail: the newest output is what a poller wants to see.
             output: truncated ? text.slice(-MAX_INLINED_OUTPUT_CHARS) : text,
             output_truncated: truncated,
@@ -335,20 +336,20 @@ const registry = defineArchestraTools([
                 }
               : null,
           },
-          `Task ${task.row.id}: ${task.row.state}`,
+          `Run ${task.row.id}: ${task.row.state}`,
         );
       } catch (error) {
-        return catchError(error, "reading the task");
+        return catchError(error, "reading the run");
       }
     },
   }),
 
   defineArchestraTool({
-    shortName: TOOL_LIST_TASKS_SHORT_NAME,
-    title: "List Tasks",
-    description: "List your tasks on one agent, newest activity first.",
+    shortName: TOOL_LIST_RUNS_SHORT_NAME,
+    title: "List Runs",
+    description: "List your runs on one agent, newest activity first.",
     schema: z.object({
-      agent_id: z.string().describe("The agent whose tasks to list."),
+      agent_id: z.string().describe("The agent whose runs to list."),
       state: z
         .enum([
           "submitted",
@@ -359,9 +360,9 @@ const registry = defineArchestraTools([
           "failed",
         ])
         .optional()
-        .describe("Only tasks in this state."),
+        .describe("Only runs in this state."),
     }),
-    outputSchema: ListTasksOutputSchema,
+    outputSchema: ListRunsOutputSchema,
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
@@ -372,14 +373,14 @@ const registry = defineArchestraTools([
           state: args.state
             ? FRIENDLY_TO_PROTOCOL_STATE[args.state]
             : undefined,
-          pageSize: MAX_LISTED_TASKS,
+          pageSize: MAX_LISTED_RUNS,
         });
         return structuredSuccessResult(
-          { tasks: tasks.map(taskRowSummary), total: totalSize },
-          `${totalSize} task(s)`,
+          { runs: tasks.map(runSummary), total: totalSize },
+          `${totalSize} run(s)`,
         );
       } catch (error) {
-        return catchError(error, "listing tasks");
+        return catchError(error, "listing runs");
       }
     },
   }),
@@ -475,11 +476,11 @@ const registry = defineArchestraTools([
   }),
 
   defineArchestraTool({
-    shortName: TOOL_STEER_TASK_SHORT_NAME,
-    title: "Steer Task",
+    shortName: TOOL_STEER_RUN_SHORT_NAME,
+    title: "Steer Run",
     description:
-      "Interject one message into a running task's container session — a course correction " +
-      "without stopping the work. Only tasks using Agent Runtime can be steered.",
+      "Interject one message into a live run's container session — a course correction " +
+      "without stopping the work. Only runs using Agent Runtime can be steered.",
     schema: z.object({
       task_id: z.string().uuid(),
       message: z.string().trim().min(1, "message is required."),
@@ -493,10 +494,10 @@ const registry = defineArchestraTools([
         const session = await AgentRunModel.findByTaskId(task.row.id);
         if (!session || session.endedAt !== null) {
           return errorResult(
-            "This task has no live container session to steer. In-process tasks cannot be steered; finished ones no longer listen.",
+            "This run has no live container session to steer. In-process runs cannot be steered; finished ones no longer listen.",
           );
         }
-        // Narrower than task access on purpose: steering types into a shell
+        // Narrower than run access on purpose: steering types into a shell
         // holding that person's own credentials.
         if (session.actorUserId !== actor.id) {
           return errorResult("Only the person the run acts as can steer it.");
@@ -519,16 +520,16 @@ const registry = defineArchestraTools([
           "Steer delivered. It lands at the loop's next turn boundary (pipe) or is typed into the session (tmux keys).",
         );
       } catch (error) {
-        return catchError(error, "steering the task");
+        return catchError(error, "steering the run");
       }
     },
   }),
 
   defineArchestraTool({
-    shortName: TOOL_CANCEL_TASK_SHORT_NAME,
-    title: "Cancel Task",
+    shortName: TOOL_CANCEL_RUN_SHORT_NAME,
+    title: "Cancel Run",
     description:
-      "Durably cancel a task. A container session carrying it is torn down.",
+      "Durably cancel a run. A container session carrying it is torn down.",
     schema: z.object({
       task_id: z.string().uuid(),
     }),
@@ -538,7 +539,7 @@ const registry = defineArchestraTools([
         const task = await requireAccessibleTask(args.task_id, actor);
         if ("error" in task) return errorResult(task.error);
         if (!task.row.agentId) {
-          return errorResult("This task has no agent to cancel against.");
+          return errorResult("This run has no agent to cancel against.");
         }
 
         const canceled = await cancelDetachedAgentTask({
@@ -548,27 +549,27 @@ const registry = defineArchestraTools([
         });
         const canceledRow = await A2ATaskModel.findById(task.row.id);
         if (!canceledRow) {
-          throw new Error("Canceled task was not persisted");
+          throw new Error("Canceled run was not persisted");
         }
         return structuredSuccessResult(
           {
-            task: taskRowSummary(canceledRow),
+            run: runSummary(canceledRow),
           },
-          `Task ${task.row.id}: ${describeProtocolState(canceled)}`,
+          `Run ${task.row.id}: ${describeProtocolState(canceled)}`,
         );
       } catch (error) {
-        return catchError(error, "canceling the task");
+        return catchError(error, "canceling the run");
       }
     },
   }),
 
   defineArchestraTool({
-    shortName: TOOL_POST_TASK_FILE_SHORT_NAME,
-    title: "Post Task File",
+    shortName: TOOL_POST_RUN_FILE_SHORT_NAME,
+    title: "Post Run File",
     description:
-      "Upload a file into the messaging-channel thread a task reports to — a demo recording, " +
+      "Upload a file into the messaging-channel thread a run reports to — a demo recording, " +
       "for example — so it renders natively there (Slack plays video uploads inline). Only " +
-      "tasks delegated from a bound messaging channel have such a thread.",
+      "runs delegated from a bound messaging channel have such a thread.",
     schema: z.object({
       task_id: z.string().uuid(),
       filename: z
@@ -592,11 +593,11 @@ const registry = defineArchestraTools([
         const session = await AgentRunModel.findByTaskId(task.row.id);
         if (!session) {
           return errorResult(
-            "This task has no container session, so there is no thread to post to.",
+            "This run has no container session, so there is no thread to post to.",
           );
         }
         // Same narrowing as steering: the upload appears in the thread as the
-        // task's own delivery, acting for the person the run runs as.
+        // run's own delivery, acting for the person the run runs as.
         if (session.actorUserId !== actor.id) {
           return errorResult(
             "Only the person the run acts as can post files for it.",
@@ -605,7 +606,7 @@ const registry = defineArchestraTools([
         const target = session.completionTarget;
         if (!target || target.type !== "chatops") {
           return errorResult(
-            "This task does not report to a messaging-channel thread.",
+            "This run does not report to a messaging-channel thread.",
           );
         }
 
@@ -613,9 +614,9 @@ const registry = defineArchestraTools([
         if (data.length === 0) {
           return errorResult("content_base64 decoded to an empty file.");
         }
-        if (data.length > MAX_TASK_FILE_BYTES) {
+        if (data.length > MAX_RUN_FILE_BYTES) {
           return errorResult(
-            `The file is ${Math.round(data.length / 1024 / 1024)}MB; keep task files under ${Math.round(MAX_TASK_FILE_BYTES / 1024 / 1024)}MB.`,
+            `The file is ${Math.round(data.length / 1024 / 1024)}MB; keep run files under ${Math.round(MAX_RUN_FILE_BYTES / 1024 / 1024)}MB.`,
           );
         }
 
@@ -631,10 +632,10 @@ const registry = defineArchestraTools([
         });
         return structuredSuccessResult(
           { success: true, task_id: task.row.id },
-          "File posted to the task's thread.",
+          "File posted to the run's thread.",
         );
       } catch (error) {
-        return catchError(error, "posting the task file");
+        return catchError(error, "posting the run file");
       }
     },
   }),
@@ -642,7 +643,7 @@ const registry = defineArchestraTools([
 
 // Bounded by the API body limit (the base64 payload plus JSON-RPC envelope
 // must fit in one request) and by what a channel thread can reasonably hold.
-const MAX_TASK_FILE_BYTES = 40 * 1024 * 1024;
+const MAX_RUN_FILE_BYTES = 40 * 1024 * 1024;
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
@@ -666,7 +667,7 @@ function credentialsNeededResult(
       )
       .join(
         "\n",
-      )}\n\nAsk the user to add them here, then start the task again: ${url}`,
+      )}\n\nAsk the user to add them here, then start the run again: ${url}`,
   );
 }
 
@@ -718,7 +719,7 @@ function missingCredentialsFrom(error: unknown): {
 function requireActor(context: ArchestraContext): A2AActor {
   if (!context.userId || !context.organizationId) {
     throw new Error(
-      "Task tools act as the calling user, so they need an authenticated user context.",
+      "Run tools act as the calling user, so they need an authenticated user context.",
     );
   }
   return {
@@ -729,8 +730,8 @@ function requireActor(context: ArchestraContext): A2AActor {
 }
 
 /**
- * A task the caller may see: their own, or any in their organization when they
- * hold agent:admin. Missing and inaccessible return the same message so task
+ * A run the caller may see: their own, or any in their organization when they
+ * hold agent:admin. Missing and inaccessible return the same message so run
  * ids cannot be probed.
  */
 async function requireAccessibleTask(
@@ -740,7 +741,7 @@ async function requireAccessibleTask(
   | { row: Awaited<ReturnType<typeof A2ATaskModel.findById>> & object }
   | { error: string }
 > {
-  const notFound = { error: "Task not found" };
+  const notFound = { error: "Run not found" };
   const row = await A2ATaskModel.findById(taskId);
   if (!row) return notFound;
 
@@ -772,7 +773,7 @@ async function requireAccessibleTask(
   return { row };
 }
 
-function taskRowSummary(row: {
+function runSummary(row: {
   id: string;
   state: string;
   agentId: string | null;

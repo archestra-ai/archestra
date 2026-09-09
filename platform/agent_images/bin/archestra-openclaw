@@ -325,6 +325,8 @@ openclaw_base_url="$(resolve_docker_desktop_url "${OPENAI_BASE_URL:?}")"
 openclaw_mcp_url="$(resolve_docker_desktop_url "${ARCHESTRA_MCP_GATEWAY_URL:?}")"
 : "${OPENAI_API_KEY:?}"
 
+# OpenClaw resolves ${ENV_VAR} references when loading configuration. Keep
+# credential values out of this persisted config; the jq literals are intentional.
 jq -n \
   --arg base_url "${openclaw_base_url}" \
   --arg model "${model}" \

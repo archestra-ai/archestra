@@ -45,6 +45,17 @@ test("context continuation chooses the latest run without crossing owner or Agen
         id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
       }),
     );
+    // Drizzle collapses this all-null nested left join to null. A run whose
+    // workspace was never created must fall back instead of throwing.
+    expect(
+      await AgentRunModel.findLatestInContext({
+        contextId: context.id,
+        agentId,
+        organizationId: org.id,
+        actorKind: "user",
+        actorId,
+      }),
+    ).toBeNull();
     await AgentWorkspaceModel.create({
       organizationId: org.id,
       agentId,

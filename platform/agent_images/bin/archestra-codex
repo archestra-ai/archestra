@@ -197,7 +197,7 @@ developer_instructions="$({
   printf '%s' "Complete the delegated task fully in this isolated runner. Use the local shell and file tools directly. Do not stop after announcing a plan. Verify the work and report the concrete result."
 } | jq -Rs .)"
 cat > "${CODEX_HOME}/config.toml" <<EOF
-model = "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
+model = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" '$value')
 model_provider = "archestra"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
@@ -206,23 +206,23 @@ ${notify_config}
 
 [model_providers.archestra]
 name = "Archestra"
-base_url = "${OPENAI_BASE_URL:?}"
+base_url = $(jq -Rn --arg value "${OPENAI_BASE_URL:?}" '$value')
 env_key = "OPENAI_API_KEY"
 wire_api = "responses"
 
 [model_providers.archestra.http_headers]
-"X-Archestra-Run-Id" = "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
-"X-Archestra-Session-Id" = "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
+"X-Archestra-Run-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
+"X-Archestra-Session-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
 
 [mcp_servers.archestra]
-url = "${ARCHESTRA_MCP_GATEWAY_URL:?}"
+url = $(jq -Rn --arg value "${ARCHESTRA_MCP_GATEWAY_URL:?}" '$value')
 bearer_token_env_var = "ARCHESTRA_MCP_GATEWAY_TOKEN"
 
 [mcp_servers.archestra.http_headers]
-"X-Archestra-Run-Id" = "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
-"X-Archestra-Session-Id" = "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}"
+"X-Archestra-Run-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
+"X-Archestra-Session-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
 
-[projects."${PWD}"]
+[projects.$(jq -Rn --arg value "${PWD}" '$value')]
 trust_level = "trusted"
 EOF
 chmod 0600 "${CODEX_HOME}/config.toml"

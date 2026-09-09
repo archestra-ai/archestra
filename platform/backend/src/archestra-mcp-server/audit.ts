@@ -6,7 +6,9 @@ import {
 } from "@/middleware/audit-log-hook";
 import A2ATaskModel from "@/models/a2a/task";
 import AgentModel from "@/models/agent";
+import AgentRunModel from "@/models/agent-run";
 import AgentToolModel from "@/models/agent-tool";
+import AgentWorkspaceModel from "@/models/agent-workspace";
 import AppModel from "@/models/app";
 import AuditLogModel from "@/models/audit-log";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -42,6 +44,10 @@ type ArchestraToolAuditSpec = {
   action: AuditEventName;
   /** Some tools create a resource only in one of their successful branches. */
   recordWhen?: (result: CallToolResult) => boolean;
+  beforeFromArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
+  afterFromResult?: (
+    result: Record<string, unknown>,
+  ) => Record<string, unknown>;
   /** Pick the target id straight from validated tool args (edits/deletes). */
   idFromArgs?: (args: Record<string, unknown>) => string | null;
   /** Pick the created id from the tool's structuredContent on success. */
@@ -124,7 +130,9 @@ export async function captureToolAuditBefore(params: {
         null);
     // Creates have no prior state; everything else snapshots it when the
     // target resolved.
-    if (
+    if (spec.beforeFromArgs) {
+      capture.before = sanitizeAuditSnapshot(spec.beforeFromArgs(params.args));
+    } else if (
       capture.targetId &&
       spec.fetchById &&
       !spec.action.endsWith(".created")
@@ -170,14 +178,18 @@ export async function recordToolAudit(params: {
     }
 
     const after =
-      outcome === "success" &&
-      !spec.action.endsWith(".deleted") &&
-      resourceId &&
-      spec.fetchById
+      outcome === "success" && spec.afterFromResult
         ? sanitizeAuditSnapshot(
-            await spec.fetchById(resourceId, ctx.organizationId),
+            spec.afterFromResult(result.structuredContent ?? {}),
           )
-        : null;
+        : outcome === "success" &&
+            !spec.action.endsWith(".deleted") &&
+            resourceId &&
+            spec.fetchById
+          ? sanitizeAuditSnapshot(
+              await spec.fetchById(resourceId, ctx.organizationId),
+            )
+          : null;
 
     const actor = await UserModel.getById(ctx.userId);
     await AuditLogModel.create({
@@ -291,6 +303,37 @@ const agentEditSpec: ArchestraToolAuditSpec = {
 };
 
 const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
+  write_workspace_file: {
+    resourceType: "agentRun",
+    action: "agentRun.updated",
+    idFromArgs: (args) => str(args.task_id),
+    beforeFromArgs: (args) => ({
+      workspaceFile: { path: args.path, writeApplied: false },
+    }),
+    afterFromResult: (result) => ({
+      workspaceFile: {
+        path: result.path,
+        writeApplied: true,
+        size: result.size,
+        sha256: result.sha256,
+      },
+    }),
+  },
+  delete_workspace: {
+    resourceType: "agentRun",
+    action: "agentRun.updated",
+    idFromArgs: (args) => str(args.task_id),
+    fetchById: async (id, organizationId) => {
+      const run = await AgentRunModel.findByTaskId(id);
+      if (run?.organizationId !== organizationId) return null;
+      const workspace = await AgentWorkspaceModel.findByWorkloadName(
+        run.workloadName,
+      );
+      return workspace?.organizationId === organizationId
+        ? { workspaceState: workspace.state }
+        : null;
+    },
+  },
   steer_run: {
     resourceType: "agentRun",
     action: "agentRun.created",

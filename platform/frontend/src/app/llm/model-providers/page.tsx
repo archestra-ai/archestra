@@ -741,14 +741,16 @@ export default function ApiKeysPage() {
                       })
                   : undefined
               }
+              search={
+                <SearchInput
+                  isLoading={isFetching}
+                  objectNamePlural="credentials"
+                  searchFields={["name"]}
+                  paramName="search"
+                  className={filterSearchClass}
+                />
+              }
             >
-              <SearchInput
-                isLoading={isFetching}
-                objectNamePlural="credentials"
-                searchFields={["name"]}
-                paramName="search"
-                className={filterSearchClass}
-              />
               <Select
                 value={providerFilter}
                 onValueChange={(value) =>
@@ -852,13 +854,16 @@ export default function ApiKeysPage() {
               if (!open) setSubscriptionToConnect(null);
             }}
             title={
-              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.kind].connect
-                .signInTitle
+              subscriptionToConnect.credential
+                ? `Reconnect ${subscriptionToConnect.name}`
+                : SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.kind].connect
+                    .signInTitle
             }
             description={
               SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.kind].connect
                 .signInDescription
             }
+            reconnectKeyId={subscriptionToConnect.credential?.id}
             defaultValues={subscriptionToConnect.defaultValues}
             allowedProviders={[subscriptionToConnect.provider]}
             credentialMode="subscription"

@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FilterBar,
   FilterBarContextualActions,
@@ -141,5 +142,124 @@ describe("FilterSelect", () => {
     expect(
       screen.getByRole("combobox", { name: "Audit action" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("compact filters", () => {
+  let compact: boolean;
+  let listeners: Set<() => void>;
+
+  beforeEach(() => {
+    compact = true;
+    listeners = new Set();
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 1023px)" && compact,
+      media: query,
+      addEventListener: (_event: string, listener: () => void) =>
+        listeners.add(listener),
+      removeEventListener: (_event: string, listener: () => void) =>
+        listeners.delete(listener),
+    }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  function FilteredList() {
+    const [action, setAction] = useState("all");
+    return (
+      <>
+        <FilterBar
+          search={<input aria-label="Search entries" />}
+          onClearFilters={action !== "all" ? () => setAction("all") : undefined}
+          moreFilters={[
+            {
+              key: "actor",
+              label: "Actor",
+              active: false,
+              control: <button type="button">All actors</button>,
+            },
+          ]}
+        >
+          <FilterSelect
+            value={action}
+            onValueChange={setAction}
+            placeholder="Filter by action"
+            items={ITEMS}
+          />
+        </FilterBar>
+        <ul>
+          {(action === "all"
+            ? ["Created entry", "Deleted entry"]
+            : ["Created entry"]
+          ).map((entry) => (
+            <li key={entry}>{entry}</li>
+          ))}
+        </ul>
+      </>
+    );
+  }
+
+  it("keeps search visible and applies and clears a filter inside the popover", async () => {
+    render(<FilteredList />);
+    expect(
+      screen.getByRole("textbox", { name: "Search entries" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    expect(screen.getByRole("button", { name: "All actors" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /More filters/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Filter by action" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.queryByText("Deleted entry")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Filters (active)" }),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText("Deleted entry")).toBeVisible();
+  });
+
+  it("retains search and selected filters when resizing between compact and desktop layouts", async () => {
+    render(<FilteredList />);
+    await userEvent.type(screen.getByRole("textbox"), "entry");
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Filter by action" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    act(() => {
+      compact = false;
+      listeners.forEach((listener) => {
+        listener();
+      });
+    });
+    expect(
+      screen.queryByRole("button", { name: "Filters (active)" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Filter by action" }),
+    ).toHaveTextContent("Create");
+    expect(screen.getByRole("textbox")).toHaveValue("entry");
+    act(() => {
+      compact = true;
+      listeners.forEach((listener) => {
+        listener();
+      });
+    });
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Filters (active)" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Deleted entry")).not.toBeInTheDocument();
+  });
+
+  it("does not show a filter button on search-only lists", () => {
+    render(<FilterBar search={<input aria-label="Search" />} />);
+    expect(screen.getByRole("textbox")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Filters" }),
+    ).not.toBeInTheDocument();
   });
 });

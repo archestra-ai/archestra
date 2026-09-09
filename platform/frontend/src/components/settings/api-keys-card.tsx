@@ -332,13 +332,14 @@ function ApiKeysCardContent() {
                     ? () => updateQueryParams({ search: null, page: "1" })
                     : undefined
                 }
-              >
-                <SearchInput
-                  objectNamePlural="API keys"
-                  searchFields={["key name"]}
-                  className={filterSearchClass}
-                />
-              </FilterBar>
+                search={
+                  <SearchInput
+                    objectNamePlural="API keys"
+                    searchFields={["key name"]}
+                    className={filterSearchClass}
+                  />
+                }
+              />
             </CollectionFilters>
             {isApiKeysLoadError ? (
               <QueryLoadError

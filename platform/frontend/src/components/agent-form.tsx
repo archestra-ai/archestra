@@ -45,6 +45,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -820,6 +821,12 @@ const AGENT_FORM_SECTIONS: readonly AgentFormSection[] = [
 
 /** What a caller-rendered footer gets to build its buttons from. */
 export interface AgentFormFooterState {
+  /**
+   * The form element's `id`. A footer rendered into a floating bar is portaled
+   * out of the `<form>`, so its submit button carries `form={formId}` to stay
+   * wired to the form it no longer sits inside.
+   */
+  formId: string;
   /** Create mode (no agent yet) vs. edit mode. */
   isCreate: boolean;
   /** A save is in flight — disable everything that would start another. */
@@ -924,6 +931,9 @@ export function AgentForm({
   openToolsCombobox = false,
 }: AgentFormProps) {
   const appName = useAppName();
+  // Given to the footer so a submit button portaled out of this form (into a
+  // floating save bar) stays associated with it via `form={formId}`.
+  const formId = useId();
   const mountedSections = new Set<AgentFormSection>(sections);
   const showConfigurationSections = mountedSections.has("configuration");
   const showMessagingSection = mountedSections.has("messaging");
@@ -2729,6 +2739,7 @@ export function AgentForm({
     !environmentConflicts.blocksSave &&
     !(scope === "team" && hasNoAvailableTeams);
   const footerState: AgentFormFooterState = {
+    formId,
     isCreate: !agent,
     isSaving: isSaving || createAgent.isPending || updateAgent.isPending,
     isDirty,
@@ -2737,6 +2748,7 @@ export function AgentForm({
   };
   return (
     <form
+      id={formId}
       className="flex flex-col"
       autoComplete="off"
       onSubmit={(event) => {

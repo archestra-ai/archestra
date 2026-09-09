@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import config from "@/config";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, test } from "@/test";
@@ -6,6 +7,35 @@ import { _resetCachedKey } from "@/utils/crypto";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 
 describe("LlmProviderApiKeyModel", () => {
+  test("an old validation cannot overwrite a reconnected credential", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret();
+    const key = await makeLlmProviderApiKey(org.id, secret.id);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(key.updatedAt.getTime() + 1000));
+      await LlmProviderApiKeyModel.setRequiresReauthentication({
+        id: key.id,
+        requiresReauthentication: false,
+      });
+      await LlmProviderApiKeyModel.setRequiresReauthentication({
+        id: key.id,
+        requiresReauthentication: true,
+        expectedUpdatedAt: key.updatedAt,
+      });
+      expect(
+        (await LlmProviderApiKeyModel.findById(key.id))
+          ?.requiresReauthentication,
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe("create", () => {
     test("can create a personal LLM provider API key", async ({
       makeOrganization,

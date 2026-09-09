@@ -119,7 +119,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-beta.1" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-beta.3" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -921,7 +921,7 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
   - Values: `true`, `false`
 
 - **`ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`** - Container image prefilled when Agent Runtime is enabled on an Agent. The built-in image supplies the default Agent loop. Custom images can replace it and set their own command.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.1` <!-- x-release-please-version -->
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:1.4.0-beta.3` <!-- x-release-please-version -->
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged Agent Runtime pods. Privileged containers have node-level access.
   - Default: `false`
@@ -1824,6 +1824,14 @@ See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses lo
   - Currently applies to Slack downloads only; MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap instead
 
 ### Knowledge Base Configuration
+
+JavaScript-rendered web crawls need Chromium on each backend worker.
+Set `ARCHESTRA_KNOWLEDGE_BASE_CRAWLER_CHROMIUM_PATH` to its executable path.
+When unset, Playwright uses its default installed Chromium location.
+The standard image does not bundle Chromium; provide it in a custom image.
+Run the browser as a non-root user with Chromium sandbox support.
+For local development, the path can point to an installed Chrome executable.
+
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
 

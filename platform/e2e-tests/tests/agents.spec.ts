@@ -171,20 +171,19 @@ test("can create and delete an agent", {
     checkEnabled: false,
   });
 
-  // The whole row opens the detail page, not just the name link: click the
-  // icon cell, which carries no control of its own. Retried until the URL
-  // changes, for the same pre-hydration reason as the wizard steps above.
+  // Click the name cell's padding, outside its link, to exercise whole-row
+  // navigation. Retry until the URL changes for the same pre-hydration
+  // reason as the wizard steps above.
   const agentDetailUrl = new RegExp(`/agents/${agentId}$`);
   // The name cell truncates long names in the DOM and carries the full
   // name as its title, so find the row by that title, not by text.
-  const rowIconCell = page
+  const rowNameCell = page
     .getByTestId(E2eTestId.AgentsTable)
-    .locator("tr")
-    .filter({ has: page.getByTitle(AGENT_NAME) })
-    .locator('td[data-column-id="icon"]');
+    .getByRole("cell")
+    .filter({ has: page.getByTitle(AGENT_NAME) });
   await expect(async () => {
     if (!page.url().match(agentDetailUrl)) {
-      await rowIconCell.click();
+      await rowNameCell.click({ position: { x: 4, y: 4 } });
     }
     await expect(page).toHaveURL(agentDetailUrl, { timeout: 3_000 });
   }).toPass({ timeout: 20_000 });

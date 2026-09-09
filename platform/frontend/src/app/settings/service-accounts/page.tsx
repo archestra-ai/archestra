@@ -395,12 +395,14 @@ export default function ServiceAccountsSettingsPage() {
               <FilterBar
                 actions={<TableCardViewToggle />}
                 onClearFilters={hasActiveFilters ? clearFilters : undefined}
+                search={
+                  <SearchInput
+                    objectNamePlural="service accounts"
+                    searchFields={["name"]}
+                    className={filterSearchClass}
+                  />
+                }
               >
-                <SearchInput
-                  objectNamePlural="service accounts"
-                  searchFields={["name"]}
-                  className={filterSearchClass}
-                />
                 <RoleSelect
                   mode="filter"
                   value={roleFilter}

@@ -447,21 +447,6 @@ function McpGateways({
           }),
         ]),
     {
-      id: "icon",
-      size: 40,
-      enableSorting: false,
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center">
-          <AgentIcon
-            icon={row.original.icon}
-            size={20}
-            fallbackType="mcp_gateway"
-          />
-        </div>
-      ),
-    },
-    {
       id: "name",
       accessorKey: "name",
       size: 240,
@@ -480,6 +465,13 @@ function McpGateways({
         return (
           <AgentNameCell
             name={agent.name}
+            icon={
+              <AgentIcon
+                icon={agent.icon}
+                size={20}
+                fallbackType="mcp_gateway"
+              />
+            }
             // A trashed gateway has no detail page: `GET /api/agents/:id`
             // filters deleted rows, so the link would land on "not found".
             href={
@@ -695,14 +687,16 @@ function McpGateways({
               <FilterBar
                 leading
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+                search={
+                  <SearchInput
+                    isLoading={isFetching}
+                    objectNamePlural="gateways"
+                    searchFields={["name"]}
+                    paramName="name"
+                    className={filterSearchClass}
+                  />
+                }
               >
-                <SearchInput
-                  isLoading={isFetching}
-                  objectNamePlural="gateways"
-                  searchFields={["name"]}
-                  paramName="name"
-                  className={filterSearchClass}
-                />
                 <ResourceScopeFilter
                   showLabels
                   ownerLabelPlural="MCP gateways"

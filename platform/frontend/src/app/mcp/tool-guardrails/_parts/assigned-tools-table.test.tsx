@@ -12,7 +12,18 @@ vi.mock("@/components/filter-bar", () => ({
   CollectionFilters: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
-  FilterBar: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  FilterBar: ({
+    search,
+    children,
+  }: {
+    search?: ReactNode;
+    children: ReactNode;
+  }) => (
+    <div>
+      {search}
+      {children}
+    </div>
+  ),
   FilterSelect: () => <button type="button">All Sources</button>,
   filterSearchClass: "",
 }));

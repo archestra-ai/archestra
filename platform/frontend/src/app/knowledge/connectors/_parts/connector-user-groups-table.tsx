@@ -213,14 +213,17 @@ export function ConnectorUserGroupsTable({
     <div>
       {groups.length > 0 && (
         <CollectionFilters>
-          <FilterBar>
-            <SearchInput
-              value={search}
-              syncQueryParams={false}
-              placeholder={`Search by ${noun.singular} or member name`}
-              className={filterSearchClass}
-              onSearchChange={setSearch}
-            />
+          <FilterBar
+            search={
+              <SearchInput
+                value={search}
+                syncQueryParams={false}
+                placeholder={`Search by ${noun.singular} or member name`}
+                className={filterSearchClass}
+                onSearchChange={setSearch}
+              />
+            }
+          >
             <Select
               value={filter}
               onValueChange={(value) => setFilter(value as GroupFilter)}

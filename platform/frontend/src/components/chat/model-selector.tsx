@@ -46,6 +46,7 @@ import {
   ModelCapabilityBadges,
   ModelContextLengthIndicator,
 } from "@/components/model-capability-indicators";
+import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";
@@ -494,6 +495,15 @@ export const ModelSelector = memo(function ModelSelector({
     includeKeyId: apiKeyId ?? undefined,
     toastOnError: false,
   });
+  const selectedKey = availableKeys?.find((key) => key.id === apiKeyId);
+  const selectedCredential =
+    selectedKey?.isAgentKey && selectedKey.subscriptionKind
+      ? availableKeys?.find(
+          (key) =>
+            !key.isAgentKey &&
+            key.subscriptionKind === selectedKey.subscriptionKind,
+        )
+      : selectedKey;
   const selectedKeySubscriptionKind =
     availableKeys?.find((key) => key.id === apiKeyId)?.subscriptionKind ?? null;
   const [open, setOpen] = useState(false);
@@ -707,6 +717,12 @@ export const ModelSelector = memo(function ModelSelector({
             onCloseAutoFocus={(e) => e.preventDefault()}
             showCloseButton={false}
           >
+            {selectedCredential?.requiresReauthentication && (
+              <SubscriptionReconnectNotice
+                credential={selectedCredential}
+                compact
+              />
+            )}
             <ModelSelectorDialogBody
               modelsByProvider={modelsByProvider}
               availableProviders={availableProviders}

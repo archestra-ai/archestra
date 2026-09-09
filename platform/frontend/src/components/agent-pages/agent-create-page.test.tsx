@@ -44,6 +44,7 @@ vi.mock("@/components/agent-form", () => ({
           fire created
         </button>
         {props.footer?.({
+          formId: "agent-form",
           isCreate: true,
           isSaving: false,
           isDirty: false,

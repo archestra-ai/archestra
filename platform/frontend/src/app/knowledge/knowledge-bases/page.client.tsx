@@ -501,12 +501,14 @@ function KnowledgeBasesList() {
               leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
               onClearFilters={hasActiveFilters ? clearFilters : undefined}
+              search={
+                <SearchInput
+                  paramName="search"
+                  className={filterSearchClass}
+                  isLoading={isFetching}
+                />
+              }
             >
-              <SearchInput
-                paramName="search"
-                className={filterSearchClass}
-                isLoading={isFetching}
-              />
               <ResourceScopeFilter
                 adminPermission={{ knowledgeSource: ["admin"] }}
                 ownerLabelPlural="knowledge bases"

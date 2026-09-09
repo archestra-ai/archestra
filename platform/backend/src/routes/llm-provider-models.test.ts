@@ -1,7 +1,9 @@
 import { MAX_CUSTOM_MODEL_TOKEN_LIMIT, TimeInMs } from "@archestra/shared";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import config from "@/config";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -15,6 +17,7 @@ import { createFastifyInstance } from "@/server";
 import { modelSyncService } from "@/services/model-sync";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import type { Model, User } from "@/types";
 import {
   getStaleModelSyncApiKeys,
@@ -67,11 +70,13 @@ const mockUserHasPermission = vi.mocked(userHasPermission);
 const mockSyncSystemKeys = vi.mocked(systemKeyManager.syncSystemKeys);
 
 describe("chat model routes", () => {
+  const server = useMswServer();
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     mockIsVertexAiEnabled.mockReturnValue(false);
     mockUserHasPermission.mockResolvedValue(true);
@@ -100,6 +105,108 @@ describe("chat model routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("refresh reports individual failures, persists rejected subscriptions, and recovers after successful validation", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({
+      secret: { apiKey: "github-test-token" },
+    });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      name: "Personal subscription",
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+    });
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      name: "Unavailable provider",
+      provider: "openai",
+      scope: "personal",
+      userId: user.id,
+    });
+    mockGetSecretValueForLlmProviderApiKey.mockResolvedValue(
+      "github-test-token",
+    );
+
+    server.use(
+      http.get(`${config.llm.openai.baseUrl}/models`, () =>
+        HttpResponse.json(
+          { error: { message: "Service unavailable" } },
+          { status: 403 },
+        ),
+      ),
+    );
+    server.use(
+      http.get(config.llm["github-copilot"].tokenExchangeUrl, () =>
+        HttpResponse.json(
+          { error: "temporarily_unavailable" },
+          { status: 503 },
+        ),
+      ),
+    );
+    const unavailable = await app.inject({
+      method: "POST",
+      url: "/api/llm-models/sync",
+    });
+    expect(unavailable.json().success).toBe(false);
+    expect(
+      (await LlmProviderApiKeyModel.findById(key.id))?.requiresReauthentication,
+    ).toBe(false);
+
+    server.use(
+      http.get(config.llm["github-copilot"].tokenExchangeUrl, () =>
+        HttpResponse.json({ error: "invalid_token" }, { status: 401 }),
+      ),
+    );
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/llm-models/sync",
+    });
+    expect(rejected.statusCode).toBe(200);
+    expect(rejected.json()).toEqual({
+      success: false,
+      failures: expect.arrayContaining([
+        {
+          apiKeyId: key.id,
+          name: "Personal subscription",
+          provider: "github-copilot",
+          requiresReauthentication: true,
+        },
+        expect.objectContaining({
+          name: "Unavailable provider",
+          requiresReauthentication: false,
+        }),
+      ]),
+    });
+    expect(
+      (await LlmProviderApiKeyModel.findById(key.id))?.requiresReauthentication,
+    ).toBe(true);
+    server.use(
+      http.get(config.llm["github-copilot"].tokenExchangeUrl, () =>
+        HttpResponse.json({
+          token: "copilot-test-bearer",
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+        }),
+      ),
+      http.get(`${config.llm["github-copilot"].baseUrl}/models`, () =>
+        HttpResponse.json({ data: [] }),
+      ),
+    );
+    const recovered = await app.inject({
+      method: "POST",
+      url: "/api/llm-models/sync",
+    });
+    expect(recovered.json().failures).toEqual([
+      expect.objectContaining({
+        name: "Unavailable provider",
+        requiresReauthentication: false,
+      }),
+    ]);
+    expect(
+      (await LlmProviderApiKeyModel.findById(key.id))?.requiresReauthentication,
+    ).toBe(false);
   });
 
   test("GET /api/chat/models only returns models suitable for chat", async ({

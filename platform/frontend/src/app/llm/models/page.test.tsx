@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -175,6 +176,91 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
+  it("reports partial refresh failures and updates the persistent reconnect state", async () => {
+    keyCreated = true;
+    let rejected = false;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          {
+            ...providerKey,
+            provider: "openai",
+            subscriptionKind: "chatgpt",
+            requiresReauthentication: rejected,
+          },
+        ]),
+      ),
+      http.post(`${API_ORIGIN}/api/llm-models/sync`, () => {
+        rejected = true;
+        return HttpResponse.json({
+          success: false,
+          failures: [
+            {
+              apiKeyId: providerKey.id,
+              name: providerKey.name,
+              provider: providerKey.provider,
+              requiresReauthentication: true,
+            },
+          ],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(model.modelId);
+    await user.click(screen.getByRole("button", { name: "Refresh Models" }));
+    expect(
+      await screen.findByText("Some models could not be refreshed"),
+    ).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: "Reconnect" }),
+    ).toBeVisible();
+    expect(screen.getByText(model.modelId)).toBeVisible();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["openai", "chatgpt", "ChatGPT", "Sign in with ChatGPT"],
+    [
+      "github-copilot",
+      "github-copilot",
+      "GitHub Copilot",
+      "Sign in with GitHub",
+    ],
+    [
+      "microsoft-365-copilot",
+      "microsoft-365-copilot",
+      "Microsoft 365 Copilot",
+      "Sign in with Microsoft",
+    ],
+    ["xai", "x-premium", "SuperGrok", "Sign in with Grok"],
+  ])("opens %s reconnect in place", async (provider, subscriptionKind, name, signInLabel) => {
+    keyCreated = true;
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          {
+            ...providerKey,
+            provider,
+            subscriptionKind,
+            name,
+            requiresReauthentication: true,
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Reconnect" }));
+    expect(
+      await screen.findByRole("heading", { name: `Reconnect ${name}` }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: signInLabel })).toBeVisible();
+    expect(screen.queryByText("Advanced settings")).not.toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it("adds a provider key from the empty state and loads its models", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -192,6 +278,87 @@ describe("ModelsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Add API Key" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the provider icon inline before the model ID", async () => {
+    keyCreated = true;
+    renderPage();
+
+    expect(await screen.findByText(model.modelId)).toBeVisible();
+    // The icon moved out of its own column and now sits in the Model ID cell.
+    expect(screen.getByRole("img", { name: "Anthropic" })).toBeVisible();
+  });
+
+  it("shows input and output prices in one combined column", async () => {
+    keyCreated = true;
+    renderPage();
+
+    expect(await screen.findByText(model.modelId)).toBeVisible();
+    // Input ($3) and output ($15) share a single cell, like Cache R/W.
+    expect(screen.getByText("$3.00 / $15.00")).toBeVisible();
+    expect(screen.getByText("$/M In/Out")).toBeVisible();
+    expect(screen.queryByText("$/M Input")).not.toBeInTheDocument();
+    expect(screen.queryByText("$/M Output")).not.toBeInTheDocument();
+  });
+
+  it("hydrates filter state from the URL query params", async () => {
+    keyCreated = true;
+    // A chat model filtered to embedding-only should drop out entirely.
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("modelType=embedding") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText("No models match your filters"),
+    ).toBeVisible();
+    expect(screen.queryByText(model.modelId)).not.toBeInTheDocument();
+  });
+
+  it("syncs the search filter to the URL query params", async () => {
+    keyCreated = true;
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      await screen.findByPlaceholderText(/search models/i),
+      "claude",
+    );
+
+    await waitFor(() =>
+      expect(routerPush).toHaveBeenCalledWith(
+        expect.stringContaining("search=claude"),
+        { scroll: false },
+      ),
+    );
+  });
+
+  it("keeps a free-only deep link while the provider keys load", async () => {
+    keyCreated = true;
+    // An OpenRouter key makes the free-only filter valid — but it resolves
+    // after first render, when apiKeys is still empty.
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([
+          { ...providerKey, provider: "openrouter", name: "OpenRouter" },
+        ]),
+      ),
+    );
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("freeOnly=true") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    renderPage();
+
+    // The toggle hydrates from the URL and stays on once keys resolve...
+    const toggle = await screen.findByRole("switch", { name: /free only/i });
+    await waitFor(() => expect(toggle).toBeChecked());
+    // ...and the deep link is never stripped while keys were loading.
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it("clears an active label filter from the model collection", async () => {

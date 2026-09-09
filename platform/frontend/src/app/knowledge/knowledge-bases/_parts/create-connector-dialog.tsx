@@ -7,7 +7,7 @@ import {
   getConnectorNamePlaceholder,
   type TextSearchLanguage,
 } from "@archestra/shared";
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
@@ -19,20 +19,14 @@ import {
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SearchInput } from "@/components/search-input";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogBody,
   DialogContent,
   DialogDescription,
-  DialogForm,
   DialogHeader,
-  DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -117,6 +111,9 @@ export function CreateConnectorDialog({
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  const [activeSection, setActiveSection] = useState<"general" | "advanced">(
+    "general",
+  );
   const [search, setSearch] = useState("");
 
   // M-Files is in beta: deployments that haven't opted in never see the type.
@@ -182,6 +179,7 @@ export function CreateConnectorDialog({
   });
 
   const handleSelectType = (type: ConnectorType) => {
+    setActiveSection("general");
     setSelectedType(type);
     form.setValue("connectorType", type);
     form.setValue("config", getDefaultConnectorConfig(type));
@@ -339,347 +337,303 @@ export function CreateConnectorDialog({
     }
   }, [open, step]);
 
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-        {step === "select" ? (
-          <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                {onBack && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={handleBackToChooser}
-                    aria-label="Go back"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                )}
-                <span>Add Connector</span>
-              </DialogTitle>
-              <DialogDescription>
-                Select a Connector type to get started.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody className="pt-4">
-              <SearchInput
-                ref={searchRef}
-                value={search}
-                onSearchChange={setSearch}
-                syncQueryParams={false}
-                debounceMs={300}
-                inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
-              />
-              <div className="grid grid-cols-2 gap-3 pt-4">
-                {filteredConnectorOptions.length ? (
-                  filteredConnectorOptions.map((option) => (
-                    <button
-                      key={option.type}
-                      type="button"
-                      onClick={() => handleSelectType(option.type)}
-                      className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50"
-                    >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                        <ConnectorTypeIcon
-                          type={option.type}
-                          className="h-7 w-7"
-                        />
-                      </div>
-                      <div>
-                        <div className="font-medium">
-                          {getConnectorTypeLabel(option.type)}
-                        </div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {option.description}
-                        </div>
-                      </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="col-span-2 flex flex-col items-center gap-2 rounded-lg border border-muted/50 p-5 text-center text-sm text-muted-foreground">
-                    No connectors match your filters. Try adjusting your search.
-                  </div>
-                )}
-              </div>
-            </DialogBody>
-          </>
-        ) : (
-          <Form {...form}>
-            <DialogForm
-              onSubmit={form.handleSubmit(handleSubmit)}
-              className="flex min-h-0 flex-1 flex-col"
-            >
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={handleBack}
-                    aria-label="Go back"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <span>
-                    Configure{" "}
-                    {selectedType
-                      ? `${getConnectorTypeLabel(selectedType)} `
-                      : ""}
-                    Connector
-                  </span>
-                </DialogTitle>
-                <DialogDescription>
-                  Enter the connection details for your{" "}
-                  {selectedType ? (
-                    <span>{getConnectorTypeLabel(selectedType)}</span>
-                  ) : null}{" "}
-                  instance.{" "}
-                  <ExternalDocsLink
-                    href={connectorDocsUrl}
-                    className="underline"
-                    showIcon={false}
-                  >
-                    Learn more
-                  </ExternalDocsLink>
-                </DialogDescription>
-              </DialogHeader>
-
-              <DialogBody className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  rules={{ required: "Name is required" }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={
-                            selectedType
-                              ? getConnectorNamePlaceholder(selectedType)
-                              : ""
-                          }
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Description{" "}
-                        <span className="text-muted-foreground font-normal">
-                          (optional)
-                        </span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="A short description of this connector"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="environmentId"
-                  render={({ field }) => (
-                    <EnvironmentSelector
-                      value={field.value ?? null}
-                      onChange={field.onChange}
-                      resource="knowledgeSource"
-                      helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
-                    />
-                  )}
-                />
-
-                <KnowledgeSourceVisibilitySelector
-                  visibility={visibility}
-                  onVisibilityChange={setVisibility}
-                  teamIds={teamIds}
-                  onTeamIdsChange={setTeamIds}
-                  showTeamRequired
-                  supportsAutoSync={connectorSupportsAutoSync(
-                    connectorType,
-                    orchestratorK8sRuntime,
-                  )}
-                  autoSyncPermissionAction="create"
-                />
-
-                {visibility === "auto-sync-permissions" &&
-                  connectorType === "notion" && (
-                    <NotionAutoSyncPermissionsNote />
-                  )}
-
-                <div className="border-t" />
-
-                {urlConfig && (
-                  <FormField
-                    control={form.control}
-                    name={
-                      urlConfig.fieldName as Path<CreateConnectorFormValues>
-                    }
-                    rules={{ required: `${urlConfig.label} is required` }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{urlConfig.label}</FormLabel>
-                        <FormDescription>
-                          {urlConfig.description}
-                        </FormDescription>
-                        <FormControl>
-                          <Input
-                            placeholder={urlConfig.placeholder}
-                            {...field}
-                            value={(field.value as string) ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                <ConnectorInlineConfigFields
-                  connectorType={connectorType}
-                  form={form}
-                  mode="create"
-                  emailRequired={emailRequired}
-                  autoSyncRequirement={connectorFieldsRequirement}
-                />
-
-                {Boolean(apiTokenLabel) && (
-                  <FormField
-                    control={form.control}
-                    name="apiToken"
-                    rules={{ required: apiTokenRequiredMessage }}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{apiTokenLabel}</FormLabel>
-                        {(apiTokenHelpText || credentialRequirement) && (
-                          <FormDescription>
-                            {apiTokenHelpText ? (
-                              <span>{apiTokenHelpText}</span>
-                            ) : null}{" "}
-                            {credentialRequirement}
-                          </FormDescription>
-                        )}
-                        <FormControl>
-                          {apiTokenMultiline ? (
-                            <SecretTextarea
-                              placeholder={apiTokenPlaceholder}
-                              rows={5}
-                              {...field}
-                            />
-                          ) : (
-                            <SecretInput
-                              placeholder={apiTokenPlaceholder}
-                              {...field}
-                            />
-                          )}
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {visibility === "auto-sync-permissions" &&
-                  connectorSupportsAdminApiKey(connectorType) && (
-                    <FormField
-                      control={form.control}
-                      name="adminApiKey"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            Organization admin API key (optional)
-                          </FormLabel>
-                          <FormDescription>
-                            <AdminApiKeyDescription type={connectorType} />
-                          </FormDescription>
-                          <FormControl>
-                            <SecretInput
-                              placeholder="Atlassian organization admin API key"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-
-                {visibility === "auto-sync-permissions" &&
-                  connectorType === "perforce" && (
-                    <PerforcePermissionSyncFields
-                      form={form}
-                      mode="create"
-                      adminCredentialDescription={permissionSyncRequirement}
-                    />
-                  )}
-
-                <Collapsible>
-                  <CollapsibleTrigger
+  if (step === "select")
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {onBack && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={handleBackToChooser}
+                  aria-label="Go back"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
+              <span>Add Connector</span>
+            </DialogTitle>
+            <DialogDescription>
+              Select a Connector type to get started.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="pt-4">
+            <SearchInput
+              ref={searchRef}
+              value={search}
+              onSearchChange={setSearch}
+              syncQueryParams={false}
+              debounceMs={300}
+              inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
+            />
+            <div className="grid grid-cols-2 gap-3 pt-4">
+              {filteredConnectorOptions.length ? (
+                filteredConnectorOptions.map((option) => (
+                  <button
+                    key={option.type}
                     type="button"
-                    className="flex w-full items-center justify-between cursor-pointer group border-t pt-3"
+                    onClick={() => handleSelectType(option.type)}
+                    className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50"
                   >
-                    <span className="text-sm font-medium">Advanced</span>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-4 space-y-4">
-                    <SchedulePicker
-                      form={form}
-                      name="schedule"
-                      connectorTypeLabel={getConnectorTypeLabel(connectorType)}
-                    />
-                    {visibility === "auto-sync-permissions" && (
-                      <PermissionSyncIntervalPicker
-                        form={form}
-                        name="permissionSyncIntervalSeconds"
-                        connectorTypeLabel={getConnectorTypeLabel(
-                          connectorType,
-                        )}
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                      <ConnectorTypeIcon
+                        type={option.type}
+                        className="h-7 w-7"
                       />
-                    )}
-                    <TextSearchLanguagePicker form={form} name="ftsLanguage" />
-                    <ConnectorAdvancedConfigFields
-                      connectorType={connectorType}
-                      form={form}
-                      mode="create"
-                    />
-                    <ProfileLabels
-                      ref={labelsRef}
-                      labels={labels}
-                      onLabelsChange={setLabels}
-                    />
-                  </CollapsibleContent>
-                </Collapsible>
-              </DialogBody>
+                    </div>
+                    <div>
+                      <div className="font-medium">
+                        {getConnectorTypeLabel(option.type)}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {option.description}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="col-span-2 flex flex-col items-center gap-2 rounded-lg border border-muted/50 p-5 text-center text-sm text-muted-foreground">
+                  No connectors match your filters. Try adjusting your search.
+                </div>
+              )}
+            </div>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+    );
 
-              <DialogStickyFooter className="mt-0">
-                <Button type="button" variant="outline" onClick={handleBack}>
-                  Back
-                </Button>
-                <Button type="submit" disabled={createConnector.isPending}>
-                  {createConnector.isPending
-                    ? "Creating..."
-                    : "Create Connector"}
-                </Button>
-              </DialogStickyFooter>
-            </DialogForm>
-          </Form>
+  return (
+    <TabbedDialogShell
+      open={open}
+      onOpenChange={handleClose}
+      title={`Configure ${getConnectorTypeLabel(connectorType)} Connector`}
+      description="Enter the connection details for your connector."
+      sidebarLabel={getConnectorTypeLabel(connectorType)}
+      sidebarDescription="Knowledge Connector"
+      sidebarIcon={
+        <ConnectorTypeIcon type={connectorType} className="h-4 w-4" />
+      }
+      activeSection={activeSection}
+      navItems={[
+        { id: "general", label: "General" },
+        { id: "advanced", label: "Advanced" },
+      ]}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={form.handleSubmit(handleSubmit, () =>
+        setActiveSection("general"),
+      )}
+      wrapForm={(children) => <Form {...form}>{children}</Form>}
+      sidebarFooter={
+        <ExternalDocsLink href={connectorDocsUrl}>Learn more</ExternalDocsLink>
+      }
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={handleBack}>
+            Back
+          </Button>
+          <Button type="submit" disabled={createConnector.isPending}>
+            {createConnector.isPending ? "Creating..." : "Create Connector"}
+          </Button>
+        </>
+      }
+    >
+      <div hidden={activeSection !== "general"} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="name"
+          rules={{ required: "Name is required" }}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Name</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={
+                    selectedType
+                      ? getConnectorNamePlaceholder(selectedType)
+                      : ""
+                  }
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                Description{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="A short description of this connector"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="environmentId"
+          render={({ field }) => (
+            <EnvironmentSelector
+              value={field.value ?? null}
+              onChange={field.onChange}
+              resource="knowledgeSource"
+              helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
+            />
+          )}
+        />
+
+        <KnowledgeSourceVisibilitySelector
+          visibility={visibility}
+          onVisibilityChange={setVisibility}
+          teamIds={teamIds}
+          onTeamIdsChange={setTeamIds}
+          showTeamRequired
+          supportsAutoSync={connectorSupportsAutoSync(
+            connectorType,
+            orchestratorK8sRuntime,
+          )}
+          autoSyncPermissionAction="create"
+        />
+
+        {visibility === "auto-sync-permissions" &&
+          connectorType === "notion" && <NotionAutoSyncPermissionsNote />}
+
+        <div className="border-t" />
+
+        {urlConfig && (
+          <FormField
+            control={form.control}
+            name={urlConfig.fieldName as Path<CreateConnectorFormValues>}
+            rules={{ required: `${urlConfig.label} is required` }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{urlConfig.label}</FormLabel>
+                <FormDescription>{urlConfig.description}</FormDescription>
+                <FormControl>
+                  <Input
+                    placeholder={urlConfig.placeholder}
+                    {...field}
+                    value={(field.value as string) ?? ""}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         )}
-      </DialogContent>
-    </Dialog>
+
+        <ConnectorInlineConfigFields
+          connectorType={connectorType}
+          form={form}
+          mode="create"
+          emailRequired={emailRequired}
+          autoSyncRequirement={connectorFieldsRequirement}
+        />
+
+        {Boolean(apiTokenLabel) && (
+          <FormField
+            control={form.control}
+            name="apiToken"
+            rules={{ required: apiTokenRequiredMessage }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{apiTokenLabel}</FormLabel>
+                {(apiTokenHelpText || credentialRequirement) && (
+                  <FormDescription>
+                    {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
+                    {credentialRequirement}
+                  </FormDescription>
+                )}
+                <FormControl>
+                  {apiTokenMultiline ? (
+                    <SecretTextarea
+                      placeholder={apiTokenPlaceholder}
+                      rows={5}
+                      {...field}
+                    />
+                  ) : (
+                    <SecretInput placeholder={apiTokenPlaceholder} {...field} />
+                  )}
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {visibility === "auto-sync-permissions" &&
+          connectorSupportsAdminApiKey(connectorType) && (
+            <FormField
+              control={form.control}
+              name="adminApiKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Organization admin API key (optional)</FormLabel>
+                  <FormDescription>
+                    <AdminApiKeyDescription type={connectorType} />
+                  </FormDescription>
+                  <FormControl>
+                    <SecretInput
+                      placeholder="Atlassian organization admin API key"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+        {visibility === "auto-sync-permissions" &&
+          connectorType === "perforce" && (
+            <PerforcePermissionSyncFields
+              form={form}
+              mode="create"
+              adminCredentialDescription={permissionSyncRequirement}
+            />
+          )}
+      </div>
+      <div hidden={activeSection !== "advanced"} className="space-y-4">
+        <SchedulePicker
+          form={form}
+          name="schedule"
+          connectorTypeLabel={getConnectorTypeLabel(connectorType)}
+        />
+        {visibility === "auto-sync-permissions" && (
+          <PermissionSyncIntervalPicker
+            form={form}
+            name="permissionSyncIntervalSeconds"
+            connectorTypeLabel={getConnectorTypeLabel(connectorType)}
+          />
+        )}
+        <TextSearchLanguagePicker form={form} name="ftsLanguage" />
+        <ConnectorAdvancedConfigFields
+          connectorType={connectorType}
+          form={form}
+          mode="create"
+        />
+        <ProfileLabels
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
+      </div>
+    </TabbedDialogShell>
   );
 }

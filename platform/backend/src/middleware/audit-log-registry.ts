@@ -383,6 +383,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
   },
 
+  "/api/llm-provider-api-keys/:id/reconnect": {
+    resourceType: "llmProviderApiKey",
+    resourceIdParam: "id",
+    action: "llmProviderApiKey.updated",
+    fetchById: (id, orgId) =>
+      LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
+  },
+
   // Tool Invocation Policies
   "/api/autonomy-policies/tool-invocation": {
     resourceType: "toolInvocationPolicy",
@@ -434,6 +442,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       KnowledgeBaseModel.findIdentityForAudit(id, orgId),
   },
 
+  "/api/knowledge-files/:fileId/content": {
+    resourceType: "knowledgeFile",
+    action: "knowledgeFile.content_upserted",
+    resourceIdParam: "fileId",
+    fetchById: (id, orgId) => KbFileModel.findByIdForAudit(id, orgId),
+  },
   // Knowledge file repository
   "/api/knowledge-files": {
     resourceType: "knowledgeFile",

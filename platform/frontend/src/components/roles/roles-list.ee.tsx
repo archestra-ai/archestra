@@ -433,15 +433,16 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                 : undefined
             }
             actions={headerAction}
-          >
-            <SearchInput
-              isLoading={isLoading}
-              objectNamePlural="roles"
-              searchFields={["name"]}
-              paramName="name"
-              className={filterSearchClass}
-            />
-          </FilterBar>
+            search={
+              <SearchInput
+                isLoading={isLoading}
+                objectNamePlural="roles"
+                searchFields={["name"]}
+                paramName="name"
+                className={filterSearchClass}
+              />
+            }
+          />
         </CollectionFilters>
 
         {isLoadingError ? (

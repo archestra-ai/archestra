@@ -1,5 +1,7 @@
 import { providerDisplayNames } from "@archestra/shared";
 import { vi } from "vitest";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AuditLogModel from "@/models/audit-log";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -242,6 +244,10 @@ describe("GET /api/llm-provider-api-keys/available", () => {
       name: "SuperGrok",
     });
 
+    await LlmProviderApiKeyModel.setRequiresReauthentication({
+      id: ownerKey.id,
+      requiresReauthentication: true,
+    });
     const response = await app.inject({
       method: "GET",
       url: `/api/llm-provider-api-keys/available?includeKeyId=${ownerKey.id}`,
@@ -254,6 +260,7 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     // The viewer can't list the owner's personal key, but the included agent
     // key must say it is a SuperGrok credential so the chat/agent preflight
     // gates sending behind "connect your own account".
+    expect(includedKey).not.toHaveProperty("requiresReauthentication");
     expect(includedKey).toMatchObject({
       isAgentKey: true,
       subscriptionKind: "x-premium",
@@ -1709,6 +1716,7 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     await makeMember(memberUser.id, organizationId, { role: "member" });
 
     app = await createApp(organizationId, memberUser);
+    registerAuditLogHook(app);
   });
 
   afterEach(async () => {
@@ -1726,6 +1734,10 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
       userId: memberUser.id,
     });
 
+    await LlmProviderApiKeyModel.setRequiresReauthentication({
+      id: key.id,
+      requiresReauthentication: true,
+    });
     const response = await app.inject({
       method: "POST",
       url: `/api/llm-provider-api-keys/${key.id}/reconnect`,
@@ -1733,6 +1745,23 @@ describe("POST /api/llm-provider-api-keys/:id/reconnect", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.json().requiresReauthentication).toBe(false);
+    expect(
+      (await LlmProviderApiKeyModel.findById(key.id))?.requiresReauthentication,
+    ).toBe(false);
+    await vi.waitFor(async () => {
+      const { data: rows } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "llmProviderApiKey",
+        limit: 50,
+        offset: 0,
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].action).toBe("llmProviderApiKey.updated");
+      expect(rows[0].before).toMatchObject({ requiresReauthentication: true });
+      expect(rows[0].after).toMatchObject({ requiresReauthentication: false });
+      expect(JSON.stringify(rows[0])).not.toContain(freshCredential);
+    });
     expect(mockTestProviderApiKey).toHaveBeenCalledWith(
       expect.objectContaining({ provider: "openai", apiKey: freshCredential }),
     );

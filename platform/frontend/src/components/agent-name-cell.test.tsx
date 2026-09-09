@@ -17,4 +17,16 @@ describe("AgentNameCell", () => {
 
     expect(screen.getByText("Built-in")).toBeInTheDocument();
   });
+
+  it("renders a leading icon inline before the name when provided", () => {
+    render(
+      <AgentNameCell
+        name="Iconic Agent"
+        icon={<span data-testid="agent-icon" />}
+      />,
+    );
+
+    expect(screen.getByTestId("agent-icon")).toBeInTheDocument();
+    expect(screen.getByText("Iconic Agent")).toBeInTheDocument();
+  });
 });

@@ -269,6 +269,16 @@ function ProjectsList() {
         <div>
           <CollectionFilters>
             <FilterBar
+              search={
+                !isDeletedView ? (
+                  <SearchInput
+                    isLoading={isFetching}
+                    placeholder="Search projects"
+                    paramName="search"
+                    className={filterSearchClass}
+                  />
+                ) : null
+              }
               leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
             >
@@ -276,12 +286,6 @@ function ProjectsList() {
               search and scope, so live controls would read as broken filters. */}
               {!isDeletedView && (
                 <>
-                  <SearchInput
-                    isLoading={isFetching}
-                    placeholder="Search projects"
-                    paramName="search"
-                    className={filterSearchClass}
-                  />
                   <ResourceScopeFilter
                     ownerLabelPlural="projects"
                     allLabel="All projects"

@@ -31,6 +31,7 @@ import {
   findAccessibleKnowledgeBase,
   findAccessibleKnowledgeBasesForFiles,
 } from "@/services/knowledge-base-access";
+import { upsertKnowledgeFile } from "@/services/knowledge-file-ingestion";
 import { readRowBytes } from "@/skills-sandbox/file-storage";
 import {
   ApiError,
@@ -258,6 +259,55 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds: body.teamIds,
         labels: await KbFileLabelModel.getLabelsFor(file.id),
       };
+    },
+  );
+
+  fastify.put(
+    "/api/knowledge-files/:fileId/content",
+    {
+      schema: {
+        operationId: RouteId.UpsertKnowledgeFile,
+        description:
+          "Create or replace a document using a stable client-generated UUID and index it into a knowledge base. Only the uploader may replace it. Existing audiences and labels are preserved. Re-indexes all knowledge bases already linked to the file; the caller must have access to each.",
+        tags: ["Knowledge Files"],
+        params: FileParamsSchema,
+        body: z.object({
+          filename: z.string().trim().min(1).max(512),
+          mimeType: z.string().trim().min(1).max(255),
+          content: z.base64().min(1).describe("Base64-encoded file bytes"),
+          knowledgeBaseId: z.string().uuid(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            id: z.string().uuid(),
+            results: z.array(
+              z.object({
+                knowledgeBaseId: z.string().uuid(),
+                indexed: z.number(),
+                failures: z.array(
+                  z.object({ fileId: z.string(), error: z.string() }),
+                ),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (request) => {
+      const result = await upsertKnowledgeFile({
+        ...request.body,
+        id: request.params.fileId,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      request.auditAfter = {
+        ...(await KbFileModel.findByIdForAudit(
+          result.id,
+          request.organizationId,
+        )),
+        results: result.results,
+      };
+      return result;
     },
   );
 

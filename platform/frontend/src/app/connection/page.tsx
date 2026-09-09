@@ -6,6 +6,7 @@ import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
 import { CONNECT_CLIENTS } from "./clients";
@@ -19,6 +20,11 @@ export default function ConnectionPage() {
   const isApproval = !!searchParams.get("connectRequest");
   const requestedClient = CONNECT_CLIENTS.find(
     (client) => client.id === searchParams.get("clientId"),
+  );
+  usePageTitle(
+    isApproval
+      ? `Connect ${requestedClient?.label ?? "your client"}`
+      : "Connect",
   );
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const organizationQuery = useOrganization(true, { fresh: true });

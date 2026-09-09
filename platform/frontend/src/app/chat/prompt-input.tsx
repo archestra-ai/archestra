@@ -38,6 +38,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -61,6 +62,7 @@ import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
@@ -285,6 +287,14 @@ const PromptInputContent = ({
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
 }) => {
+  const selectedCredentialId =
+    currentConversationChatApiKeyId ?? initialApiKeyId ?? agentLlmApiKeyId;
+  const { data: credentialOptions } = useAvailableLlmProviderApiKeys({
+    toastOnError: false,
+  });
+  const rejectedCredential = credentialOptions?.find(
+    (key) => key.id === selectedCredentialId && key.requiresReauthentication,
+  );
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
@@ -902,6 +912,12 @@ const PromptInputContent = ({
 
   return (
     <div className="relative">
+      {rejectedCredential && (
+        <SubscriptionReconnectNotice
+          credential={rejectedCredential}
+          className="mb-2"
+        />
+      )}
       {conversationId && queuedMessages.length > 0 && (
         <div
           className="mb-2 flex max-h-40 flex-col gap-1 overflow-y-auto"

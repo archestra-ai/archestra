@@ -45,12 +45,17 @@ import {
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
+import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
+import {
+  CompactWarning,
+  CompactWarningText,
+} from "@/components/ui/compact-warning";
 import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -98,19 +103,25 @@ export default function ModelsPage() {
     isLoadingError: isModelsLoadError,
     refetch,
   } = useModelsWithApiKeys({ toastOnError: false });
-  const { data: apiKeys = [] } = useLlmProviderApiKeys();
+  const { data: apiKeys = [], isLoading: isApiKeysLoading } =
+    useLlmProviderApiKeys();
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const selectedLabels = useSelectedLabels();
   const [isCreateApiKeyDialogOpen, setIsCreateApiKeyDialogOpen] =
     useState(false);
-  const [search, setSearch] = useState("");
-  const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
   const [apiKeyFilterOpen, setApiKeyFilterOpen] = useState(false);
-  const [modelTypeFilter, setModelTypeFilter] =
-    useState<ModelsPageModelTypeFilter>("all");
-  const [freeOnly, setFreeOnly] = useState(false);
+  // Filters live in the URL so they survive reloads and are shareable, like the
+  // other list pages' table filters.
+  const search = searchParams.get("search") ?? "";
+  const apiKeyFilter = searchParams.get("apiKey") ?? "all";
+  const modelTypeParam = searchParams.get("modelType");
+  const modelTypeFilter: ModelsPageModelTypeFilter =
+    modelTypeParam === "chat" || modelTypeParam === "embedding"
+      ? modelTypeParam
+      : "all";
+  const freeOnly = searchParams.get("freeOnly") === "true";
   const labelsFilter = searchParams.get("labels") ?? "";
   const editId = searchParams.get("edit");
   const modelFromUrl = useMemo(
@@ -130,10 +141,13 @@ export default function ModelsPage() {
   );
 
   useEffect(() => {
-    if (!canFilterFreeModels && freeOnly) {
-      setFreeOnly(false);
+    // Wait for the provider-key query to settle before clearing: on a cold
+    // cache `apiKeys` starts empty, so acting while it loads would strip a
+    // `?freeOnly=true` deep link before an OpenRouter key had a chance to load.
+    if (!isApiKeysLoading && !canFilterFreeModels && freeOnly) {
+      updateQueryParams({ freeOnly: null });
     }
-  }, [canFilterFreeModels, freeOnly]);
+  }, [isApiKeysLoading, canFilterFreeModels, freeOnly, updateQueryParams]);
 
   const bulkVisibility = useBulkUpdateModelVisibility();
 
@@ -204,11 +218,13 @@ export default function ModelsPage() {
       labelsFilter,
   );
   const clearFilters = useCallback(() => {
-    setSearch("");
-    setApiKeyFilter("all");
-    setModelTypeFilter("all");
-    setFreeOnly(false);
-    updateQueryParams({ labels: null });
+    updateQueryParams({
+      search: null,
+      apiKey: null,
+      modelType: null,
+      freeOnly: null,
+      labels: null,
+    });
   }, [updateQueryParams]);
 
   // Hiding keeps a model out of the pickers without deleting anything, so the
@@ -251,96 +267,90 @@ export default function ModelsPage() {
         allLabel: "Select all models on this page",
       }),
       {
-        id: "providerIcon",
-        size: 40,
-        header: "",
-        cell: ({ row }) => {
-          const config = PROVIDER_CONFIG[row.original.provider];
-          if (!config) return null;
-          return (
-            <div className="flex items-center justify-center">
-              <Image
-                src={config.icon}
-                alt={config.name}
-                width={20}
-                height={20}
-                className="rounded dark:invert"
-              />
-            </div>
-          );
-        },
-      },
-      {
         accessorKey: "modelId",
-        size: 280,
         header: "Model ID",
         cell: ({ row }) => {
           const { modelId, provider, isFree } = row.original;
           const isLatestAlias = isOpenRouterLatestAlias(provider, modelId);
+          // The provider icon sits inline before the model ID (as the knowledge
+          // connectors table does) rather than in its own column, saving the
+          // table a fixed slot of horizontal space.
+          const config = PROVIDER_CONFIG[provider];
           return (
-            <div className="min-w-0 space-y-2">
-              <span className="flex items-center gap-2 font-mono text-sm">
-                <span className="truncate">{modelId}</span>
-                <LabelTags labels={row.original.labels} />
-              </span>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                {isFree && <FreeModelBadge />}
-                {isLatestAlias && <LatestModelBadge />}
-                {row.original.isBest && <BestModelBadge />}
-                {providerRequiresPerUserCredential(provider) && (
-                  <PerUserModelBadge />
-                )}
-                {row.original.embeddingDimensions !== null && (
-                  <EmbeddingModelBadge />
-                )}
-                {row.original.teams.length > 0 && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge variant="outline" className="text-xs gap-1">
-                          <Users className="h-3 w-3 shrink-0" />
-                          <span>
-                            {row.original.teams.length === 1
-                              ? "1 team"
-                              : `${row.original.teams.length} teams`}
-                          </span>
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>
-                          Limited to:{" "}
-                          {row.original.teams
-                            .map((team) => team.name)
-                            .join(", ")}
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {row.original.users.length > 0 && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge variant="outline" className="text-xs gap-1">
-                          <UserRoundCheck className="h-3 w-3 shrink-0" />
-                          <span>
-                            {row.original.users.length === 1
-                              ? "1 person"
-                              : `${row.original.users.length} people`}
-                          </span>
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>
-                          Limited to:{" "}
-                          {row.original.users
-                            .map((user) => user.name)
-                            .join(", ")}
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+            <div className="flex min-w-0 items-center gap-3">
+              {config && (
+                <Image
+                  src={config.icon}
+                  alt={config.name}
+                  width={20}
+                  height={20}
+                  className="shrink-0 rounded dark:invert"
+                />
+              )}
+              <div className="min-w-0 space-y-2">
+                <span className="flex items-center gap-2 font-mono text-sm">
+                  <span className="truncate">{modelId}</span>
+                  <LabelTags labels={row.original.labels} />
+                </span>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                  {isFree && <FreeModelBadge />}
+                  {isLatestAlias && <LatestModelBadge />}
+                  {row.original.isBest && <BestModelBadge />}
+                  {providerRequiresPerUserCredential(provider) && (
+                    <PerUserModelBadge />
+                  )}
+                  {row.original.embeddingDimensions !== null && (
+                    <EmbeddingModelBadge />
+                  )}
+                  {row.original.teams.length > 0 && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <Users className="h-3 w-3 shrink-0" />
+                            <span>
+                              {row.original.teams.length === 1
+                                ? "1 team"
+                                : `${row.original.teams.length} teams`}
+                            </span>
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>
+                            Limited to:{" "}
+                            {row.original.teams
+                              .map((team) => team.name)
+                              .join(", ")}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {row.original.users.length > 0 && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <UserRoundCheck className="h-3 w-3 shrink-0" />
+                            <span>
+                              {row.original.users.length === 1
+                                ? "1 person"
+                                : `${row.original.users.length} people`}
+                            </span>
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>
+                            Limited to:{" "}
+                            {row.original.users
+                              .map((user) => user.name)
+                              .join(", ")}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -348,6 +358,7 @@ export default function ModelsPage() {
       },
       {
         accessorKey: "apiKeys",
+        size: 160,
         header: "Source",
         cell: ({ row }) => {
           const apiKeys = row.original.apiKeys;
@@ -396,40 +407,32 @@ export default function ModelsPage() {
         },
       },
       {
-        id: "pricingInput",
-        size: 104,
-        header: "$/M Input",
+        id: "pricingInputOutput",
+        size: 160,
+        // Input and output prices share one column (like Cache R/W) to save
+        // horizontal space, shown "$input / $output" and free to wrap onto two
+        // lines when the column is narrow.
+        header: "$/M In/Out",
         cell: ({ row }) => {
-          const price = row.original.pricePerMillionInput;
+          const { pricePerMillionInput, pricePerMillionOutput } = row.original;
           if (hasUnknownCapabilities(row.original)) return null;
-          return price ? (
-            <span className="text-sm font-mono">
-              ${formatPricePerMillion(price)}
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">-</span>
-          );
-        },
-      },
-      {
-        id: "pricingOutput",
-        size: 104,
-        header: "$/M Output",
-        cell: ({ row }) => {
-          const price = row.original.pricePerMillionOutput;
-          if (hasUnknownCapabilities(row.original)) return null;
-          return price ? (
-            <span className="text-sm font-mono">
-              ${formatPricePerMillion(price)}
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">-</span>
+          if (!pricePerMillionInput && !pricePerMillionOutput) {
+            return <span className="text-sm text-muted-foreground">-</span>;
+          }
+          const input = pricePerMillionInput
+            ? `$${formatPricePerMillion(pricePerMillionInput)}`
+            : "-";
+          const output = pricePerMillionOutput
+            ? `$${formatPricePerMillion(pricePerMillionOutput)}`
+            : "-";
+          return (
+            <span className="text-sm font-mono">{`${input} / ${output}`}</span>
           );
         },
       },
       {
         id: "pricingCache",
-        size: 132,
+        size: 160,
         header: "$/M Cache R/W",
         cell: ({ row }) => {
           const { pricePerMillionCacheRead, pricePerMillionCacheWrite } =
@@ -452,7 +455,7 @@ export default function ModelsPage() {
         id: "contextLength",
         // Sorting must follow what the cell shows, not the architectural column.
         accessorFn: (row) => resolveDisplayContextLength(row).display,
-        size: 100,
+        size: 88,
         header: "Context",
         cell: ({ row }) => {
           if (hasUnknownCapabilities(row.original)) {
@@ -561,28 +564,52 @@ export default function ModelsPage() {
       description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
       actionButton={refreshModelsButton}
     >
+      {(apiKeys.some((key) => key.requiresReauthentication) ||
+        syncModelsMutation.data?.success === false) && (
+        <div className="mb-4 space-y-2">
+          {apiKeys
+            .filter((key) => key.requiresReauthentication)
+            .map((key) => (
+              <SubscriptionReconnectNotice key={key.id} credential={key} />
+            ))}
+          {syncModelsMutation.data?.success === false && (
+            <CompactWarning>
+              <RefreshCw />
+              <span className="font-medium">
+                Some models could not be refreshed
+              </span>
+              <CompactWarningText>
+                {syncModelsMutation.data.failures
+                  .map((failure) => failure.name)
+                  .join(", ")}
+                . Existing models are still listed.
+              </CompactWarningText>
+            </CompactWarning>
+          )}
+        </div>
+      )}
       <BulkActionsScope>
         {models.length > 0 && (
           <CollectionFilters>
             <FilterBar
               leading
               onClearFilters={hasActiveFilters ? clearFilters : undefined}
+              search={
+                <SearchInput
+                  objectNamePlural="models"
+                  searchFields={["model ID"]}
+                  paramName="search"
+                  className={filterSearchClass}
+                />
+              }
             >
-              <SearchInput
-                objectNamePlural="models"
-                searchFields={["model ID"]}
-                value={search}
-                onSearchChange={setSearch}
-                syncQueryParams={false}
-                className={filterSearchClass}
-              />
               <LlmProviderApiKeyDropdown
                 availableKeys={apiKeys}
                 selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
                 open={apiKeyFilterOpen}
                 onOpenChange={setApiKeyFilterOpen}
                 onSelectKey={(value) => {
-                  setApiKeyFilter(value);
+                  updateQueryParams({ apiKey: value });
                   setApiKeyFilterOpen(false);
                 }}
                 triggerVariant="select"
@@ -593,14 +620,14 @@ export default function ModelsPage() {
                 allOptionLabel="All provider API keys"
                 allOptionSelected={apiKeyFilter === "all"}
                 onSelectAllOption={() => {
-                  setApiKeyFilter("all");
+                  updateQueryParams({ apiKey: null });
                   setApiKeyFilterOpen(false);
                 }}
               />
               <FilterSelect
                 value={modelTypeFilter}
                 onValueChange={(v) =>
-                  setModelTypeFilter(v as "all" | "chat" | "embedding")
+                  updateQueryParams({ modelType: v === "all" ? null : v })
                 }
                 placeholder="Model type"
                 items={[
@@ -659,7 +686,9 @@ export default function ModelsPage() {
                   <Switch
                     id="models-free-only"
                     checked={freeOnly}
-                    onCheckedChange={setFreeOnly}
+                    onCheckedChange={(checked) =>
+                      updateQueryParams({ freeOnly: checked ? "true" : null })
+                    }
                   />
                   <Label
                     htmlFor="models-free-only"
@@ -708,6 +737,15 @@ export default function ModelsPage() {
 
         <DataTable
           columns={columns}
+          flexibleColumnIds={["modelId"]}
+          fixedWidthColumnIds={[
+            "apiKeys",
+            "pricingInputOutput",
+            "pricingCache",
+            "contextLength",
+            "outputLength",
+          ]}
+          tableClassName="min-w-[1000px]"
           data={filteredModels}
           getRowId={(row) => row.id}
           rowSelection={rowSelection}

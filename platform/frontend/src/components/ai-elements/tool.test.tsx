@@ -58,9 +58,14 @@ describe("Tool copy actions", () => {
 
     render(<ToolInput input={{ command: "echo hi\necho bye", cwd: "/tmp" }} />);
 
-    // per-field blocks instead of one JSON dump with escaped \n
-    expect(screen.getByText("echo hi")).toBeInTheDocument();
-    expect(screen.getByText("echo bye")).toBeInTheDocument();
+    // The raw multiline value is present immediately, even before the lazy
+    // highlighter loads and splits the text into separate line elements.
+    const command = screen.getAllByRole("region", {
+      name: "Code sample, text",
+    })[0];
+    expect(command.querySelector("code")?.textContent).toBe(
+      "echo hi\necho bye",
+    );
     expect(screen.queryByText(/\\n/)).not.toBeInTheDocument();
 
     // the field copy button copies the raw string, not JSON

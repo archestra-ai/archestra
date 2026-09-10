@@ -3,7 +3,7 @@ title: Runtime Credentials
 category: Administration
 description: Manage reusable secrets for Agent Runtime
 order: 5
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -31,6 +31,8 @@ Definitions describe the credential but do not contain its secret value.
 Connect organization values from **Settings → Agents → Runtime credentials**.
 
 Connect personal values under **Personal settings → Connections**. Archestra prompts for a missing personal value when a run starts.
+
+Credential setup links from conversations open a dialog for all missing credentials. After saving, return to the conversation and retry your request.
 
 Saved values are never displayed again. They use the configured [secrets manager](/docs/platform-secrets-management).
 

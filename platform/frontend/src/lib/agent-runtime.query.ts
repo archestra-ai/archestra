@@ -337,6 +337,51 @@ export function useSetAgentRuntimeCredential(agentId: string) {
   });
 }
 
+/** Save independently so a failed connection does not discard successful ones. */
+export function useSetMissingAgentRuntimeCredentials(agentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (credentials: Array<{ key: string; value: string }>) => {
+      const saved: string[] = [];
+      const failed: string[] = [];
+      // Agent-specific shared secrets update one bag. Concurrent writes could
+      // each read the old bag and overwrite another credential's value.
+      for (const { key, value } of credentials) {
+        try {
+          const { error } = await setAgentRuntimeCredential({
+            path: { id: agentId, key },
+            body: { value },
+          });
+          if (error) throw reportApiError(error);
+          saved.push(key);
+        } catch {
+          failed.push(key);
+        }
+      }
+      return { saved, failed };
+    },
+    onSuccess: async ({ saved, failed }) => {
+      if (failed.length > 0) {
+        toast.error(
+          "Some credentials could not be saved. Retry the remaining fields.",
+        );
+      } else if (saved.length > 0) {
+        toast.success("Credentials saved");
+      }
+      // Reusable connections may also satisfy other Agents' preflights.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["runtime-credentials"] }),
+        queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === "agents" &&
+            query.queryKey[2] === "runtime" &&
+            query.queryKey[3] === "preflight",
+        }),
+      ]);
+    },
+  });
+}
+
 export function useDeleteAgentRuntimeCredential(agentId: string) {
   const queryClient = useQueryClient();
   return useMutation({

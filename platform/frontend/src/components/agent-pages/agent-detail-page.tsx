@@ -21,6 +21,7 @@ import { ConvertToSkillDialog } from "@/app/agents/convert-to-skill-dialog";
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
@@ -672,6 +673,14 @@ function AgentDetails({
         )}
       </div>
 
+      {hasAgentRuntime && !isGone && (
+        <AgentRuntimeCredentialsDeepLink
+          key={agent.id}
+          agentId={agent.id}
+          declarations={agent.runtime?.credentials ?? []}
+          canEditAgent={canEdit}
+        />
+      )}
       <UnsavedChangesDialog
         open={guard.confirmOpen}
         onKeepEditing={() => {

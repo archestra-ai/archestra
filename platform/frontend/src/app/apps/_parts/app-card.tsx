@@ -5,7 +5,7 @@ import {
   AppWindow,
   History,
   Loader2,
-  MoreHorizontal,
+  MessageSquare,
   Pin,
   PinOff,
   Server,
@@ -13,9 +13,8 @@ import {
   SquareArrowOutUpRight,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { LabelTags } from "@/components/label-tags";
@@ -23,15 +22,12 @@ import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-histor
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { TableCard } from "@/components/table-card-view";
-import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  type TableRowAction,
+  TableRowActions,
+} from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -78,55 +74,6 @@ export function AppCard({
     />
   ) : (
     <ExternalAppCard app={app} showDisabledSelection={selection === null} />
-  );
-}
-
-// Shared card chrome: the scope pill / owner badge / overflow menu cluster that
-// sits at the right of the card's header row (mirroring the project card).
-function CardOverflowMenu({
-  leading,
-  children,
-}: {
-  leading?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      {leading}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground"
-            aria-label="More actions"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">{children}</DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}
-
-// Pin/Unpin menu item (mirrors the project card's): pins are per-user and
-// toggle from the same overflow menu on both card kinds.
-function PinMenuItem({
-  pinned,
-  target,
-}: {
-  pinned: boolean;
-  target: PinAppTarget;
-}) {
-  const pinAppMutation = usePinApp();
-  return (
-    <DropdownMenuItem
-      onSelect={() => pinAppMutation.mutate({ pinned: !pinned, target })}
-    >
-      {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-      <span>{pinned ? "Unpin" : "Pin"}</span>
-    </DropdownMenuItem>
   );
 }
 
@@ -197,6 +144,7 @@ function OwnedAppCard({
 }) {
   const router = useRouter();
   const openApp = useOpenAppInChat();
+  const pinApp = usePinApp();
   const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
   const access = useAppAccess(app);
   // A personal app the caller only reaches through app:admin oversight
@@ -225,6 +173,7 @@ function OwnedAppCard({
   });
 
   const handleOpen = async (lockedChat = false) => {
+    if (isOpening) return;
     setIsOpening(true);
     const result = await openApp.mutateAsync({ appId: app.id, lockedChat });
     if (result?.conversationId) {
@@ -233,6 +182,69 @@ function OwnedAppCard({
       setIsOpening(false);
     }
   };
+  const actions: TableRowAction[] = [
+    {
+      icon: <MessageSquare className="h-4 w-4" />,
+      label: "Chat",
+      disabled: isOpening,
+      onClick: () => void handleOpen(),
+    },
+    {
+      icon: <Settings className="h-4 w-4" />,
+      label: "Settings",
+      permissions: { app: ["update"] },
+      disabled: !!settingsDisabledReason,
+      disabledTooltip: settingsDisabledReason,
+      onClick: () => onOpenSettings?.(app),
+    },
+  ];
+  const dropdownActions: TableRowAction[] = [
+    {
+      icon: app.pinnedAt ? (
+        <PinOff className="h-4 w-4" />
+      ) : (
+        <Pin className="h-4 w-4" />
+      ),
+      label: app.pinnedAt ? "Unpin" : "Pin",
+      onClick: () =>
+        pinApp.mutate({
+          pinned: !app.pinnedAt,
+          target: { source: "owned", appId: app.id } satisfies PinAppTarget,
+        }),
+    },
+    {
+      icon: <History className="h-4 w-4" />,
+      label: "Version history",
+      permissions: { app: ["update"] },
+      disabled: !!settingsDisabledReason,
+      disabledTooltip: settingsDisabledReason,
+      onClick: () => setHistoryOpen(true),
+    },
+    {
+      icon: <SquareArrowOutUpRight className="h-4 w-4" />,
+      label: "Open in new tab",
+      href: appRunUrl(app),
+      external: true,
+    },
+    ...(lockedChatEnabled
+      ? [
+          {
+            icon: <LockedChatIcon className="h-4 w-4" />,
+            label: "Open as locked chat",
+            onClick: () => void handleOpen(true),
+          } satisfies TableRowAction,
+        ]
+      : []),
+    {
+      icon: <Trash2 className="h-4 w-4" />,
+      label: "Delete",
+      variant: "destructive",
+      permissions: { app: ["delete"] },
+      disabled: !!deleteDisabledReason,
+      disabledTooltip: deleteDisabledReason,
+      onClick: () => setDeleteOpen(true),
+    },
+  ];
   return (
     <>
       <TableCard
@@ -254,44 +266,11 @@ function OwnedAppCard({
         }
         description={app.description}
         actions={
-          <CardOverflowMenu>
-            <PinMenuItem
-              pinned={!!app.pinnedAt}
-              target={{ source: "owned", appId: app.id }}
-            />
-            <AppMenuItem
-              icon={<Settings className="h-4 w-4" />}
-              label="Settings"
-              disabledReason={settingsDisabledReason}
-              onSelect={() => onOpenSettings?.(app)}
-            />
-            <AppMenuItem
-              icon={<History className="h-4 w-4" />}
-              label="Version history"
-              disabledReason={settingsDisabledReason}
-              onSelect={() => setHistoryOpen(true)}
-            />
-            <DropdownMenuItem asChild>
-              <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
-                <SquareArrowOutUpRight className="h-4 w-4" />
-                Open in new tab
-              </Link>
-            </DropdownMenuItem>
-            {lockedChatEnabled ? (
-              <DropdownMenuItem onSelect={() => void handleOpen(true)}>
-                <LockedChatIcon className="h-4 w-4" />
-                Open as locked chat
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuSeparator />
-            <AppMenuItem
-              icon={<Trash2 className="h-4 w-4" />}
-              label="Delete"
-              variant="destructive"
-              disabledReason={deleteDisabledReason}
-              onSelect={() => setDeleteOpen(true)}
-            />
-          </CardOverflowMenu>
+          <TableRowActions
+            actions={actions}
+            dropdownActions={dropdownActions}
+            itemName={app.name}
+          />
         }
         selected={selection?.selected}
         selectionDisabled={selection?.selectionDisabled || !access.canEdit}
@@ -360,6 +339,7 @@ function ExternalAppCard({
 }) {
   const router = useRouter();
   const openApp = useOpenExternalAppInChat();
+  const pinApp = usePinApp();
   // Stays true from click through the redirect; see OwnedAppCard for the same
   // reasoning. Only a failure resets it (the card unmounts on success).
   const [isOpening, setIsOpening] = useState(false);
@@ -371,6 +351,7 @@ function ExternalAppCard({
   const serverHref = `/mcp/registry/${app.catalogId}`;
 
   const handleOpen = async (lockedChat = false) => {
+    if (isOpening) return;
     setIsOpening(true);
     const result = await openApp.mutateAsync({
       mcpServerId: app.mcpServerId,
@@ -389,6 +370,58 @@ function ExternalAppCard({
       setIsOpening(false);
     }
   };
+  const actions: TableRowAction[] = [
+    {
+      icon: <MessageSquare className="h-4 w-4" />,
+      label: "Chat",
+      disabled: isOpening,
+      onClick: () => void handleOpen(),
+    },
+    {
+      icon: <Server className="h-4 w-4" />,
+      label: "Manage MCP server",
+      href: serverHref,
+    },
+  ];
+  const dropdownActions: TableRowAction[] = [
+    {
+      icon: app.pinnedAt ? (
+        <PinOff className="h-4 w-4" />
+      ) : (
+        <Pin className="h-4 w-4" />
+      ),
+      label: app.pinnedAt ? "Unpin" : "Pin",
+      onClick: () =>
+        pinApp.mutate({
+          pinned: !app.pinnedAt,
+          target: {
+            source: "external",
+            mcpServerId: app.mcpServerId,
+            resourceUri: app.resourceUri,
+            toolName: app.toolName,
+          } satisfies PinAppTarget,
+        }),
+    },
+    ...(app.requiresInput
+      ? []
+      : [
+          {
+            icon: <SquareArrowOutUpRight className="h-4 w-4" />,
+            label: "Open in new tab",
+            href: runHref,
+            external: true,
+          } satisfies TableRowAction,
+        ]),
+    ...(lockedChatEnabled
+      ? [
+          {
+            icon: <LockedChatIcon className="h-4 w-4" />,
+            label: "Open as locked chat",
+            onClick: () => void handleOpen(true),
+          } satisfies TableRowAction,
+        ]
+      : []),
+  ];
   return (
     <TableCard
       className="relative"
@@ -409,37 +442,11 @@ function ExternalAppCard({
       }
       description={app.description}
       actions={
-        <CardOverflowMenu>
-          <PinMenuItem
-            pinned={!!app.pinnedAt}
-            target={{
-              source: "external",
-              mcpServerId: app.mcpServerId,
-              resourceUri: app.resourceUri,
-              toolName: app.toolName,
-            }}
-          />
-          {app.requiresInput ? null : (
-            <DropdownMenuItem asChild>
-              <Link href={runHref} target="_blank" rel="noreferrer">
-                <SquareArrowOutUpRight className="h-4 w-4" />
-                Open in new tab
-              </Link>
-            </DropdownMenuItem>
-          )}
-          {lockedChatEnabled ? (
-            <DropdownMenuItem onSelect={() => void handleOpen(true)}>
-              <LockedChatIcon className="h-4 w-4" />
-              Open as locked chat
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem asChild>
-            <Link href={serverHref}>
-              <Server className="h-4 w-4" />
-              Manage MCP server
-            </Link>
-          </DropdownMenuItem>
-        </CardOverflowMenu>
+        <TableRowActions
+          actions={actions}
+          dropdownActions={dropdownActions}
+          itemName={app.name}
+        />
       }
       selected={false}
       selectionDisabled={showDisabledSelection}
@@ -453,63 +460,5 @@ function ExternalAppCard({
         <ScopeBadge scope={app.scope} />
       </div>
     </TableCard>
-  );
-}
-
-/**
- * A refused menu item stays in the menu so the action remains discoverable.
- * `aria-disabled` keeps it focusable, while the guarded select handler and the
- * visible/screen-reader reason explain why it cannot run.
- */
-function AppMenuItem({
-  icon,
-  label,
-  onSelect,
-  disabledReason,
-  variant,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onSelect: () => void;
-  disabledReason?: string;
-  variant?: "default" | "destructive";
-}) {
-  const reasonId = useId();
-  const isDisabled = !!disabledReason;
-  const content = (
-    <DropdownMenuItem
-      aria-disabled={isDisabled || undefined}
-      aria-describedby={isDisabled ? reasonId : undefined}
-      className={isDisabled ? "cursor-not-allowed opacity-50" : undefined}
-      variant={variant}
-      onSelect={(event) => {
-        if (isDisabled) {
-          event.preventDefault();
-          return;
-        }
-        onSelect();
-      }}
-    >
-      {icon}
-      <span>{label}</span>
-      {disabledReason ? (
-        <span id={reasonId} aria-hidden="true" className="sr-only">
-          {disabledReason}
-        </span>
-      ) : null}
-    </DropdownMenuItem>
-  );
-
-  if (!disabledReason) return content;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="cursor-not-allowed">{content}</div>
-      </TooltipTrigger>
-      <TooltipContent side="left" className="max-w-64">
-        {disabledReason}
-      </TooltipContent>
-    </Tooltip>
   );
 }

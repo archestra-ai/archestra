@@ -40,6 +40,13 @@ class AgentVersionModel {
     return createHash("sha256").update(stableStringify(snapshot)).digest("hex");
   }
 
+  /** Public-safe identity for comparing rule sets without exposing references. */
+  static computeActivationSkillRuleDigest(
+    rules: AgentConfigSnapshot["activationSkillRules"],
+  ): string {
+    return createHash("sha256").update(stableStringify(rules)).digest("hex");
+  }
+
   /**
    * Assemble the agent's canonical config snapshot. Queries run through the
    * caller's transaction so the snapshot sees that transaction's own
@@ -59,6 +66,7 @@ class AgentVersionModel {
       knowledgeBases,
       connectors,
       excludedConnectors,
+      activationSkillRuleRows,
       modelRows,
       keyRows,
     ] = await Promise.all([
@@ -161,6 +169,10 @@ class AgentVersionModel {
           ),
         )
         .where(eq(schema.agentExcludedConnectorsTable.agentId, agent.id)),
+      tx
+        .select()
+        .from(schema.agentActivationSkillRulesTable)
+        .where(eq(schema.agentActivationSkillRulesTable.agentId, agent.id)),
       agent.modelId
         ? tx
             .select({ externalId: schema.modelsTable.externalId })
@@ -194,6 +206,15 @@ class AgentVersionModel {
       missingCredentialBehavior: agent.missingCredentialBehavior,
       accessAllTools: agent.accessAllTools,
       accessAllSubagents: agent.accessAllSubagents,
+      activationSkillMode: agent.activationSkillMode,
+      activationSkillRules: activationSkillRuleRows
+        .map((row) => ({
+          disposition: row.disposition,
+          reference: activationSkillRuleReference(row),
+        }))
+        .sort((left, right) =>
+          stableStringify(left).localeCompare(stableStringify(right)),
+        ),
       // Header NAMES only (no values); order is not meaningful.
       passthroughHeaders: [...(agent.passthroughHeaders ?? [])].sort(),
       incomingEmailEnabled: agent.incomingEmailEnabled,
@@ -413,6 +434,29 @@ class AgentVersionModel {
   }
 }
 
+function activationSkillRuleReference(
+  row: typeof schema.agentActivationSkillRulesTable.$inferSelect,
+) {
+  if (row.source === "native" && row.skillId) {
+    return { source: row.source, skillId: row.skillId } as const;
+  }
+  if (row.source === "external_mcp" && row.mcpServerId && row.uri !== null) {
+    return {
+      source: row.source,
+      mcpServerId: row.mcpServerId,
+      uri: row.uri,
+    } as const;
+  }
+  if (row.source === "plugin" && row.pluginId && row.skillPath !== null) {
+    return {
+      source: row.source,
+      pluginId: row.pluginId,
+      skillPath: row.skillPath,
+    } as const;
+  }
+  throw new Error("Invalid stored activation skill rule");
+}
+
 export default AgentVersionModel;
 
 // === Internal helpers ===
@@ -454,6 +498,14 @@ function normalizeAgentVersion(row: AgentVersion): AgentVersion {
       missingCredentialBehavior:
         AgentConfigSnapshotSchema.shape.missingCredentialBehavior.parse(
           row.snapshot.missingCredentialBehavior,
+        ),
+      activationSkillMode:
+        AgentConfigSnapshotSchema.shape.activationSkillMode.parse(
+          row.snapshot.activationSkillMode,
+        ),
+      activationSkillRules:
+        AgentConfigSnapshotSchema.shape.activationSkillRules.parse(
+          row.snapshot.activationSkillRules,
         ),
     },
   };

@@ -4,21 +4,25 @@ import {
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
-import config from "@/config";
 import { createPaginatedResult } from "@/database/utils/pagination";
-import { AgentModel } from "@/models";
-import { listPluginSkills } from "@/plugins/plugin-skills";
+import {
+  getAvailableAgentSkillReference,
+  listPolicyIndependentAvailableAgentSkills,
+  type PolicyIndependentAvailableAgentSkill,
+  type SkillAvailabilityContext,
+} from "@/services/agent-activation-skill-candidates";
+import {
+  type AgentActivationSkillPolicyEvaluator,
+  agentActivationSkillPolicyService,
+} from "@/services/agent-activation-skill-policy";
 import {
   agentToolExclusionsService,
   isToolIdentityExcluded,
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
-import { listExternalMcpSkills } from "@/services/external-mcp-skills";
 import { formatExternalSkillName } from "@/skills/external-skill-activation";
 import { formatPluginSkillName } from "@/skills/plugin-skill-activation";
 import { escapeXmlAttr } from "@/skills/skill-activation";
-import { listAccessibleCatalogSkills } from "@/skills/skill-catalog-prompt";
 import type {
   Agent,
   AgentActivationSkill,
@@ -29,62 +33,80 @@ import type {
   Skill,
 } from "@/types";
 
-interface SkillAvailabilityContext {
-  organizationId: string;
-  userId?: string;
-  agentId?: string;
-  /** Explicit environment preview for an agent that has not been created. */
-  environmentId?: string | null;
-}
-
 export type AvailableAgentSkill =
   | { source: "native"; activationName: string; skill: Skill }
   | ProjectedPluginSkill
   | ProjectedExternalSkill;
 
 /**
- * The structured counterpart to `list_skills`: all skill sources visible to
- * the current principal in an agent's environment, with the same projected
- * activation names the MCP tool accepts.
+ * The structured counterpart to `list_skills`: the skill sources visible to
+ * the current principal in an agent's environment and allowed by that agent's
+ * policy, with the same projected activation names the MCP tool accepts.
  */
 export async function listAvailableAgentSkills(
   params: SkillAvailabilityContext,
 ): Promise<AvailableAgentSkill[]> {
-  const environmentId =
-    params.environmentId !== undefined
-      ? params.environmentId
-      : params.agentId !== undefined
-        ? await AgentModel.findEnvironmentId(params.agentId)
-        : null;
-  const [nativeSkills, externalSkills, pluginSkills] = await Promise.all([
-    listAccessibleCatalogSkills({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      environmentId,
-    }),
-    config.mcpGateway.skillsEnabled
-      ? listExternalMcpSkills({
-          organizationId: params.organizationId,
-          userId: params.userId,
-          isMcpServerAdmin: await isMcpServerAdmin(params),
-          environmentId,
-        })
-      : [],
-    config.plugins.enabled
-      ? listPluginSkills({
-          organizationId: params.organizationId,
-          userId: params.userId,
-        })
-      : [],
-  ]);
-  const effectiveNativeSkills = selectEffectiveNativeSkills(
-    nativeSkills,
+  const candidates = await listPolicyIndependentAvailableAgentSkills(params);
+  const policyEvaluator =
+    params.agentId === undefined
+      ? null
+      : await agentActivationSkillPolicyService.getEvaluator(params.agentId);
+  return projectEffectiveAvailableAgentSkills(
+    candidates,
     params.userId,
+    policyEvaluator,
+  );
+}
+
+/** Apply one agent policy and the same precedence/name projection as runtime. */
+export function projectEffectiveAvailableAgentSkills(
+  candidates: PolicyIndependentAvailableAgentSkill[],
+  userId: string | undefined,
+  policyEvaluator: AgentActivationSkillPolicyEvaluator | null,
+): AvailableAgentSkill[] {
+  const nativeSkills = candidates
+    .filter((candidate) => candidate.source === "native")
+    .map((candidate) => candidate.skill);
+  const pluginSkills = candidates
+    .filter((candidate) => candidate.source === "plugin")
+    .map((candidate) => candidate.skill);
+  const externalSkills = candidates
+    .filter((candidate) => candidate.source === "external")
+    .map((candidate) => candidate.skill);
+  const policyNativeSkills = policyEvaluator
+    ? nativeSkills.filter((skill) =>
+        policyEvaluator.isReferenceAllowed({
+          source: "native",
+          skillId: skill.id,
+        }),
+      )
+    : nativeSkills;
+  const policyPluginSkills = policyEvaluator
+    ? pluginSkills.filter((skill) =>
+        policyEvaluator.isReferenceAllowed({
+          source: "plugin",
+          pluginId: skill.pluginId,
+          skillPath: skill.skillPath,
+        }),
+      )
+    : pluginSkills;
+  const policyExternalSkills = policyEvaluator
+    ? externalSkills.filter((skill) =>
+        policyEvaluator.isReferenceAllowed({
+          source: "external_mcp",
+          mcpServerId: skill.mcpServerId,
+          uri: skill.uri,
+        }),
+      )
+    : externalSkills;
+  const effectiveNativeSkills = selectEffectiveNativeSkills(
+    policyNativeSkills,
+    userId,
   );
   const projectedSkills = projectLiveSkillNames({
     nativeNames: effectiveNativeSkills.map((skill) => skill.name),
-    pluginSkills,
-    externalSkills,
+    pluginSkills: policyPluginSkills,
+    externalSkills: policyExternalSkills,
   });
 
   return [
@@ -95,6 +117,45 @@ export async function listAvailableAgentSkills(
     })),
     ...projectedSkills,
   ];
+}
+
+/**
+ * Project raw policy-editor candidates into stable identities and
+ * collision-safe cross-source activation names without applying policy.
+ * Native duplicates are deliberately preserved: the editor must be able to
+ * select an exact lower-precedence skill, after which runtime policy filtering
+ * happens before native precedence chooses the effective skill.
+ */
+export function projectPolicyIndependentAvailableAgentSkills(
+  candidates: PolicyIndependentAvailableAgentSkill[],
+  _userId: string | undefined,
+): AgentActivationSkill[] {
+  const nativeSkills = candidates
+    .filter((candidate) => candidate.source === "native")
+    .map((candidate) => candidate.skill);
+  const projected = projectLiveSkillNames({
+    nativeNames: nativeSkills.map((skill) => skill.name),
+    pluginSkills: candidates
+      .filter((candidate) => candidate.source === "plugin")
+      .map((candidate) => candidate.skill),
+    externalSkills: candidates
+      .filter((candidate) => candidate.source === "external")
+      .map((candidate) => candidate.skill),
+  });
+  return [
+    ...nativeSkills.map((skill) => ({
+      source: "native" as const,
+      activationName: skill.name,
+      skill,
+    })),
+    ...projected,
+  ]
+    .map(toAgentActivationSkill)
+    .sort(
+      (left, right) =>
+        left.name.localeCompare(right.name) ||
+        referenceKey(left).localeCompare(referenceKey(right)),
+    );
 }
 
 export async function getAgentActivationSkills(
@@ -113,7 +174,7 @@ export async function getAgentActivationSkills(
 }
 
 /**
- * HTTP list projection of the complete activation catalog. Search is a
+ * HTTP list projection of the effective activation catalog. Search is a
  * case-insensitive substring match across display name, activation name,
  * description, and provider name, and is applied before offset pagination.
  */
@@ -192,7 +253,7 @@ function toAgentActivationSkill(
 ): AgentActivationSkill {
   if (available.source === "native") {
     return {
-      reference: { source: "native", skillId: available.skill.id },
+      reference: getAvailableAgentSkillReference(available),
       name: available.skill.name,
       activationName: available.activationName,
       description: available.skill.description,
@@ -202,11 +263,7 @@ function toAgentActivationSkill(
   }
   if (available.source === "plugin") {
     return {
-      reference: {
-        source: "plugin",
-        pluginId: available.skill.pluginId,
-        skillPath: available.skill.skillPath,
-      },
+      reference: getAvailableAgentSkillReference(available),
       name: available.skill.name,
       activationName: available.wireName,
       description: available.skill.description,
@@ -215,11 +272,7 @@ function toAgentActivationSkill(
     };
   }
   return {
-    reference: {
-      source: "external_mcp",
-      mcpServerId: available.skill.mcpServerId,
-      uri: available.skill.uri,
-    },
+    reference: getAvailableAgentSkillReference(available),
     name: available.skill.name,
     activationName: available.wireName,
     description: available.skill.description,
@@ -286,18 +339,6 @@ function nativeSkillPrecedence(skill: Skill, userId: string | undefined) {
     case "org":
       return 2;
   }
-}
-
-async function isMcpServerAdmin(
-  params: Pick<SkillAvailabilityContext, "organizationId" | "userId">,
-): Promise<boolean> {
-  if (!params.userId) return false;
-  return (
-    await getMcpCatalogPermissionChecker({
-      userId: params.userId,
-      organizationId: params.organizationId,
-    })
-  ).isAdmin;
 }
 
 function projectLiveSkillNames(params: {

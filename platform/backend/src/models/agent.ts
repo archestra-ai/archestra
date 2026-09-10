@@ -48,6 +48,8 @@ import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import {
   type Agent,
+  type AgentActivationSkillMode,
+  AgentActivationSkillModeSchema,
   type AgentScope,
   type AgentScopeFilter,
   type AgentToolRef,
@@ -62,6 +64,7 @@ import {
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
+import AgentActivationSkillRuleModel from "./agent-activation-skill-rule";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentExcludedConnectorModel from "./agent-excluded-connector";
 import AgentExcludedSkillModel from "./agent-excluded-skill";
@@ -589,8 +592,10 @@ class AgentModel {
       knowledgeBaseIds,
       connectorIds,
       suggestedPrompts,
+      activationSkillPolicy,
       ...agent
     }: InsertAgent & {
+      activationSkillMode?: AgentActivationSkillMode;
       isPersonalGateway?: boolean;
       // Server-owned like isPersonalGateway: omitted from the request schemas
       // (the skill-assignment routes are the only client-facing write path)
@@ -625,6 +630,8 @@ class AgentModel {
        * `agentSubagentExclusionsService.getCreationDefaultExclusions`.
        */
       defaultExcludedSubagentIds?: string[];
+      /** Caller will fork version 1 after completing a staged create policy. */
+      deferInitialVersionFork?: boolean;
     },
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -658,6 +665,10 @@ class AgentModel {
 
     const [createdAgent] = await AgentModel.insertWithSlugRetry({
       ...agent,
+      // A staged policy is always inserted fail-closed. The policy service
+      // installs its exact rules and flips to the requested mode before the
+      // create route returns.
+      ...(activationSkillPolicy && { activationSkillMode: "manual" as const }),
       ...(enableAccessAllTools && { accessAllTools: false }),
       organizationId,
       ...(slug && { slug }),
@@ -802,14 +813,18 @@ class AgentModel {
       }
     }
 
-    // Fork version 1 now that the full config of this create (row, junctions,
-    // auto-assigned tools, exclusion pre-fill) is in place. Best-effort: a
-    // versioning failure must never fail the create itself.
-    const fork = await AgentVersionModel.forkIfChangedBestEffort(
-      createdAgent.id,
-    );
-    if (fork) {
-      createdAgent.latestVersion = fork.version;
+    // Fork version 1 once the full config of this create (row, junctions,
+    // auto-assigned tools, exclusion pre-fill) is in place. A caller that
+    // defers this fork must capture version 1 after it finishes its remaining
+    // initialization. Best-effort: a versioning failure must never fail the
+    // create itself.
+    if (!options?.deferInitialVersionFork) {
+      const fork = await AgentVersionModel.forkIfChangedBestEffort(
+        createdAgent.id,
+      );
+      if (fork) {
+        createdAgent.latestVersion = fork.version;
+      }
     }
 
     // Get team details and tools for the created agent
@@ -1868,6 +1883,44 @@ class AgentModel {
       .where(
         and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
       );
+  }
+
+  static async setActivationSkillPolicyState(params: {
+    id: string;
+    mode: AgentActivationSkillMode;
+    revision: number;
+    tx?: Transaction;
+  }): Promise<void> {
+    await (params.tx ?? db)
+      .update(schema.agentsTable)
+      .set({
+        activationSkillMode: params.mode,
+        activationSkillPolicyRevision: params.revision,
+      })
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
+
+  static async findActivationSkillPolicyState(
+    id: string,
+    tx?: Transaction,
+  ): Promise<{
+    mode: AgentActivationSkillMode;
+    revision: number;
+  } | null> {
+    const [row] = await (tx ?? db)
+      .select({
+        mode: schema.agentsTable.activationSkillMode,
+        revision: schema.agentsTable.activationSkillPolicyRevision,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+    return row ?? null;
   }
 
   static async findEnvironmentId(id: string): Promise<string | null> {
@@ -3677,6 +3730,9 @@ class AgentModel {
           // exclusions are copied can only leave a fail-closed (assigned-tools-
           // only) clone, never one wide open in Auto mode with no exclusions.
           accessAllTools: false,
+          // Skill policy rules are copied below. Start closed so a partial
+          // clone can never transiently widen a Manual source to All.
+          activationSkillMode: "manual",
           considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
@@ -3716,6 +3772,20 @@ class AgentModel {
         created.id,
         excludedConnectorIds,
       );
+
+      const activationSkillRules =
+        await AgentActivationSkillRuleModel.findByAgent(sourceAgent.id);
+      await AgentActivationSkillRuleModel.addRules({
+        agentId: created.id,
+        rules: activationSkillRules,
+      });
+      await AgentModel.setActivationSkillPolicyState({
+        id: created.id,
+        mode: AgentActivationSkillModeSchema.parse(
+          sourceAgent.activationSkillMode,
+        ),
+        revision: activationSkillRules.length > 0 ? 1 : 0,
+      });
 
       // Now that the verbatim exclusions exist, flip an All-tools source's
       // clone on. Skip the pre-fill: the copy above is the authoritative set,
@@ -3860,6 +3930,7 @@ class AgentModel {
       excludedSubagentIds,
       skillIds,
       excludedSkillIds,
+      activationSkillRules,
       excludedToolIds,
       hookRows,
       suggestedPrompts,
@@ -3880,6 +3951,7 @@ class AgentModel {
       // exactly the change the log exists to show.
       AgentSkillModel.findSkillIdsByAgent(id),
       AgentExcludedSkillModel.findSkillIdsByAgent(id),
+      AgentActivationSkillRuleModel.findByAgent(id),
       AgentExcludedToolModel.findToolIdsByAgent(id),
       // Hook IDENTITY only, never `content`: a hook edit must produce a
       // non-empty diff, but script bodies would ride along on every unrelated
@@ -3950,6 +4022,19 @@ class AgentModel {
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
       accessAllSkills: row.accessAllSkills,
+      activationSkillMode: row.activationSkillMode,
+      activationSkillPolicyRevision: row.activationSkillPolicyRevision,
+      // Audit readers may not have access to every skill named by a saved
+      // policy. Counts make the policy change visible without disclosing an
+      // unavailable native id, external URI, or plugin path.
+      activationSkillRuleCounts: {
+        allowed: activationSkillRules.filter(
+          (rule) => rule.disposition === "allow",
+        ).length,
+        excluded: activationSkillRules.filter(
+          (rule) => rule.disposition === "exclude",
+        ).length,
+      },
       // passthrough_headers is a text[] of header NAMES (no values), so it is
       // safe to capture verbatim.
       passthroughHeaders: [...(row.passthroughHeaders ?? [])].sort(),

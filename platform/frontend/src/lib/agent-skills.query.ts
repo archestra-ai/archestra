@@ -9,6 +9,8 @@ import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   getAgentActivationSkills: getAgentActivationSkillsApi,
+  getAgentActivationSkillPolicy,
+  patchAgentActivationSkillPolicy,
   getAgentSkills,
   updateAgentSkills,
   getAgentSkillExclusions,
@@ -21,6 +23,13 @@ type AgentSkillExclusions =
 export type AgentActivationSkills =
   archestraApiTypes.GetAgentActivationSkillsResponses["200"];
 export type AgentActivationSkill = AgentActivationSkills["data"][number];
+export type AgentActivationSkillPolicy =
+  archestraApiTypes.GetAgentActivationSkillPolicyResponses["200"];
+export type AgentActivationSkillPolicyInput = NonNullable<
+  archestraApiTypes.CreateAgentData["body"]["activationSkillPolicy"]
+>;
+type PatchAgentActivationSkillPolicyInput =
+  archestraApiTypes.PatchAgentActivationSkillPolicyData["body"];
 
 /**
  * The PUT bodies carry ids only; the GET responses additionally carry the rows
@@ -36,6 +45,7 @@ export function useAgentActivationSkills(params: {
   limit: number;
   offset: number;
   search?: string;
+  view?: "effective" | "eligible";
   enabled?: boolean;
 }) {
   return useQuery({
@@ -43,6 +53,7 @@ export function useAgentActivationSkills(params: {
       "agents",
       params.agentId ?? "draft",
       "activation-skills",
+      params.view ?? "effective",
       params.environmentId ?? "default",
       params.limit,
       params.offset,
@@ -51,14 +62,15 @@ export function useAgentActivationSkills(params: {
     enabled: params.enabled ?? true,
     queryFn: async (): Promise<AgentActivationSkills> => {
       const query = {
-        ...(params.agentId
-          ? { agentId: params.agentId }
-          : params.environmentId
-            ? { environmentId: params.environmentId }
-            : {}),
+        ...(params.agentId ? { agentId: params.agentId } : {}),
+        ...((!params.agentId || params.view === "eligible") &&
+        params.environmentId !== undefined
+          ? { environmentId: params.environmentId }
+          : {}),
         limit: params.limit,
         offset: params.offset,
         search: params.search,
+        view: params.view,
       };
       const { data, error } = await getAgentActivationSkillsApi({ query });
       throwOnApiError(error, { toastOnError: false });
@@ -66,6 +78,48 @@ export function useAgentActivationSkills(params: {
       return data;
     },
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useAgentActivationSkillPolicy(agentId: string | undefined) {
+  return useQuery({
+    queryKey: agentActivationSkillPolicyQueryKey(agentId ?? ""),
+    enabled: !!agentId,
+    queryFn: async (): Promise<AgentActivationSkillPolicy> => {
+      if (!agentId) throw new Error("No agent id to read skill policy for");
+      const { data, error } = await getAgentActivationSkillPolicy({
+        path: { id: agentId },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      if (!data) throw new Error("Agent skill policy response carried no body");
+      return data;
+    },
+  });
+}
+
+export function usePatchAgentActivationSkillPolicy() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      agentId: string;
+      patch: PatchAgentActivationSkillPolicyInput;
+    }) => {
+      const { data, error } = await patchAgentActivationSkillPolicy({
+        path: { id: params.agentId },
+        body: params.patch,
+      });
+      if (error) throw reportApiError(error);
+      if (!data) throw new Error("Agent skill policy response carried no body");
+      return data;
+    },
+    onSettled: (_data, _error, { agentId }) => {
+      queryClient.invalidateQueries({
+        queryKey: agentActivationSkillPolicyQueryKey(agentId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["agents", agentId, "activation-skills"],
+      });
+    },
   });
 }
 
@@ -168,4 +222,8 @@ function agentSkillsQueryKey(agentId: string) {
 
 function agentSkillExclusionsQueryKey(agentId: string) {
   return ["agents", agentId, "skill-exclusions"] as const;
+}
+
+function agentActivationSkillPolicyQueryKey(agentId: string) {
+  return ["agents", agentId, "activation-skill-policy"] as const;
 }

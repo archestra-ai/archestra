@@ -47324,6 +47324,18 @@
                           "accessAllSkills": {
                             "type": "boolean"
                           },
+                          "activationSkillMode": {
+                            "type": "string",
+                            "enum": [
+                              "all",
+                              "manual"
+                            ]
+                          },
+                          "activationSkillPolicyRevision": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "accessAllSubagents": {
                             "type": "boolean"
                           },
@@ -47749,6 +47761,8 @@
                           "missingCredentialBehavior",
                           "accessAllTools",
                           "accessAllSkills",
+                          "activationSkillMode",
+                          "activationSkillPolicyRevision",
                           "accessAllSubagents",
                           "builtInAgentConfig",
                           "builtIn",
@@ -48534,6 +48548,193 @@
                         "prompt"
                       ]
                     }
+                  },
+                  "activationSkillPolicy": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "all",
+                          "manual"
+                        ]
+                      },
+                      "allowedReferences": {
+                        "default": [],
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "native"
+                                  ],
+                                  "description": "A skill-library skill."
+                                },
+                                "skillId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The skill-library skill ID."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "skillId"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "external_mcp"
+                                  ],
+                                  "description": "A skill from an MCP server."
+                                },
+                                "mcpServerId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The MCP server installation ID."
+                                },
+                                "uri": {
+                                  "type": "string",
+                                  "description": "The skill resource URI."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "mcpServerId",
+                                "uri"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "plugin"
+                                  ],
+                                  "description": "A skill bundled in a plugin."
+                                },
+                                "pluginId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The plugin ID."
+                                },
+                                "skillPath": {
+                                  "type": "string",
+                                  "description": "The skill root inside the plugin."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "pluginId",
+                                "skillPath"
+                              ]
+                            }
+                          ],
+                          "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                        }
+                      },
+                      "excludedReferences": {
+                        "default": [],
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "native"
+                                  ],
+                                  "description": "A skill-library skill."
+                                },
+                                "skillId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The skill-library skill ID."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "skillId"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "external_mcp"
+                                  ],
+                                  "description": "A skill from an MCP server."
+                                },
+                                "mcpServerId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The MCP server installation ID."
+                                },
+                                "uri": {
+                                  "type": "string",
+                                  "description": "The skill resource URI."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "mcpServerId",
+                                "uri"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "plugin"
+                                  ],
+                                  "description": "A skill bundled in a plugin."
+                                },
+                                "pluginId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The plugin ID."
+                                },
+                                "skillPath": {
+                                  "type": "string",
+                                  "description": "The skill root inside the plugin."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "pluginId",
+                                "skillPath"
+                              ]
+                            }
+                          ],
+                          "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                        }
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
                   }
                 },
                 "required": [
@@ -48847,6 +49048,18 @@
                     },
                     "accessAllSkills": {
                       "type": "boolean"
+                    },
+                    "activationSkillMode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "activationSkillPolicyRevision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
                     },
                     "accessAllSubagents": {
                       "type": "boolean"
@@ -49273,6 +49486,8 @@
                     "missingCredentialBehavior",
                     "accessAllTools",
                     "accessAllSkills",
+                    "activationSkillMode",
+                    "activationSkillPolicyRevision",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -49950,6 +50165,18 @@
                       "accessAllSkills": {
                         "type": "boolean"
                       },
+                      "activationSkillMode": {
+                        "type": "string",
+                        "enum": [
+                          "all",
+                          "manual"
+                        ]
+                      },
+                      "activationSkillPolicyRevision": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "accessAllSubagents": {
                         "type": "boolean"
                       },
@@ -50375,6 +50602,8 @@
                       "missingCredentialBehavior",
                       "accessAllTools",
                       "accessAllSkills",
+                      "activationSkillMode",
+                      "activationSkillPolicyRevision",
                       "accessAllSubagents",
                       "builtInAgentConfig",
                       "builtIn",
@@ -51237,6 +51466,18 @@
                     "accessAllSkills": {
                       "type": "boolean"
                     },
+                    "activationSkillMode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "activationSkillPolicyRevision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -51662,6 +51903,8 @@
                     "missingCredentialBehavior",
                     "accessAllTools",
                     "accessAllSkills",
+                    "activationSkillMode",
+                    "activationSkillPolicyRevision",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -52593,6 +52836,18 @@
                         "accessAllSkills": {
                           "type": "boolean"
                         },
+                        "activationSkillMode": {
+                          "type": "string",
+                          "enum": [
+                            "all",
+                            "manual"
+                          ]
+                        },
+                        "activationSkillPolicyRevision": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
@@ -53018,6 +53273,8 @@
                         "missingCredentialBehavior",
                         "accessAllTools",
                         "accessAllSkills",
+                        "activationSkillMode",
+                        "activationSkillPolicyRevision",
                         "accessAllSubagents",
                         "builtInAgentConfig",
                         "builtIn",
@@ -53632,6 +53889,18 @@
                     "accessAllSkills": {
                       "type": "boolean"
                     },
+                    "activationSkillMode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "activationSkillPolicyRevision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -54057,6 +54326,8 @@
                     "missingCredentialBehavior",
                     "accessAllTools",
                     "accessAllSkills",
+                    "activationSkillMode",
+                    "activationSkillPolicyRevision",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -55112,6 +55383,18 @@
                     "accessAllSkills": {
                       "type": "boolean"
                     },
+                    "activationSkillMode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "activationSkillPolicyRevision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -55537,6 +55820,8 @@
                     "missingCredentialBehavior",
                     "accessAllTools",
                     "accessAllSkills",
+                    "activationSkillMode",
+                    "activationSkillPolicyRevision",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -56527,6 +56812,14 @@
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
+                        "activationSkillMode": {
+                          "default": "all",
+                          "type": "string",
+                          "enum": [
+                            "all",
+                            "manual"
+                          ]
+                        },
                         "passthroughHeaders": {
                           "type": "array",
                           "items": {
@@ -56766,6 +57059,31 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "activationSkillRuleCounts": {
+                          "type": "object",
+                          "properties": {
+                            "allowed": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "excluded": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "allowed",
+                            "excluded"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "activationSkillRuleDigest": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64
                         }
                       },
                       "required": [
@@ -56779,6 +57097,7 @@
                         "missingCredentialBehavior",
                         "accessAllTools",
                         "accessAllSubagents",
+                        "activationSkillMode",
                         "passthroughHeaders",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
@@ -56795,7 +57114,9 @@
                         "hooks",
                         "knowledgeBases",
                         "connectors",
-                        "excludedConnectors"
+                        "excludedConnectors",
+                        "activationSkillRuleCounts",
+                        "activationSkillRuleDigest"
                       ],
                       "additionalProperties": false
                     },
@@ -57407,6 +57728,18 @@
                     "accessAllSkills": {
                       "type": "boolean"
                     },
+                    "activationSkillMode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "activationSkillPolicyRevision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -57832,6 +58165,8 @@
                     "missingCredentialBehavior",
                     "accessAllTools",
                     "accessAllSkills",
+                    "activationSkillMode",
+                    "activationSkillPolicyRevision",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -58439,6 +58774,18 @@
                     "accessAllSkills": {
                       "type": "boolean"
                     },
+                    "activationSkillMode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "activationSkillPolicyRevision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -58864,6 +59211,8 @@
                     "missingCredentialBehavior",
                     "accessAllTools",
                     "accessAllSkills",
+                    "activationSkillMode",
+                    "activationSkillPolicyRevision",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -61546,6 +61895,7 @@
           },
           {
             "schema": {
+              "nullable": true,
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -61554,6 +61904,20 @@
             "name": "environmentId",
             "required": false,
             "description": "Environment for a new-agent preview. Omit for the Default environment."
+          },
+          {
+            "schema": {
+              "default": "effective",
+              "type": "string",
+              "enum": [
+                "effective",
+                "eligible"
+              ]
+            },
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "description": "Effective applies the saved agent policy; eligible lists caller-visible choices for the policy editor."
           }
         ],
         "responses": {
@@ -61740,6 +62104,1613 @@
                     "data",
                     "pagination",
                     "enabled"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:read"
+          ]
+        }
+      }
+    },
+    "/api/agents/{id}/activation-skill-policy": {
+      "get": {
+        "operationId": "getAgentActivationSkillPolicy",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Get an internal agent's skill activation policy\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "allowedReferences": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "native"
+                                ],
+                                "description": "A skill-library skill."
+                              },
+                              "skillId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The skill-library skill ID."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "skillId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "external_mcp"
+                                ],
+                                "description": "A skill from an MCP server."
+                              },
+                              "mcpServerId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The MCP server installation ID."
+                              },
+                              "uri": {
+                                "type": "string",
+                                "description": "The skill resource URI."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "mcpServerId",
+                              "uri"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "plugin"
+                                ],
+                                "description": "A skill bundled in a plugin."
+                              },
+                              "pluginId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The plugin ID."
+                              },
+                              "skillPath": {
+                                "type": "string",
+                                "description": "The skill root inside the plugin."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "pluginId",
+                              "skillPath"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ],
+                        "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                      }
+                    },
+                    "excludedReferences": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "native"
+                                ],
+                                "description": "A skill-library skill."
+                              },
+                              "skillId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The skill-library skill ID."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "skillId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "external_mcp"
+                                ],
+                                "description": "A skill from an MCP server."
+                              },
+                              "mcpServerId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The MCP server installation ID."
+                              },
+                              "uri": {
+                                "type": "string",
+                                "description": "The skill resource URI."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "mcpServerId",
+                              "uri"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "plugin"
+                                ],
+                                "description": "A skill bundled in a plugin."
+                              },
+                              "pluginId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The plugin ID."
+                              },
+                              "skillPath": {
+                                "type": "string",
+                                "description": "The skill root inside the plugin."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "pluginId",
+                              "skillPath"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ],
+                        "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                      }
+                    },
+                    "allowedSkills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "reference": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "native"
+                                    ],
+                                    "description": "A skill-library skill."
+                                  },
+                                  "skillId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The skill-library skill ID."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "skillId"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "external_mcp"
+                                    ],
+                                    "description": "A skill from an MCP server."
+                                  },
+                                  "mcpServerId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The MCP server installation ID."
+                                  },
+                                  "uri": {
+                                    "type": "string",
+                                    "description": "The skill resource URI."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "mcpServerId",
+                                  "uri"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "plugin"
+                                    ],
+                                    "description": "A skill bundled in a plugin."
+                                  },
+                                  "pluginId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The plugin ID."
+                                  },
+                                  "skillPath": {
+                                    "type": "string",
+                                    "description": "The skill root inside the plugin."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "pluginId",
+                                  "skillPath"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ],
+                            "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "The declared, human-facing skill name."
+                          },
+                          "activationName": {
+                            "type": "string",
+                            "description": "The exact name to pass to load_skill."
+                          },
+                          "description": {
+                            "type": "string",
+                            "description": "The skill description."
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ],
+                            "description": "The visibility scope through which the skill is shared."
+                          },
+                          "providerName": {
+                            "nullable": true,
+                            "description": "Plugin or MCP server name; null for a skill-library entry.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "reference",
+                          "name",
+                          "activationName",
+                          "description",
+                          "scope",
+                          "providerName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "excludedSkills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "reference": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "native"
+                                    ],
+                                    "description": "A skill-library skill."
+                                  },
+                                  "skillId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The skill-library skill ID."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "skillId"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "external_mcp"
+                                    ],
+                                    "description": "A skill from an MCP server."
+                                  },
+                                  "mcpServerId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The MCP server installation ID."
+                                  },
+                                  "uri": {
+                                    "type": "string",
+                                    "description": "The skill resource URI."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "mcpServerId",
+                                  "uri"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "plugin"
+                                    ],
+                                    "description": "A skill bundled in a plugin."
+                                  },
+                                  "pluginId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The plugin ID."
+                                  },
+                                  "skillPath": {
+                                    "type": "string",
+                                    "description": "The skill root inside the plugin."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "pluginId",
+                                  "skillPath"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ],
+                            "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "The declared, human-facing skill name."
+                          },
+                          "activationName": {
+                            "type": "string",
+                            "description": "The exact name to pass to load_skill."
+                          },
+                          "description": {
+                            "type": "string",
+                            "description": "The skill description."
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ],
+                            "description": "The visibility scope through which the skill is shared."
+                          },
+                          "providerName": {
+                            "nullable": true,
+                            "description": "Plugin or MCP server name; null for a skill-library entry.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "reference",
+                          "name",
+                          "activationName",
+                          "description",
+                          "scope",
+                          "providerName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "hiddenAllowedCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "hiddenExcludedCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "revision",
+                    "allowedReferences",
+                    "excludedReferences",
+                    "allowedSkills",
+                    "excludedSkills",
+                    "hiddenAllowedCount",
+                    "hiddenExcludedCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:read"
+          ]
+        }
+      },
+      "patch": {
+        "operationId": "patchAgentActivationSkillPolicy",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Apply a revisioned update to an internal agent's skill activation policy\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "manual"
+                    ]
+                  },
+                  "operations": {
+                    "default": [],
+                    "maxItems": 2000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "add",
+                            "remove"
+                          ]
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": [
+                            "allow",
+                            "exclude"
+                          ]
+                        },
+                        "reference": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "native"
+                                  ],
+                                  "description": "A skill-library skill."
+                                },
+                                "skillId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The skill-library skill ID."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "skillId"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "external_mcp"
+                                  ],
+                                  "description": "A skill from an MCP server."
+                                },
+                                "mcpServerId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The MCP server installation ID."
+                                },
+                                "uri": {
+                                  "type": "string",
+                                  "description": "The skill resource URI."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "mcpServerId",
+                                "uri"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "plugin"
+                                  ],
+                                  "description": "A skill bundled in a plugin."
+                                },
+                                "pluginId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "description": "The plugin ID."
+                                },
+                                "skillPath": {
+                                  "type": "string",
+                                  "description": "The skill root inside the plugin."
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "pluginId",
+                                "skillPath"
+                              ]
+                            }
+                          ],
+                          "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                        }
+                      },
+                      "required": [
+                        "op",
+                        "disposition",
+                        "reference"
+                      ]
+                    }
+                  },
+                  "discardUnavailable": {
+                    "default": [],
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "allow",
+                        "exclude"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "expectedRevision"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "allowedReferences": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "native"
+                                ],
+                                "description": "A skill-library skill."
+                              },
+                              "skillId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The skill-library skill ID."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "skillId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "external_mcp"
+                                ],
+                                "description": "A skill from an MCP server."
+                              },
+                              "mcpServerId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The MCP server installation ID."
+                              },
+                              "uri": {
+                                "type": "string",
+                                "description": "The skill resource URI."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "mcpServerId",
+                              "uri"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "plugin"
+                                ],
+                                "description": "A skill bundled in a plugin."
+                              },
+                              "pluginId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The plugin ID."
+                              },
+                              "skillPath": {
+                                "type": "string",
+                                "description": "The skill root inside the plugin."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "pluginId",
+                              "skillPath"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ],
+                        "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                      }
+                    },
+                    "excludedReferences": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "native"
+                                ],
+                                "description": "A skill-library skill."
+                              },
+                              "skillId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The skill-library skill ID."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "skillId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "external_mcp"
+                                ],
+                                "description": "A skill from an MCP server."
+                              },
+                              "mcpServerId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The MCP server installation ID."
+                              },
+                              "uri": {
+                                "type": "string",
+                                "description": "The skill resource URI."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "mcpServerId",
+                              "uri"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "plugin"
+                                ],
+                                "description": "A skill bundled in a plugin."
+                              },
+                              "pluginId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "description": "The plugin ID."
+                              },
+                              "skillPath": {
+                                "type": "string",
+                                "description": "The skill root inside the plugin."
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "pluginId",
+                              "skillPath"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ],
+                        "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                      }
+                    },
+                    "allowedSkills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "reference": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "native"
+                                    ],
+                                    "description": "A skill-library skill."
+                                  },
+                                  "skillId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The skill-library skill ID."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "skillId"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "external_mcp"
+                                    ],
+                                    "description": "A skill from an MCP server."
+                                  },
+                                  "mcpServerId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The MCP server installation ID."
+                                  },
+                                  "uri": {
+                                    "type": "string",
+                                    "description": "The skill resource URI."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "mcpServerId",
+                                  "uri"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "plugin"
+                                    ],
+                                    "description": "A skill bundled in a plugin."
+                                  },
+                                  "pluginId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The plugin ID."
+                                  },
+                                  "skillPath": {
+                                    "type": "string",
+                                    "description": "The skill root inside the plugin."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "pluginId",
+                                  "skillPath"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ],
+                            "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "The declared, human-facing skill name."
+                          },
+                          "activationName": {
+                            "type": "string",
+                            "description": "The exact name to pass to load_skill."
+                          },
+                          "description": {
+                            "type": "string",
+                            "description": "The skill description."
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ],
+                            "description": "The visibility scope through which the skill is shared."
+                          },
+                          "providerName": {
+                            "nullable": true,
+                            "description": "Plugin or MCP server name; null for a skill-library entry.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "reference",
+                          "name",
+                          "activationName",
+                          "description",
+                          "scope",
+                          "providerName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "excludedSkills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "reference": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "native"
+                                    ],
+                                    "description": "A skill-library skill."
+                                  },
+                                  "skillId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The skill-library skill ID."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "skillId"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "external_mcp"
+                                    ],
+                                    "description": "A skill from an MCP server."
+                                  },
+                                  "mcpServerId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The MCP server installation ID."
+                                  },
+                                  "uri": {
+                                    "type": "string",
+                                    "description": "The skill resource URI."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "mcpServerId",
+                                  "uri"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "plugin"
+                                    ],
+                                    "description": "A skill bundled in a plugin."
+                                  },
+                                  "pluginId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                    "description": "The plugin ID."
+                                  },
+                                  "skillPath": {
+                                    "type": "string",
+                                    "description": "The skill root inside the plugin."
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "pluginId",
+                                  "skillPath"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ],
+                            "description": "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath."
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "The declared, human-facing skill name."
+                          },
+                          "activationName": {
+                            "type": "string",
+                            "description": "The exact name to pass to load_skill."
+                          },
+                          "description": {
+                            "type": "string",
+                            "description": "The skill description."
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ],
+                            "description": "The visibility scope through which the skill is shared."
+                          },
+                          "providerName": {
+                            "nullable": true,
+                            "description": "Plugin or MCP server name; null for a skill-library entry.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "reference",
+                          "name",
+                          "activationName",
+                          "description",
+                          "scope",
+                          "providerName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "hiddenAllowedCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "hiddenExcludedCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "revision",
+                    "allowedReferences",
+                    "excludedReferences",
+                    "allowedSkills",
+                    "excludedSkills",
+                    "hiddenAllowedCount",
+                    "hiddenExcludedCount"
                   ],
                   "additionalProperties": false
                 }
@@ -64385,6 +66356,18 @@
                     "accessAllSkills": {
                       "type": "boolean"
                     },
+                    "activationSkillMode": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "manual"
+                      ]
+                    },
+                    "activationSkillPolicyRevision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -64810,6 +66793,8 @@
                     "missingCredentialBehavior",
                     "accessAllTools",
                     "accessAllSkills",
+                    "activationSkillMode",
+                    "activationSkillPolicyRevision",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -370293,7 +372278,7 @@
             "in": "query",
             "name": "forAgentId",
             "required": false,
-            "description": "Restrict results to skills visible from this agent's environment (skills with no environment assignments and built-in skills are visible everywhere)."
+            "description": "Restrict results to native skills allowed by this agent's skill policy and visible from its environment."
           },
           {
             "schema": {

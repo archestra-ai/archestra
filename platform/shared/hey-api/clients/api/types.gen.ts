@@ -14096,6 +14096,8 @@ export type GetAgentsResponses = {
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
             accessAllTools: boolean;
             accessAllSkills: boolean;
+            activationSkillMode: 'all' | 'manual';
+            activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
@@ -14263,6 +14265,87 @@ export type CreateAgentData = {
             summaryTitle: string;
             prompt: string;
         }>;
+        activationSkillPolicy?: {
+            mode: 'all' | 'manual';
+            /**
+             * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+             */
+            allowedReferences?: Array<{
+                /**
+                 * A skill-library skill.
+                 */
+                source: 'native';
+                /**
+                 * The skill-library skill ID.
+                 */
+                skillId: string;
+            } | {
+                /**
+                 * A skill from an MCP server.
+                 */
+                source: 'external_mcp';
+                /**
+                 * The MCP server installation ID.
+                 */
+                mcpServerId: string;
+                /**
+                 * The skill resource URI.
+                 */
+                uri: string;
+            } | {
+                /**
+                 * A skill bundled in a plugin.
+                 */
+                source: 'plugin';
+                /**
+                 * The plugin ID.
+                 */
+                pluginId: string;
+                /**
+                 * The skill root inside the plugin.
+                 */
+                skillPath: string;
+            }>;
+            /**
+             * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+             */
+            excludedReferences?: Array<{
+                /**
+                 * A skill-library skill.
+                 */
+                source: 'native';
+                /**
+                 * The skill-library skill ID.
+                 */
+                skillId: string;
+            } | {
+                /**
+                 * A skill from an MCP server.
+                 */
+                source: 'external_mcp';
+                /**
+                 * The MCP server installation ID.
+                 */
+                mcpServerId: string;
+                /**
+                 * The skill resource URI.
+                 */
+                uri: string;
+            } | {
+                /**
+                 * A skill bundled in a plugin.
+                 */
+                source: 'plugin';
+                /**
+                 * The plugin ID.
+                 */
+                pluginId: string;
+                /**
+                 * The skill root inside the plugin.
+                 */
+                skillPath: string;
+            }>;
+        };
     };
     path?: never;
     query?: never;
@@ -14396,6 +14479,8 @@ export type CreateAgentResponses = {
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
+        activationSkillMode: 'all' | 'manual';
+        activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -14639,6 +14724,8 @@ export type GetAllAgentsResponses = {
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
+        activationSkillMode: 'all' | 'manual';
+        activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -14933,6 +15020,8 @@ export type GetDefaultMcpGatewayResponses = {
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
+        activationSkillMode: 'all' | 'manual';
+        activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -15219,6 +15308,8 @@ export type ImportAgentResponses = {
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
             accessAllTools: boolean;
             accessAllSkills: boolean;
+            activationSkillMode: 'all' | 'manual';
+            activationSkillPolicyRevision: number;
             accessAllSubagents: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
@@ -15518,6 +15609,8 @@ export type GetAgentResponses = {
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
+        activationSkillMode: 'all' | 'manual';
+        activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -15811,6 +15904,8 @@ export type UpdateAgentResponses = {
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
+        activationSkillMode: 'all' | 'manual';
+        activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -16079,6 +16174,7 @@ export type GetAgentVersionResponses = {
             missingCredentialBehavior: string;
             accessAllTools: boolean;
             accessAllSubagents: boolean;
+            activationSkillMode: 'all' | 'manual';
             passthroughHeaders: Array<string>;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: string;
@@ -16132,6 +16228,11 @@ export type GetAgentVersionResponses = {
                 id: string;
                 name: string;
             }>;
+            activationSkillRuleCounts: {
+                allowed: number;
+                excluded: number;
+            };
+            activationSkillRuleDigest: string;
         };
         contentHash: string;
         createdAt: string;
@@ -16279,6 +16380,8 @@ export type RestoreAgentVersionResponses = {
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
+        activationSkillMode: 'all' | 'manual';
+        activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -16496,6 +16599,8 @@ export type CloneAgentResponses = {
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
+        activationSkillMode: 'all' | 'manual';
+        activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -17290,7 +17395,11 @@ export type GetAgentActivationSkillsData = {
         /**
          * Environment for a new-agent preview. Omit for the Default environment.
          */
-        environmentId?: string;
+        environmentId?: string | null;
+        /**
+         * Effective applies the saved agent policy; eligible lists caller-visible choices for the policy editor.
+         */
+        view?: 'effective' | 'eligible';
     };
     url: '/api/agents/activation-skills';
 };
@@ -17442,6 +17551,629 @@ export type GetAgentActivationSkillsResponses = {
 };
 
 export type GetAgentActivationSkillsResponse = GetAgentActivationSkillsResponses[keyof GetAgentActivationSkillsResponses];
+
+export type GetAgentActivationSkillPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/activation-skill-policy';
+};
+
+export type GetAgentActivationSkillPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentActivationSkillPolicyError = GetAgentActivationSkillPolicyErrors[keyof GetAgentActivationSkillPolicyErrors];
+
+export type GetAgentActivationSkillPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        mode: 'all' | 'manual';
+        revision: number;
+        /**
+         * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+         */
+        allowedReferences: Array<{
+            /**
+             * A skill-library skill.
+             */
+            source: 'native';
+            /**
+             * The skill-library skill ID.
+             */
+            skillId: string;
+        } | {
+            /**
+             * A skill from an MCP server.
+             */
+            source: 'external_mcp';
+            /**
+             * The MCP server installation ID.
+             */
+            mcpServerId: string;
+            /**
+             * The skill resource URI.
+             */
+            uri: string;
+        } | {
+            /**
+             * A skill bundled in a plugin.
+             */
+            source: 'plugin';
+            /**
+             * The plugin ID.
+             */
+            pluginId: string;
+            /**
+             * The skill root inside the plugin.
+             */
+            skillPath: string;
+        }>;
+        /**
+         * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+         */
+        excludedReferences: Array<{
+            /**
+             * A skill-library skill.
+             */
+            source: 'native';
+            /**
+             * The skill-library skill ID.
+             */
+            skillId: string;
+        } | {
+            /**
+             * A skill from an MCP server.
+             */
+            source: 'external_mcp';
+            /**
+             * The MCP server installation ID.
+             */
+            mcpServerId: string;
+            /**
+             * The skill resource URI.
+             */
+            uri: string;
+        } | {
+            /**
+             * A skill bundled in a plugin.
+             */
+            source: 'plugin';
+            /**
+             * The plugin ID.
+             */
+            pluginId: string;
+            /**
+             * The skill root inside the plugin.
+             */
+            skillPath: string;
+        }>;
+        allowedSkills: Array<{
+            /**
+             * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+             */
+            reference: {
+                /**
+                 * A skill-library skill.
+                 */
+                source: 'native';
+                /**
+                 * The skill-library skill ID.
+                 */
+                skillId: string;
+            } | {
+                /**
+                 * A skill from an MCP server.
+                 */
+                source: 'external_mcp';
+                /**
+                 * The MCP server installation ID.
+                 */
+                mcpServerId: string;
+                /**
+                 * The skill resource URI.
+                 */
+                uri: string;
+            } | {
+                /**
+                 * A skill bundled in a plugin.
+                 */
+                source: 'plugin';
+                /**
+                 * The plugin ID.
+                 */
+                pluginId: string;
+                /**
+                 * The skill root inside the plugin.
+                 */
+                skillPath: string;
+            };
+            /**
+             * The declared, human-facing skill name.
+             */
+            name: string;
+            /**
+             * The exact name to pass to load_skill.
+             */
+            activationName: string;
+            /**
+             * The skill description.
+             */
+            description: string;
+            /**
+             * The visibility scope through which the skill is shared.
+             */
+            scope: 'personal' | 'team' | 'org';
+            /**
+             * Plugin or MCP server name; null for a skill-library entry.
+             */
+            providerName: string | null;
+        }>;
+        excludedSkills: Array<{
+            /**
+             * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+             */
+            reference: {
+                /**
+                 * A skill-library skill.
+                 */
+                source: 'native';
+                /**
+                 * The skill-library skill ID.
+                 */
+                skillId: string;
+            } | {
+                /**
+                 * A skill from an MCP server.
+                 */
+                source: 'external_mcp';
+                /**
+                 * The MCP server installation ID.
+                 */
+                mcpServerId: string;
+                /**
+                 * The skill resource URI.
+                 */
+                uri: string;
+            } | {
+                /**
+                 * A skill bundled in a plugin.
+                 */
+                source: 'plugin';
+                /**
+                 * The plugin ID.
+                 */
+                pluginId: string;
+                /**
+                 * The skill root inside the plugin.
+                 */
+                skillPath: string;
+            };
+            /**
+             * The declared, human-facing skill name.
+             */
+            name: string;
+            /**
+             * The exact name to pass to load_skill.
+             */
+            activationName: string;
+            /**
+             * The skill description.
+             */
+            description: string;
+            /**
+             * The visibility scope through which the skill is shared.
+             */
+            scope: 'personal' | 'team' | 'org';
+            /**
+             * Plugin or MCP server name; null for a skill-library entry.
+             */
+            providerName: string | null;
+        }>;
+        hiddenAllowedCount: number;
+        hiddenExcludedCount: number;
+    };
+};
+
+export type GetAgentActivationSkillPolicyResponse = GetAgentActivationSkillPolicyResponses[keyof GetAgentActivationSkillPolicyResponses];
+
+export type PatchAgentActivationSkillPolicyData = {
+    body: {
+        expectedRevision: number;
+        mode?: 'all' | 'manual';
+        operations?: Array<{
+            op: 'add' | 'remove';
+            disposition: 'allow' | 'exclude';
+            /**
+             * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+             */
+            reference: {
+                /**
+                 * A skill-library skill.
+                 */
+                source: 'native';
+                /**
+                 * The skill-library skill ID.
+                 */
+                skillId: string;
+            } | {
+                /**
+                 * A skill from an MCP server.
+                 */
+                source: 'external_mcp';
+                /**
+                 * The MCP server installation ID.
+                 */
+                mcpServerId: string;
+                /**
+                 * The skill resource URI.
+                 */
+                uri: string;
+            } | {
+                /**
+                 * A skill bundled in a plugin.
+                 */
+                source: 'plugin';
+                /**
+                 * The plugin ID.
+                 */
+                pluginId: string;
+                /**
+                 * The skill root inside the plugin.
+                 */
+                skillPath: string;
+            };
+        }>;
+        discardUnavailable?: Array<'allow' | 'exclude'>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/activation-skill-policy';
+};
+
+export type PatchAgentActivationSkillPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PatchAgentActivationSkillPolicyError = PatchAgentActivationSkillPolicyErrors[keyof PatchAgentActivationSkillPolicyErrors];
+
+export type PatchAgentActivationSkillPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        mode: 'all' | 'manual';
+        revision: number;
+        /**
+         * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+         */
+        allowedReferences: Array<{
+            /**
+             * A skill-library skill.
+             */
+            source: 'native';
+            /**
+             * The skill-library skill ID.
+             */
+            skillId: string;
+        } | {
+            /**
+             * A skill from an MCP server.
+             */
+            source: 'external_mcp';
+            /**
+             * The MCP server installation ID.
+             */
+            mcpServerId: string;
+            /**
+             * The skill resource URI.
+             */
+            uri: string;
+        } | {
+            /**
+             * A skill bundled in a plugin.
+             */
+            source: 'plugin';
+            /**
+             * The plugin ID.
+             */
+            pluginId: string;
+            /**
+             * The skill root inside the plugin.
+             */
+            skillPath: string;
+        }>;
+        /**
+         * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+         */
+        excludedReferences: Array<{
+            /**
+             * A skill-library skill.
+             */
+            source: 'native';
+            /**
+             * The skill-library skill ID.
+             */
+            skillId: string;
+        } | {
+            /**
+             * A skill from an MCP server.
+             */
+            source: 'external_mcp';
+            /**
+             * The MCP server installation ID.
+             */
+            mcpServerId: string;
+            /**
+             * The skill resource URI.
+             */
+            uri: string;
+        } | {
+            /**
+             * A skill bundled in a plugin.
+             */
+            source: 'plugin';
+            /**
+             * The plugin ID.
+             */
+            pluginId: string;
+            /**
+             * The skill root inside the plugin.
+             */
+            skillPath: string;
+        }>;
+        allowedSkills: Array<{
+            /**
+             * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+             */
+            reference: {
+                /**
+                 * A skill-library skill.
+                 */
+                source: 'native';
+                /**
+                 * The skill-library skill ID.
+                 */
+                skillId: string;
+            } | {
+                /**
+                 * A skill from an MCP server.
+                 */
+                source: 'external_mcp';
+                /**
+                 * The MCP server installation ID.
+                 */
+                mcpServerId: string;
+                /**
+                 * The skill resource URI.
+                 */
+                uri: string;
+            } | {
+                /**
+                 * A skill bundled in a plugin.
+                 */
+                source: 'plugin';
+                /**
+                 * The plugin ID.
+                 */
+                pluginId: string;
+                /**
+                 * The skill root inside the plugin.
+                 */
+                skillPath: string;
+            };
+            /**
+             * The declared, human-facing skill name.
+             */
+            name: string;
+            /**
+             * The exact name to pass to load_skill.
+             */
+            activationName: string;
+            /**
+             * The skill description.
+             */
+            description: string;
+            /**
+             * The visibility scope through which the skill is shared.
+             */
+            scope: 'personal' | 'team' | 'org';
+            /**
+             * Plugin or MCP server name; null for a skill-library entry.
+             */
+            providerName: string | null;
+        }>;
+        excludedSkills: Array<{
+            /**
+             * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+             */
+            reference: {
+                /**
+                 * A skill-library skill.
+                 */
+                source: 'native';
+                /**
+                 * The skill-library skill ID.
+                 */
+                skillId: string;
+            } | {
+                /**
+                 * A skill from an MCP server.
+                 */
+                source: 'external_mcp';
+                /**
+                 * The MCP server installation ID.
+                 */
+                mcpServerId: string;
+                /**
+                 * The skill resource URI.
+                 */
+                uri: string;
+            } | {
+                /**
+                 * A skill bundled in a plugin.
+                 */
+                source: 'plugin';
+                /**
+                 * The plugin ID.
+                 */
+                pluginId: string;
+                /**
+                 * The skill root inside the plugin.
+                 */
+                skillPath: string;
+            };
+            /**
+             * The declared, human-facing skill name.
+             */
+            name: string;
+            /**
+             * The exact name to pass to load_skill.
+             */
+            activationName: string;
+            /**
+             * The skill description.
+             */
+            description: string;
+            /**
+             * The visibility scope through which the skill is shared.
+             */
+            scope: 'personal' | 'team' | 'org';
+            /**
+             * Plugin or MCP server name; null for a skill-library entry.
+             */
+            providerName: string | null;
+        }>;
+        hiddenAllowedCount: number;
+        hiddenExcludedCount: number;
+    };
+};
+
+export type PatchAgentActivationSkillPolicyResponse = PatchAgentActivationSkillPolicyResponses[keyof PatchAgentActivationSkillPolicyResponses];
 
 export type GetAgentSkillsData = {
     body?: never;
@@ -18210,6 +18942,8 @@ export type RestoreAgentResponses = {
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
+        activationSkillMode: 'all' | 'manual';
+        activationSkillPolicyRevision: number;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -95613,7 +96347,7 @@ export type GetSkillsData = {
         search?: string;
         sourceRepo?: string;
         /**
-         * Restrict results to skills visible from this agent's environment (skills with no environment assignments and built-in skills are visible everywhere).
+         * Restrict results to native skills allowed by this agent's skill policy and visible from its environment.
          */
         forAgentId?: string;
         /**

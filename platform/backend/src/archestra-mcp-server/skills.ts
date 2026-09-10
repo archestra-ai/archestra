@@ -26,6 +26,8 @@ import {
 } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
 import { getPluginSkill } from "@/plugins/plugin-skills";
+import { getAvailableAgentSkillReference } from "@/services/agent-activation-skill-candidates";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import {
   type AvailableAgentSkill,
   listAvailableAgentSkills,
@@ -298,6 +300,15 @@ const registry = defineArchestraTools([
       if (!resolved) {
         return unknownSkillError(args.name);
       }
+      if (
+        context.agent.id !== undefined &&
+        !(await agentActivationSkillPolicyService.isReferenceAllowed({
+          agentId: context.agent.id,
+          reference: getAvailableAgentSkillReference(resolved),
+        }))
+      ) {
+        return unknownSkillError(args.name);
+      }
       if (resolved.source === "plugin") {
         const pluginSkill = resolved.skill;
         const live = await getPluginSkill({
@@ -307,6 +318,18 @@ const registry = defineArchestraTools([
           userId: ctx.userId,
         });
         if (!live) return unknownSkillError(args.name);
+        if (
+          !(await agentActivationSkillPolicyService.isReferenceAllowed({
+            agentId: context.agent.id,
+            reference: {
+              source: "plugin",
+              pluginId: live.pluginId,
+              skillPath: live.skillPath,
+            },
+          }))
+        ) {
+          return unknownSkillError(args.name);
+        }
         if (args.path !== undefined && args.path !== "") {
           return readPluginSkillFile(live, args.path, resolved.activationName);
         }
@@ -342,6 +365,18 @@ const registry = defineArchestraTools([
           tokenAuth: context.tokenAuth,
         });
         if (!live) return unknownSkillError(args.name);
+        if (
+          !(await agentActivationSkillPolicyService.isReferenceAllowed({
+            agentId: context.agent.id,
+            reference: {
+              source: "external_mcp",
+              mcpServerId: live.mcpServerId,
+              uri: live.uri,
+            },
+          }))
+        ) {
+          return unknownSkillError(args.name);
+        }
         if (args.path !== undefined && args.path !== "") {
           return readExternalSkillFile(
             live,
@@ -1076,11 +1111,12 @@ async function resolveSkillReference(
   if (!looksLikeLegacySkillReference(name)) {
     const nativeSkill = await findAccessibleSkill(ctx, name, agentId);
     if (nativeSkill) {
-      return {
+      const resolved: AvailableAgentSkill = {
         source: "native",
         activationName: nativeSkill.name,
         skill: nativeSkill,
       };
+      if (await isResolvedSkillAllowed(agentId, resolved)) return resolved;
     }
   }
 
@@ -1131,15 +1167,23 @@ async function resolveSkillReference(
   );
   if (projected) return projected;
 
-  const nativeSkill = await findAccessibleSkill(ctx, name, agentId);
-  if (nativeSkill) {
-    return {
-      source: "native",
-      activationName: nativeSkill.name,
-      skill: nativeSkill,
-    };
-  }
-  return null;
+  return (
+    availableSkills.find(
+      (skill) => skill.source === "native" && skill.activationName === name,
+    ) ?? null
+  );
+}
+
+async function isResolvedSkillAllowed(
+  agentId: string | undefined,
+  resolved: AvailableAgentSkill,
+): Promise<boolean> {
+  return agentId === undefined
+    ? true
+    : agentActivationSkillPolicyService.isReferenceAllowed({
+        agentId,
+        reference: getAvailableAgentSkillReference(resolved),
+      });
 }
 
 function looksLikeLegacySkillReference(name: string): boolean {

@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { useCallback, useState } from "react";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
-import { Badge } from "@/components/ui/badge";
+import { SkillSourceBadge } from "@/components/skill-source-badge";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Table,
@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { agentActivationSkillReferenceKey } from "@/lib/agent-skill-reference";
 import {
   type AgentActivationSkill,
   useAgentActivationSkills,
@@ -33,7 +34,7 @@ const columns: ColumnDef<AgentActivationSkill>[] = [
             <p className="truncate font-medium" title={skill.name}>
               {skill.name}
             </p>
-            <SourceBadge
+            <SkillSourceBadge
               source={skill.reference.source}
               providerName={skill.providerName}
             />
@@ -111,7 +112,7 @@ export function AgentActivationSkillsTable({
       <DataTable
         columns={columns}
         data={data.data}
-        getRowId={(skill) => referenceKey(skill.reference)}
+        getRowId={(skill) => agentActivationSkillReferenceKey(skill.reference)}
         pagination={{
           ...pagination,
           total: data.pagination.total,
@@ -161,57 +162,4 @@ function MessageTable({
       </Table>
     </div>
   );
-}
-
-function SourceBadge({
-  source,
-  providerName,
-}: {
-  source: "native" | "external_mcp" | "plugin";
-  providerName: string | null;
-}) {
-  const sourceName = sourceLabel(source);
-  const label = providerName ? `${providerName} · ${sourceName}` : sourceName;
-  return (
-    <Badge
-      variant="secondary"
-      title={label}
-      className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
-    >
-      {providerName && <span className="truncate">{providerName}</span>}
-      {providerName && (
-        <span aria-hidden className="shrink-0 text-muted-foreground">
-          ·
-        </span>
-      )}
-      <span className="shrink-0">{sourceName}</span>
-    </Badge>
-  );
-}
-
-function sourceLabel(source: "native" | "external_mcp" | "plugin") {
-  switch (source) {
-    case "native":
-      return "Skill library";
-    case "external_mcp":
-      return "MCP";
-    case "plugin":
-      return "Plugin";
-  }
-}
-
-function referenceKey(
-  reference:
-    | { source: "native"; skillId: string }
-    | { source: "external_mcp"; mcpServerId: string; uri: string }
-    | { source: "plugin"; pluginId: string; skillPath: string },
-) {
-  switch (reference.source) {
-    case "native":
-      return `native:${reference.skillId}`;
-    case "external_mcp":
-      return `external:${reference.mcpServerId}:${reference.uri}`;
-    case "plugin":
-      return `plugin:${reference.pluginId}:${reference.skillPath}`;
-  }
 }

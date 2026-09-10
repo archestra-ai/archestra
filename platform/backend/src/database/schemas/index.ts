@@ -54,6 +54,7 @@ export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-req
 export { default as a2aTaskEventsTable } from "./a2a-task-event";
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
+export { default as agentActivationSkillRulesTable } from "./agent-activation-skill-rule";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
 export { default as agentExcludedConnectorsTable } from "./agent-excluded-connector";
 export { default as agentExcludedSkillsTable } from "./agent-excluded-skill";

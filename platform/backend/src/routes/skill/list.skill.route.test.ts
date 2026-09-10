@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { EnvironmentModel, SkillModel } from "@/models";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import skillRoutes from "./skill.routes";
@@ -14,7 +15,11 @@ describe("GET /api/skills", () => {
 
   test("forAgentId restricts the list to the agent's environment", async ({
     makeAgent,
+    makeMember,
   }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
     const staging = await EnvironmentModel.create({
       organizationId: ctx.organizationId,
       name: "Staging",
@@ -89,6 +94,75 @@ describe("GET /api/skills", () => {
     // without the filter, the management surface lists every environment
     const all = await ctx.app.inject({ method: "GET", url: "/api/skills" });
     expect(all.json().data).toHaveLength(4);
+  });
+
+  test("forAgentId applies the agent's Manual skill allowlist", async ({
+    makeAgent,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const agent = await makeAgent({
+      name: "Manual Skill Agent",
+      organizationId: ctx.organizationId,
+    });
+    const allowed = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("allowed-skill") },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("blocked-skill") },
+    });
+
+    await agentActivationSkillPolicyService.initializePolicy({
+      agentId: agent.id,
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      policy: {
+        mode: "manual",
+        allowedReferences: [{ source: "native", skillId: allowed.json().id }],
+        excludedReferences: [],
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?forAgentId=${agent.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      response.json().data.map((skill: { name: string }) => skill.name),
+    ).toEqual(["allowed-skill"]);
+    expect(response.json().pagination.total).toBe(1);
+  });
+
+  test("forAgentId does not disclose an unreadable agent's policy", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const otherAuthor = await makeUser();
+    const privateAgent = await makeAgent({
+      name: "Private Skill Agent",
+      organizationId: ctx.organizationId,
+      scope: "personal",
+      authorId: otherAuthor.id,
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?forAgentId=${privateAgent.id}`,
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 
   test("lists skills with a file count that includes SKILL.md", async () => {

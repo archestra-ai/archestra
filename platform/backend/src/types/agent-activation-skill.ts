@@ -26,6 +26,10 @@ export const AgentActivationSkillReferenceSchema = z
     "Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.",
   );
 
+export type AgentActivationSkillReference = z.infer<
+  typeof AgentActivationSkillReferenceSchema
+>;
+
 /**
  * One skill the current principal can activate through an internal agent.
  * `name` is the declared display name; `activationName` is the exact

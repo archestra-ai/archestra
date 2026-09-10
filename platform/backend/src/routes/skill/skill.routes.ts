@@ -25,6 +25,7 @@ import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
+  AgentActivationSkillRuleModel,
   AgentModel,
   CreatedByModel,
   lookupCreator,
@@ -366,9 +367,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: z.string().optional(),
           sourceRepo: z.string().optional(),
           forAgentId: UuidIdSchema.optional().describe(
-            "Restrict results to skills visible from this agent's " +
-              "environment (skills with no environment assignments and " +
-              "built-in skills are visible everywhere).",
+            "Restrict results to native skills allowed by this agent's " +
+              "skill policy and visible from its environment.",
           ),
           scope: ResourceVisibilityScopeSchema.optional().describe(
             "Filter by visibility scope: personal, team, or org.",
@@ -446,22 +446,64 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Skills are environment-scoped; `forAgentId` narrows the list to what
-      // that agent can actually see (used by the chat slash-command menu).
+      // that agent can actually use (used by the chat slash-command menu).
       let environmentId: string | null | undefined;
+      let allowedSkillIds: string[] | undefined;
+      let excludedSkillIds: string[] | undefined;
       if (forAgentId !== undefined) {
-        const agent = await AgentModel.findById(forAgentId);
+        const agent = await AgentModel.findById(forAgentId, user.id, true);
         if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "Agent not found");
         }
+        const agentChecker = await getAgentTypePermissionChecker({
+          userId: user.id,
+          organizationId,
+        });
+        try {
+          agentChecker.require(agent.agentType, "read");
+        } catch {
+          throw new ApiError(404, "Agent not found");
+        }
+        if (
+          !agentChecker.isAdmin(agent.agentType) &&
+          !(await AgentModel.findById(forAgentId, user.id, false))
+        ) {
+          throw new ApiError(404, "Agent not found");
+        }
+        const policy =
+          await AgentActivationSkillRuleModel.findPolicySnapshot(forAgentId);
+        if (!policy) {
+          throw new ApiError(404, "Agent not found");
+        }
         environmentId = agent.environmentId ?? null;
+        if (policy.mode === "manual") {
+          allowedSkillIds = policy.rules.flatMap((rule) =>
+            rule.disposition === "allow" && rule.reference.source === "native"
+              ? [rule.reference.skillId]
+              : [],
+          );
+        } else {
+          excludedSkillIds = policy.rules.flatMap((rule) =>
+            rule.disposition === "exclude" && rule.reference.source === "native"
+              ? [rule.reference.skillId]
+              : [],
+          );
+        }
       }
       // Non-admins see only skills within their scope; admins see all.
-      const accessibleSkillIds = checker.isAdmin
+      let accessibleSkillIds = checker.isAdmin
         ? undefined
         : await SkillTeamModel.getUserAccessibleSkillIds({
             organizationId,
             userId: user.id,
           });
+      if (allowedSkillIds !== undefined) {
+        const accessibleSet =
+          accessibleSkillIds === undefined ? null : new Set(accessibleSkillIds);
+        accessibleSkillIds = accessibleSet
+          ? allowedSkillIds.filter((id) => accessibleSet.has(id))
+          : allowedSkillIds;
+      }
 
       // Author filters are an admin oversight surface (mirrors the agents
       // list); non-admins are already restricted to their own scope.
@@ -490,6 +532,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           sourceRepo,
           accessibleSkillIds,
+          excludedSkillIds,
           environmentId,
           labelFilteredIds,
           ...scopeFilters,
@@ -500,6 +543,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           sourceRepo,
           accessibleSkillIds,
+          excludedSkillIds,
           environmentId,
           labelFilteredIds,
           ...scopeFilters,

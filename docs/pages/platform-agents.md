@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,6 +16,7 @@ An agent can include:
 - suggested prompts for common tasks in chat
 - a **Tools & Knowledge Sources** setting: **Auto** (every tool and knowledge source the chatting user can access, minus an exclusion list) or **Custom** (only assigned tools and sources)
 - optional **Load tools when needed** mode for keeping MCP `tools/list` small
+- a **Skills** setting: **All** (every skill the caller can access, minus an exclusion list) or **Manual** (only selected skills)
 - a **Missing connections** setting — people are asked to connect a server when a tool needs it, when the chat opens, or before they can chat
 - a **Subagents** setting: **Auto** (delegate to any agent the chatting user can access, minus a disabled list) or **Custom** (only assigned delegation targets)
 - one or more assigned knowledge sources
@@ -130,9 +131,16 @@ See [Environments](/docs/platform-environments) for the isolation model and [net
 
 ## Skills
 
-An agent consumes [Agent Skills](/docs/platform-agent-skills) through two built-in tools: `list_skills` returns the catalog, `load_skill` pulls one skill's instructions into context. Users can also invoke a skill directly with a `/skill-name` slash command in chat. Either way, the agent only sees skills in its [environment](#environments) that the calling user can access.
+An agent consumes [Agent Skills](/docs/platform-agent-skills) through two built-in tools: `list_skills` returns the catalog, `load_skill` pulls one skill's instructions into context. Users can also invoke a skill directly with a `/skill-name` slash command in chat.
 
-The agent's card shows how many of those skills the current viewer can activate. The read-only **Skills** table on the agent's **Tools, Skills & Knowledge** tab shows the same caller-visible catalog and labels each skill's organization, team, or personal scope. For an internal agent, the Archestra MCP Server's `get_agent` resource exposes the list as `skills` and reports whether `load_skill` is enabled as `skillsEnabled` when the current user has `skill:read`; skill names and descriptions remain untrusted catalog metadata until the skill is loaded.
+Choose the agent's skill policy under **Skills** on its **Tools, Skills & Knowledge** step or tab:
+
+- **All** lets the agent use every skill available to the caller in the agent's [environment](#environments), except skills you exclude. Newly available skills are included automatically.
+- **Manual** lets the agent use only the skills you select. Use this for a specialist agent that should stay within a small, explicit skill set.
+
+The caller's own access still applies in both modes. Selecting a skill never grants access to someone who could not otherwise use it. The policy is enforced consistently for `list_skills`, `load_skill`, chat slash commands and attachments, delegated skills, and sandbox replay.
+
+The agent's card shows how many skills the current viewer can activate. For an internal agent, the Archestra MCP Server's `get_agent` resource exposes the effective list as `skills` and reports whether `load_skill` is enabled as `skillsEnabled` when the current user has `skill:read`; skill names and descriptions remain untrusted catalog metadata until the skill is loaded.
 
 A skill that names an `agent` in its frontmatter runs in that subagent instead — the agent calls the skill's `skill__<name>` tool and receives the result. See [Running a Skill in a Subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent).
 

@@ -24,6 +24,9 @@ function makeSnapshot(
     missingCredentialBehavior: "allow",
     accessAllTools: true,
     accessAllSubagents: false,
+    activationSkillMode: "all",
+    activationSkillRuleCounts: { allowed: 0, excluded: 0 },
+    activationSkillRuleDigest: "0".repeat(64),
     passthroughHeaders: [],
     incomingEmailEnabled: false,
     incomingEmailSecurityMode: "strict",
@@ -94,6 +97,25 @@ describe("compareAgentSnapshots", () => {
     expect(name?.change).toBe("unchanged");
   });
 
+  it("detects a skill-rule change without exposing rule references", () => {
+    const sections = compareAgentSnapshots(
+      makeSnapshot({
+        activationSkillRuleCounts: { allowed: 1, excluded: 0 },
+        activationSkillRuleDigest: "1".repeat(64),
+      }),
+      makeSnapshot(),
+    );
+    const config = section(sections, "configuration");
+    if (config.kind !== "fields") throw new Error("expected fields");
+    expect(
+      config.fields.find((field) => field.label === "Skill rules"),
+    ).toMatchObject({
+      change: "changed",
+      previous: "0 allowed, 0 excluded",
+      current: "1 allowed, 0 excluded",
+    });
+  });
+
   it("pairs collection items by id: added, removed, and mode changes", () => {
     const sections = compareAgentSnapshots(
       makeSnapshot({
@@ -143,6 +165,26 @@ describe("compareAgentSnapshots", () => {
       change: "changed",
       previousDetail: "profile",
       detail: "user",
+    });
+  });
+
+  it("shows skill mode changes in the version preview", () => {
+    const sections = compareAgentSnapshots(
+      makeSnapshot({
+        activationSkillMode: "manual",
+      }),
+      makeSnapshot({
+        activationSkillMode: "all",
+      }),
+    );
+    const config = section(sections, "configuration");
+    if (config.kind !== "fields") throw new Error("expected fields");
+    expect(
+      config.fields.find((field) => field.label === "Skill access"),
+    ).toMatchObject({
+      change: "changed",
+      previous: "All",
+      current: "Manual",
     });
   });
 
@@ -604,6 +646,9 @@ const SNAPSHOT_KEY_HOMES: Record<
   missingCredentialBehavior: { field: "Missing tool connection" },
   accessAllTools: { field: "Access all tools" },
   accessAllSubagents: { field: "Access all subagents" },
+  activationSkillMode: { field: "Skill access" },
+  activationSkillRuleCounts: { field: "Skill rules" },
+  activationSkillRuleDigest: { field: "Skill rules" },
   considerContextUntrusted: { field: "Treat context as untrusted" },
   passthroughHeaders: { field: "Passthrough headers" },
   incomingEmailEnabled: { field: "Incoming email" },

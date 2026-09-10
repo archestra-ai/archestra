@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import logger from "@/logging";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import type { SandboxCaller } from "@/skills-sandbox/types";
 import type { HookFile, HookOutcome } from "@/types/hook";
 import { asSandboxId } from "@/types/skill-sandbox";
 import { shellQuote } from "@/utils/shell-quote";
@@ -38,7 +39,7 @@ interface HookRunResult {
  */
 export async function runHookScript(params: {
   sandboxId: string;
-  caller: { userId: string; organizationId: string };
+  caller: SandboxCaller & { agentId: string };
   hookFile: HookFile;
   payload: Record<string, unknown>;
 }): Promise<HookRunResult> {

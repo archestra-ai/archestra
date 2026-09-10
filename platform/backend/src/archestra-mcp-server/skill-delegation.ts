@@ -3,12 +3,13 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
-import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
+import { AgentModel, SkillModel } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
 import { ProviderError } from "@/routes/chat/errors";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
+import { listAvailableAgentSkills } from "@/services/agent-activation-skills";
 import {
   buildSkillActivationPromptContext,
   formatSkillActivation,
@@ -144,6 +145,16 @@ export async function handleSkillDelegation(
   });
   const skill = skills.find((s) => slugify(s.name) === skillSlug);
   if (!skill) {
+    return errorResult(
+      `No skill delegation is configured for "${SKILL_TOOL_PREFIX}${skillSlug}". Use an exact skill delegation tool name (${SKILL_TOOL_PREFIX}*) from your tools list. Do not guess skill names.`,
+    );
+  }
+  if (
+    !(await agentActivationSkillPolicyService.isReferenceAllowed({
+      agentId,
+      reference: { source: "native", skillId: skill.id },
+    }))
+  ) {
     return errorResult(
       `No skill delegation is configured for "${SKILL_TOOL_PREFIX}${skillSlug}". Use an exact skill delegation tool name (${SKILL_TOOL_PREFIX}*) from your tools list. Do not guess skill names.`,
     );
@@ -311,23 +322,14 @@ async function findAgentDesignatedSkills(params: {
 }): Promise<Skill[]> {
   const { agentId, organizationId, userId } = params;
 
-  const [environmentId, checker] = await Promise.all([
-    AgentModel.findEnvironmentId(agentId),
-    getSkillPermissionChecker({ userId, organizationId }),
-  ]);
-  const accessibleSkillIds = checker.isAdmin
-    ? undefined
-    : await SkillTeamModel.getUserAccessibleSkillIds({
-        organizationId,
-        userId,
-      });
-
-  const skills = await SkillModel.findByOrganization({
+  const available = await listAvailableAgentSkills({
     organizationId,
-    accessibleSkillIds,
-    environmentId,
+    userId,
+    agentId,
   });
-  return skills
+  return available
+    .filter((skill) => skill.source === "native")
+    .map((skill) => skill.skill)
     .filter((skill) => skill.agentName !== null)
     .sort((a, b) => a.name.localeCompare(b.name));
 }

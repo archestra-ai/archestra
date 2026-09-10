@@ -242,6 +242,8 @@ class SkillModel {
     sourceRepo?: string;
     /** When set, restricts results to these skill IDs (scope filtering). */
     accessibleSkillIds?: string[];
+    /** When set, excludes these skill IDs (agent All-mode blocklist). */
+    excludedSkillIds?: string[];
     /**
      * When set (null = Default environment), restricts results to skills
      * visible from that environment: strict match, built-in skills exempt.
@@ -288,6 +290,8 @@ class SkillModel {
     search?: string;
     sourceRepo?: string;
     accessibleSkillIds?: string[];
+    /** Same agent-policy exclusion filter as `findByOrganization`. */
+    excludedSkillIds?: string[];
     /** Same environment-visibility filter as `findByOrganization`. */
     environmentId?: string | null;
     scope?: ResourceVisibilityScope;
@@ -1589,6 +1593,7 @@ function buildOrgFilters(params: {
   search?: string;
   sourceRepo?: string;
   accessibleSkillIds?: string[];
+  excludedSkillIds?: string[];
   environmentId?: string | null;
   scope?: ResourceVisibilityScope;
   teamIds?: string[];
@@ -1611,6 +1616,9 @@ function buildOrgFilters(params: {
     getSkillStatusCondition(params.status ?? "active"),
     ...(params.accessibleSkillIds !== undefined
       ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
+      : []),
+    ...(params.excludedSkillIds?.length
+      ? [notInArray(schema.skillsTable.id, params.excludedSkillIds)]
       : []),
     ...(params.labelFilteredIds !== undefined
       ? [inArray(schema.skillsTable.id, params.labelFilteredIds)]

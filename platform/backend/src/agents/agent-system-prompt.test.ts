@@ -19,7 +19,7 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { SkillModel } from "@/models";
+import { AgentModel, SkillModel } from "@/models";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { describe, expect, test } from "@/test";
@@ -226,6 +226,20 @@ describe("buildAgentSystemPrompt", () => {
     });
     expect(withCatalog).toContain("<available_skills>");
     expect(withCatalog).toContain("pdf-processing");
+
+    await AgentModel.setActivationSkillPolicyState({
+      id: agent.id,
+      mode: "manual",
+      revision: 1,
+    });
+    const restrictedCatalog = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: withLoadSkill,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+    expect(restrictedCatalog).not.toContain("pdf-processing");
 
     const withoutCatalog = await buildAgentSystemPrompt({
       agent,

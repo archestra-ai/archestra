@@ -373,6 +373,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × skill exclusion; parent (agent) audited",
   },
+  agentActivationSkillRulesTable: {
+    audited: false,
+    reason: "join: agent × activation-skill policy; parent (agent) audited",
+  },
   agentExcludedSubagentsTable: {
     audited: false,
     reason: "join: agent × subagent exclusion; parent (agent) audited",

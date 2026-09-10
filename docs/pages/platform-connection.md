@@ -205,11 +205,11 @@ The `copilot` CLI must be on your `PATH`.
 
 ### Claude Desktop
 
-Download the setup helper and open it in normal Claude Desktop. Confirm its native installation prompt to start the reviewed setup. For an existing third-party profile, use the terminal option. The setup script supports macOS, Windows, and Linux. Choose subscription authentication or an API key in the review step. The script checks inference, saves a gateway profile, and restarts Desktop. It preserves other profiles and backs up changed files.
+Download the setup helper and open it in normal Claude Desktop. Confirm its native installation prompt to start the reviewed setup. For an existing third-party profile, use the terminal option. The setup script supports macOS, Windows, and Linux. Choose subscription authentication or an API key in the review step. The script checks inference, saves a gateway profile, and restarts Desktop. It preserves manually created profiles and backs up changed files. Rerunning setup replaces the managed connection; a different deployment takes precedence over the previous one.
 
 Subscription setup obtains a token locally through the official Claude Code CLI. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download requires Node.js 18+ and Python 3.9 or newer.
 
-Authorize the MCP connector in Desktop's **Settings → Connectors**. Install your shared-skills marketplace under **Settings → Plugins**. To revert, select your previous inference profile and restart Desktop.
+Authorize the MCP connector in Desktop's **Settings → Connectors**. Install your shared-skills marketplace under **Settings → Plugins**. To switch back, rerun the previous deployment’s installer or select a manually created inference profile.
 
 See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for requirements and authentication details.
 ### n8n

@@ -28,7 +28,7 @@ Open **Connect** and select **Claude Desktop**. Review your authentication, mode
 
 Already using a third-party Desktop profile? Use **Use terminal instead**. Run that command in a terminal, or PowerShell on Windows.
 
-The installer checks inference before changing your configuration. It backs up changed files, preserves other profiles, and restarts Desktop. If macOS rejects automatic quitting, the installer waits for you to quit from Desktop’s menu. You do not download or import a profile manually. Keep the download and generated command private; they contain an expiring setup ticket. Installation redeems the ticket once. Download a new installer if it expires.
+The installer checks inference before changing your configuration. It backs up changed files, preserves manually created profiles, and restarts Desktop. Rerunning setup replaces the installer-managed connection, including its gateway and skills settings. Installing from another deployment replaces the previous managed connection. If macOS rejects automatic quitting, the installer waits for you to quit from Desktop’s menu. You do not download or import a profile manually. Keep the download and generated command private; they contain an expiring setup ticket. Installation redeems the ticket once. Download a new installer if it expires.
 
 ## Connect From An Agent
 
@@ -50,7 +50,7 @@ MCP connectors require separate browser authorization in Desktop's **Settings �
 
 ## Revert
 
-Select your previous profile in **Configure Third-Party Inference** and restart Desktop. The installer also keeps `.before-archestra` backups of existing files it changes.
+Select a manually created profile in **Configure Third-Party Inference** and restart Desktop. To return to another deployment, run its installer again. The installer also keeps `.before-archestra` backups of existing files it changes.
 
 See [Connect Your Agents](/docs/platform-connection) for other clients.
 

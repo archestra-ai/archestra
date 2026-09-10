@@ -185,8 +185,7 @@ def main():
         raise RuntimeError('Install Python 3.9 or newer, then retry setup.')
     directory, launch = desktop_location()
     library = directory / 'configLibrary'
-    target = SETUP.get('proxy') or SETUP.get('mcp') or SETUP['skills']
-    profile_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:' + (target.get('url') or target['cloneUrl'])))
+    profile_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:managed'))
     profile_path = library / (profile_id + '.json')
     meta_path = library / '_meta.json'
     app_path = directory / 'claude_desktop_config.json'
@@ -194,9 +193,25 @@ def main():
     metadata = read_json(meta_path, {'entries': []})
     if not isinstance(metadata.get('entries'), list):
         raise RuntimeError('Desktop profile library has an unexpected format; no files were changed.')
+    managed = {}
+    for entry in metadata['entries']:
+        entry_id = entry.get('id', '')
+        try:
+            uuid.UUID(entry_id)
+        except (ValueError, TypeError, AttributeError):
+            continue
+        candidate = read_json(library / (entry_id + '.json'), {})
+        urls = [candidate.get('inferenceGatewayBaseUrl')]
+        urls += [server.get('url') for server in candidate.get('managedMcpServers', [])]
+        urls += [marketplace.get('url') for marketplace in candidate.get('allowedPluginMarketplaces', [])]
+        legacy_ids = {str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:' + url)) for url in urls if isinstance(url, str)}
+        if entry_id == profile_id or entry_id in legacy_ids:
+            managed[entry_id] = candidate
+    previous = managed.get(metadata.get('appliedId'), previous)
     proxy = SETUP['proxy']
     subscription = bool(proxy and proxy['authMode'] == 'provider-key')
-    profile = previous.copy()
+    # Rebuild the managed connection so omitted resources cannot remain active.
+    profile = {}
     if proxy:
         headers = {'X-Archestra-Agent-Id': 'anthropic_claude_desktop'}
         if proxy.get('passthroughVirtualKey'):
@@ -229,18 +244,20 @@ def main():
     # Preserve other profiles and application preferences. Keep the first backup
     # so a repeat installation cannot replace the original restore point.
     app_config = read_json(app_path, {})
-    for path in (profile_path, meta_path, app_path):
+    old_paths = [library / (entry_id + '.json') for entry_id in managed if entry_id != profile_id]
+    for path in (profile_path, meta_path, app_path, *old_paths):
         backup = path.with_name(path.name + '.before-archestra')
         if path.exists() and not backup.exists():
             write_json(backup, read_json(path, {}))
-    entries = [entry for entry in metadata['entries'] if entry.get('id') != profile_id]
+    entries = [entry for entry in metadata['entries'] if entry.get('id') != profile_id and entry.get('id') not in managed]
     entries.append({'id': profile_id, 'name': SETUP['appName'] + ' Desktop'})
     metadata.update({'appliedId': profile_id, 'entries': entries})
-    if proxy:
-        app_config['deploymentMode'] = '3p'
+    app_config['deploymentMode'] = '3p' if proxy else '1p'
     write_json(profile_path, profile)
     write_json(meta_path, metadata)
     write_json(app_path, app_config)
+    for path in old_paths:
+        path.unlink(missing_ok=True)
     started = subprocess.Popen(launch, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     try:
         if started.wait(timeout=2) != 0:
@@ -254,7 +271,7 @@ def main():
         print('In Desktop Settings > Plugins, install your shared marketplace.')
     if subscription:
         print('The subscription token lasts up to one year. Rerun setup after expiration or revocation.')
-    print('To revert, select your previous profile in Configure Third-Party Inference and restart Desktop.')
+    print('To switch back, rerun the previous deployment installer or select a manually created inference profile.')
 
 
 try:

@@ -64,7 +64,7 @@ test.each([
     await writeFile(
       path.join(directory, "test.py"),
       `
-import io, json, os, pathlib, runpy, subprocess, sys, urllib.error
+import io, json, os, pathlib, runpy, subprocess, sys, urllib.error, uuid
 from unittest.mock import patch
 root = pathlib.Path(__file__).parent
 home = root / 'home'
@@ -121,7 +121,36 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         assert profile_path.stat().st_mode & 0o777 == 0o600
         assert json.loads((library / '_meta.json.before-archestra').read_text()) == original
         assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}
-        assert json.loads((library.parent / 'claude_desktop_config.json').read_text()).get('deploymentMode') == ${auth === "none" ? "None" : "'3p'"}
+        assert json.loads((library.parent / 'claude_desktop_config.json').read_text()).get('deploymentMode') == ${auth === "none" ? "'1p'" : "'3p'"}
+        # Migrate a profile made by the older per-deployment installer.
+        legacy_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:https://proxy.example/v1/mcp/test'))
+        legacy_path = library / (legacy_id + '.json')
+        legacy_path.write_text(json.dumps(profile))
+        old_metadata = {**metadata, 'appliedId': legacy_id, 'entries': metadata['entries'] + [{'id': legacy_id, 'name': 'Old deployment'}]}
+        (library / '_meta.json').write_text(json.dumps(old_metadata))
+        # A different deployment replaces the managed connection without duplicating it.
+        module = runpy.run_path(str(root / 'installer.py'))
+        module['main'].__globals__['SETUP'] = json.loads(json.dumps(module['SETUP']).replace('proxy.example', 'replacement.example'))
+        module['main']()
+        replaced_metadata = json.loads((library / '_meta.json').read_text())
+        assert replaced_metadata == metadata
+        assert not legacy_path.exists()
+        assert json.loads(legacy_path.with_name(legacy_path.name + '.before-archestra').read_text()) == profile
+        replaced_profile = json.loads(profile_path.read_text())
+        assert replaced_profile['managedMcpServers'][0]['url'] == 'https://replacement.example/v1/mcp/test'
+        assert 'proxy.example' not in json.dumps(replaced_profile)
+        assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}
+        # A managed connection must not retain resources deselected on a rerun.
+        module['main'].__globals__['SETUP']['mcp'] = None
+        module['main'].__globals__['SETUP']['skills'] = None
+        module['main']()
+        assert 'managedMcpServers' not in json.loads(profile_path.read_text())
+        module['main'].__globals__['SETUP']['proxy'] = None
+        module['main']()
+        assert json.loads(profile_path.read_text()) == {}
+        assert json.loads((library.parent / 'claude_desktop_config.json').read_text())['deploymentMode'] == '1p'
+        # Restore the original reviewed setup before testing a launch failure.
+        runpy.run_path(str(root / 'installer.py'))
         desktop_process.return_value.wait.return_value = 1
         try:
             runpy.run_path(str(root / 'installer.py'))

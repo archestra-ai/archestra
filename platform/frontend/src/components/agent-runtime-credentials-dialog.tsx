@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -193,27 +194,29 @@ function MissingCredentialsDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{credential.label}</FormLabel>
-                      <p className="text-xs text-muted-foreground">
-                        {credential.key} ·{" "}
-                        {credential.scope === "per_user"
-                          ? "Personal"
-                          : "Organization"}
-                      </p>
-                      {[
-                        ...new Set([
-                          credential.description?.trim(),
-                          definition?.description.trim(),
-                        ]),
-                      ]
-                        .filter(Boolean)
-                        .map((description) => (
-                          <p
-                            key={description}
-                            className="whitespace-pre-wrap break-words text-sm text-muted-foreground"
-                          >
-                            {description}
-                          </p>
-                        ))}
+                      <FormDescription className="space-y-2">
+                        <span className="block">
+                          {credential.key} ·{" "}
+                          {credential.scope === "per_user"
+                            ? "Personal"
+                            : "Organization"}
+                        </span>
+                        {[
+                          ...new Set([
+                            credential.description?.trim(),
+                            definition?.description.trim(),
+                          ]),
+                        ]
+                          .filter(Boolean)
+                          .map((description) => (
+                            <span
+                              key={description}
+                              className="block whitespace-pre-wrap break-words"
+                            >
+                              {description}
+                            </span>
+                          ))}
+                      </FormDescription>
                       {!canSet(credential) ? (
                         <p className="text-sm text-muted-foreground">
                           An administrator must configure this organization

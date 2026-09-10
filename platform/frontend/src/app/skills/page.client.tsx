@@ -214,6 +214,12 @@ function SkillsList() {
     pluginSkillsEnabled &&
     !isDeletedView &&
     (kind === "all" || kind === "plugin");
+  // Name-based edit links may target a skill beyond the visible page, so keep
+  // their existing complete standalone list until the name has resolved.
+  const openEdit = searchParams.get("openEdit");
+  const isStandalonePaginatedView =
+    !isDeletedView && kind === "standalone" && !openEdit;
+  const usesPaginatedSkills = isDeletedView || isStandalonePaginatedView;
 
   /**
    * Everything that narrows the table, with the page itself left out — the
@@ -245,7 +251,7 @@ function SkillsList() {
       offset: pageIndex * pageSize,
       ...listFilters,
     },
-    { enabled: isDeletedView, toastOnError: false },
+    { enabled: usesPaginatedSkills, toastOnError: false },
   );
   const {
     data: activeSkills = [],
@@ -254,13 +260,14 @@ function SkillsList() {
     isLoadingError: isActiveSkillsLoadError,
     refetch: refetchActiveSkills,
   } = useSkillsList(listFilters, {
-    enabled: !isDeletedView && showStandaloneSkills,
+    enabled:
+      !isDeletedView && showStandaloneSkills && !isStandalonePaginatedView,
     toastOnError: false,
   });
-  const isFetching = isDeletedView
+  const isFetching = usesPaginatedSkills
     ? isDeletedSkillsFetching
     : isActiveSkillsFetching;
-  const isSkillsLoadError = isDeletedView
+  const isSkillsLoadError = usesPaginatedSkills
     ? isDeletedSkillsLoadError
     : isActiveSkillsLoadError;
   const { data: sourceReposData } = useSkillSourceRepos();
@@ -383,7 +390,9 @@ function SkillsList() {
   const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
   const userTeamIdSet = new Set((userTeams ?? []).map((team) => team.id));
 
-  const standaloneSkills = isDeletedView ? (skills?.data ?? []) : activeSkills;
+  const standaloneSkills = usesPaginatedSkills
+    ? (skills?.data ?? [])
+    : activeSkills;
   const items: ListedSkill[] = [
     ...(showStandaloneSkills
       ? standaloneSkills.map((skill) => ({
@@ -450,7 +459,6 @@ function SkillsList() {
   // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
   // (e.g. from the chat SkillPill). The name resolves to an id once the items
   // it was searched by have loaded.
-  const openEdit = searchParams.get("openEdit");
   useEffect(() => {
     if (!openEdit || standaloneSkills.length === 0) return;
     const match = standaloneSkills.find((skill) => skill.name === openEdit);
@@ -458,10 +466,12 @@ function SkillsList() {
     router.replace(`/skills/${match.id}`);
   }, [openEdit, standaloneSkills, router]);
   const pagination = skills?.pagination;
-  const totalStandaloneSkills = isDeletedView
+  const totalStandaloneSkills = usesPaginatedSkills
     ? (pagination?.total ?? 0)
     : activeSkills.length;
-  const totalSkills = isDeletedView ? totalStandaloneSkills : items.length;
+  const totalSkills = usesPaginatedSkills
+    ? totalStandaloneSkills
+    : items.length;
   const hasActiveFilters =
     !!search ||
     !!sourceRepo ||
@@ -490,7 +500,7 @@ function SkillsList() {
    * which is only true during a first load of a query that is switched on.
    */
   const isInitialSkillsLoad =
-    ((isDeletedView ? isDeletedSkillsPending : isActiveSkillsPending) &&
+    ((usesPaginatedSkills ? isDeletedSkillsPending : isActiveSkillsPending) &&
       isFetching) ||
     (showMcpSkills && isExternalSkillsPending && isExternalSkillsFetching) ||
     (showPluginSkills && isPluginSkillsPending && isPluginSkillsFetching);
@@ -803,7 +813,7 @@ function SkillsList() {
         <QueryLoadError
           title="Couldn't load your skills"
           onRetry={() =>
-            isDeletedView ? refetchSkills() : refetchActiveSkills()
+            usesPaginatedSkills ? refetchSkills() : refetchActiveSkills()
           }
         />
       </PageLayout>
@@ -1068,8 +1078,8 @@ function SkillsList() {
                       : "No skills match the current filters."
                   }
                   onClearFilters={clearFilters}
-                  manualPagination={isDeletedView}
-                  manualSorting={isDeletedView}
+                  manualPagination={usesPaginatedSkills}
+                  manualSorting={usesPaginatedSkills}
                   sorting={sorting}
                   onSortingChange={handleSortingChange}
                   pagination={{ pageIndex, pageSize, total: totalSkills }}

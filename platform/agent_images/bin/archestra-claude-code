@@ -55,6 +55,9 @@ args=(
   --mcp-config "${mcp_config}"
   --strict-mcp-config
 )
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  args+=(--continue)
+fi
 if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
   args+=(--append-system-prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT}")
 fi
@@ -98,13 +101,14 @@ set -euo pipefail
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 payload="$(cat)"
 transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
+last_assistant_message="$(jq -r '.last_assistant_message | strings // empty' <<<"${payload}")"
 printf '%s\n' '{"hook_event_name":"Stop"}' \
   | "${runtime_dir}/attention-hook.sh" \
   >/dev/null 2>&1 || true
 
 if [[ -n "${transcript}" && -r "${transcript}" ]]; then
   readable_tmp="${runtime_dir}/readable-transcript.tmp.json"
-  if jq -s '
+  if jq -s --arg final "${last_assistant_message}" '
     def timestamp($entry):
       if ($entry.timestamp | type) == "string"
       then {timestamp:$entry.timestamp}
@@ -152,6 +156,10 @@ if [[ -n "${transcript}" && -r "${transcript}" ]]; then
           end
       ]
     }
+    | if $final != "" and
+        (.entries[-1] | .type != "message" or .role != "assistant" or .text != $final)
+      then .entries += [{type:"message", role:"assistant", text:$final}]
+      else . end
   ' "${transcript}" > "${readable_tmp}" 2>/dev/null; then
     mv "${readable_tmp}" "${runtime_dir}/readable-transcript.json"
   else
@@ -160,7 +168,10 @@ if [[ -n "${transcript}" && -r "${transcript}" ]]; then
 fi
 
 if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" ]]; then
-  if [[ -n "${transcript}" && -r "${transcript}" ]]; then
+  # Stop can fire before the final response is flushed to the JSONL file.
+  if [[ -n "${last_assistant_message}" ]]; then
+    printf '%s\n' "${last_assistant_message}" > "${runtime_dir}/final-answer.txt"
+  elif [[ -n "${transcript}" && -r "${transcript}" ]]; then
     jq -rs '[.[]
         | select(.type == "assistant")
         | .message.content

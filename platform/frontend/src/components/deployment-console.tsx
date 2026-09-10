@@ -235,10 +235,10 @@ export function DeploymentLogPanel({
                 variant="outline"
                 size="sm"
                 onClick={onScrollToBottom}
-                className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                className="h-7 gap-1.5 px-2 text-xs text-muted-foreground has-[>svg]:px-2"
               >
-                <ArrowDown className="mr-2 h-3 w-3" />
-                Scroll to Bottom
+                <ArrowDown className="size-3" />
+                <span>Scroll to Bottom</span>
               </Button>
             )}
             {actions}

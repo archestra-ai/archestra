@@ -5,10 +5,11 @@ import logger from "@/logging";
 import {
   A2ATaskModel,
   AgentModel,
-  AgentRunInputModel,
   AgentRunModel,
+  AgentWorkspaceModel,
 } from "@/models";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
+import type { AgentWorkspace } from "@/types/agent-workspace";
 import {
   isAnyAgentRuntimeBackendDriverEnabled,
   resolveAgentRuntimeBackendDriver,
@@ -46,6 +47,11 @@ class AgentRunReconciler {
     if (this.isReconciling) return;
     this.isReconciling = true;
     try {
+      const workspaces = await AgentWorkspaceModel.listForReaping(
+        config.agentRuntime.defaultIdleTimeoutMinutes,
+      );
+      for (const workspace of workspaces)
+        await this.reconcileWorkspace(workspace);
       const sessions = await AgentRunModel.listOpen();
       for (const session of sessions) {
         if (this.inFlight.has(session.id)) continue;
@@ -70,6 +76,103 @@ class AgentRunReconciler {
     void this.reconcile().catch((error) => {
       logger.warn({ error }, "Agent Runtime reconciliation failed");
     });
+  }
+
+  private async reconcileWorkspace(workspace: AgentWorkspace): Promise<void> {
+    const backend = resolveAgentRuntimeBackendDriver(workspace.backend);
+    const expired = workspace.expiresAt.getTime() <= Date.now();
+    if (workspace.state === "idle" && !expired) {
+      try {
+        const run = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+        const activityAt = run
+          ? await backend.getLastWorkspaceActivity(run)
+          : null;
+        if (activityAt && activityAt > workspace.lastActivityAt) {
+          await AgentWorkspaceModel.recordActivity(workspace.id, activityAt);
+          return;
+        }
+      } catch (error) {
+        logger.warn(
+          { error, workspaceId: workspace.id },
+          "Could not verify workspace activity; idle suspension will retry",
+        );
+        return;
+      }
+    }
+    if (workspace.state === "resuming" && !expired) {
+      try {
+        const run = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+        if (!run) throw new Error("Workspace run not found");
+        await backend.resumeWorkspace(run);
+        await AgentWorkspaceModel.finishResume(workspace.id);
+      } catch (error) {
+        logger.warn(
+          { error, workspaceId: workspace.id },
+          "Workspace resume will retry",
+        );
+      }
+      return;
+    }
+    const target =
+      expired || workspace.state === "deleting" ? "deleting" : "suspending";
+    if (
+      workspace.state !== target &&
+      !(await AgentWorkspaceModel.transition({
+        id: workspace.id,
+        from: workspace.state,
+        to: target,
+        expectedLastActivityAt:
+          target === "suspending" ? workspace.lastActivityAt : undefined,
+      }))
+    )
+      return;
+    try {
+      if (target === "deleting") {
+        const run = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+        if (run) {
+          const task = await A2ATaskModel.findById(run.taskId);
+          if (task && !isTerminalA2ATaskState(task.state)) {
+            await this.a2aManager.cancelTask({
+              actor: {
+                kind: workspace.actorKind,
+                id: workspace.actorId,
+                organizationId: workspace.organizationId,
+              },
+              agentId: workspace.agentId,
+              request: { id: run.taskId },
+            });
+          }
+          // Capture the supervisor's final output while its volume still exists.
+          // A failed capture/cleanup leaves the deleting intent for retry.
+          if (!run.endedAt || run.virtualApiKeyId) {
+            await cleanupAgentRun(run, { requireTranscript: true });
+          } else {
+            await backend.releaseRun(run);
+          }
+        }
+        await backend.deleteWorkspace(workspace);
+        await AgentWorkspaceModel.transition({
+          id: workspace.id,
+          from: "deleting",
+          to: "deleted",
+        });
+      } else {
+        const run = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+        if (run?.virtualApiKeyId)
+          await cleanupAgentRun(run, { requireTranscript: true });
+        await backend.suspendWorkspace(workspace);
+        await AgentWorkspaceModel.transition({
+          id: workspace.id,
+          from: "suspending",
+          to: "suspended",
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        { error, workspaceId: workspace.id },
+        "Workspace reconciliation will retry",
+      );
+    }
   }
 
   private async reconcileSession(
@@ -104,10 +207,6 @@ class AgentRunReconciler {
           "Re-adopting Agent Runtime run after owner restart",
         );
         try {
-          await backend.stageInputs({
-            session,
-            inputs: await AgentRunInputModel.findByTaskId(session.taskId),
-          });
           await this.a2aManager.adoptAgentRun({
             taskId: session.taskId,
             session,

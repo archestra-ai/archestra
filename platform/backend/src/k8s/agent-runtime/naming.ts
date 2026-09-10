@@ -2,6 +2,7 @@ import { sanitizeLabelValue } from "@/k8s/shared";
 
 /** The A2A task this pod carries — the pod's stable selector identity. */
 export const AGENT_RUNTIME_TASK_LABEL = "archestra.io/agent-run-task-id";
+export const AGENT_RUNTIME_WORKSPACE_LABEL = "archestra.io/agent-workspace";
 
 /** The Agent Runtime definition the pod was launched from, for fleet-wide sweeps. */
 const AGENT_RUNTIME_DEFINITION_LABEL = "archestra.io/agent-runtime-id";
@@ -13,13 +14,13 @@ const AGENT_RUNTIME_PURPOSE_VALUE = "agent-runtime";
 export const AGENT_RUNTIME_LEASE_SCOPE = "agent-run-transition";
 
 export function agentRuntimeNames(frozenName: string): {
-  job: string;
+  sandbox: string;
   secret: string;
   networkPolicy: string;
   environmentNetworkPolicy: string;
 } {
   return {
-    job: frozenName,
+    sandbox: frozenName,
     secret: `${frozenName}-env`,
     networkPolicy: `${frozenName}-np`,
     environmentNetworkPolicy: `${frozenName}-egress`,
@@ -46,9 +47,4 @@ export function agentRuntimeLabels(params: {
     [AGENT_RUNTIME_TASK_LABEL]: sanitizeLabelValue(params.taskId),
     [AGENT_RUNTIME_DEFINITION_LABEL]: sanitizeLabelValue(params.agentRuntimeId),
   };
-}
-
-/** Selector for the single pod carrying one task. */
-export function agentRuntimePodSelector(taskId: string): string {
-  return `${AGENT_RUNTIME_TASK_LABEL}=${taskId}`;
 }

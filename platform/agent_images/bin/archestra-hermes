@@ -330,6 +330,7 @@ database_path = Path(sys.argv[1])
 task = sys.argv[2]
 answer_path = Path(sys.argv[3])
 done_path = Path(sys.argv[4])
+minimum_message_id = int(sys.argv[5])
 
 while not done_path.exists():
     try:
@@ -337,17 +338,18 @@ while not done_path.exists():
             with sqlite3.connect(database_path, timeout=0.2) as database:
                 session = database.execute(
                     """
-                    SELECT sessions.id
+                    SELECT sessions.id, messages.id
                     FROM sessions
                     JOIN messages ON messages.session_id = sessions.id
                     WHERE sessions.source = 'tui'
                       AND sessions.parent_session_id IS NULL
                       AND messages.role = 'user'
                       AND messages.content = ?
-                    ORDER BY sessions.started_at DESC
+                      AND messages.id > ?
+                    ORDER BY messages.id DESC
                     LIMIT 1
                     """,
-                    (task,),
+                    (task, minimum_message_id),
                 ).fetchone()
                 if session:
                     assistant = database.execute(
@@ -355,13 +357,14 @@ while not done_path.exists():
                         SELECT content
                         FROM messages
                         WHERE session_id = ?
+                          AND id > ?
                           AND role = 'assistant'
                           AND active = 1
                           AND finish_reason IS NOT NULL
                         ORDER BY id DESC
                         LIMIT 1
                         """,
-                        (session[0],),
+                        (session[0], session[1]),
                     ).fetchone()
                     if assistant and assistant[0].strip():
                         subprocess.run(
@@ -389,6 +392,9 @@ common_args=(
   --yolo
   --accept-hooks
 )
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
+  common_args+=(--continue)
+fi
 
 case "${runtime_mode}" in
   interactive)
@@ -412,11 +418,27 @@ case "${runtime_mode}" in
       exit 0
     fi
 
+    # Capture the cursor before starting Hermes, including when the next prompt
+    # repeats an earlier one. Only messages written by this invocation can finish it.
+    message_cursor="$(python3 - "${HERMES_HOME}/state.db" <<'PYTHON'
+import sqlite3
+import sys
+from pathlib import Path
+
+database_path = Path(sys.argv[1])
+if database_path.exists():
+    with sqlite3.connect(database_path) as database:
+        print(database.execute("SELECT COALESCE(MAX(id), 0) FROM messages").fetchone()[0])
+else:
+    print(0)
+PYTHON
+    )"
     python3 "${completion_watcher}" \
       "${HERMES_HOME}/state.db" \
       "$(cat "${task_file}")" \
       "${runtime_dir}/final-answer.txt" \
-      "${runtime_dir}/turn-complete" &
+      "${runtime_dir}/turn-complete" \
+      "${message_cursor}" &
 
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     exec "${script_dir}/archestra-tui-run" \

@@ -56,7 +56,15 @@ export const AGENT_RUNTIME_EGRESS_POLICY_CRDS = {
  * Kubernetes policy. The GKE path also emits a standard policy for CIDRs.
  */
 export function buildAgentRuntimeEnvironmentEgressPolicies(params: {
-  spec: KubernetesAgentRunLaunchSpec;
+  spec: Pick<
+    KubernetesAgentRunLaunchSpec,
+    | "frozenName"
+    | "taskId"
+    | "namespace"
+    | "agentRuntimeId"
+    | "ownerReferences"
+    | "effectiveNetworkPolicy"
+  >;
   capabilities?: K8sNetworkPolicyCapabilities | null;
   clusterDnsIps?: string[];
 }): AgentRuntimeEgressPolicyObject[] {

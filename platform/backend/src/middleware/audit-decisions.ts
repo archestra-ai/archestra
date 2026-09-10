@@ -672,6 +672,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "records which pod carries an A2A task; the task's own state machine and event log are the record of the work",
   },
+  agentWorkspacesTable: {
+    audited: false,
+    reason:
+      "internal workspace lifecycle and compare-and-set ownership; user actions are audited by the runtime routes",
+  },
   agentRunTranscriptsTable: {
     audited: false,
     reason:

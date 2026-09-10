@@ -10,13 +10,17 @@ import type {
   AgentRuntimeSteerMode,
   EffectiveNetworkPolicy,
 } from "@/types";
+import type {
+  AgentWorkspaceFileRequest,
+  AgentWorkspaceFileResult,
+} from "@/types/agent-workspace-file";
 
 /**
  * Runtime-neutral description of one isolated Agent run.
  *
  * The control plane resolves identity, credentials, inference, tools, limits,
  * and network intent before crossing this boundary. A backend translates the
- * result into its own vocabulary: a Kubernetes Job today, and potentially a
+ * result into its own vocabulary: a Kubernetes Sandbox today, and potentially a
  * VM or managed sandbox later.
  */
 export type AgentRunLaunchSpec = {
@@ -32,8 +36,9 @@ export type AgentRunLaunchSpec = {
   env: Record<string, string>;
   secretEnv: Record<string, string>;
   activeDeadlineSeconds: number | null;
-  /** Writable scratch-space ceiling enforced by the runtime backend. */
-  ephemeralStorageLimit: string;
+  /** Durable workspace PVC, including nested Docker storage for privileged runtimes. */
+  workspaceStorageSize?: string;
+  workspaceStorageClass?: string;
   /**
    * Steers the pod onto a dedicated node pool: applied verbatim as the pod's
    * nodeSelector, with one matching NoSchedule toleration per entry. Empty
@@ -79,6 +84,47 @@ export interface AgentRuntimeBackendDriver {
   /** Schedule the workload. Returns once accepted, not once running. */
   launch(spec: AgentRunLaunchSpec): Promise<void>;
 
+  /** Run another turn in the retained workspace with freshly resolved credentials. */
+  continueRun(params: {
+    session: AgentRunRecord;
+    spec: AgentRunLaunchSpec;
+  }): Promise<void>;
+  /** Recover a durable, unstarted continuation after its launcher disappeared. */
+  recoverRun(session: AgentRunRecord): Promise<void>;
+  /** Stop only this turn, keeping the workspace available for continuation. */
+  stopRun(session: AgentRunRecord): Promise<"suspended" | undefined>;
+  /** Revoke turn-scoped access; a successful live CLI may retain it until workspace cleanup. */
+  releaseRun(
+    session: AgentRunRecord,
+    options?: { retainInteractiveSession?: boolean },
+  ): Promise<void>;
+  /** True only for the original, still-running interactive CLI. */
+  hasRetainedTerminal(
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
+  ): Promise<boolean>;
+  /** Stable connection hints; commands require the caller's own cluster access. */
+  getWorkspaceConnection(
+    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope">,
+  ): {
+    hostname: string;
+    shellCommand: string;
+  };
+  accessWorkspaceFile(params: {
+    session: AgentRunRecord;
+    request: AgentWorkspaceFileRequest;
+  }): Promise<AgentWorkspaceFileResult>;
+  /** Remove compute while preserving the workspace's durable volumes. */
+  suspendWorkspace(
+    session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
+  ): Promise<void>;
+  /** Wake compute without launching another Agent turn. */
+  resumeWorkspace(session: AgentRunRecord): Promise<void>;
+  /** Last observed deliberate development activity; process output does not count. */
+  getLastWorkspaceActivity(session: AgentRunRecord): Promise<Date | null>;
+  deleteWorkspace(
+    session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
+  ): Promise<void>;
+
   /** Materialize durable task inputs before the Agent command is released. */
   stageInputs(params: {
     session: AgentRunRecord;
@@ -97,7 +143,7 @@ export interface AgentRuntimeBackendDriver {
 
   /** Inspect the runtime's current startup wait without opening a terminal. */
   getStartupProgress(
-    session: Pick<AgentRunRecord, "taskId" | "runtimeScope">,
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
   ): Promise<AgentRunStartupProgress>;
 
   /** Follow the session's output. Resolves when the stream ends. */

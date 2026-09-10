@@ -37,7 +37,12 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(body.resource).toBe(
         "http://localhost:9000/v1/mcp/some-profile-id",
       );
-      expect(body.authorization_servers).toEqual(["http://localhost:9000"]);
+      expect(body.authorization_servers).toEqual([config.frontendBaseUrl]);
+      const authorization = await app.inject({
+        method: "GET",
+        url: "/.well-known/oauth-authorization-server",
+      });
+      expect(body.authorization_servers[0]).toBe(authorization.json().issuer);
       expect(body.scopes_supported).toEqual(["mcp"]);
       expect(body.bearer_methods_supported).toEqual(["header"]);
     });
@@ -55,9 +60,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(body.resource).toBe(
         "http://host.docker.internal:9000/v1/mcp/test-id",
       );
-      expect(body.authorization_servers).toEqual([
-        "http://host.docker.internal:9000",
-      ]);
+      expect(body.authorization_servers).toEqual([config.frontendBaseUrl]);
     });
 
     test("ignores forwarded public origin when proxy trust is disabled", async () => {
@@ -75,7 +78,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       const body = response.json();
 
       expect(body.resource).toBe("http://localhost:9000/v1/mcp/test-id");
-      expect(body.authorization_servers).toEqual(["http://localhost:9000"]);
+      expect(body.authorization_servers).toEqual([config.frontendBaseUrl]);
     });
 
     test("returns app-connector metadata", async () => {
@@ -252,7 +255,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
         expect(body.jwks_uri).toMatch(/^https:\/\//);
       });
 
-      test("uses https:// for resource and authorization_servers in oauth-protected-resource when X-Forwarded-Proto is https", async () => {
+      test("uses the forwarded protocol for the resource without changing the issuer", async () => {
         const response = await proxyApp.inject({
           method: "GET",
           url: "/.well-known/oauth-protected-resource/v1/mcp/some-profile-id",
@@ -266,7 +269,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
         const body = response.json();
 
         expect(body.resource).toMatch(/^https:\/\//);
-        expect(body.authorization_servers[0]).toMatch(/^https:\/\//);
+        expect(body.authorization_servers).toEqual([config.frontendBaseUrl]);
       });
 
       test("prefers forwarded public origin over internal upstream host", async () => {
@@ -286,9 +289,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
         expect(body.resource).toBe(
           "https://gateway.example.com/v1/mcp/test-id",
         );
-        expect(body.authorization_servers).toEqual([
-          "https://gateway.example.com",
-        ]);
+        expect(body.authorization_servers).toEqual([config.frontendBaseUrl]);
       });
 
       test("prefers forwarded public origin for server-to-server endpoints", async () => {

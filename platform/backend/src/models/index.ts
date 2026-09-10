@@ -29,6 +29,7 @@ export { default as AgentSkillModel } from "./agent-skill";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as AgentVersionModel } from "./agent-version";
+export { default as AgentWorkspaceModel } from "./agent-workspace";
 export { default as AppModel } from "./app";
 export { default as AppAccessModel } from "./app-access";
 export { default as AppDataModel } from "./app-data";

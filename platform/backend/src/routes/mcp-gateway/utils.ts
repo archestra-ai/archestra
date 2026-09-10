@@ -13,16 +13,16 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   platformExecutedAs,
-  TOOL_CANCEL_TASK_SHORT_NAME,
+  TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
-  TOOL_GET_TASK_SHORT_NAME,
-  TOOL_LIST_TASKS_SHORT_NAME,
+  TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_START_TASK_SHORT_NAME,
-  TOOL_STEER_TASK_SHORT_NAME,
+  TOOL_START_RUN_SHORT_NAME,
+  TOOL_STEER_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -410,12 +410,12 @@ export async function createAgentServer(params: {
       mcpTools.some(
         (tool) =>
           archestraMcpBranding.getToolShortName(tool.name) ===
-          TOOL_START_TASK_SHORT_NAME,
+          TOOL_START_RUN_SHORT_NAME,
       );
-    // A task handle is not useful without its lifecycle controls. Dynamic
+    // A run handle is not useful without its lifecycle controls. Dynamic
     // per-Agent delegation tools do not have assignment rows, so expose the
-    // controls as protocol support whenever this gateway can start a task.
-    // The handlers still scope every task to the authenticated actor and the
+    // controls as protocol support whenever this gateway can start a run.
+    // The handlers still scope every run to the authenticated actor and the
     // call path keeps its normal RBAC check.
     const implicitTaskControlTools = hasTaskStarter
       ? getImplicitTaskControlTools()
@@ -2533,10 +2533,10 @@ function isArchestraMetaTool(toolName: string) {
 function isTaskControlTool(toolName: string) {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   return (
-    shortName === TOOL_GET_TASK_SHORT_NAME ||
-    shortName === TOOL_LIST_TASKS_SHORT_NAME ||
-    shortName === TOOL_STEER_TASK_SHORT_NAME ||
-    shortName === TOOL_CANCEL_TASK_SHORT_NAME
+    shortName === TOOL_GET_RUN_SHORT_NAME ||
+    shortName === TOOL_LIST_RUNS_SHORT_NAME ||
+    shortName === TOOL_STEER_RUN_SHORT_NAME ||
+    shortName === TOOL_CANCEL_RUN_SHORT_NAME
   );
 }
 

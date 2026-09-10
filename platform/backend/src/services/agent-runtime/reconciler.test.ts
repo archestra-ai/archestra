@@ -22,7 +22,7 @@ describe("AgentRunReconciler", () => {
     const overlapping = agentRunReconciler.reconcile();
 
     await overlapping;
-    expect(listOpenSpy).toHaveBeenCalledOnce();
+    await expect.poll(() => listOpenSpy.mock.calls.length).toBe(1);
     expect(pendingSpy).not.toHaveBeenCalled();
 
     releaseListOpen?.([]);

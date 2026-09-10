@@ -83,7 +83,7 @@ if [[ -t 0 ]]; then
   # watching for completion.
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   set +e
-  "${script_dir}/archestra-tui-exec" \
+  ARCHESTRA_AGENT_RUNTIME_ANSWER_FILE="${answer_file}" "${script_dir}/archestra-tui-exec" \
     "${done_marker}" \
     "${completed_frame}" \
     "$@"

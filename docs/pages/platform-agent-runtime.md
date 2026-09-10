@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated runtime
-lastUpdated: "2026-09-08"
+lastUpdated: "2026-09-09"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -54,6 +54,96 @@ This lets a coordinator Agent stay responsive in a messaging channel while a spe
 
 Kubernetes is currently the only supported runtime backend. Support for additional backends is planned.
 
+## Cluster Prerequisites
+
+Agent Runtime uses the upstream [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
+For deployed clusters, install the controller before enabling Agent Runtime.
+The controller manages Sandbox resources and their backing Pods.
+It does not select or install a container isolation runtime.
+
+Use Linux nodes with enough CPU, memory, and disk space for your images.
+The cluster must permit custom resources and the controller's Kubernetes permissions.
+Archestra also needs its Helm chart's runtime permissions in each execution namespace.
+Pods must reach your image registry, DNS, and the Archestra proxy and gateway.
+See [network egress](#environments-and-network-egress) for network-policy requirements.
+
+Install the tested controller version with an administrator's cluster context:
+
+```sh
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
+kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
+kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
+```
+
+The upstream controller is separate from provider-managed products with similar names.
+For example, GKE's managed Agent Sandbox adds restrictions beyond this controller.
+
+### Local Development With Tilt
+
+Set `ARCHESTRA_AGENT_RUNTIME_ENABLED=true` in `platform/.env`, then run `tilt up`.
+Tilt installs the pinned controller and waits for readiness before starting the backend.
+Your local cluster needs a default storage class with dynamic volume provisioning.
+The bootstrap reports missing storage instead of leaving runs waiting for volumes.
+
+Tilt pins the backend's Kubernetes connection to the selected local cluster.
+Changing your CLI context does not redirect the running backend elsewhere.
+The controller remains installed after `tilt down`; other worktrees can share it.
+Workspace retention and cleanup still follow the runtime's configured deadlines.
+
+### Provider Setup
+
+These are configuration requirements, not a certification of every provider or node image.
+Check admission policies, storage topology, and image architecture before enabling workloads.
+
+| Cluster | Compute and Controller | Persistent Storage | Privileged Workloads |
+| --- | --- | --- | --- |
+| GKE Standard | Install the upstream controller on Linux node pools. Use a dedicated pool for development workloads. | Enable the [Persistent Disk CSI driver](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gce-pd-csi-driver). | Standard nodes can support them when admission permits. [GKE Sandbox](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/sandbox-pods) does not support privileged containers. |
+| GKE Autopilot | Check [Autopilot restrictions](https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-security) for the controller and workload. | Use a supported Persistent Disk storage class. | Arbitrary privileged images are not supported. Use Standard nodes for privileged development stacks. |
+| AKS | Install the upstream controller on Linux agent pools. Review [pod security configuration](https://learn.microsoft.com/en-us/azure/aks/secure-container-access). | Enable [Azure Disk CSI](https://learn.microsoft.com/en-us/azure/aks/create-volume-azure-disk). | Admission and Azure Policy must permit the workload. Scope exceptions to a dedicated namespace and pool. |
+| EKS With EC2 Nodes | Install the upstream controller on managed or self-managed Linux nodes. | Install the [EBS CSI driver](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html) and configure its IAM permissions. | Admission must permit the workload. EKS Fargate does not support privileged containers. |
+| EKS Auto Mode | Install the upstream controller. Review [Auto Mode security](https://docs.aws.amazon.com/eks/latest/best-practices/autosecure.html) and configure an appropriate NodePool. | Use an Auto Mode storage class with `ebs.csi.eks.amazonaws.com`. Do not substitute the EC2 EBS driver's provisioner. | Check admission and Bottlerocket/SELinux behavior for your image. Auto Mode is not Fargate; do not assume their restrictions are identical. |
+| Self-Managed Kubernetes | Install the upstream controller and use Linux nodes with a compatible OCI runtime. | Configure a CSI driver and a dynamically provisioned storage class. | Your container runtime and admission policies must permit privileged Pods. |
+
+For zonal disks, prefer `WaitForFirstConsumer` storage binding.
+The storage topology must match the node pool's allowed zones.
+Node-local storage cannot preserve a workspace after losing its node.
+
+### Privileged Containers
+
+A privileged container receives broad access to the node's kernel and devices.
+It removes important container security restrictions.
+Treat it as code with potential node-level impact, not ordinary application isolation.
+
+Running a coding CLI does not itself require privilege.
+Docker-in-Docker and nested Kubernetes development clusters may require it.
+For example, a development image can run Docker, kind, and Tilt inside its Pod.
+Remote builders or other supported build configurations may avoid this requirement.
+
+On cgroup v2 nodes, the image must delegate cgroup controllers before starting Docker.
+See the [Docker nesting bootstrap](https://github.com/moby/moby/blob/master/hack/dind) for the required setup.
+After workspace resumption, restart Docker and any retained development containers.
+
+Privilege requires all three approvals:
+
+1. The deployment sets `ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true`.
+2. The Agent's runtime configuration requests elevated permissions.
+3. The node runtime and cluster admission policies allow privileged containers.
+
+The Archestra setting does not override your cloud provider or admission controller.
+Use the provider guidance above to configure a compatible pool.
+Keep privileged workloads separate from Archestra's own Pods and other tenants.
+Restrict access to the execution namespace and its Agent configurations.
+
+For Kubernetes Pod Security Admission, a dedicated namespace can use the `privileged` enforcement level.
+This permits privileged Pods; it does not make every container privileged automatically.
+Review [namespace policy configuration](https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-namespace-labels/) before applying an exception.
+Do not relax the policy for a shared application namespace.
+Other admission policies can still reject the Pod.
+
+Select a dedicated pool with `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`.
+Archestra adds matching `NoSchedule` tolerations for the selector's key-value pairs.
+Configure the corresponding labels and taints on your pool.
+
 ## Configure Agent Runtime
 
 An administrator must first enable Agent Runtime for the deployment. See [Deployment configuration](/docs/platform-deployment#agent-runtime).
@@ -87,18 +177,22 @@ The dedicated runtime uses the same Agent system prompt and tool access as the f
 
 ### Environments and network egress
 
-Each run Job uses the Agent's [Environment](/docs/platform-environments),
+Each workspace uses the Agent's [Environment](/docs/platform-environments),
 including its Kubernetes namespace and network egress policy. If the Agent has
 no Environment policy override, Archestra uses the organization default policy,
 then the built-in **Public internet** policy.
 
-The policy is applied before Kubernetes creates the Job. Archestra emits the
+The policy is applied before Kubernetes creates the Sandbox. Archestra emits the
 policy type supported by the cluster: standard Kubernetes `NetworkPolicy`,
 Cilium `CiliumNetworkPolicy`, GKE `FQDNNetworkPolicy`, or AWS
 `ApplicationNetworkPolicy`. This gives runs the same IP, domain, Public
 internet CIDR-exception, and floor behavior as MCP server pods and code sandboxes. DNS and the
 Archestra control plane remain reachable so the run can use the LLM
 proxy and MCP gateway.
+
+Continuations refresh the current Environment policy before starting the next turn.
+Obsolete policy types are removed, including when a suspended workspace resumes.
+Changing the execution namespace requires a new workspace.
 
 See [Network egress policies](/docs/platform-environments#network-egress-policies)
 for policy modes, provider support, and the fixed SSRF floor.
@@ -171,8 +265,8 @@ resolves those concerns before the backend starts the image.
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
-| Completion | Exit `0` only after the task is complete. Any non-zero exit marks the run failed. The Kubernetes Job is not retried, because replaying an Agent process could repeat side effects. |
-| Storage | Treat the filesystem as ephemeral. Commit, upload, or otherwise persist durable results before exiting. |
+| Completion | Exit `0` only after the turn is complete. Any non-zero exit marks the run failed. The workspace supervisor does not replay an interrupted turn after Pod replacement. |
+| Storage | `/home/node` and `/var/run/archestra` are persisted on a workspace PVC. Privileged runtimes also persist `/var/lib/docker` there. Other container paths are ephemeral. Export final deliverables before the workspace's retention deadline. |
 
 The initial task is supplied in
 `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is
@@ -182,6 +276,62 @@ client decides how to combine them. It should read
 input loop and remain available for follow-ups, while `one_shot` means finish
 the supplied task and exit. Images that support only unattended work can ignore
 interactive mode, but they will not provide a useful Chat terminal.
+
+### Workspace Continuations
+
+A completed task can retain its interactive session. Reattaching preserves that
+process, terminal history, and conversation. When the process has ended, resuming
+creates a new run in the same workspace. The completed A2A task stays completed.
+Only the workspace's original actor can continue it, and only one turn can own it
+at a time.
+
+The supervisor keeps the Pod available after a successful turn. After the idle
+timeout, Archestra suspends the Sandbox to release compute while retaining its
+PVC. The hard deadline removes the workspace, including its volume. Run history
+remains available after workspace removal.
+
+Terminal input and interactive shell commands refresh the workspace activity timer.
+Detached terminal sessions retain their last activity time. Background output does not reset idle retention.
+The hard deadline still applies during active development.
+
+Canceling a run stops its Agent process without deleting the workspace.
+Deleting a workspace removes its files permanently. Saved run transcripts remain available.
+An active run must finish or be canceled before its workspace can be deleted.
+
+Suspension is not a memory snapshot. Shell processes, Docker containers, and
+development servers stop when the Pod is removed. Clients restore their saved
+conversation state from disk; development services must be started again.
+
+On a continuation, `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` asks the client to restore
+its prior session before handling the new `ARCHESTRA_AGENT_RUNTIME_TASK`.
+`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` stays stable across turns, while
+`ARCHESTRA_AGENT_RUNTIME_TASK_ID` identifies the current run. Re-read injected
+credentials on every invocation. A retained interactive CLI keeps its virtual key until
+suspension, replacement by another turn, or workspace deletion. Other completed
+processes release their virtual keys immediately.
+Archestra clears the initial Kubernetes credential Secret when a turn finishes,
+so replacement Pods do not inherit those earlier credential values.
+
+Custom images should keep their working files and native session state under
+`/home/node`. The initial contents of that directory are copied from the image
+when the workspace is created. Do not assume other paths survive suspension.
+An interrupted request is marked failed rather than automatically executed again,
+because its external side effects may already have happened.
+
+### Workspace Files
+
+External clients can read and write retained files without starting another Agent turn.
+File access wakes a suspended workspace and refreshes its activity timer.
+Wake-up applies the current Environment egress policy before starting the Pod.
+If that policy cannot be applied, the workspace stays suspended.
+The retention deadline remains fixed.
+
+`read_workspace_file` and `write_workspace_file` accept a run ID and a workspace-relative path.
+Reads download bytes as base64. Writes upload base64 bytes and require explicit overwrite permission.
+Both return the file size and SHA-256 digest for verification.
+Paths resolve beneath `/home/node/workspace`; symbolic links and traversal are rejected.
+Only the original run owner can access these files.
+See the [tool reference](/docs/platform-archestra-mcp-server) for the request schema.
 
 ### Readable transcript
 
@@ -243,9 +393,10 @@ activity, not credentials, private reasoning, or raw provider events.
 
 ### Input files
 
-Files attached to the run's first Chat message are staged before the
-Agent command starts. Each run receives a fresh input directory at
-`ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR`. The task text lists
+Files attached to initial runs or API/A2A follow-ups are staged before the
+Agent command starts. Each turn uses its own subdirectory under
+`ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR`. Earlier attachments remain intact.
+The task text lists
 the absolute path of every attached file, and
 `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` points to a JSON
 array containing each file's original name, absolute path, media type, and
@@ -274,8 +425,9 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Durable run identifier. |
 | `ARCHESTRA_AGENT_RUNTIME_DIR` | Runtime-owned control and artifact directory. Defaults to `/var/run/archestra`. |
 | `ARCHESTRA_AGENT_RUNTIME_MODE` | `interactive` for a Chat-owned live terminal; `one_shot` for unattended delegation that must exit when complete. |
+| `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`, `ARCHESTRA_AGENT_RUNTIME_CONTINUE` | Stable workspace identity and `1` when restoring a saved client session for a follow-up. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK`, `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` | Initial task and Agent instructions. |
-| `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Directory containing files attached to the initial run message. |
+| `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Parent directory containing each turn's attached files. |
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` | JSON manifest containing each input file's name, path, media type, and size. |
 | `ARCHESTRA_AGENT_RUNTIME_MODEL` | Provider-qualified model ID for generic clients. |
 | `ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL` | Provider-native model slug for clients that configure their provider separately. |
@@ -319,7 +471,10 @@ See [Runtime Credentials](/docs/platform-runtime-credentials) for connection typ
 - **Metered LLM budget** creates a spend ceiling for the run's short-lived virtual API key. After the ceiling is reached, further metered model calls are blocked by the LLM proxy. Subscription-backed calls have no billed spend and do not count against this ceiling.
 - **CPU and memory** override the installation defaults for this Agent. Leave them blank unless the workload needs different sizing.
 
-With the Kubernetes backend, each delegated task starts in a fresh pod. Task state, events, logs, and the final response remain attached to the run. The container filesystem is removed when the run ends. Keep durable outputs in a repository or an external artifact store.
+A new task starts a workspace; a continuation reuses its retained workspace.
+Task state, events, logs, and the final response remain attached to each run.
+Keep final deliverables in a repository or an external artifact store: retained
+workspace files are removed at the hard deadline or on explicit teardown.
 
 ## Logs and Observability
 
@@ -343,21 +498,26 @@ gateway and sends the run headers described above.
 
 Give the coordinator Agent access to the specialist under **Tools & Knowledge → Subagents**. The coordinator delegates through the specialist's ordinary Agent tool. If the specialist has Agent Runtime configured, Archestra automatically turns that delegation into a durable task in its dedicated runtime and returns immediately. There is no separate invocation syntax.
 
-Assign `start_task` when the coordinator should choose a target by Agent ID
-instead of using a specialist's Agent tool. Any gateway that can start a task
-automatically exposes `get_task`, `list_tasks`, `steer_task`, and `cancel_task`;
+Assign `start_run` when the coordinator should choose a target by Agent ID
+instead of using a specialist's Agent tool. Any gateway that can start a run
+automatically exposes `get_run`, `list_runs`, `steer_run`, and `cancel_run`;
 these lifecycle controls do not require separate assignment. They are also the
 generic interface for external Agent clients. The coordinator can continue
-answering other messages while the task works.
+answering other messages while the run works.
 
 ### External Agent clients
 
-An Agent running on a developer machine or another system uses the same task interface as an Archestra coordinator. Connect it to the Agent's MCP Gateway, then use:
+An Agent running on a developer machine or another system uses the same run interface as an Archestra coordinator. Connect it to the Agent's MCP Gateway, then use:
 
 1. `list_agents` to discover an accessible Agent.
-2. `start_task` to schedule durable work on it.
-3. `get_task` or `list_tasks` to read status and results.
-4. `steer_task` or `cancel_task` when the task needs intervention.
+2. `start_run` to schedule durable work on it.
+3. `get_run` or `list_runs` to read status and results.
+4. `steer_run` or `cancel_run` when the run needs intervention.
+
+Steering a completed run starts another turn in its retained workspace.
+An A2A client sends a new task with the same `contextId` to continue there.
+The original terminal task remains unchanged.
+Use `delete_workspace` only to permanently discard the environment and its files.
 
 These tools use Archestra's A2A task state machine underneath. A client that supports A2A can drive the same lifecycle directly. The client never needs a Claude-to-Claude, Codex-to-Codex, or other runtime-specific integration: it asks Archestra to run an Agent, and Archestra selects that Agent's configured runtime. `SendMessage` to an Agent with a dedicated runtime returns a durable A2A Task; the same method returns a Message for an Agent without Agent Runtime unless the caller explicitly requests a task.
 
@@ -376,8 +536,8 @@ and returns immediately. Archestra records the originating channel binding and
 thread on the run. When the task settles, Archestra posts the result
 asynchronously into that same thread. The message footer identifies the
 specialist Agent that produced it, for example **🤖 Codex**. Delivery is
-durable: if the control plane restarts while a Kubernetes job is running, it
-re-adopts the job and retries the pending thread notification.
+durable: if the control plane restarts while a Sandbox turn is running, it
+re-adopts the run and retries the pending thread notification.
 
 Users can name a specialist when they want a specific one, but they do not need
 to know Agent IDs or task-tool syntax. If the coordinator does not delegate,
@@ -414,8 +574,8 @@ retained transcript. Archestra generates a concise title from the opening task.
 You can pin or rename any run from its sidebar menu. Pinned runs
 stay in the shared **Pinned** section with chats, projects, and apps. They also
 appear under **Pinned** in the conversation search palette. The same menu stops
-an active run or deletes a finished one. Stopping removes the runtime workload
-and keeps the output produced before cancellation.
+an active run or deletes a finished run record. Stopping keeps the workspace
+and the output produced before cancellation.
 
 ## Organize Runs in Projects
 
@@ -439,17 +599,19 @@ the run.
 ## View Runs from an Agent
 
 An Agent with Agent Runtime configured has a **Runs** tab. A running run opens
-its live terminal. A completed run from any maintained catalog image opens a
-readable transcript. Use the selector to switch to its terminal replay. A
-custom image opens the same readable view when it implements the
-[readable transcript contract](#readable-transcript); otherwise, it opens its
-retained terminal output. Use this tab to:
+its live terminal. Completed runs open their retained terminal recording.
+Continue reattaches to the original interactive CLI while it remains alive.
+Detach returns to the recording without stopping that session.
+After suspension or Pod replacement, Resume conversation restores the saved conversation in a new process.
+The resumed terminal stays interactive after answering your follow-up.
+Recording navigation lets you revisit earlier screens, including output replaced by terminal redraws.
+Structured transcripts remain available to integrations. Use this tab to:
 
 - review run outcomes and timestamps
 - read live or retained container logs
 - attach to the live shell for troubleshooting or interactive work
 
-Agent Runtime jobs provide `/var/run/archestra/attach` for direct Kubernetes access.
+Agent Runtime workspaces provide `/var/run/archestra/attach` for direct Kubernetes access.
 Interactive `bash` and `sh` sessions opened through `kubectl exec` or k9s join
 the Agent session automatically. Press `Ctrl-b`, then `d`, to detach without
 stopping the run. For a raw diagnostic shell, set
@@ -465,6 +627,12 @@ period, which is 90 days by default. Set
 uncompressed transcript size accepted from one run. A run beyond that ceiling
 keeps its final 1 MiB instead, and the terminal labels the recording
 **Retained tail only** so the missing history is never silent.
+
+After workspace expiry, a temporary recovery Pod reads output from retained storage.
+It mounts only runtime storage, read-only, and receives no platform credentials.
+It never starts an agent process.
+A NetworkPolicy denies its network traffic. Recovery does not extend the workspace deadline.
+Failed or interrupted captures preserve storage for another attempt.
 
 Only the user whose credentials started a run can attach to its live
 shell. Agent administrators cannot enter another user's shell. There is no

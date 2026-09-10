@@ -1,19 +1,22 @@
 import {
-  TOOL_GET_TASK_FULL_NAME,
+  TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
-  TOOL_POST_TASK_FILE_FULL_NAME,
-  TOOL_START_TASK_FULL_NAME,
+  TOOL_POST_RUN_FILE_FULL_NAME,
+  TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import config from "@/config";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
   A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
   AgentTeamModel,
+  AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
@@ -21,7 +24,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
-describe("task tools", () => {
+describe("run tools", () => {
   let callingAgent: Agent;
   let actorId: string;
   let organizationId: string;
@@ -35,6 +38,7 @@ describe("task tools", () => {
       makeUser,
       seedAndAssignArchestraTools,
     }) => {
+      vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
       const organization = await makeOrganization();
       const actor = await makeUser();
       await makeMember(actor.id, organization.id, { role: "member" });
@@ -72,7 +76,7 @@ describe("task tools", () => {
     await AgentTeamModel.syncAgentTeams(target.id, [team.id]);
 
     const result = await executeArchestraTool(
-      TOOL_START_TASK_FULL_NAME,
+      TOOL_START_RUN_FULL_NAME,
       { agent_id: target.id, message: "Do the restricted work" },
       context,
     );
@@ -83,7 +87,65 @@ describe("task tools", () => {
     );
   });
 
-  test("task controls remain callable without individual assignment", async ({
+  test("returns a setup link and every missing credential before starting a run", async ({
+    makeAgent,
+  }) => {
+    const originalEnabled = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = true;
+    onTestFinished(() => {
+      config.agentRuntime.enabled = originalEnabled;
+    });
+    const target = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      scope: "org",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub token",
+            scope: "per_user",
+            required: true,
+          },
+          {
+            key: "CLAUDE_CODE_OAUTH_TOKEN",
+            label: "Claude Code token",
+            scope: "per_user",
+            required: true,
+          },
+        ],
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const result = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: target.id, message: "Review the example repository" },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain("GITHUB_TOKEN");
+    expect(text).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(text).toContain(
+      `/agents/${target.id}?section=advanced&setup=credentials`,
+    );
+    expect(
+      await AgentRunModel.listForAgent({ agentId: target.id, organizationId }),
+    ).toEqual([]);
+  });
+
+  test("run controls remain callable without individual assignment", async ({
     makeAgent,
   }) => {
     const unassignedAgent = await makeAgent({
@@ -94,7 +156,7 @@ describe("task tools", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_GET_TASK_FULL_NAME,
+      TOOL_GET_RUN_FULL_NAME,
       { task_id: crypto.randomUUID() },
       {
         ...context,
@@ -105,14 +167,14 @@ describe("task tools", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain(
-      "Task not found",
+      "Run not found",
     );
     expect((result.content[0] as { text: string }).text).not.toContain(
       "not assigned",
     );
   });
 
-  test("preserves the originating chat thread on a delegated task", async ({
+  test("preserves the originating chat thread on a delegated run", async ({
     makeAgent,
   }) => {
     const target = await makeAgent({
@@ -140,7 +202,7 @@ describe("task tools", () => {
     };
 
     const result = await executeArchestraTool(
-      TOOL_START_TASK_FULL_NAME,
+      TOOL_START_RUN_FULL_NAME,
       { agent_id: target.id, message: "Do the work" },
       chatContext,
     );
@@ -212,6 +274,67 @@ describe("task tools", () => {
     });
     return task;
   }
+
+  test("workspace file tools accept the task ID and enforce original ownership", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const run = await AgentRunModel.findByTaskId(task.id);
+    if (!run) throw new Error("Run fixture missing");
+    await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "idle",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const access = vi
+      .spyOn(agentRuntimeManager, "accessWorkspaceFile")
+      .mockResolvedValue({
+        path: "notes.txt",
+        size: 5,
+        sha256: "test-digest",
+        content_base64: Buffer.from("hello").toString("base64"),
+      });
+    try {
+      const written = await executeArchestraTool(
+        "archestra__write_workspace_file",
+        { task_id: task.id, path: "notes.txt", content: "hello" },
+        context,
+      );
+      expect(written.isError).toBeFalsy();
+      const read = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "notes.txt" },
+        context,
+      );
+      expect(read.structuredContent).toMatchObject({
+        content: "hello",
+        encoding: "utf8",
+      });
+      expect(access).toHaveBeenCalledTimes(2);
+      const other = await makeUser();
+      await makeMember(other.id, organizationId, { role: "member" });
+      const denied = await executeArchestraTool(
+        "archestra__read_workspace_file",
+        { task_id: task.id, path: "notes.txt" },
+        { ...context, userId: other.id },
+      );
+      expect(denied.isError).toBe(true);
+      expect(access).toHaveBeenCalledTimes(2);
+    } finally {
+      access.mockRestore();
+    }
+  });
 
   test("lists accessible Agent runs with live and thread links", async () => {
     const binding = await ChatOpsChannelBindingModel.create({
@@ -290,7 +413,7 @@ describe("task tools", () => {
     expect(JSON.stringify(result.content)).toContain("Agent not found");
   });
 
-  test("post_task_file uploads into the task's chatops thread", async () => {
+  test("post_run_file uploads into the run's chatops thread", async () => {
     const task = await seedChatopsTask({
       actorUserId: actorId,
       withTarget: true,
@@ -300,7 +423,7 @@ describe("task tools", () => {
       .mockResolvedValue();
 
     const result = await executeArchestraTool(
-      TOOL_POST_TASK_FILE_FULL_NAME,
+      TOOL_POST_RUN_FILE_FULL_NAME,
       {
         task_id: task.id,
         filename: "demo.mp4",
@@ -321,7 +444,7 @@ describe("task tools", () => {
     upload.mockRestore();
   });
 
-  test("post_task_file refuses a task with no messaging-channel thread", async () => {
+  test("post_run_file refuses a run with no messaging-channel thread", async () => {
     const task = await seedChatopsTask({
       actorUserId: actorId,
       withTarget: false,
@@ -331,7 +454,7 @@ describe("task tools", () => {
       .mockResolvedValue();
 
     const result = await executeArchestraTool(
-      TOOL_POST_TASK_FILE_FULL_NAME,
+      TOOL_POST_RUN_FILE_FULL_NAME,
       {
         task_id: task.id,
         filename: "demo.mp4",
@@ -348,7 +471,7 @@ describe("task tools", () => {
     upload.mockRestore();
   });
 
-  test("post_task_file only serves the person the run acts as", async ({
+  test("post_run_file only serves the person the run acts as", async ({
     makeUser,
     makeMember,
   }) => {
@@ -363,7 +486,7 @@ describe("task tools", () => {
       .mockResolvedValue();
 
     const result = await executeArchestraTool(
-      TOOL_POST_TASK_FILE_FULL_NAME,
+      TOOL_POST_RUN_FILE_FULL_NAME,
       {
         task_id: task.id,
         filename: "demo.mp4",

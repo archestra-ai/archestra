@@ -6,7 +6,9 @@ import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   cancelAgentRun,
+  continueAgentRun,
   deleteAgentRun,
+  deleteAgentWorkspace,
   deleteAgentRuntimeCredential,
   getAgentRuntimePreflight,
   getAgentRunShare,
@@ -73,9 +75,17 @@ export function useMyAgentRun(taskId: string, enabled = true) {
     },
     enabled: enabled && !!taskId,
     refetchInterval: (query) =>
-      query.state.status === "error" || query.state.data?.endedAt
+      query.state.status === "error" ||
+      (query.state.data?.endedAt &&
+        (!query.state.data.workspace ||
+          query.state.data.workspace.state === "deleted"))
         ? false
-        : 2_000,
+        : query.state.data?.endedAt &&
+            ["idle", "suspended"].includes(
+              query.state.data.workspace?.state ?? "",
+            )
+          ? 30_000
+          : 2_000,
     retry: (failureCount) => failureCount < 8,
     retryDelay: 500,
   });
@@ -112,6 +122,28 @@ export function useStartAgentRun() {
   });
 }
 
+export function useContinueAgentRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      taskId,
+      message,
+    }: {
+      taskId: string;
+      message: string;
+    }) => {
+      const { data, error } = await continueAgentRun({
+        path: { taskId },
+        body: { message },
+      });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["agent-runs"] }),
+  });
+}
+
 export function useCancelAgentRun() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -129,6 +161,21 @@ export function useCancelAgentRun() {
           queryKey: ["agent-runs", "mine"],
         }),
       ]);
+    },
+  });
+}
+
+export function useDeleteAgentWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { data, error } = await deleteAgentWorkspace({ path: { taskId } });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    onSuccess: async () => {
+      toast.success("Workspace deleted. Run history is still available.");
+      await queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
     },
   });
 }
@@ -287,6 +334,51 @@ export function useSetAgentRuntimeCredential(agentId: string) {
       queryClient.invalidateQueries({
         queryKey: ["agents", agentId, "runtime", "preflight"],
       }),
+  });
+}
+
+/** Save independently so a failed connection does not discard successful ones. */
+export function useSetMissingAgentRuntimeCredentials(agentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (credentials: Array<{ key: string; value: string }>) => {
+      const saved: string[] = [];
+      const failed: string[] = [];
+      // Agent-specific shared secrets update one bag. Concurrent writes could
+      // each read the old bag and overwrite another credential's value.
+      for (const { key, value } of credentials) {
+        try {
+          const { error } = await setAgentRuntimeCredential({
+            path: { id: agentId, key },
+            body: { value },
+          });
+          if (error) throw reportApiError(error);
+          saved.push(key);
+        } catch {
+          failed.push(key);
+        }
+      }
+      return { saved, failed };
+    },
+    onSuccess: async ({ saved, failed }) => {
+      if (failed.length > 0) {
+        toast.error(
+          "Some credentials could not be saved. Retry the remaining fields.",
+        );
+      } else if (saved.length > 0) {
+        toast.success("Credentials saved");
+      }
+      // Reusable connections may also satisfy other Agents' preflights.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["runtime-credentials"] }),
+        queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === "agents" &&
+            query.queryKey[2] === "runtime" &&
+            query.queryKey[3] === "preflight",
+        }),
+      ]);
+    },
   });
 }
 

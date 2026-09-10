@@ -54,7 +54,9 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Check if the profile has an external IdP configured
-      const authorizationServers = [baseUrl];
+      // Discovery identifies the issuer, not an interchangeable API hostname.
+      // Strict MCP clients reject metadata whose issuer differs from this URL.
+      const authorizationServers = [config.frontendBaseUrl];
       const profileId = await extractProfileIdFromResourcePath(resourcePath);
       if (profileId) {
         const externalIssuer = await getExternalIdpIssuerForProfile(profileId);

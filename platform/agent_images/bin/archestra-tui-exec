@@ -33,6 +33,8 @@ def main() -> int:
     os.tcsetpgrp(0, child_pid)
     os.killpg(child_pid, signal.SIGCONT)
 
+    turn_prefix = os.environ.get("ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX")
+    completed_version = None
     child_status: int | None = None
     try:
         while child_status is None:
@@ -41,10 +43,16 @@ def main() -> int:
                 child_status = status
                 break
             if completion_marker.exists():
-                time.sleep(2)
-                capture_frame(frame_file)
-                child_status = stop_process_group(child_pid)
-                break
+                version = completion_marker.stat().st_mtime_ns
+                if version != completed_version:
+                    time.sleep(2)
+                    capture_frame(frame_file)
+                    if turn_prefix and not Path(str(completion_marker) + ".failed").exists():
+                        publish_completed_turn(turn_prefix, frame_file)
+                        completed_version = version
+                    else:
+                        child_status = stop_process_group(child_pid)
+                        break
             time.sleep(0.2)
     finally:
         signal.signal(signal.SIGTTOU, signal.SIG_IGN)
@@ -53,6 +61,34 @@ def main() -> int:
     if completion_marker.exists():
         return 0
     return os.waitstatus_to_exitcode(child_status)
+
+
+def publish_completed_turn(turn_prefix: str, frame_file: Path) -> None:
+    # Complete the requested turn without exiting the interactive CLI. Its pane
+    # and process memory remain available until suspension or another launch.
+    prefix = Path(turn_prefix)
+    answer_file = os.environ.get("ARCHESTRA_AGENT_RUNTIME_ANSWER_FILE")
+    answer = (
+        Path(answer_file).read_bytes()
+        if answer_file and Path(answer_file).exists()
+        else b""
+    )
+    with Path(turn_prefix + ".log").open("ab") as log:
+        log.write(
+            b"\n===ARCHESTRA-FINAL-ANSWER===\n"
+            + answer
+            + b"\n===ARCHESTRA-FINAL-ANSWER-END===\n"
+        )
+        if frame_file.exists():
+            log.write(b"\x1b[2J\x1b[H" + frame_file.read_bytes())
+    subprocess.run(
+        ["tmux", "set-option", "-t", "agent", "@archestra_retained_task", prefix.name],
+        check=True,
+    )
+    if not Path(turn_prefix + ".exit").exists():
+        temporary = Path(turn_prefix + ".result.tmp")
+        temporary.write_text("0\n")
+        temporary.replace(turn_prefix + ".result")
 
 
 def capture_frame(frame_file: Path) -> None:

@@ -1,6 +1,6 @@
+import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
-import { finished } from "node:stream/promises";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
@@ -17,7 +17,14 @@ import {
   withK8sApiRetry,
 } from "@/k8s/shared";
 import logger from "@/logging";
-import { AgentRunModel, VirtualApiKeyModel } from "@/models";
+import {
+  AgentModel,
+  AgentRunInputModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
+  OrganizationModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
@@ -25,28 +32,39 @@ import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import {
   AGENT_RUNTIME_ATTACH_SCRIPT,
-  AGENT_RUNTIME_ATTACHMENTS_DIR,
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_INPUTS_READY_FILE,
 } from "@/services/agent-runtime/runtime-contract";
+import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
   AgentRunInput,
   AgentRunRecord,
   AgentRuntimeSteerMode,
 } from "@/types";
+import { ApiError } from "@/types";
+import {
+  type AgentWorkspaceFileRequest,
+  AgentWorkspaceFileRequestSchema,
+  AgentWorkspaceFileResultSchema,
+} from "@/types/agent-workspace-file";
+import { execAgentRuntimeCommand } from "./exec";
 import {
   AGENT_RUNTIME_CONTAINER_NAME,
   AGENT_RUNTIME_TMUX_SESSION,
-  buildAgentRuntimeJob,
+  AGENT_SANDBOX_API,
+  type AgentSandbox,
   buildAgentRuntimePlatformEgressPolicy,
+  buildAgentRuntimeSandbox,
   buildAgentRuntimeSecret,
   buildAgentRuntimeTerminalIntegrationScript,
+  buildAgentRuntimeTurnScript,
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
 import {
   AGENT_RUNTIME_LEASE_SCOPE,
+  AGENT_RUNTIME_TASK_LABEL,
+  AGENT_RUNTIME_WORKSPACE_LABEL,
   agentRuntimeNames,
-  agentRuntimePodSelector,
 } from "./naming";
 import {
   AGENT_RUNTIME_EGRESS_POLICY_CRDS,
@@ -60,6 +78,7 @@ import {
   describeAgentRuntimeStartupProgress,
   isSameAgentRuntimeStartupProgress,
 } from "./startup-phase";
+import { withTranscriptRecoveryPod } from "./transcript-recovery";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
 type K8sClients = ReturnType<typeof createK8sClients>;
@@ -106,19 +125,20 @@ class AgentRuntimeManager {
       }),
     };
 
-    const existingJob = await clients.batchApi
-      .readNamespacedJob({
-        name: names.job,
+    const existingSandbox = await clients.customObjectsApi
+      .getNamespacedCustomObject({
+        ...AGENT_SANDBOX_API,
+        name: names.sandbox,
         namespace: withOwner.namespace,
       })
       .catch((error) => {
         if (isK8sNotFoundError(error)) return null;
         throw error;
       });
-    if (existingJob) {
+    if (existingSandbox) {
       logger.info(
-        { taskId: withOwner.taskId, job: names.job },
-        "Adopting an existing Agent Runtime job with the same frozen name",
+        { taskId: withOwner.taskId, sandbox: names.sandbox },
+        "Adopting an existing Agent Sandbox with the same frozen name",
       );
       return;
     }
@@ -154,18 +174,47 @@ class AgentRuntimeManager {
 
     await withK8sApiRetry(
       () =>
-        clients.batchApi.createNamespacedJob({
+        clients.customObjectsApi.createNamespacedCustomObject({
+          ...AGENT_SANDBOX_API,
           namespace: withOwner.namespace,
-          body: buildAgentRuntimeJob(withOwner),
+          body: buildAgentRuntimeSandbox(withOwner),
         }),
-      { label: "create Agent Runtime job" },
+      { label: "create Agent Sandbox" },
     ).catch((error) => {
       if (!isK8sConflictError(error)) throw error;
       logger.info(
-        { taskId: withOwner.taskId, job: names.job },
-        "Adopting an existing Agent Runtime job with the same frozen name",
+        { taskId: withOwner.taskId, sandbox: names.sandbox },
+        "Adopting an existing Agent Sandbox with the same frozen name",
       );
     });
+  }
+
+  /** Read or atomically replace a bounded file in the owning workspace. */
+  async accessWorkspaceFile(params: {
+    session: AgentRunRecord;
+    request: AgentWorkspaceFileRequest;
+  }) {
+    const request = AgentWorkspaceFileRequestSchema.parse(params.request);
+    const pod = await this.findPod(params.session);
+    if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
+      throw new ApiError(
+        409,
+        "Resume this workspace before accessing its files",
+      );
+    }
+    const result = await this.execInPod({
+      session: params.session,
+      podName: pod.metadata.name,
+      command: ["python3", "/usr/local/bin/archestra-workspace-files"],
+      stdin: NodeReadable.from([JSON.stringify(request)]),
+    });
+    const response = JSON.parse(result);
+    if (response.ok !== true)
+      throw new ApiError(
+        400,
+        response.error || "Workspace file operation failed",
+      );
+    return AgentWorkspaceFileResultSchema.parse(response);
   }
 
   /**
@@ -187,10 +236,11 @@ class AgentRuntimeManager {
     if (!pod) {
       throw new Error("This session ended before its input files were staged");
     }
+    const readyFile = `/var/run/archestra/turns/${params.session.taskId}.inputs-ready`;
     const alreadyReady = await this.execInPod({
       session: params.session,
       podName: pod,
-      command: ["/bin/sh", "-c", `test -f ${AGENT_RUNTIME_INPUTS_READY_FILE}`],
+      command: ["/bin/sh", "-c", 'test -f "$1"', "check-inputs", readyFile],
     })
       .then(() => true)
       .catch(() => false);
@@ -205,7 +255,7 @@ class AgentRuntimeManager {
           "-c",
           'umask 077; mkdir -p "$1"; cat > "$2"',
           "archestra-stage-input",
-          AGENT_RUNTIME_ATTACHMENTS_DIR,
+          path.posix.dirname(input.runtimePath),
           input.runtimePath,
         ],
         stdin: NodeReadable.from([input.fileData]),
@@ -229,13 +279,395 @@ class AgentRuntimeManager {
       command: [
         "/bin/sh",
         "-c",
-        'umask 077; cat > "$1" && touch "$2"',
+        'umask 077; cat > "$1" && mkdir -p /var/run/archestra/turns && touch "$2" "$3"',
         "archestra-stage-input",
         AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
         AGENT_RUNTIME_INPUTS_READY_FILE,
+        readyFile,
       ],
       stdin: NodeReadable.from([manifest]),
     });
+  }
+
+  async continueRun(params: {
+    session: AgentRunRecord;
+    spec: AgentRunLaunchSpec;
+  }): Promise<void> {
+    const clients = this.requireClients();
+    const sandbox = (await clients.customObjectsApi.getNamespacedCustomObject({
+      ...AGENT_SANDBOX_API,
+      namespace: params.session.runtimeScope,
+      name: params.session.workloadName,
+    })) as AgentSandbox;
+    const container = sandbox.spec.podTemplate.spec?.containers.find(
+      (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
+    );
+    if (
+      container?.image !== params.spec.image ||
+      Boolean(container.securityContext?.privileged) !== params.spec.privileged
+    ) {
+      throw new Error(
+        "The Agent image or privilege configuration changed; start a new workspace instead",
+      );
+    }
+    await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
+    // Keep the pending handoff outside this process before waiting for compute.
+    // It contains credentials, so use a Secret, not annotations or task logs.
+    const initialSecretName = agentRuntimeNames(
+      params.session.workloadName,
+    ).secret;
+    const initialSecret = container.envFrom?.some(
+      ({ secretRef }) => secretRef?.name === initialSecretName,
+    )
+      ? await clients.coreApi.readNamespacedSecret({
+          namespace: params.session.runtimeScope,
+          name: initialSecretName,
+        })
+      : null;
+    const inheritedVariableNames = [
+      ...(container.env ?? []).map(({ name }) => name),
+      ...Object.keys(initialSecret?.data ?? {}),
+    ];
+    await clients.coreApi
+      .createNamespacedSecret({
+        namespace: params.session.runtimeScope,
+        body: {
+          metadata: {
+            name: pendingTurnSecretName(params.session),
+            labels: {
+              [AGENT_RUNTIME_WORKSPACE_LABEL]: params.session.workloadName,
+            },
+            ownerReferences: sandbox.metadata.uid
+              ? [
+                  {
+                    apiVersion: sandbox.apiVersion,
+                    kind: sandbox.kind,
+                    name: params.session.workloadName,
+                    uid: sandbox.metadata.uid,
+                  },
+                ]
+              : undefined,
+          },
+          type: "Opaque",
+          stringData: {
+            request: buildAgentRuntimeTurnScript(
+              params.spec,
+              inheritedVariableNames,
+            ),
+          },
+        },
+      })
+      .catch((error) => {
+        if (!isK8sConflictError(error)) throw error;
+      });
+    await this.recoverRun(params.session);
+  }
+
+  async recoverRun(session: AgentRunRecord): Promise<void> {
+    const clients = this.requireClients();
+    const pending = await clients.coreApi
+      .readNamespacedSecret({
+        namespace: session.runtimeScope,
+        name: pendingTurnSecretName(session),
+      })
+      .catch((error) => {
+        if (isK8sNotFoundError(error)) return null;
+        throw error;
+      });
+    const sandbox = (await clients.customObjectsApi.getNamespacedCustomObject({
+      ...AGENT_SANDBOX_API,
+      namespace: session.runtimeScope,
+      name: session.workloadName,
+    })) as AgentSandbox;
+    if (
+      sandbox.spec.shutdownTime &&
+      Date.parse(sandbox.spec.shutdownTime) <= Date.now()
+    ) {
+      throw new ApiError(409, "The workspace retention deadline has passed");
+    }
+    if (
+      pending &&
+      pending.metadata?.labels?.[AGENT_RUNTIME_WORKSPACE_LABEL] !==
+        session.workloadName
+    ) {
+      throw new ApiError(
+        409,
+        "The saved continuation belongs to a different workspace",
+      );
+    }
+    // The initial turn is already part of the Sandbox's bootstrap contract.
+    if (
+      !pending &&
+      sandbox.metadata.labels?.[AGENT_RUNTIME_TASK_LABEL] === session.taskId
+    )
+      return;
+    await clients.customObjectsApi.patchNamespacedCustomObject(
+      {
+        ...AGENT_SANDBOX_API,
+        namespace: session.runtimeScope,
+        name: session.workloadName,
+        body: { spec: { operatingMode: "Running" } },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
+    const podName = await this.waitForRunningPod({
+      session,
+      timeoutMessage: "The workspace could not be resumed",
+    });
+    if (!podName) throw new Error("The workspace is not running");
+    const script = pending?.data?.request;
+    if (!script) {
+      const published = await this.execInPod({
+        session,
+        podName,
+        command: [
+          "/bin/sh",
+          "-c",
+          'base="/var/run/archestra/turns/$1"; if [ -f "$base.request" ] || [ -f "$base.started" ] || [ -f "$base.exit" ]; then printf present; fi',
+          "check-turn",
+          session.taskId,
+        ],
+      });
+      if (published !== "present")
+        throw new ApiError(
+          502,
+          "The run was interrupted before its command was saved. Continue in the retained workspace to retry.",
+        );
+      return;
+    }
+    // Inputs are database-backed so another process can finish this handoff.
+    // Publish the executable request only after this turn's files are durable.
+    await this.stageInputs({
+      session,
+      inputs: await AgentRunInputModel.findByTaskId(session.taskId),
+    });
+    await this.execInPod({
+      session,
+      podName,
+      command: [
+        "/bin/sh",
+        "-c",
+        [
+          "set -eu; umask 077",
+          'request="/var/run/archestra/turns/$1.request"',
+          'if [ -f "$request" ] || [ -f "/var/run/archestra/turns/$1.started" ] || [ -f "/var/run/archestra/turns/$1.exit" ]; then exit 0; fi',
+          'cat > "$request.tmp"',
+          'mv "$request.tmp" "$request"',
+        ].join("\n"),
+        "enqueue-turn",
+        session.taskId,
+      ],
+      stdin: NodeReadable.from([Buffer.from(script, "base64")]),
+    });
+  }
+
+  async hasRetainedTerminal(
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
+  ): Promise<boolean> {
+    const pod = await this.findPod(session);
+    if (pod?.status?.phase !== "Running" || !pod.metadata?.name) return false;
+    const output = await execAgentRuntimeCommand({
+      exec: this.requireClients().exec,
+      namespace: session.runtimeScope,
+      podName: pod.metadata.name,
+      container: AGENT_RUNTIME_CONTAINER_NAME,
+      command: [
+        "tmux",
+        "display-message",
+        "-p",
+        "-t",
+        "agent",
+        "#{pane_dead}:#{@archestra_retained_task}",
+      ],
+    }).catch(() => "");
+    return output.trim() === `0:${session.taskId}`;
+  }
+
+  async releaseRun(
+    session: AgentRunRecord,
+    options?: { retainInteractiveSession?: boolean },
+  ): Promise<void> {
+    if (
+      !options?.retainInteractiveSession ||
+      !(await this.hasRetainedTerminal(session))
+    ) {
+      await this.revokeVirtualKey(session);
+    }
+    const clients = this.requireClients();
+    // Keep the names for continuation's inherited-env unset list, but prevent
+    // replacement Pods and their exec shells from receiving stale credentials.
+    const name = agentRuntimeNames(session.workloadName).secret;
+    await withK8sApiRetry(
+      async () => {
+        const secret = await clients.coreApi.readNamespacedSecret({
+          namespace: session.runtimeScope,
+          name,
+        });
+        if (!Object.values(secret.data ?? {}).some(Boolean)) return;
+        await clients.coreApi.patchNamespacedSecret(
+          {
+            namespace: session.runtimeScope,
+            name,
+            body: {
+              metadata: { resourceVersion: secret.metadata?.resourceVersion },
+              data: Object.fromEntries(
+                Object.keys(secret.data ?? {}).map((key) => [key, ""]),
+              ),
+            },
+          },
+          setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+        );
+      },
+      { label: "clear retained Agent Runtime credentials" },
+    ).catch((error) => {
+      if (!isK8sNotFoundError(error)) throw error;
+    });
+    await clients.coreApi
+      .deleteNamespacedSecret({
+        namespace: session.runtimeScope,
+        name: pendingTurnSecretName(session),
+      })
+      .catch((error) => {
+        if (!isK8sNotFoundError(error)) throw error;
+      });
+  }
+
+  async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
+    await this.revokeVirtualKey(session);
+    const pod = await this.findPod(session);
+    if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
+      await this.suspendWorkspace(session);
+      return "suspended";
+    }
+    await this.execInPod({
+      session,
+      podName: pod.metadata.name,
+      command: [
+        "/bin/sh",
+        "-c",
+        [
+          'set -eu; base="/var/run/archestra/turns/$1"',
+          '[ ! -f "$base.exit" ] || exit 0',
+          'touch "$base.cancel"',
+          'if [ ! -f "$base.request" ] && [ ! -f "$base.started" ]; then printf "130\\n" > "$base.exit.tmp"; mv "$base.exit.tmp" "$base.exit"; fi',
+          'attempt=0; while [ ! -f "$base.exit" ]; do attempt=$((attempt + 1)); [ "$attempt" -lt 15 ] || exit 1; sleep 1; done',
+        ].join("\n"),
+        "stop-turn",
+        session.taskId,
+      ],
+    });
+  }
+
+  async suspendWorkspace(
+    session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
+  ): Promise<void> {
+    await this.requireClients().customObjectsApi.patchNamespacedCustomObject(
+      {
+        ...AGENT_SANDBOX_API,
+        namespace: session.runtimeScope,
+        name: session.workloadName,
+        body: { spec: { operatingMode: "Suspended" } },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
+  }
+
+  async getLastWorkspaceActivity(
+    session: AgentRunRecord,
+  ): Promise<Date | null> {
+    const podName = await this.findPodName(session);
+    if (!podName) return null;
+    const output = await this.execInPod({
+      session,
+      podName,
+      command: [
+        "/bin/sh",
+        "-c",
+        "{ cat /var/run/archestra/development-activity 2>/dev/null; tmux list-clients -F '#{client_activity}' 2>/dev/null; } | sort -nr | head -1",
+      ],
+    });
+    if (!/^\d+$/.test(output.trim())) return null;
+    const timestamp = Number(output.trim()) * 1000;
+    if (!Number.isSafeInteger(timestamp) || timestamp <= 0) return null;
+    return new Date(Math.min(timestamp, Date.now()));
+  }
+
+  getWorkspaceConnection(
+    session: Pick<AgentRunRecord, "workloadName" | "runtimeScope">,
+  ) {
+    return {
+      hostname: `${session.workloadName}.${session.runtimeScope}`,
+      shellCommand: [
+        "kubectl",
+        "exec",
+        "-it",
+        "-n",
+        session.runtimeScope,
+        session.workloadName,
+        "-c",
+        AGENT_RUNTIME_CONTAINER_NAME,
+        "--",
+        "env",
+        "ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH=0",
+        "/bin/sh",
+      ]
+        .map(shellDisplayArgument)
+        .join(" "),
+    };
+  }
+
+  async resumeWorkspace(session: AgentRunRecord): Promise<void> {
+    const clients = this.requireClients();
+    const sandbox = (await clients.customObjectsApi.getNamespacedCustomObject({
+      ...AGENT_SANDBOX_API,
+      namespace: session.runtimeScope,
+      name: session.workloadName,
+    })) as AgentSandbox;
+    if (
+      sandbox.spec.shutdownTime &&
+      Date.parse(sandbox.spec.shutdownTime) <= Date.now()
+    ) {
+      throw new ApiError(409, "The workspace retention deadline has passed");
+    }
+    const agent = await AgentModel.findById(session.agentId);
+    if (!agent || agent.organizationId !== session.organizationId) {
+      throw new ApiError(404, "Workspace Agent not found");
+    }
+    const organization = await OrganizationModel.getById(
+      session.organizationId,
+    );
+    const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
+      organizationId: session.organizationId,
+      environmentId: agent.environmentId,
+      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
+    });
+    await this.refreshWorkspaceEgress({
+      sandbox,
+      spec: {
+        taskId: session.taskId,
+        agentRuntimeId: session.agentId,
+        frozenName: session.workloadName,
+        runtimeScope: session.runtimeScope,
+        effectiveNetworkPolicy,
+      },
+    });
+    await clients.customObjectsApi.patchNamespacedCustomObject(
+      {
+        ...AGENT_SANDBOX_API,
+        namespace: session.runtimeScope,
+        name: session.workloadName,
+        body: { spec: { operatingMode: "Running" } },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
+    if (
+      !(await this.waitForRunningPod({
+        session,
+        timeoutMessage: "The workspace could not be resumed",
+      }))
+    ) {
+      throw new ApiError(409, "The workspace could not be resumed");
+    }
   }
 
   /**
@@ -298,6 +730,24 @@ class AgentRuntimeManager {
     /** Called as the attach moves through its waits; see `startup-phase`. */
     onProgress?: AgentRuntimeStartupProgressReporter;
   }): Promise<{ podName: string; command: string; socket: WebSocket }> {
+    if (params.session.endedAt) {
+      const workspace = await AgentWorkspaceModel.findByWorkloadName(
+        params.session.workloadName,
+      );
+      if (
+        !workspace ||
+        workspace.state !== "idle" ||
+        workspace.lastTaskId !== params.session.taskId ||
+        workspace.expiresAt.getTime() <= Date.now() ||
+        !(await this.hasRetainedTerminal(params.session))
+      ) {
+        throw new ApiError(
+          409,
+          "The original terminal is no longer running. Resume the saved conversation instead.",
+        );
+      }
+      await AgentWorkspaceModel.recordActivity(workspace.id, new Date());
+    }
     const clients = this.requireClients();
     // A2A marks the durable task working before Kubernetes necessarily has a
     // Running pod. Chat can therefore open the terminal during image pull or
@@ -357,45 +807,19 @@ class AgentRuntimeManager {
     };
   }
 
-  /** Follow the session's stdout, which is what the agent loop prints. */
+  /** Follow this turn's output, not earlier turns in the same Pod. */
   async streamLogs(params: {
     session: AgentRunRecord;
     destination: Writable;
     lines: number;
     abortSignal?: AbortSignal;
   }): Promise<void> {
-    const clients = this.requireClients();
-    const pod = await this.findPodPhase(params.session);
-    if (!pod) {
-      throw new Error("This session has no pod to read logs from");
-    }
-    const request = await clients.log.log(
-      params.session.runtimeScope,
-      pod.name,
-      AGENT_RUNTIME_CONTAINER_NAME,
-      params.destination,
-      {
-        follow: true,
-        tailLines: params.lines,
-        pretty: false,
-        timestamps: false,
-      },
-    );
-    params.abortSignal?.addEventListener(
-      "abort",
-      () => {
-        request.abort();
-      },
-      { once: true },
-    );
+    await this.readTurnOutput({ ...params, follow: true });
   }
 
   /**
-   * Copy the pod's retained stdout once, after the workload has settled.
-   *
-   * Kubernetes follow connections can close before the pod does. The live
-   * stream remains useful for progress, but this non-following read is the
-   * authoritative transcript captured immediately before teardown.
+   * Recover the turn's full output from its PVC, independently of container log
+   * rotation and Pod replacement, before committing the transcript to storage.
    */
   async snapshotLogs(params: {
     session: AgentRunRecord;
@@ -403,52 +827,7 @@ class AgentRuntimeManager {
     lines: number;
     abortSignal?: AbortSignal;
   }): Promise<void> {
-    if (params.abortSignal?.aborted) {
-      throw new Error("AgentRuntime output snapshot was aborted");
-    }
-
-    const clients = this.requireClients();
-    const pod = await this.findPodPhase(params.session);
-    if (!pod) {
-      throw new Error("This session has no pod to read logs from");
-    }
-
-    const snapshotFinished = finished(params.destination);
-    let request: AbortController;
-    try {
-      request = await clients.log.log(
-        params.session.runtimeScope,
-        pod.name,
-        AGENT_RUNTIME_CONTAINER_NAME,
-        params.destination,
-        {
-          follow: false,
-          tailLines: params.lines,
-          pretty: false,
-          timestamps: false,
-        },
-      );
-    } catch (error) {
-      params.destination.destroy();
-      await snapshotFinished.catch(() => undefined);
-      throw error;
-    }
-
-    const abortSnapshot = () => {
-      request.abort();
-      params.destination.destroy(
-        new Error("AgentRuntime output snapshot was aborted"),
-      );
-    };
-    params.abortSignal?.addEventListener("abort", abortSnapshot, {
-      once: true,
-    });
-    if (params.abortSignal?.aborted) abortSnapshot();
-    try {
-      await snapshotFinished;
-    } finally {
-      params.abortSignal?.removeEventListener("abort", abortSnapshot);
-    }
+    await this.readTurnOutput({ ...params, follow: false });
   }
 
   /** Pod carrying a session, or null when nothing is scheduled. */
@@ -456,10 +835,13 @@ class AgentRuntimeManager {
     const clients = this.requireClients();
     const pods = await clients.coreApi.listNamespacedPod({
       namespace: session.runtimeScope,
-      labelSelector: agentRuntimePodSelector(session.taskId),
+      labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
     });
     const running = pods.items.find(
-      (pod) => pod.status?.phase === "Running" && pod.metadata?.name,
+      (pod) =>
+        pod.status?.phase === "Running" &&
+        pod.metadata?.name &&
+        !pod.metadata.deletionTimestamp,
     );
     return running?.metadata?.name ?? null;
   }
@@ -481,7 +863,7 @@ class AgentRuntimeManager {
 
   /** Point-in-time startup state used to seed a newly loaded run page. */
   async getStartupProgress(
-    session: Pick<AgentRunRecord, "taskId" | "runtimeScope">,
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
   ): Promise<AgentRuntimeStartupProgress & { resourceName: string | null }> {
     const pod = await this.findPod(session);
     return {
@@ -498,22 +880,24 @@ class AgentRuntimeManager {
    * someone watching a run start.
    */
   async findPod(
-    session: Pick<AgentRunRecord, "taskId" | "runtimeScope">,
+    session: Pick<AgentRunRecord, "taskId" | "runtimeScope" | "workloadName">,
   ): Promise<k8s.V1Pod | null> {
     const clients = this.requireClients();
     const pods = await clients.coreApi.listNamespacedPod({
       namespace: session.runtimeScope,
-      labelSelector: agentRuntimePodSelector(session.taskId),
+      labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
     });
-    return pods.items.find((candidate) => candidate.metadata?.name) ?? null;
+    return (
+      pods.items.find(
+        (candidate) =>
+          candidate.metadata?.name && !candidate.metadata.deletionTimestamp,
+      ) ?? null
+    );
   }
 
   /**
-   * Wait for a session's Job to reach a terminal state.
-   *
-   * The Job, not the pod, is the authority: a pod that dies with a retryable
-   * exit code is replaced under a Job that is still running, and treating that
-   * first pod's death as the outcome would end the task early.
+   * Wait for the supervisor's durable turn result, not workspace termination.
+   * Sandbox failure/expiry is a failure when no turn result was published.
    *
    * Resolves `{ outcome: "aborted" }` rather than throwing when the caller's
    * signal fires, so cancellation and failure stay distinguishable to the
@@ -528,32 +912,62 @@ class AgentRuntimeManager {
     reason?: string;
   }> {
     const clients = this.requireClients();
-    const { job: jobName } = agentRuntimeNames(params.session.workloadName);
+    const { sandbox: sandboxName } = agentRuntimeNames(
+      params.session.workloadName,
+    );
     const interval = params.pollIntervalMs ?? AGENT_RUNTIME_COMPLETION_POLL_MS;
 
     while (!params.abortSignal?.aborted) {
-      const job = await clients.batchApi
-        .readNamespacedJobStatus({
-          name: jobName,
+      const sandbox = await clients.customObjectsApi
+        .getNamespacedCustomObjectStatus({
+          ...AGENT_SANDBOX_API,
+          name: sandboxName,
           namespace: params.session.runtimeScope,
         })
-        .catch(() => null);
+        .then((value) => value as AgentSandbox)
+        .catch((error) => {
+          if (isK8sNotFoundError(error)) return null;
+          throw error;
+        });
 
-      if (!job) {
-        // The Job is gone: either torn down under us, or it never landed.
+      if (!sandbox) {
+        // The workspace is gone: either torn down under us, or it never landed.
         // Either way there is no outcome left to wait for.
         return {
           outcome: "failed",
-          reason: "The Agent Runtime job no longer exists",
+          reason: "The Agent Sandbox no longer exists",
         };
       }
-      if ((job.status?.succeeded ?? 0) > 0) {
-        return { outcome: "succeeded" };
+      const pod = await this.findPod(params.session);
+      if (pod?.status?.phase === "Running" && pod.metadata?.name) {
+        const result = await this.execInPod({
+          session: params.session,
+          podName: pod.metadata.name,
+          command: [
+            "/bin/sh",
+            "-c",
+            'file="/var/run/archestra/turns/$1.exit"; if [ -f "$file" ]; then cat "$file"; fi',
+            "read-turn-result",
+            params.session.taskId,
+          ],
+        });
+        if (result.trim()) {
+          return result.trim() === "0"
+            ? { outcome: "succeeded" }
+            : {
+                outcome: "failed",
+                reason: `The Agent Runtime turn exited with status ${result.trim()}`,
+              };
+        }
       }
-      if ((job.status?.failed ?? 0) > 0) {
-        const condition = job.status?.conditions?.find(
-          (entry) => entry.type === "Failed" && entry.status === "True",
-        );
+      const finished = sandbox.status?.conditions?.find(
+        (entry) => entry.type === "Finished" && entry.status === "True",
+      );
+      const expired = sandbox.status?.conditions?.find(
+        (entry) => entry.reason === "SandboxExpired",
+      );
+      if (finished || expired) {
+        const condition = finished ?? expired;
         return {
           outcome: "failed",
           reason:
@@ -578,6 +992,12 @@ class AgentRuntimeManager {
     // The key outlives the pod otherwise: a finished session's API key would
     // keep working, still charging the person it acted as.
     await this.revokeVirtualKey(session);
+    await this.deleteWorkspace(session);
+  }
+
+  async deleteWorkspace(
+    session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
+  ): Promise<void> {
     if (!this.isEnabled) return;
 
     const clients = this.requireClients();
@@ -586,10 +1006,11 @@ class AgentRuntimeManager {
 
     const deletions: Array<[string, () => Promise<unknown>]> = [
       [
-        "job",
+        "sandbox",
         () =>
-          clients.batchApi.deleteNamespacedJob({
-            name: names.job,
+          clients.customObjectsApi.deleteNamespacedCustomObject({
+            ...AGENT_SANDBOX_API,
+            name: names.sandbox,
             namespace,
             // Without Foreground the Job's pod outlives the Job object.
             propagationPolicy: "Foreground",
@@ -632,6 +1053,7 @@ class AgentRuntimeManager {
       ) as Array<[string, () => Promise<unknown>]>),
     ];
 
+    const errors: unknown[] = [];
     for (const [kind, remove] of deletions) {
       try {
         await withK8sApiRetry(remove, {
@@ -639,12 +1061,15 @@ class AgentRuntimeManager {
         });
       } catch (error) {
         if (isK8sNotFoundError(error)) continue;
+        errors.push(error);
         logger.warn(
           { error, sessionId: session.id, kind },
           "Failed to delete an Agent Runtime run object during teardown",
         );
       }
     }
+    if (errors.length)
+      throw new AggregateError(errors, "Workspace cleanup did not complete");
   }
 
   /**
@@ -672,6 +1097,86 @@ class AgentRuntimeManager {
   }
 
   // ===================== internals =====================
+
+  private async refreshWorkspaceEgress(params: {
+    sandbox: AgentSandbox;
+    spec: Pick<
+      AgentRunLaunchSpec,
+      | "taskId"
+      | "agentRuntimeId"
+      | "frozenName"
+      | "runtimeScope"
+      | "effectiveNetworkPolicy"
+    >;
+  }): Promise<void> {
+    const clients = this.requireClients();
+    // The retained Pod keeps its original selector even though this turn has
+    // a new task ID. Policies must continue selecting that Pod after a wake-up.
+    const taskId =
+      params.sandbox.spec.podTemplate.metadata?.labels?.[
+        AGENT_RUNTIME_TASK_LABEL
+      ];
+    if (!taskId)
+      throw new Error("Workspace is missing its network policy selector");
+    const spec = {
+      ...params.spec,
+      taskId,
+      frozenName: params.sandbox.metadata.name ?? params.spec.frozenName,
+      namespace: params.spec.runtimeScope,
+      ownerReferences: params.sandbox.metadata.ownerReferences,
+    };
+    const policies = buildAgentRuntimeEnvironmentEgressPolicies({
+      spec,
+      capabilities: (await getK8sCapabilities()).networkPolicy,
+      clusterDnsIps: await clusterDnsResolver.getClusterDnsIps(clients.coreApi),
+    });
+    await this.applyEgressPolicies(policies);
+    await this.applyNetworkPolicy(
+      buildAgentRuntimePlatformEgressPolicy({
+        spec,
+        platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
+        platformPodLabels: config.agentRuntime.platformPodSelector,
+        platformPorts: [config.api.port],
+      }),
+    );
+    // Policies are additive. Leaving an old allow policy of a different kind
+    // would defeat a tightened Environment policy. Finish pruning before the
+    // continuation request is published or a suspended Pod is woken.
+    const name = agentRuntimeNames(spec.frozenName).environmentNetworkPolicy;
+    const desiredKinds = new Set(policies.map(({ kind }) => kind));
+    const removals: Array<
+      [AgentRuntimeEgressPolicyObject["kind"], () => Promise<unknown>]
+    > = [
+      [
+        "NetworkPolicy",
+        () =>
+          clients.networkingApi.deleteNamespacedNetworkPolicy({
+            name,
+            namespace: spec.namespace,
+          }),
+      ],
+      ...Object.entries(AGENT_RUNTIME_EGRESS_POLICY_CRDS).map(
+        ([kind, coordinates]) =>
+          [
+            kind as AgentRuntimeEgressPolicyObject["kind"],
+            () =>
+              clients.customObjectsApi.deleteNamespacedCustomObject({
+                ...coordinates,
+                name,
+                namespace: spec.namespace,
+              }),
+          ] as [AgentRuntimeEgressPolicyObject["kind"], () => Promise<unknown>],
+      ),
+    ];
+    for (const [kind, remove] of removals) {
+      if (desiredKinds.has(kind)) continue;
+      try {
+        await remove();
+      } catch (error) {
+        if (!isK8sNotFoundError(error)) throw error;
+      }
+    }
+  }
 
   private async applyNetworkPolicy(body: k8s.V1NetworkPolicy): Promise<void> {
     const clients = this.requireClients();
@@ -735,9 +1240,9 @@ class AgentRuntimeManager {
           ...coordinates,
           namespace: metadata.namespace,
           name: metadata.name,
-          body: policy.object,
+          body: [{ op: "replace", path: "/spec", value: policy.object.spec }],
         },
-        setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+        setHeaderOptions("Content-Type", PatchStrategy.JsonPatch),
       );
     }
   }
@@ -756,46 +1261,128 @@ class AgentRuntimeManager {
     await AgentRunModel.clearVirtualApiKey(session.id);
   }
 
+  private async readTurnOutput(params: {
+    session: AgentRunRecord;
+    destination: Writable;
+    follow: boolean;
+    abortSignal?: AbortSignal;
+    podName?: string;
+  }): Promise<void> {
+    if (params.abortSignal?.aborted) {
+      params.destination.end();
+      if (!params.follow)
+        throw new Error("Agent Runtime transcript snapshot aborted");
+      return;
+    }
+    if (!/^[a-zA-Z0-9-]+$/.test(params.session.taskId))
+      throw new Error("Invalid Agent Runtime turn identifier");
+    const pod = params.podName
+      ? { name: params.podName, phase: "Running" }
+      : await this.findPodPhase(params.session);
+    if (!pod || pod.phase !== "Running") {
+      if (params.follow)
+        throw new Error("This session has no running pod to read output from");
+      return withTranscriptRecoveryPod({
+        clients: this.requireClients(),
+        session: params.session,
+        abortSignal: params.abortSignal,
+        read: (podName) => this.readTurnOutput({ ...params, podName }),
+      });
+    }
+    const path = `/var/run/archestra/turns/${params.session.taskId}`;
+    // Read fixed byte ranges so growing output cannot duplicate bytes between
+    // polls. The exit marker ends the remote process even after a disconnect.
+    const script = params.follow
+      ? `offset=0; while :; do
+done_turn=0; [ ! -f '${path}.exit' ] || done_turn=1
+if [ -f '${path}.log' ]; then
+size=$(wc -c < '${path}.log'); count=$((size - offset))
+if [ "$count" -gt 0 ]; then tail -c +$((offset + 1)) '${path}.log' | head -c "$count"; offset=$size; fi
+fi
+[ "$done_turn" = 0 ] || break
+sleep 1
+done`
+      : `cat '${path}.log'`;
+    const clients = this.requireClients();
+    await new Promise<void>((resolve, reject) => {
+      let socket: WebSocket | undefined;
+      let settled = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        params.abortSignal?.removeEventListener("abort", abort);
+        params.destination.removeListener("error", finish);
+        socket?.close();
+        params.destination.end();
+        if (error) reject(error);
+        else resolve();
+      };
+      const timer = params.follow
+        ? undefined
+        : setTimeout(
+            () =>
+              finish(new Error("Agent Runtime transcript snapshot timed out")),
+            30_000,
+          );
+      const abort = () =>
+        finish(
+          params.follow
+            ? undefined
+            : new Error("Agent Runtime transcript snapshot aborted"),
+        );
+      params.abortSignal?.addEventListener("abort", abort, { once: true });
+      params.destination.on("error", finish);
+      clients.exec
+        .exec(
+          params.session.runtimeScope,
+          pod.name,
+          AGENT_RUNTIME_CONTAINER_NAME,
+          ["/bin/sh", "-c", script],
+          params.destination,
+          null,
+          null,
+          false,
+          (status) =>
+            finish(
+              status.status === "Success"
+                ? undefined
+                : new Error("Could not read turn output"),
+            ),
+        )
+        .then((connected) => {
+          socket = connected;
+          if (settled || params.abortSignal?.aborted) {
+            connected.close();
+            finish();
+            return;
+          }
+          connected.on("error", finish);
+          connected.on("close", () =>
+            finish(
+              new Error(
+                "Agent Runtime transcript disconnected before completion",
+              ),
+            ),
+          );
+        })
+        .catch(finish);
+    });
+  }
+
   private async execInPod(params: {
     session: AgentRunRecord;
     podName: string;
     command: string[];
     stdin?: Readable;
-  }): Promise<void> {
-    const clients = this.requireClients();
-    const { PassThrough } = await import("node:stream");
-    const stderr = new PassThrough();
-    const stderrChunks: Buffer[] = [];
-    stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-
-    await new Promise<void>((resolve, reject) => {
-      clients.exec
-        .exec(
-          params.session.runtimeScope,
-          params.podName,
-          AGENT_RUNTIME_CONTAINER_NAME,
-          params.command,
-          null,
-          stderr,
-          params.stdin ?? null,
-          false,
-          (status) => {
-            if (status.status === "Success") {
-              resolve();
-              return;
-            }
-            reject(
-              new Error(
-                `Command in Agent Runtime pod failed: ${
-                  Buffer.concat(stderrChunks).toString("utf8").trim() ||
-                  status.message ||
-                  "unknown error"
-                }`,
-              ),
-            );
-          },
-        )
-        .catch(reject);
+  }): Promise<string> {
+    return execAgentRuntimeCommand({
+      exec: this.requireClients().exec,
+      namespace: params.session.runtimeScope,
+      podName: params.podName,
+      container: AGENT_RUNTIME_CONTAINER_NAME,
+      command: params.command,
+      stdin: params.stdin,
     });
   }
 
@@ -905,6 +1492,12 @@ class AgentRuntimeManager {
 export default new AgentRuntimeManager();
 
 // ===================== helpers =====================
+
+function pendingTurnSecretName(
+  session: Pick<AgentRunRecord, "taskId">,
+): string {
+  return `agent-turn-${session.taskId}`;
+}
 
 /**
  * How often a waiting run re-reads its Job. Long enough that a task running

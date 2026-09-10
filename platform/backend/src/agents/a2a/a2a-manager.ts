@@ -16,6 +16,7 @@ import {
   A2APushNotificationConfigModel,
   A2ATaskModel,
   AgentModel,
+  AgentRunModel,
   AgentTeamModel,
   TeamModel,
   UserModel,
@@ -158,6 +159,8 @@ interface A2AManagerConfig {
  * ChatOps run was traced as `a2a` because nothing reads that key.
  */
 export interface A2ASystemParams {
+  /** New A2A task, retained runtime workspace: terminal tasks remain immutable. */
+  resumeFromTaskId?: string;
   sessionId?: string;
   /** Project assigned by an interactive Chat execution launcher. */
   projectId?: string;
@@ -423,6 +426,21 @@ export class A2AManager {
       // A detached run returns its task handle before execution. Reject an
       // incompatible model before compaction, context creation, or turn writes.
       const runtime = resolveAgentRuntime(agent);
+      // Protocol terminal tasks remain immutable. A new task addressed to
+      // their context reuses the same owned workspace, just like MCP/UI
+      // continuation, rather than silently creating another development box.
+      const previousRuntimeRun =
+        runtime && fullTaskMode && !task && context
+          ? await AgentRunModel.findLatestInContext({
+              contextId: context.id,
+              agentId,
+              organizationId: actor.organizationId,
+              actorKind: actor.kind,
+              actorId: actor.id,
+            })
+          : null;
+      const resumeFromTaskId =
+        systemParams?.resumeFromTaskId ?? previousRuntimeRun?.taskId;
       if (
         fullTaskMode &&
         params.taskRun?.createTask &&
@@ -615,9 +633,10 @@ export class A2AManager {
             // a direct send, while foreground Chat can remain message-based.
             if (runtime && runOpts.taskId) {
               return runTaskInAgentRuntime({
+                resumeFromTaskId,
                 runtime,
-                // The task is the pod's identity: one session per task, so a
-                // resumed task adopts its own pod rather than starting a second.
+                // Each task is a turn; continuations share the retained
+                // Sandbox identity and adoption never repeats a started turn.
                 taskId: runOpts.taskId,
                 agentId,
                 actor,

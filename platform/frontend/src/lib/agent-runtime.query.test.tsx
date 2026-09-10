@@ -25,6 +25,36 @@ describe("useMyAgentRun", () => {
     vi.clearAllMocks();
   });
 
+  it("polls retained idle workspaces slowly, accelerates during resume, and stops after deletion", async () => {
+    vi.useFakeTimers();
+    const response = (state: string) =>
+      ({
+        data: {
+          endedAt: "2026-09-03T12:00:00.000Z",
+          workspace: { state },
+        },
+        error: undefined,
+      }) as never;
+    sdk.getMyAgentRun.mockResolvedValue(response("idle"));
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { unmount } = renderHook(() => useMyAgentRun("task-1"), { wrapper });
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(sdk.getMyAgentRun).toHaveBeenCalledTimes(1);
+    sdk.getMyAgentRun.mockResolvedValue(response("resuming"));
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+    expect(sdk.getMyAgentRun).toHaveBeenCalledTimes(2);
+    sdk.getMyAgentRun.mockResolvedValue(response("deleted"));
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    expect(sdk.getMyAgentRun).toHaveBeenCalledTimes(3);
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    expect(sdk.getMyAgentRun).toHaveBeenCalledTimes(3);
+    unmount();
+    queryClient.clear();
+  });
+
   it("stops polling after a run load exhausts its retries", async () => {
     vi.useFakeTimers();
     sdk.getMyAgentRun.mockResolvedValue({

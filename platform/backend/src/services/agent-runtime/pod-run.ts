@@ -5,8 +5,10 @@ import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  A2ATaskModel,
   AgentRunInputModel,
   AgentRunModel,
+  AgentWorkspaceModel,
   EnvironmentModel,
   OrganizationModel,
 } from "@/models";
@@ -54,6 +56,7 @@ async function startAgentRunSession(params: {
   modelId: string | null;
   llmApiKeyId: string | null;
   titleUserId?: string;
+  resumeFromTaskId?: string;
 }): Promise<AgentRunRecord> {
   const backend = resolveAgentRuntimeBackendDriver(params.runtime.backend);
 
@@ -77,6 +80,27 @@ async function startAgentRunSession(params: {
   const inputFiles = await AgentRunInputModel.findByTaskId(params.taskId);
   const runId = randomUUID();
 
+  const priorRun = params.resumeFromTaskId
+    ? await AgentRunModel.findByTaskId(params.resumeFromTaskId)
+    : null;
+  const workspace = priorRun
+    ? await AgentWorkspaceModel.findByWorkloadName(priorRun.workloadName)
+    : null;
+  if (
+    params.resumeFromTaskId &&
+    (!priorRun ||
+      !workspace ||
+      workspace.organizationId !== params.organizationId ||
+      workspace.actorKind !== params.actor.kind ||
+      workspace.actorId !== params.actor.id ||
+      workspace.agentId !== params.agentId ||
+      workspace.runtimeScope !== runtimeScope)
+  )
+    throw new ApiError(
+      409,
+      "The prior workspace is unavailable for this actor, Agent, or environment",
+    );
+
   const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
     runtime: params.runtime,
     taskId: params.taskId,
@@ -91,6 +115,17 @@ async function startAgentRunSession(params: {
     runMode: params.runMode,
     inputFiles,
   });
+
+  if (workspace) {
+    spec.frozenName = workspace.workloadName;
+    // A new turn does not buy another full workspace lifetime. Keep the UI's
+    // run deadline aligned with the original controller shutdown timestamp.
+    spec.activeDeadlineSeconds = Math.max(
+      1,
+      Math.ceil((workspace.expiresAt.getTime() - Date.now()) / 1000),
+    );
+  }
+  spec.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID = spec.frozenName;
 
   // The row lands before the workload: it is what teardown reads to find the
   // objects, so a crash between the two must leave a record, not an orphan.
@@ -135,25 +170,90 @@ async function startAgentRunSession(params: {
       );
     });
 
+  let claimedWorkspace = false;
+  let createdWorkspace:
+    | Awaited<ReturnType<typeof AgentWorkspaceModel.create>>
+    | undefined;
   try {
-    await backend.launch(spec);
-    await backend.stageInputs({ session, inputs: inputFiles });
+    if (workspace) {
+      const claimed = await AgentWorkspaceModel.claim({
+        id: workspace.id,
+        organizationId: params.organizationId,
+        actorKind: params.actor.kind,
+        actorId: params.actor.id,
+        agentId: params.agentId,
+        taskId: params.taskId,
+      });
+      if (!claimed)
+        throw new ApiError(
+          409,
+          "This workspace is already in use or its retention deadline has passed",
+        );
+      claimedWorkspace = true;
+      const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
+      if (previous?.virtualApiKeyId)
+        await cleanupAgentRun(previous, { requireTranscript: true });
+      await backend.continueRun({ session, spec });
+    } else {
+      createdWorkspace = await AgentWorkspaceModel.create({
+        organizationId: params.organizationId,
+        agentId: params.agentId,
+        actorKind: params.actor.kind,
+        actorId: params.actor.id,
+        backend: backend.name,
+        runtimeScope,
+        workloadName: spec.frozenName,
+        activeTaskId: params.taskId,
+        lastTaskId: params.taskId,
+        expiresAt: new Date(
+          Date.now() +
+            (spec.activeDeadlineSeconds ??
+              config.agentRuntime.defaultTtlHours * 3600) *
+              1000,
+        ),
+      });
+      await backend.launch(spec);
+      await backend.stageInputs({ session, inputs: inputFiles });
+    }
   } catch (error) {
-    // Nothing was scheduled, but a Secret holding the actor's personal
-    // credentials may already exist. Close the session so the reconciler does
-    // not adopt it, and remove whatever landed.
-    await backend.teardown(session).catch((teardownError) => {
+    // A publication can succeed before its exec connection fails. Keep the
+    // claim until stopping that possibly-running turn has been acknowledged.
+    try {
+      let suspended = false;
+      if (claimedWorkspace)
+        suspended = (await backend.stopRun(session)) === "suspended";
+      if (workspace) {
+        await backend.releaseRun(session);
+        if (claimedWorkspace)
+          await AgentWorkspaceModel.release({
+            workloadName: session.workloadName,
+            taskId: session.taskId,
+            suspended,
+          });
+      } else {
+        if (createdWorkspace)
+          await AgentWorkspaceModel.transition({
+            id: createdWorkspace.id,
+            from: "active",
+            to: "deleting",
+          });
+        await backend.teardown(session);
+        if (createdWorkspace)
+          await AgentWorkspaceModel.transition({
+            id: createdWorkspace.id,
+            from: "deleting",
+            to: "deleted",
+          });
+      }
+      await AgentRunModel.close({ id: session.id });
+    } catch (cleanupError) {
+      // Leave the session open for terminal reconciliation, including failed
+      // stop/revoke attempts. Never release another task's workspace claim.
       logger.warn(
-        { error: teardownError, sessionId: session.id },
-        "Teardown after a failed Agent Runtime launch did not complete",
+        { error: cleanupError, sessionId: session.id },
+        "Cleanup after a failed Agent Runtime launch will retry",
       );
-    });
-    await AgentRunModel.close({ id: session.id }).catch((error) => {
-      logger.warn(
-        { error, sessionId: session.id, taskId: session.taskId },
-        "Could not mark the Agent run as ended",
-      );
-    });
+    }
     throw error;
   }
 
@@ -202,6 +302,7 @@ export async function runTaskInAgentRuntime(params: {
   modelId: string | null;
   llmApiKeyId: string | null;
   titleUserId?: string;
+  resumeFromTaskId?: string;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
@@ -233,17 +334,56 @@ export async function resumeAgentRun(params: {
 }
 
 /** Clean up a session whose task settled while no backend owned its run. */
-export async function cleanupAgentRun(session: AgentRunRecord): Promise<void> {
+export async function cleanupAgentRun(
+  session: AgentRunRecord,
+  options?: { requireTranscript?: boolean },
+): Promise<void> {
   const backend = resolveAgentRuntimeBackendDriver(session.backend);
-  const output = new AgentRuntimeOutputCapture({ backend, session });
+  const workspace = await AgentWorkspaceModel.findByWorkloadName(
+    session.workloadName,
+  );
+  const task = await A2ATaskModel.findById(session.taskId);
+  // Stop first: the supervisor publishes the final transcript before acknowledging
+  // cancellation. Never stop a newer turn that already claimed this workspace.
+  let suspended = false;
+  if (
+    workspace?.activeTaskId === session.taskId &&
+    (task?.state === "TASK_STATE_CANCELED" ||
+      task?.state === "TASK_STATE_FAILED")
+  ) {
+    suspended = (await backend.stopRun(session)) === "suspended";
+  }
+  const output = new AgentRuntimeOutputCapture({
+    backend,
+    session,
+    throwOnSnapshotError:
+      options?.requireTranscript || workspace?.state === "deleting",
+  });
   const stopCapture = new AbortController();
   const capture = output.follow(stopCapture.signal);
   await Promise.race([capture, delayMs(LOG_DRAIN_GRACE_MS)]);
   stopCapture.abort();
   await output.recoverSnapshot(AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS));
-  await persistTranscript({ session, output });
-  await backend.teardown(session);
-  await AgentRunModel.close({ id: session.id, logs: output.retainedLogs });
+  await persistTranscript({
+    session,
+    output,
+    required: options?.requireTranscript || workspace?.state === "deleting",
+  });
+  await backend.releaseRun(session, {
+    retainInteractiveSession:
+      !options?.requireTranscript &&
+      task?.state === "TASK_STATE_COMPLETED" &&
+      ["active", "idle"].includes(workspace?.state ?? ""),
+  });
+  await AgentWorkspaceModel.release({
+    workloadName: session.workloadName,
+    taskId: session.taskId,
+    suspended,
+  });
+  await AgentRunModel.close({
+    id: session.id,
+    logs: output.retainedLogs || undefined,
+  });
 }
 
 async function followAgentRun(params: {
@@ -262,6 +402,13 @@ async function followAgentRun(params: {
   let outcome: "succeeded" | "failed" | "aborted" = "failed";
 
   try {
+    if (params.launchedAt === undefined) {
+      await backend.recoverRun(session);
+      await backend.stageInputs({
+        session,
+        inputs: await AgentRunInputModel.findByTaskId(session.taskId),
+      });
+    }
     await backend.waitUntilRunning({
       session,
       abortSignal: params.abortSignal,
@@ -332,29 +479,65 @@ async function followAgentRun(params: {
           ? "stopped_by_user"
           : "failed",
     );
-    await persistTranscript({ session, output });
-    await backend.teardown(session).catch((error) => {
+    let cleanupSucceeded = true;
+    let suspended = false;
+    await (async () => {
+      if (outcome !== "succeeded" || params.abortSignal?.aborted) {
+        suspended = (await backend.stopRun(session)) === "suspended";
+        await output.recoverSnapshot(
+          AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS),
+        );
+      }
+      await backend.releaseRun(session, {
+        retainInteractiveSession: outcome === "succeeded",
+      });
+    })().catch((error) => {
+      cleanupSucceeded = false;
       logger.warn(
         { error, sessionId: session.id, taskId: session.taskId },
         "Agent Runtime run teardown did not complete",
       );
     });
-    await AgentRunModel.close({
-      id: session.id,
-      logs: output.retainedLogs,
-    }).catch((error) => {
-      logger.warn(
-        { error, sessionId: session.id, taskId: session.taskId },
-        "Could not mark the Agent run as ended",
-      );
-    });
+    await persistTranscript({ session, output });
+    const workspace = await AgentWorkspaceModel.findByWorkloadName(
+      session.workloadName,
+    );
+    // Expiry owns strict final capture. Do not let this best-effort follower
+    // close the run and make the reaper skip a failed transcript recovery.
+    if (workspace?.state === "deleting") cleanupSucceeded = false;
+    // Keep failed cleanup open so terminal reconciliation can retry it.
+    if (cleanupSucceeded)
+      await AgentRunModel.close({
+        id: session.id,
+        logs: output.retainedLogs,
+      }).catch((error) => {
+        logger.warn(
+          { error, sessionId: session.id, taskId: session.taskId },
+          "Could not mark the Agent run as ended",
+        );
+      });
+    if (cleanupSucceeded) {
+      await AgentWorkspaceModel.release({
+        workloadName: session.workloadName,
+        taskId: session.taskId,
+        suspended,
+      });
+    }
   }
 }
 
 async function persistTranscript(params: {
   session: AgentRunRecord;
   output: AgentRuntimeOutputCapture;
+  required?: boolean;
 }): Promise<void> {
+  // A later reconciliation may find the workspace already suspended or gone.
+  // No recovered bytes is not evidence that the prior transcript was empty.
+  if (
+    params.output.observedTranscriptBytes === 0 &&
+    !params.output.readableTranscript
+  )
+    return;
   await agentRunTranscriptStore
     .persist({
       runId: params.session.id,
@@ -363,6 +546,7 @@ async function persistTranscript(params: {
       readableTranscript: params.output.readableTranscript,
     })
     .catch((error) => {
+      if (params.required) throw error;
       logger.warn(
         {
           error,
@@ -418,4 +602,5 @@ export function extractFinalAnswer(transcript: string): string {
 }
 
 const LOG_DRAIN_GRACE_MS = 2_000;
-const OUTPUT_SNAPSHOT_TIMEOUT_MS = 10_000;
+// A retained PVC may need attachment to a temporary recovery Pod first.
+const OUTPUT_SNAPSHOT_TIMEOUT_MS = 120_000;

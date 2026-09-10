@@ -115,7 +115,9 @@ export function AgentRuntimeCredentialPrompt({
             variant="outline"
             className="ml-auto h-6 shrink-0 px-2 text-xs"
           >
-            <Link href={`/agents/${agentId}?tab=overview#runtime-credentials`}>
+            <Link
+              href={`/agents/${agentId}?section=advanced&setup=credentials`}
+            >
               Agent details
             </Link>
           </Button>

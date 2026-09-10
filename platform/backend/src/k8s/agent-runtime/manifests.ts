@@ -6,17 +6,17 @@ import {
   AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
   AGENT_RUNTIME_DIR,
   AGENT_RUNTIME_INPUTS_READY_FILE,
-  AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE,
-  AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES,
   AGENT_RUNTIME_SHELL_INIT_SCRIPT,
   AGENT_RUNTIME_STEER_FIFO,
 } from "@/services/agent-runtime/runtime-contract";
 import type { AgentRuntimeResources } from "@/types";
 import {
   AGENT_RUNTIME_TASK_LABEL,
+  AGENT_RUNTIME_WORKSPACE_LABEL,
   agentRuntimeLabels,
   agentRuntimeNames,
 } from "./naming";
+import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 
 const DNS_PORTS = [
   { protocol: "UDP" as const, port: 53 },
@@ -29,6 +29,76 @@ export const AGENT_RUNTIME_TMUX_SESSION = "agent";
 /** Container name in the Job spec; exec and log reads both address it. */
 export const AGENT_RUNTIME_CONTAINER_NAME = "agent-runtime";
 
+/** Pinned upstream API; the controller is installed by the cluster operator. */
+export const AGENT_SANDBOX_API = {
+  group: "agents.x-k8s.io",
+  version: "v1beta1",
+  plural: "sandboxes",
+} as const;
+
+export interface AgentSandbox {
+  apiVersion: "agents.x-k8s.io/v1beta1";
+  kind: "Sandbox";
+  metadata: k8s.V1ObjectMeta;
+  spec: {
+    podTemplate: k8s.V1PodTemplateSpec;
+    operatingMode: "Running" | "Suspended";
+    service: boolean;
+    shutdownTime?: string;
+    shutdownPolicy: "Retain";
+    volumeClaimTemplates: Array<{
+      metadata: k8s.V1ObjectMeta;
+      spec: k8s.V1PersistentVolumeClaimSpec;
+    }>;
+  };
+  status?: {
+    conditions?: Array<{
+      type: string;
+      status: string;
+      reason?: string;
+      message?: string;
+    }>;
+  };
+}
+
+/** Render a turn request without interpolating credentials into exec arguments. */
+export function buildAgentRuntimeTurnScript(
+  spec: AgentRunLaunchSpec,
+  inheritedVariableNames: string[] = [],
+): string {
+  const variables = {
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    TERM: "xterm-256color",
+    ENV: AGENT_RUNTIME_SHELL_INIT_SCRIPT,
+    PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
+    ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",
+    ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT: "0",
+    ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR: AGENT_RUNTIME_ATTACHMENTS_DIR,
+    ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST:
+      AGENT_RUNTIME_ATTACHMENTS_MANIFEST,
+    ...spec.env,
+    ...spec.secretEnv,
+    ARCHESTRA_AGENT_RUNTIME_CONTINUE: "1",
+  };
+  return [
+    "set -eu",
+    // A retained tmux server inherits the initial Pod environment. Remove its
+    // managed variables before applying this turn, including removed credentials.
+    ...inheritedVariableNames.map((name) => {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
+        throw new Error("Invalid runtime environment variable name");
+      return `unset ${name}`;
+    }),
+    ...Object.entries(variables).map(([name, value]) => {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
+        throw new Error("Invalid runtime environment variable name");
+      return `export ${name}=${shellQuote(value)}`;
+    }),
+    resolveEntrypoint(spec.command),
+  ].join("\n");
+}
+
 /**
  * Install the stable attach command and the hook used by kubectl/k9s shells.
  * Kept as a script so the manager can repair live pods created before an
@@ -38,7 +108,7 @@ export function buildAgentRuntimeTerminalIntegrationScript(): string {
   return [
     `printf '%s\\n' '#!/bin/sh' 'tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on' 'exec tmux attach -t ${AGENT_RUNTIME_TMUX_SESSION}' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
     `chmod 755 ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
-    `printf '%s\\n' 'if [ "\${ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; then exec ${AGENT_RUNTIME_ATTACH_SCRIPT}; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
+    `printf '%s\\n' 'if [ -t 0 ] && [ -t 1 ]; then date +%s > /var/run/archestra/development-activity; fi' 'if [ "\${ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; then exec ${AGENT_RUNTIME_ATTACH_SCRIPT}; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
     `chmod 644 ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
   ].join("\n");
 }
@@ -75,13 +145,10 @@ export type KubernetesAgentRunLaunchSpec = Omit<
  * CLIs that own their own input loop are steered with `tmux send-keys`
  * instead, which needs no cooperation from the process.
  *
- * The wrapper deliberately does not restart the agent: the Job's
- * `restartPolicy: Never` plus `backoffLimit: 0` means a session that exits
- * stays exited rather than silently re-running whatever side effects it had
- * already performed.
+ * The workspace supervisor owns PID 1; agent command completion is independent
+ * of Pod completion. Durable request markers prevent replay after replacement.
  */
 function buildAgentRuntimeBootstrapScript(): string {
-  const exitCodeFile = `${AGENT_RUNTIME_DIR}/exit-code`;
   return [
     "set -eu",
     `mkdir -p ${AGENT_RUNTIME_DIR}`,
@@ -100,83 +167,68 @@ function buildAgentRuntimeBootstrapScript(): string {
     '  echo "agent-runtime: this image has no tmux, which Agent Runtime runs require for attach and steering" >&2',
     `  exit ${AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE}`,
     "fi",
-    `printf '%s\\n' "$ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT" > ${AGENT_RUNTIME_DIR}/entry.sh`,
-    // The sleep before the pane exits is the drain for the pipe-pane mirror
-    // below: a one-shot CLI writes its entire result in its final instant, and
-    // a pane that exits with that burst still in the pty buffer takes the
-    // mirror down before it is copied out — the durable transcript (and the
-    // completion message built from it) arrives empty while the pane showed a
-    // full answer.
-    `printf '%s\n' '/bin/sh ${AGENT_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; sleep 2; exit "$status"' > ${AGENT_RUNTIME_DIR}/session.sh`,
-    // Create the pane before starting the Agent so its output cannot race the
-    // pipe setup. A fast one-shot client used to finish before pipe-pane was
-    // attached, leaving its durable transcript empty.
-    `tmux new-session -d -x 120 -y 40 -s ${AGENT_RUNTIME_TMUX_SESSION} 'while :; do sleep 1; done'`,
-    // Let browser terminals send wheel events to tmux. Its WheelUpPane binding
-    // enters copy mode and scrolls tmux's own history; without mouse mode,
-    // xterm falls back to cursor-key sequences that get typed into the pane.
-    `tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on`,
-    // A maintained CLI may set these user options from a native lifecycle
-    // hook. Keeping the indicator in tmux makes it visible to every attached
-    // client without screen-scraping or coupling the platform to one TUI.
-    `tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} @archestra_attention 0`,
-    `tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} status-left '#{?#{==:#{@archestra_attention},1},#[fg=yellow,bold]#{@archestra_attention_label}#[default] ,}[#S] '`,
-    // Mirror the pane to the container's stdout. tmux gives the agent a pty,
-    // so without this its output exists only inside the pane: kubectl logs
-    // shows nothing, and the platform's log-follower streams an empty task.
-    `tmux pipe-pane -t ${AGENT_RUNTIME_TMUX_SESSION} -o 'cat >> /proc/1/fd/1'`,
-    `tmux respawn-pane -k -t ${AGENT_RUNTIME_TMUX_SESSION} '/bin/sh ${AGENT_RUNTIME_DIR}/session.sh'`,
-    // Hold PID 1 for exactly as long as the session lives, so the Job
-    // completes when the agent is done rather than when tmux forks away.
-    `while tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; do sleep 5; done`,
-    // Provider-native transcript files are normalized by maintained images.
-    // Frame the bounded artifact separately from the PTY stream; output capture
-    // removes this protocol before terminal persistence or live delivery.
-    `if [ -s ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE} ] && command -v base64 >/dev/null 2>&1 && [ "$(wc -c < ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE})" -le ${AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES} ]; then`,
-    `  printf '\\033]777;archestra-readable-transcript=base64\\007'`,
-    `  base64 < ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE} | tr -d '\\n'`,
-    `  printf '\\033]777;archestra-readable-transcript=end\\007'`,
+    'case "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" in ""|*[!a-zA-Z0-9-]*) echo "Invalid runtime task ID" >&2; exit 78;; esac',
+    `mkdir -p ${AGENT_RUNTIME_DIR}/turns`,
+    `request=${AGENT_RUNTIME_DIR}/turns/$ARCHESTRA_AGENT_RUNTIME_TASK_ID.request`,
+    `if [ ! -f "$request" ] && [ ! -f "${AGENT_RUNTIME_DIR}/turns/$ARCHESTRA_AGENT_RUNTIME_TASK_ID.exit" ]; then`,
+    "  umask 077",
+    `  printf '%s\\n' "$ARCHESTRA_AGENT_RUNTIME_ENTRYPOINT" > "$request.tmp"`,
+    '  mv "$request.tmp" "$request"',
     "fi",
-    `if [ ! -f ${exitCodeFile} ]; then`,
-    '  echo "agent-runtime: agent session ended without an exit status" >&2',
-    "  exit 1",
-    "fi",
-    `exit "$(cat ${exitCodeFile})"`,
+    buildSandboxSupervisorScript(),
   ].join("\n");
 }
 
 /**
- * A Job, not a Deployment: an Agent Runtime run runs to completion. A Deployment would
- * restart a finished session forever, and restart a crashed one behind the
- * user's back — re-executing side effects the first attempt already had.
+ * A durable Sandbox owns the workspace; the supervisor executes each request
+ * at most once, independently of the controller's Pod replacement policy.
  */
-export function buildAgentRuntimeJob(
+export function buildAgentRuntimeSandbox(
   spec: KubernetesAgentRunLaunchSpec,
-): k8s.V1Job {
+): AgentSandbox {
   const names = agentRuntimeNames(spec.frozenName);
   const labels = agentRuntimeLabels({
     taskId: spec.taskId,
     agentRuntimeId: spec.agentRuntimeId,
   });
+  labels[AGENT_RUNTIME_WORKSPACE_LABEL] = spec.frozenName;
 
   return {
-    apiVersion: "batch/v1",
-    kind: "Job",
+    apiVersion: "agents.x-k8s.io/v1beta1",
+    kind: "Sandbox",
     metadata: {
-      name: names.job,
+      name: names.sandbox,
       namespace: spec.namespace,
       labels,
       ownerReferences: spec.ownerReferences,
     },
     spec: {
-      // One attempt, one pod: see buildAgentRuntimeBootstrapScript.
-      backoffLimit: 0,
-      parallelism: 1,
-      completions: 1,
+      operatingMode: "Running",
+      // Controller-owned headless Service preserves the workspace DNS identity.
+      service: true,
+      shutdownPolicy: "Retain",
+      volumeClaimTemplates: [
+        {
+          metadata: { name: "workspace" },
+          spec: {
+            accessModes: ["ReadWriteOnce"],
+            resources: {
+              requests: { storage: spec.workspaceStorageSize ?? "20Gi" },
+            },
+            ...(spec.workspaceStorageClass
+              ? { storageClassName: spec.workspaceStorageClass }
+              : {}),
+          },
+        },
+      ],
       ...(spec.activeDeadlineSeconds
-        ? { activeDeadlineSeconds: spec.activeDeadlineSeconds }
+        ? {
+            shutdownTime: new Date(
+              Date.now() + spec.activeDeadlineSeconds * 1000,
+            ).toISOString(),
+          }
         : {}),
-      template: {
+      podTemplate: {
         metadata: { labels },
         spec: {
           restartPolicy: "Never",
@@ -207,25 +259,36 @@ export function buildAgentRuntimeJob(
           // The agent authenticates to the platform with credentials mounted
           // from a Secret; it has no business reading the cluster's API.
           automountServiceAccountToken: false,
-          volumes: [
+          securityContext: { fsGroup: 1000 },
+          // Seed image-provided HOME configuration once, before mounting the
+          // durable HOME over it. A blank PVC must not hide bundled settings.
+          initContainers: [
             {
-              name: "archestra-run",
-              emptyDir: { sizeLimit: spec.ephemeralStorageLimit },
+              name: "initialize-workspace",
+              image: spec.image,
+              command: [
+                "/bin/sh",
+                "-c",
+                [
+                  "set -eu",
+                  "mkdir -p /mnt/workspace/runtime /mnt/workspace/home /mnt/workspace/docker",
+                  "if [ ! -f /mnt/workspace/.initialized ]; then",
+                  "  if [ -d /home/node ]; then cp -R /home/node/. /mnt/workspace/home/; fi",
+                  "  touch /mnt/workspace/.initialized",
+                  "fi",
+                ].join("\n"),
+              ],
+              securityContext: {
+                runAsUser: 1000,
+                runAsGroup: 1000,
+                allowPrivilegeEscalation: false,
+              },
+              volumeMounts: [
+                { name: "workspace", mountPath: "/mnt/workspace" },
+              ],
             },
-            // A privileged Agent Runtime run is expected to run its own dockerd (kind,
-            // tilt, testcontainers). Docker's overlay2 storage driver cannot
-            // stack on the container's own overlayfs root, and its silent
-            // fallback is vfs — full copies per layer, unusably slow. An
-            // emptyDir gives /var/lib/docker a real (non-overlay) filesystem.
-            ...(spec.privileged
-              ? [
-                  {
-                    name: "docker-lib",
-                    emptyDir: { sizeLimit: spec.ephemeralStorageLimit },
-                  },
-                ]
-              : []),
           ],
+          volumes: [],
           containers: [
             {
               name: AGENT_RUNTIME_CONTAINER_NAME,
@@ -271,9 +334,23 @@ export function buildAgentRuntimeJob(
                 : {}),
               resources: buildResourceRequirements(spec.resources),
               volumeMounts: [
-                { name: "archestra-run", mountPath: AGENT_RUNTIME_DIR },
+                {
+                  name: "workspace",
+                  mountPath: AGENT_RUNTIME_DIR,
+                  subPath: "runtime",
+                },
+                { name: "workspace", mountPath: "/home/node", subPath: "home" },
                 ...(spec.privileged
-                  ? [{ name: "docker-lib", mountPath: "/var/lib/docker" }]
+                  ? // Keep nested development containers, images and volumes on
+                    // the same durable disk as the workspace. A Pod replacement
+                    // restarts dockerd; it must not erase the development DB.
+                    [
+                      {
+                        name: "workspace",
+                        mountPath: "/var/lib/docker",
+                        subPath: "docker",
+                      },
+                    ]
                   : []),
               ],
               ...(spec.privileged
@@ -324,7 +401,10 @@ export function buildAgentRuntimeSecret(
  * network is the environment's decision to make, not this policy's.
  */
 export function buildAgentRuntimePlatformEgressPolicy(params: {
-  spec: KubernetesAgentRunLaunchSpec;
+  spec: Pick<
+    KubernetesAgentRunLaunchSpec,
+    "frozenName" | "namespace" | "taskId" | "agentRuntimeId" | "ownerReferences"
+  >;
   platformNamespace: string;
   platformPodLabels: Record<string, string>;
   platformPorts: number[];

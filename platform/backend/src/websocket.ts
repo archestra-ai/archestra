@@ -700,6 +700,26 @@ class WebSocketService {
     }
 
     if (session.endedAt) {
+      if (session.virtualApiKeyId) {
+        const backend = resolveAgentRuntimeBackendDriver(session.backend);
+        const output = new AgentRuntimeOutputCapture({ backend, session });
+        try {
+          await output.recoverSnapshot(AbortSignal.timeout(30_000));
+          if (output.observedTranscriptBytes > 0) {
+            await agentRunTranscriptStore.persist({
+              runId: session.id,
+              transcript: output.completeTranscript,
+              observedBytes: output.observedTranscriptBytes,
+              readableTranscript: output.readableTranscript,
+            });
+          }
+        } catch (error) {
+          logger.warn(
+            { error, runId },
+            "Could not refresh retained terminal output",
+          );
+        }
+      }
       const decoder = new StringDecoder("utf8");
       const transcript = await agentRunTranscriptStore
         .stream({

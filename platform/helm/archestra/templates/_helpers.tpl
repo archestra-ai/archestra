@@ -499,13 +499,16 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
-# Jobs run Agent Runtime workloads. The control plane only needs to create,
-# inspect, and remove them; it never mutates an existing Job or manages CronJobs.
-- apiGroups: ["batch"]
-  resources: ["jobs"]
-  verbs: ["get", "create", "delete"]
-- apiGroups: ["batch"]
-  resources: ["jobs/status"]
+# Agent Sandbox owns the runtime Pod and persistent workspace lifecycle.
+# Transcript recovery verifies the retained claim belongs to its Sandbox.
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get"]
+- apiGroups: ["agents.x-k8s.io"]
+  resources: ["sandboxes"]
+  verbs: ["get", "list", "create", "patch", "delete"]
+- apiGroups: ["agents.x-k8s.io"]
+  resources: ["sandboxes/status"]
   verbs: ["get"]
 # DaemonSet for the MCP image pre-puller, which keeps every node's image cache
 # warm so a hibernated MCP server wakes without reaching the registry. Narrower

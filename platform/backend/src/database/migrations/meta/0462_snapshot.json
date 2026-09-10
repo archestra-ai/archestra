@@ -1,5 +1,5 @@
 {
-  "id": "36a98bbf-0806-4a86-b0cf-d4662f09a931",
+  "id": "5c2bc2b1-9ab4-4b5a-a4da-876f0b60634f",
   "prevId": "e71b06fd-e30e-4317-9e2d-2041b2d0e620",
   "version": "7",
   "dialect": "postgresql",
@@ -96,143 +96,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.a2a_connections": {
-      "name": "a2a_connections",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "remote_agent_id": {
-          "name": "remote_agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "selected_interface": {
-          "name": "selected_interface",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "security_requirement": {
-          "name": "security_requirement",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auth_type": {
-          "name": "auth_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'none'"
-        },
-        "auth_config": {
-          "name": "auth_config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "last_verified_at": {
-          "name": "last_verified_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "a2a_connections_remote_agent_id_uidx": {
-          "name": "a2a_connections_remote_agent_id_uidx",
-          "columns": [
-            {
-              "expression": "remote_agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "a2a_connections_remote_agent_id_a2a_remote_agents_id_fk": {
-          "name": "a2a_connections_remote_agent_id_a2a_remote_agents_id_fk",
-          "tableFrom": "a2a_connections",
-          "tableTo": "a2a_remote_agents",
-          "columnsFrom": [
-            "remote_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "a2a_connections_secret_id_secret_id_fk": {
-          "name": "a2a_connections_secret_id_secret_id_fk",
-          "tableFrom": "a2a_connections",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "a2a_connections_auth_type_check": {
-          "name": "a2a_connections_auth_type_check",
-          "value": "\"a2a_connections\".\"auth_type\" in ('none', 'bearer', 'api_key')"
-        },
-        "a2a_connections_secret_check": {
-          "name": "a2a_connections_secret_check",
-          "value": "(\"a2a_connections\".\"auth_type\" = 'none' and \"a2a_connections\".\"secret_id\" is null) or (\"a2a_connections\".\"auth_type\" <> 'none' and \"a2a_connections\".\"secret_id\" is not null)"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.a2a_context_compactions": {
@@ -585,314 +448,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.a2a_outbound_runs": {
-      "name": "a2a_outbound_runs",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "parent_agent_id": {
-          "name": "parent_agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "remote_agent_id": {
-          "name": "remote_agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "connection_id": {
-          "name": "connection_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tool_id": {
-          "name": "tool_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tool_call_id": {
-          "name": "tool_call_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "remote_task_id": {
-          "name": "remote_task_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "remote_context_id": {
-          "name": "remote_context_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_name_snapshot": {
-          "name": "target_name_snapshot",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "interface_snapshot": {
-          "name": "interface_snapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "error_code": {
-          "name": "error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status_reason": {
-          "name": "status_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "a2a_outbound_runs_organization_id_idx": {
-          "name": "a2a_outbound_runs_organization_id_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "a2a_outbound_runs_parent_agent_id_idx": {
-          "name": "a2a_outbound_runs_parent_agent_id_idx",
-          "columns": [
-            {
-              "expression": "parent_agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "a2a_outbound_runs_connection_task_idx": {
-          "name": "a2a_outbound_runs_connection_task_idx",
-          "columns": [
-            {
-              "expression": "connection_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "remote_task_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "a2a_outbound_runs_remote_agent_started_at_idx": {
-          "name": "a2a_outbound_runs_remote_agent_started_at_idx",
-          "columns": [
-            {
-              "expression": "remote_agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "started_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "a2a_outbound_runs_organization_id_organization_id_fk": {
-          "name": "a2a_outbound_runs_organization_id_organization_id_fk",
-          "tableFrom": "a2a_outbound_runs",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "a2a_outbound_runs_parent_agent_id_agents_id_fk": {
-          "name": "a2a_outbound_runs_parent_agent_id_agents_id_fk",
-          "tableFrom": "a2a_outbound_runs",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "parent_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "a2a_outbound_runs_remote_agent_id_a2a_remote_agents_id_fk": {
-          "name": "a2a_outbound_runs_remote_agent_id_a2a_remote_agents_id_fk",
-          "tableFrom": "a2a_outbound_runs",
-          "tableTo": "a2a_remote_agents",
-          "columnsFrom": [
-            "remote_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "a2a_outbound_runs_connection_id_a2a_connections_id_fk": {
-          "name": "a2a_outbound_runs_connection_id_a2a_connections_id_fk",
-          "tableFrom": "a2a_outbound_runs",
-          "tableTo": "a2a_connections",
-          "columnsFrom": [
-            "connection_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "a2a_outbound_runs_tool_id_tools_id_fk": {
-          "name": "a2a_outbound_runs_tool_id_tools_id_fk",
-          "tableFrom": "a2a_outbound_runs",
-          "tableTo": "tools",
-          "columnsFrom": [
-            "tool_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "a2a_outbound_runs_user_id_user_id_fk": {
-          "name": "a2a_outbound_runs_user_id_user_id_fk",
-          "tableFrom": "a2a_outbound_runs",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "a2a_outbound_runs_conversation_id_conversations_id_fk": {
-          "name": "a2a_outbound_runs_conversation_id_conversations_id_fk",
-          "tableFrom": "a2a_outbound_runs",
-          "tableTo": "conversations",
-          "columnsFrom": [
-            "conversation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.a2a_push_notification_config": {
       "name": "a2a_push_notification_config",
       "schema": "",
@@ -985,303 +540,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.a2a_remote_agent_teams": {
-      "name": "a2a_remote_agent_teams",
-      "schema": "",
-      "columns": {
-        "remote_agent_id": {
-          "name": "remote_agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "a2a_remote_agent_teams_remote_agent_id_a2a_remote_agents_id_fk": {
-          "name": "a2a_remote_agent_teams_remote_agent_id_a2a_remote_agents_id_fk",
-          "tableFrom": "a2a_remote_agent_teams",
-          "tableTo": "a2a_remote_agents",
-          "columnsFrom": [
-            "remote_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "a2a_remote_agent_teams_team_id_team_id_fk": {
-          "name": "a2a_remote_agent_teams_team_id_team_id_fk",
-          "tableFrom": "a2a_remote_agent_teams",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "a2a_remote_agent_teams_remote_agent_id_team_id_pk": {
-          "name": "a2a_remote_agent_teams_remote_agent_id_team_id_pk",
-          "columns": [
-            "remote_agent_id",
-            "team_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.a2a_remote_agent_users": {
-      "name": "a2a_remote_agent_users",
-      "schema": "",
-      "columns": {
-        "remote_agent_id": {
-          "name": "remote_agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "a2a_remote_agent_users_remote_agent_id_a2a_remote_agents_id_fk": {
-          "name": "a2a_remote_agent_users_remote_agent_id_a2a_remote_agents_id_fk",
-          "tableFrom": "a2a_remote_agent_users",
-          "tableTo": "a2a_remote_agents",
-          "columnsFrom": [
-            "remote_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "a2a_remote_agent_users_user_id_user_id_fk": {
-          "name": "a2a_remote_agent_users_user_id_user_id_fk",
-          "tableFrom": "a2a_remote_agent_users",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "a2a_remote_agent_users_remote_agent_id_user_id_pk": {
-          "name": "a2a_remote_agent_users_remote_agent_id_user_id_pk",
-          "columns": [
-            "remote_agent_id",
-            "user_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.a2a_remote_agents": {
-      "name": "a2a_remote_agents",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "author_id": {
-          "name": "author_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'org'"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "discovery_mode": {
-          "name": "discovery_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "discovery_url": {
-          "name": "discovery_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "agent_card": {
-          "name": "agent_card",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "card_hash": {
-          "name": "card_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_discovered_at": {
-          "name": "last_discovered_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "a2a_remote_agents_organization_id_idx": {
-          "name": "a2a_remote_agents_organization_id_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "a2a_remote_agents_author_id_idx": {
-          "name": "a2a_remote_agents_author_id_idx",
-          "columns": [
-            {
-              "expression": "author_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "a2a_remote_agents_organization_id_organization_id_fk": {
-          "name": "a2a_remote_agents_organization_id_organization_id_fk",
-          "tableFrom": "a2a_remote_agents",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "a2a_remote_agents_author_id_user_id_fk": {
-          "name": "a2a_remote_agents_author_id_user_id_fk",
-          "tableFrom": "a2a_remote_agents",
-          "tableTo": "user",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "a2a_remote_agents_discovery_mode_check": {
-          "name": "a2a_remote_agents_discovery_mode_check",
-          "value": "\"a2a_remote_agents\".\"discovery_mode\" in ('well_known', 'card_url', 'inline_card')"
-        },
-        "a2a_remote_agents_discovery_url_check": {
-          "name": "a2a_remote_agents_discovery_url_check",
-          "value": "(\"a2a_remote_agents\".\"discovery_mode\" = 'inline_card' and \"a2a_remote_agents\".\"discovery_url\" is null) or (\"a2a_remote_agents\".\"discovery_mode\" <> 'inline_card' and \"a2a_remote_agents\".\"discovery_url\" is not null)"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.a2a_task_approval_request": {
@@ -3091,8 +2349,8 @@
           "method": "btree",
           "with": {}
         },
-        "agent_runs_workload_name_uidx": {
-          "name": "agent_runs_workload_name_uidx",
+        "agent_runs_workload_name_idx": {
+          "name": "agent_runs_workload_name_idx",
           "columns": [
             {
               "expression": "workload_name",
@@ -3101,7 +2359,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3782,6 +3040,171 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.agent_workspaces": {
+      "name": "agent_workspaces",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_kind": {
+          "name": "actor_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "backend": {
+          "name": "backend",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runtime_scope": {
+          "name": "runtime_scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workload_name": {
+          "name": "workload_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "active_task_id": {
+          "name": "active_task_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_task_id": {
+          "name": "last_task_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_activity_at": {
+          "name": "last_activity_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "idle_at": {
+          "name": "idle_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "agent_workspaces_workload_name_uidx": {
+          "name": "agent_workspaces_workload_name_uidx",
+          "columns": [
+            {
+              "expression": "workload_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agent_workspaces_owner_idx": {
+          "name": "agent_workspaces_owner_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "actor_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "actor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agent_workspaces_expiry_idx": {
+          "name": "agent_workspaces_expiry_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -24197,12 +23620,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "delegate_to_a2a_connection_id": {
-          "name": "delegate_to_a2a_connection_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -24309,22 +23726,6 @@
           "method": "btree",
           "with": {}
         },
-        "tools_a2a_connection_uidx": {
-          "name": "tools_a2a_connection_uidx",
-          "columns": [
-            {
-              "expression": "delegate_to_a2a_connection_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"tools\".\"delegate_to_a2a_connection_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "tools_delegate_to_agent_id_idx": {
           "name": "tools_delegate_to_agent_id_idx",
           "columns": [
@@ -24404,19 +23805,6 @@
           "tableTo": "agents",
           "columnsFrom": [
             "delegate_to_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "tools_delegate_to_a2a_connection_id_a2a_connections_id_fk": {
-          "name": "tools_delegate_to_a2a_connection_id_a2a_connections_id_fk",
-          "tableFrom": "tools",
-          "tableTo": "a2a_connections",
-          "columnsFrom": [
-            "delegate_to_a2a_connection_id"
           ],
           "columnsTo": [
             "id"

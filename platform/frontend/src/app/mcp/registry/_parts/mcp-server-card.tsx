@@ -1090,7 +1090,6 @@ export function McpServerCard({
         selectionLabel={selection ? `Select ${item.name}` : undefined}
         onNavigate={() => goToItemPage()}
         footer={cardActions}
-        density="compact"
       >
         {cardBody}
       </TableCard>

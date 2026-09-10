@@ -1,6 +1,7 @@
 import type { PaginationQuery } from "@archestra/shared";
 import {
   and,
+  asc,
   desc,
   eq,
   getTableColumns,
@@ -46,6 +47,69 @@ class AgentRunModel {
       .where(eq(schema.agentRunsTable.taskId, taskId))
       .limit(1);
     return run ?? null;
+  }
+
+  /** Resolve an owned session URL (or any of its task aliases) to its current turn. */
+  static async findCurrentSessionForActor(params: {
+    taskId: string;
+    actorUserId: string;
+    organizationId: string;
+  }): Promise<AgentRunSession | null> {
+    const workspaces = schema.agentWorkspacesTable;
+    const [workspace] = await db
+      .select()
+      .from(workspaces)
+      .where(
+        and(
+          eq(workspaces.organizationId, params.organizationId),
+          eq(workspaces.actorKind, "user"),
+          eq(workspaces.actorId, params.actorUserId),
+          or(
+            eq(workspaces.id, params.taskId),
+            sql`${workspaces.workloadName} IN (
+          SELECT workload_name FROM agent_runs WHERE task_id = ${params.taskId}::uuid
+          AND organization_id = ${params.organizationId}
+          AND actor_kind = 'user' AND actor_id = ${params.actorUserId}
+        )`,
+          ),
+        ),
+      )
+      .limit(1);
+    const run = await AgentRunModel.findForActorByTaskId({
+      ...params,
+      taskId: workspace?.lastTaskId ?? params.taskId,
+    });
+    return run && (!workspace || run.workloadName === workspace.workloadName)
+      ? run
+      : null;
+  }
+
+  /** Stream history metadata in bounded pages; cursor comparisons stay in PostgreSQL. */
+  static async listPreviousTurns(params: {
+    run: AgentRunRecord;
+    afterId?: string;
+  }) {
+    const table = schema.agentRunsTable;
+    return db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.workloadName, params.run.workloadName),
+          eq(table.organizationId, params.run.organizationId),
+          eq(table.actorKind, params.run.actorKind),
+          eq(table.actorId, params.run.actorId),
+          sql`${table.id} <> ${params.run.id}::uuid`,
+          isNotNull(table.endedAt),
+          sql`${table.startedAt} <= (SELECT started_at FROM agent_runs WHERE id = ${params.run.id}::uuid)`,
+          params.afterId
+            ? sql`(${table.startedAt}, ${table.id}) >
+        (SELECT started_at, id FROM agent_runs WHERE id = ${params.afterId}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(asc(table.startedAt), asc(table.id))
+      .limit(100);
   }
 
   /** A new protocol task in an existing context continues its owner's latest
@@ -271,6 +335,9 @@ class AgentRunModel {
       eq(schema.agentRunsTable.actorKind, "user"),
       eq(schema.agentRunsTable.actorId, params.actorUserId),
       eq(schema.agentRunsTable.organizationId, params.organizationId),
+      sql`NOT EXISTS (SELECT 1 FROM agent_workspaces w
+        WHERE w.workload_name = ${schema.agentRunsTable.workloadName}
+        AND w.last_task_id <> ${schema.agentRunsTable.taskId})`,
     ];
     const [rows, [{ total }]] = await Promise.all([
       AgentRunModel.selectRunSessionsWhere({
@@ -498,6 +565,7 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
+        sessionId: sql<string>`COALESCE(${schema.agentWorkspacesTable.id}, ${schema.agentRunsTable.taskId})`,
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -514,6 +582,13 @@ class AgentRunModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.workloadName,
+          schema.agentRunsTable.workloadName,
+        ),
       )
       .leftJoin(
         schema.projectsTable,

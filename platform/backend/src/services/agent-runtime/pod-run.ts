@@ -196,6 +196,8 @@ async function startAgentRunSession(params: {
       await backend.continueRun({ session, spec });
     } else {
       createdWorkspace = await AgentWorkspaceModel.create({
+        // The initial public run URL is the permanent session URL.
+        id: params.taskId,
         organizationId: params.organizationId,
         agentId: params.agentId,
         actorKind: params.actor.kind,

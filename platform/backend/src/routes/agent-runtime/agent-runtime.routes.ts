@@ -472,7 +472,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const owned = await AgentRunModel.findForActorByTaskId({
+      const owned = await AgentRunModel.findCurrentSessionForActor({
         taskId: request.params.taskId,
         actorUserId: request.user.id,
         organizationId: request.organizationId,
@@ -600,6 +600,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         attachmentCount: request.body.attachments?.length ?? 0,
       };
       return reply.send({
+        sessionId: workspace.id,
         taskId: task.id,
         state: task.state,
         agentId: run.agentId,
@@ -927,7 +928,7 @@ async function inspectStartupProgress(
 }
 
 async function requireOwnedRun(request: OwnedRunRequest) {
-  const run = await AgentRunModel.findForActorByTaskId({
+  const run = await AgentRunModel.findCurrentSessionForActor({
     taskId: request.params.taskId,
     actorUserId: request.user.id,
     organizationId: request.organizationId,

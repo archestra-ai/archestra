@@ -83,6 +83,7 @@ export function renderWindowsSetupScript(ctx: SetupScriptContext): string {
 // ===================================================================
 
 const CLIENT_LABELS: Record<ConnectionSetupClientId, string> = {
+  "claude-desktop": "Claude Desktop",
   "claude-code": "Claude Code",
   codex: "Codex",
   "copilot-cli": "Copilot CLI",

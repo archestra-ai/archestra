@@ -4,6 +4,7 @@ import {
   CLAUDE_CLIENT_FILTER,
   CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
   CLAUDE_METADATA_SESSION_SOURCE,
   CODEX_CLIENT_FILTER,
   CODEX_CLIENT_ID,
@@ -2126,15 +2127,15 @@ describe("InteractionModel", () => {
           type: "openai:chatCompletions",
         });
 
-      // Two Claude clients (auto-discovered generic id and header-set Code id),
-      // a Codex client, a customer agent, and a plain session with no client.
+      // Distinct Claude apps and legacy attribution must filter independently.
       await make("auto-claude-session", CLAUDE_CLIENT_ID);
       await make("claude-code-session", CLAUDE_CODE_CLIENT_ID);
+      await make("desktop-session", CLAUDE_DESKTOP_CLIENT_ID);
       await make("codex-session", CODEX_CLIENT_ID);
       await make("customer-session", "my-custom-agent");
       await make("plain-session", null);
 
-      // Filter to Claude — expands to every Claude client id.
+      // The legacy Claude filter includes generic and explicit Code attribution.
       const claude = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
@@ -2142,9 +2143,26 @@ describe("InteractionModel", () => {
         { client: CLAUDE_CLIENT_FILTER },
       );
       expect(claude.data).toHaveLength(2);
-      expect(claude.data.flatMap((s) => s.externalAgentIds).sort()).toEqual(
-        [CLAUDE_CLIENT_ID, CLAUDE_CODE_CLIENT_ID].sort(),
-      );
+      expect(claude.data.flatMap((s) => s.externalAgentIds).sort()).toEqual([
+        CLAUDE_CLIENT_ID,
+        CLAUDE_CODE_CLIENT_ID,
+      ]);
+
+      for (const [client, ids] of [
+        ["claude-code", [CLAUDE_CLIENT_ID, CLAUDE_CODE_CLIENT_ID]],
+        ["claude-desktop", [CLAUDE_DESKTOP_CLIENT_ID]],
+      ] as const) {
+        const result = await InteractionModel.getSessions(
+          { limit: 100, offset: 0 },
+          admin.id,
+          true,
+          { client },
+        );
+        expect(result.data).toHaveLength(ids.length);
+        expect(
+          result.data.flatMap((session) => session.externalAgentIds).sort(),
+        ).toEqual([...ids].sort());
+      }
 
       // Filter to Codex — only the Codex client id.
       const codex = await InteractionModel.getSessions(
@@ -2158,13 +2176,13 @@ describe("InteractionModel", () => {
         CODEX_CLIENT_ID,
       ]);
 
-      // No filter returns all five
+      // No filter returns all six
       const all = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
         true,
       );
-      expect(all.data).toHaveLength(5);
+      expect(all.data).toHaveLength(6);
     });
 
     test("marks mixed-source chat sessions without promoting compaction to the session source", async ({

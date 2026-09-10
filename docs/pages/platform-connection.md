@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-09
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -205,21 +205,23 @@ The `copilot` CLI must be on your `PATH`.
 
 ### Claude Desktop
 
-For a full walkthrough, see [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example).
+Download the setup helper and open it in normal Claude Desktop.
+Confirm its native installation prompt to start the reviewed setup.
+For an existing third-party profile, use the terminal option.
+The setup script supports macOS, Windows, and Linux.
+Choose subscription authentication or an API key in the review step.
+The script checks inference, saves a gateway profile, and restarts Desktop.
+It preserves other profiles and backs up changed files.
 
-> **Note:** Claude Desktop's third-party inference cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
+Subscription setup obtains a token locally through the official Claude Code CLI.
+API-key setup uses a personal virtual key backed by your configured Anthropic key.
+The download requires Node.js 18+ and Python 3.9 or newer.
 
-Download the configuration profile from the Connection page and import it into Claude Desktop.
-Remote endpoints require HTTPS. Local development also supports HTTP on `localhost`, `127.0.0.1`, and `[::1]`.
-This applies to the gateway and shared-skills marketplace. Other HTTP hostnames remain unsupported.
+Authorize the MCP connector in Desktop's **Settings → Connectors**.
+Install your shared-skills marketplace under **Settings → Plugins**.
+To revert, select your previous inference profile and restart Desktop.
 
-Import the file through **Developer → Configure Third-Party Inference → Import configuration**.
-The profile contains credentials. Keep it private and delete it after importing.
-
-- **MCP gateway** — enable Developer Mode, open Developer → Configure Third-Party Inference, add a blank managed MCP server, and paste the gateway URL. Sign in once in your browser.
-- **LLM proxy** — in the same form, paste the gateway base URL and your API key, then add the Archestra attribution headers under Custom headers.
-- **Skills** — in **Settings → Plugins → Browse plugins**, install your shared-skills marketplace.
-- **Revert** — remove the connector and clear the inference credential in the app.
+See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for requirements and authentication details.
 
 ### n8n
 

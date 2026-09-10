@@ -19,3 +19,15 @@ test("copies the current deployment prompt and offers the manual fallback", asyn
   );
   expect(onManualSetup).toHaveBeenCalledOnce();
 });
+
+test("identifies Claude Code and Claude Desktop in their logo tooltips", async () => {
+  const user = userEvent.setup();
+  render(<ConnectWithAi onManualSetup={() => {}} />);
+  await user.hover(screen.getByRole("button", { name: "Claude Code" }));
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("Claude Code");
+  await user.unhover(screen.getByRole("button", { name: "Claude Code" }));
+  await user.hover(screen.getByRole("button", { name: "Claude Desktop" }));
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    "Claude Desktop",
+  );
+});

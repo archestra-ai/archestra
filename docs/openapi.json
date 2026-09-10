@@ -134293,6 +134293,7 @@
                     "type": "string",
                     "enum": [
                       "claude-code",
+                      "claude-desktop",
                       "codex",
                       "copilot-cli",
                       "cursor"
@@ -134909,6 +134910,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "codex",
                         "copilot-cli",
                         "cursor"
@@ -135258,6 +135260,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "codex",
                         "copilot-cli",
                         "cursor"
@@ -136934,6 +136937,7 @@
                     "type": "string",
                     "enum": [
                       "claude-code",
+                      "claude-desktop",
                       "codex",
                       "copilot-cli",
                       "cursor"
@@ -137068,6 +137072,9 @@
                     "command": {
                       "type": "string"
                     },
+                    "installerUrl": {
+                      "type": "string"
+                    },
                     "expiresAt": {
                       "type": "string",
                       "format": "date-time"
@@ -137115,6 +137122,7 @@
                             "type": "string",
                             "enum": [
                               "claude-code",
+                              "claude-desktop",
                               "codex",
                               "copilot-cli",
                               "cursor"
@@ -138004,6 +138012,17 @@
         ],
         "description": "Serve the rendered one-time setup script for a connection setup. Authenticates via the one-time token in the path; the token is consumed atomically on the first successful render.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "desktop"
+              ]
+            },
+            "in": "query",
+            "name": "download",
+            "required": false
+          },
           {
             "schema": {
               "type": "string",
@@ -192690,6 +192709,8 @@
               "type": "string",
               "enum": [
                 "claude",
+                "claude-code",
+                "claude-desktop",
                 "codex",
                 "copilot-cli",
                 "cursor"
@@ -389388,6 +389409,8 @@
               "type": "string",
               "enum": [
                 "claude",
+                "claude-code",
+                "claude-desktop",
                 "codex",
                 "copilot-cli",
                 "cursor"
@@ -389941,6 +389964,8 @@
                         "type": "string",
                         "enum": [
                           "claude",
+                          "claude-code",
+                          "claude-desktop",
                           "codex",
                           "copilot-cli",
                           "cursor"

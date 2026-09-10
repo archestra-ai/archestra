@@ -38,6 +38,7 @@ import type {
   SortDirection,
   UpdateAgentTool,
 } from "@/types";
+import { ApiError } from "@/types";
 import AgentTeamModel from "./agent-team";
 import AgentVersionModel from "./agent-version";
 import McpServerUserModel from "./mcp-server-user";
@@ -97,6 +98,28 @@ class AgentToolModel {
 
     // Find or create the delegation tool for the target agent
     const tool = await ToolModel.findOrCreateDelegationTool(targetAgentId);
+
+    const [collision] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.toolsTable.name, tool.name),
+          ne(schema.toolsTable.id, tool.id),
+        ),
+      )
+      .limit(1);
+    if (collision) {
+      throw new ApiError(
+        409,
+        `Delegation tool name "${tool.name}" is already assigned to this agent`,
+      );
+    }
 
     // Assign the tool to the source agent
     await AgentToolModel.createIfNotExists(agentId, tool.id);

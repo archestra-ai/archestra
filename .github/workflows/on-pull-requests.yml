@@ -543,7 +543,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d # v2.87.0
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
         with:
           tool: cargo-deny@0.20.2
 
@@ -592,7 +592,7 @@ jobs:
           node-version: "24.11.1"
 
       - name: Run Node triage parity test
-        run: node --test ../.claude/skills/archestra-dev-bench-analysis/bin/render-triage.test.mjs
+        run: node --test ../.agents/skills/archestra-dev-bench-analysis/bin/render-triage.test.mjs
 
       - name: Rust formatting
         run: cargo fmt --all --check

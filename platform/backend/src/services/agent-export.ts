@@ -90,6 +90,7 @@ async function resolveToolReferences(
   const nonDelegationTools = agent.tools.filter(
     (t) =>
       !t.delegateToAgentId &&
+      !t.delegateToA2aConnectionId &&
       (hasKnowledgeSources || !isQueryKnowledgeSourcesTool(t.name)),
   );
   if (nonDelegationTools.length === 0) return [];

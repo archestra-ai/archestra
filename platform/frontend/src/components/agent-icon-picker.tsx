@@ -1,6 +1,5 @@
 "use client";
 
-import { EmojiPicker } from "@ferrucc-io/emoji-picker";
 import {
   AppWindow,
   Bot,
@@ -14,6 +13,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -28,6 +28,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { ServiceLogoPicker } from "./service-logo-picker";
+
+const AgentEmojiPicker = dynamic(
+  async () => {
+    const module = await import("./agent-emoji-picker");
+    return module.AgentEmojiPicker;
+  },
+  { loading: () => <div className="h-[336px] w-full" aria-hidden="true" /> },
+);
 
 const MAX_IMAGE_SIZE = 512 * 1024; // 512 KB
 
@@ -228,22 +236,7 @@ export function AgentIconPicker({
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
           >
-            <EmojiPicker
-              className="w-full max-w-full overflow-hidden rounded-none border-0"
-              onEmojiSelect={handleEmojiSelect}
-              emojisPerRow={8}
-              emojiSize={32}
-            >
-              <EmojiPicker.Header className="p-2">
-                <EmojiPicker.Input
-                  placeholder="Search emoji..."
-                  className="mb-0"
-                />
-              </EmojiPicker.Header>
-              <EmojiPicker.Group>
-                <EmojiPicker.List hideStickyHeader containerHeight={280} />
-              </EmojiPicker.Group>
-            </EmojiPicker>
+            {open && <AgentEmojiPicker onEmojiSelect={handleEmojiSelect} />}
           </TabsContent>
           <TabsContent value="upload" className="m-0 p-4">
             <div className="flex flex-col items-center gap-3 py-6">

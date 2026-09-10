@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { notifyManager, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 /**
@@ -19,8 +19,9 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 export function useIsAppLoading(): boolean {
   const client = useQueryClient();
   const subscribe = useCallback(
-    (onChange: () => void) =>
-      client.getQueryCache().subscribe((event) => {
+    (onChange: () => void) => {
+      const notifyOnChange = notifyManager.batchCalls(onChange);
+      return client.getQueryCache().subscribe((event) => {
         // Observer options change during rendering. Subscribing to those can
         // repeatedly interrupt the shell before its loading state commits.
         if (
@@ -28,9 +29,10 @@ export function useIsAppLoading(): boolean {
           event.type === "removed" ||
           event.type === "updated"
         ) {
-          onChange();
+          notifyOnChange();
         }
-      }),
+      });
+    },
     [client],
   );
   const getSnapshot = useCallback(

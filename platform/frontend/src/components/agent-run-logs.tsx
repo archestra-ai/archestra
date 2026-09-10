@@ -21,12 +21,16 @@ export function AgentRunLogs({
   title = "Output",
   liveTerminal,
   canControl = false,
+  sessionId,
 }: {
   run: AgentRun;
   title?: string;
   liveTerminal?: ReactNode;
   canControl?: boolean;
+  sessionId?: string;
 }) {
+  const includeSessionHistory = Boolean(sessionId);
+  const logId = sessionId ?? run.taskId;
   const [terminalContent, setTerminalContent] = useState("");
   const [readableContent, setReadableContent] = useState("");
 
@@ -69,7 +73,10 @@ export function AgentRunLogs({
     const subscribeToLogs = () => {
       websocketService.send({
         type: "subscribe_agent_run_logs",
-        payload: { runId: run.taskId },
+        payload: {
+          runId: logId,
+          ...(includeSessionHistory ? { includeSessionHistory: true } : {}),
+        },
       });
     };
     setTerminalContent("");
@@ -81,14 +88,14 @@ export function AgentRunLogs({
     websocketService.connect();
     const subscriptions = [
       websocketService.subscribe("agent_run_session", (message) => {
-        if (message.payload.runId !== run.taskId) return;
+        if (message.payload.runId !== logId) return;
         receivedOutput = true;
         setSnapshot(message.payload.transcript);
       }),
       websocketService.subscribe(
         "agent_run_logs",
         (message: AgentRunLogsMessage) => {
-          if (message.payload.runId === run.taskId) {
+          if (message.payload.runId === logId) {
             receivedOutput = true;
             if (message.payload.channel === "readable") {
               setReadableContent((value) => value + message.payload.logs);
@@ -101,7 +108,7 @@ export function AgentRunLogs({
       websocketService.subscribe(
         "agent_run_logs_error",
         (message: AgentRunLogsErrorMessage) => {
-          if (message.payload.runId === run.taskId) {
+          if (message.payload.runId === logId) {
             setError(message.payload.error);
             setIsStreaming(false);
           }
@@ -110,7 +117,7 @@ export function AgentRunLogs({
       websocketService.subscribe(
         "agent_run_logs_ended",
         (message: AgentRunLogsEndedMessage) => {
-          if (message.payload.runId === run.taskId) {
+          if (message.payload.runId === logId) {
             // A dropped exec/log stream does not end the running agent or the WebSocket.
             if (!run.endedAt) {
               if (emptyRetryTimer) clearTimeout(emptyRetryTimer);
@@ -158,10 +165,10 @@ export function AgentRunLogs({
       for (const unsubscribe of subscriptions) unsubscribe();
       websocketService.send({
         type: "unsubscribe_agent_run_logs",
-        payload: { runId: run.taskId },
+        payload: { runId: logId },
       });
     };
-  }, [run.endedAt, run.taskId]);
+  }, [run.endedAt, logId, includeSessionHistory]);
 
   if (conversation)
     return (

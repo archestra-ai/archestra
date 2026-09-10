@@ -21,6 +21,7 @@ import type { MswControl } from "./helpers/msw-control";
 /** Rows of the studio nav, in order, as a reader sees them. */
 const STUDIO_NAV = [
   "Agents",
+  "External Agents",
   "Skills",
   "MCP Registry",
   "MCP Gateways",
@@ -178,10 +179,9 @@ test.describe("studio sidebar navigation", () => {
 
     await expect(page.getByRole("link", { name: /^Plugins/ })).toBeVisible();
     expect(await rowNames(page)).toEqual([
-      "Agents",
-      "Skills",
+      ...STUDIO_NAV.slice(0, 3),
       "Plugins",
-      ...STUDIO_NAV.slice(2),
+      ...STUDIO_NAV.slice(3),
     ]);
   });
 });

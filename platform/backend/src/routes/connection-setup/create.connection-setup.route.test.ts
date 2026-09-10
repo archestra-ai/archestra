@@ -448,34 +448,42 @@ describe("POST /api/connection-setups", () => {
     expect(setup?.virtualApiKeyId).toBeNull();
   });
 
-  test("claude-code anthropic passthrough provisions an attribution key by default", async ({
-    makeAgent,
-  }) => {
-    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+  for (const [clientId, platform] of [
+    ["claude-code", "macos"],
+    ["claude-desktop", "macos"],
+    ["claude-desktop", "windows"],
+    ["claude-desktop", "linux"],
+  ] as const) {
+    test(`${clientId} ${platform} anthropic passthrough provisions an attribution key by default`, async ({
+      makeAgent,
+    }) => {
+      const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/connection-setups",
-      payload: {
-        clientId: "claude-code",
-        baseUrl: "http://localhost:9000/v1",
-        llmProxyId: proxy.id,
-        provider: "anthropic",
-      },
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId,
+          platform,
+          baseUrl: "http://localhost:9000/v1",
+          llmProxyId: proxy.id,
+          provider: "anthropic",
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const rawToken = response
+        .json()
+        .command.match(/script\/([^']+)'/)?.[1] as string;
+      const setup = await ConnectionSetupModel.findByToken(rawToken);
+      expect(setup?.proxyAuth).toBe("provider-key");
+      expect(setup?.virtualApiKeyId).not.toBeNull();
+      const attributionKey = await VirtualApiKeyModel.findById(
+        setup?.virtualApiKeyId as string,
+      );
+      expect(attributionKey?.keyType).toBe("passthrough");
+      expect(attributionKey?.authorId).toBe(user.id);
     });
-    expect(response.statusCode).toBe(200);
-    const rawToken = response
-      .json()
-      .command.match(/script\/([^']+)'/)?.[1] as string;
-    const setup = await ConnectionSetupModel.findByToken(rawToken);
-    expect(setup?.proxyAuth).toBe("provider-key");
-    expect(setup?.virtualApiKeyId).not.toBeNull();
-    const attributionKey = await VirtualApiKeyModel.findById(
-      setup?.virtualApiKeyId as string,
-    );
-    expect(attributionKey?.keyType).toBe("passthrough");
-    expect(attributionKey?.authorId).toBe(user.id);
-  });
+  }
 
   test("codex openai passthrough provisions an attribution key by default (mirrors Claude Code)", async ({
     makeAgent,

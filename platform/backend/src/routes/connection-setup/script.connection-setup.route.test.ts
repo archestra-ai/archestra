@@ -4,6 +4,7 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import JSZip from "jszip";
 import { vi } from "vitest";
 import {
   ConnectionSetupModel,
@@ -91,6 +92,55 @@ describe("GET /api/connection-setups/script/:token", () => {
       method: "GET",
       url: `/api/connection-setups/script/${rawToken}`,
       remoteAddress: nextRemoteAddress(),
+    });
+  }
+
+  for (const platform of ["macos", "windows", "linux"] as const) {
+    test(`serves and consumes the Desktop ${platform} installer`, async ({
+      makeAgent,
+    }) => {
+      const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+      const { rawToken, command } = await createSetup({
+        clientId: "claude-desktop",
+        platform,
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "anthropic",
+        proxyAuth: "provider-key",
+      });
+      const download = await app.inject({
+        method: "GET",
+        url: `/api/connection-setups/script/${rawToken}?download=desktop`,
+        remoteAddress: nextRemoteAddress(),
+      });
+      expect(download.statusCode).toBe(200);
+      expect(download.headers["content-disposition"]).toContain(".mcpb");
+      const bundle = await JSZip.loadAsync(download.rawPayload);
+      const setupFile = bundle.file("setup.json");
+      if (!setupFile) throw new Error("Missing bundled setup ticket");
+      expect(JSON.parse(await setupFile.async("string"))).toEqual({
+        origin: "http://localhost:9000",
+        rawToken,
+        platform,
+      });
+      expect(
+        (await ConnectionSetupModel.findByToken(rawToken))?.consumedAt,
+      ).toBeNull();
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode).toBe(200);
+      expect(command).toContain(platform === "windows" ? "| iex" : "| bash");
+      const usedDownload = await app.inject({
+        method: "GET",
+        url: `/api/connection-setups/script/${rawToken}?download=desktop`,
+        remoteAddress: nextRemoteAddress(),
+      });
+      expect(usedDownload.statusCode).toBe(410);
+      expect(response.body).toContain(
+        platform === "windows"
+          ? "$installer = @'"
+          : "python3 <<'ARCHESTRA_DESKTOP_PY'",
+      );
+      expect((await fetchScript(rawToken)).statusCode).toBe(410);
     });
   }
 

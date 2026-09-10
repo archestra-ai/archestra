@@ -6,6 +6,25 @@ Archestra uses two release pipelines:
 
 [Release-please](https://github.com/googleapis/release-please-action#supporting-multiple-release-branches) manages versions and changelogs. GitHub Actions builds the artifacts. Only approved stable releases update `latest`.
 
+```mermaid
+gitGraph
+   commit id: "1.3 cut point"
+   branch release/1.3
+   checkout main
+   commit id: "fix B"
+   commit id: "feat C"
+   commit id: "beta" tag: "v1.4.0-beta.1"
+   checkout release/1.3
+   cherry-pick id: "fix B" tag: ""
+   commit id: "patch" tag: "v1.3.52"
+   checkout main
+   commit id: "beta again" tag: "v1.4.0-beta.2"
+   branch release/1.4
+   commit id: "stable cut" tag: "v1.4.0"
+   checkout main
+   commit id: "Feat" tag: "v1.5.0-beta.1"
+```
+
 ## Release A Beta
 
 1. [ ] Open the release-please PR on `main` (for example, `1.4.0-beta.2`).

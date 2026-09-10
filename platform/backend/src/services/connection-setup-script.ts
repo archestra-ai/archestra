@@ -18,6 +18,7 @@ import type {
   ConnectionSetupProxyAuth,
 } from "@/types";
 import { archestraMarkWithText } from "./archestra-mark";
+import { renderClaudeDesktopSetupScript } from "./connection-setup-script.claude-desktop";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 import { describeMarketplaceContents } from "./marketplace-copy";
 import {
@@ -177,6 +178,9 @@ export function claudeCodeOAuthNextStep(serverName: string): string {
 }
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
+  if (rawCtx.clientId === "claude-desktop") {
+    return renderClaudeDesktopSetupScript(rawCtx);
+  }
   // appName is white-label, admin-controlled text that lands in script comments
   // and bare echo strings. Collapse control characters (newlines, NUL, …) to
   // spaces so it can never break out of a comment line and execute.
@@ -216,6 +220,7 @@ export function renderSetupScript(rawCtx: SetupScriptContext): string {
 // ===================================================================
 
 const CLIENT_LABELS: Record<ConnectionSetupClientId, string> = {
+  "claude-desktop": "Claude Desktop",
   "claude-code": "Claude Code",
   codex: "Codex",
   "copilot-cli": "Copilot CLI",

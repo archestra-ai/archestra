@@ -241,6 +241,7 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
 
 /** A user's durable run session as rendered in Chat and its sidebar. */
 export const SelectAgentRunSessionSchema = SelectAgentRunSchema.extend({
+  sessionId: z.string().uuid(),
   prompt: z.string(),
   agent: z.object({
     id: z.string().uuid(),
@@ -302,6 +303,7 @@ export const UpdateAgentRunSchema = createUpdateSchema(schema.agentRunsTable)
   );
 
 export const StartAgentRunResponseSchema = z.object({
+  sessionId: z.string().uuid().optional(),
   taskId: z.string().uuid(),
   state: A2ATaskStateSchema,
   agentId: z.string().uuid(),

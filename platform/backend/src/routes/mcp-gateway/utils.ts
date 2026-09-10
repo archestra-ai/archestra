@@ -422,7 +422,9 @@ export async function createAgentServer(params: {
       : [];
     const candidateTools = dedupeToolsByName(
       [
-        ...mcpTools.filter((tool) => !tool.delegateToAgentId),
+        ...mcpTools.filter(
+          (tool) => !tool.delegateToAgentId && !tool.delegateToA2aConnectionId,
+        ),
         ...implicitMetaTools,
         ...implicitTaskControlTools,
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({

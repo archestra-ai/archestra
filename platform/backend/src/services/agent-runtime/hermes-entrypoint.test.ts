@@ -23,11 +23,14 @@ describe("Hermes image entrypoint", () => {
     "one_shot",
     "interactive",
     "continuation",
+    "isolated",
   ] as const)("configures and starts %s run through the native session protocol", async (mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-hermes-"));
     try {
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
+      const stateDir =
+        mode === "isolated" ? path.join(root, "separate-state") : runtime;
       const workspace = path.join(root, "workspace");
       const home = path.join(root, "home");
       await Promise.all([
@@ -67,6 +70,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         ARCHESTRA_AGENT_RUNTIME_MODE:
           mode === "interactive" ? mode : "one_shot",
         ARCHESTRA_AGENT_RUNTIME_CONTINUE: mode === "continuation" ? "1" : "0",
+        ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR: stateDir,
         ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
         ARCHESTRA_AGENT_ATTENTION_COMMAND: attentionCommand,
@@ -80,7 +84,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       });
 
       const config = JSON.parse(
-        await readFile(path.join(runtime, "hermes", "config.yaml"), "utf8"),
+        await readFile(path.join(stateDir, "hermes", "config.yaml"), "utf8"),
       );
       expect(config.plugins.enabled).toEqual(["archestra-attention"]);
       expect(config.providers.archestra.transport).toBe("openai_chat");

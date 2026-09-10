@@ -674,6 +674,20 @@ export const permissionDescriptions: Record<string, string> = {
 export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
+  // Inspecting or mutating arbitrary outbound destinations can configure
+  // credential-bearing egress, so those operations remain settings-manager
+  // only. Credential-redacted registry summaries require Agent read and are
+  // visibility-filtered unless the caller can update Agent settings. Run
+  // history includes caller and conversation identifiers, so it requires
+  // Agent-settings read and intentionally permits organization-wide access.
+  [RouteId.InspectA2aRemoteAgent]: { agentSettings: ["update"] },
+  [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
+  [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agentSettings: ["read"] },
+  [RouteId.CreateA2aRemoteAgent]: { agentSettings: ["update"] },
+  [RouteId.UpdateA2aRemoteAgent]: { agentSettings: ["update"] },
+  [RouteId.DeleteA2aRemoteAgent]: { agentSettings: ["update"] },
+
   /**
    * Getting basic info about the organization requires the user to be
    * authenticated but no specific permission.
@@ -1409,6 +1423,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentDelegations]: {},
   [RouteId.SyncAgentDelegations]: {},
   [RouteId.DeleteAgentDelegation]: {},
+  [RouteId.GetAgentA2aDelegations]: {},
+  [RouteId.SyncAgentA2aDelegations]: {},
   [RouteId.GetAllDelegationConnections]: {},
   [RouteId.GetLimits]: {
     llmLimit: ["read"],
@@ -2163,6 +2179,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  "/a2a/agents": { agent: ["read"] },
   "/agents/new": { agent: ["create"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },

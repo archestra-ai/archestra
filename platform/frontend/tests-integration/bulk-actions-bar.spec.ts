@@ -139,6 +139,43 @@ test.describe("Bulk actions bar", () => {
       url: "/api/skills",
       body: {
         ...shareableSkillsSeed,
+        data: matchingSkills.slice(0, 2),
+        pagination: {
+          ...shareableSkillsSeed.pagination,
+          limit: 2,
+          total: 7,
+          totalPages: 4,
+          hasNext: true,
+        },
+      },
+    });
+    const listRequests: URL[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname === "/api/skills") listRequests.push(url);
+    });
+    await page.goto("/skills?kind=standalone&pageSize=2");
+
+    await page
+      .getByRole("checkbox", { name: "Select all skills on this page" })
+      .click();
+    await expect(page.getByTestId("skills-bulk-selection-count")).toHaveText(
+      "2 skills selected",
+    );
+    expect(listRequests).toHaveLength(1);
+    expect(listRequests[0].searchParams.get("limit")).toBe("2");
+
+    const offer = page.getByRole("button", { name: /^Select all/ });
+    await expect(offer).toHaveText(
+      "Select all 7 skills that match the current filters.",
+    );
+
+    // Only explicit escalation may load the rows beyond the visible page.
+    await mswControl.use({
+      method: "get",
+      url: "/api/skills",
+      body: {
+        ...shareableSkillsSeed,
         data: matchingSkills,
         pagination: {
           ...shareableSkillsSeed.pagination,
@@ -149,25 +186,33 @@ test.describe("Bulk actions bar", () => {
         },
       },
     });
-    // The collection loads all sources once, then applies its shared page size.
-    await page.goto("/skills?pageSize=2");
-
-    await page
-      .getByRole("checkbox", { name: "Select all skills on this page" })
-      .click();
-
-    const offer = page.getByRole("button", { name: /^Select all/ });
-    await expect(offer).toHaveText(
-      "Select all 7 skills that match the current filters.",
-    );
-
     await offer.click();
 
     await expect(page.getByTestId("skills-bulk-selection-count")).toHaveText(
       "All 7 skills selected",
     );
+    const deleteButton = page.getByRole("button", {
+      name: "Delete",
+      exact: true,
+    });
+    await expect(deleteButton).toBeEnabled();
+    expect(listRequests).toHaveLength(2);
+    expect(listRequests[1].searchParams.get("limit")).toBe("100");
+    await deleteButton.click();
+    await expect(page.getByRole("dialog")).toContainText("Delete 7 skills?");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
     // The offer has nothing left to escalate to.
     await expect(offer).toBeHidden();
+    await page
+      .getByRole("checkbox", { name: "Select skill-1", exact: true })
+      .click();
+    await expect(page.getByTestId("skills-bulk-selection-count")).toHaveText(
+      "1 skill selected",
+    );
+    await page.getByRole("button", { name: "Clear", exact: true }).click();
+    await expect(page.getByTestId("skills-bulk-selection-count")).toHaveText(
+      "0 skills selected",
+    );
   });
 
   test("ticking a row selects it instead of opening the row's editor", async ({

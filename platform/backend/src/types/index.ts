@@ -1,6 +1,7 @@
 export * from "./a2a-artifact";
 export * from "./a2a-context";
 export * from "./a2a-message";
+export * from "./a2a-outbound";
 export * from "./a2a-task";
 export * from "./a2a-task-approval-request";
 export * from "./account";

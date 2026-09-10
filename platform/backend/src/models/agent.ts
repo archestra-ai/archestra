@@ -4058,6 +4058,7 @@ const agentToolRefColumns = {
   agentId: schema.toolsTable.agentId,
   catalogId: schema.toolsTable.catalogId,
   delegateToAgentId: schema.toolsTable.delegateToAgentId,
+  delegateToA2aConnectionId: schema.toolsTable.delegateToA2aConnectionId,
   name: schema.toolsTable.name,
   rawName: schema.toolsTable.rawName,
   description: schema.toolsTable.description,

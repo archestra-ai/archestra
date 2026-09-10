@@ -7,7 +7,20 @@ vi.mock("@/config", async () =>
   }),
 );
 
-const { validateOutboundUrl } = await import("./outbound-url");
+const { isAllowedA2aAddress, validateOutboundUrl } = await import(
+  "./outbound-url"
+);
+
+test("allows only public unicast DNS answers in production", () => {
+  expect(isAllowedA2aAddress("8.8.8.8")).toBe(true);
+  expect(isAllowedA2aAddress("2001:4860:4860::8888")).toBe(true);
+  expect(isAllowedA2aAddress("127.0.0.1")).toBe(false);
+  expect(isAllowedA2aAddress("10.0.0.1")).toBe(false);
+  expect(isAllowedA2aAddress("169.254.169.254")).toBe(false);
+  expect(isAllowedA2aAddress("100.64.0.1")).toBe(false);
+  expect(isAllowedA2aAddress("224.0.0.1")).toBe(false);
+  expect(isAllowedA2aAddress("::")).toBe(false);
+});
 
 describe("validateOutboundUrl in production", () => {
   test("accepts an ordinary https endpoint", () => {
@@ -21,6 +34,11 @@ describe("validateOutboundUrl in production", () => {
     // http would put the caller's own credentials on the wire in clear text.
     ["plain http", "http://hooks.example.com/a2a", "scheme_not_https"],
     ["a non-web scheme", "file:///etc/passwd", "scheme_not_https"],
+    [
+      "embedded credentials",
+      "https://user:password@hooks.example.com/a2a",
+      "userinfo_not_allowed",
+    ],
   ])("rejects %s", ([, url, reason]) => {
     expect(validateOutboundUrl(url)).toEqual({ ok: false, reason });
   });
@@ -58,6 +76,24 @@ describe("validateOutboundUrl outside production", () => {
     const { validateOutboundUrl: validate } = await import("./outbound-url");
     return validate(url);
   }
+
+  async function devAllowsAddress(address: string) {
+    vi.doMock("@/config", async () =>
+      (await import("@/test/mocks/config")).configModuleMock({
+        production: false,
+        test: { enableE2eTestEndpoints: false },
+      }),
+    );
+    const { isAllowedA2aAddress: allowsAddress } = await import(
+      "./outbound-url"
+    );
+    return allowsAddress(address);
+  }
+
+  test("allows loopback DNS answers but not private ranges", async () => {
+    expect(await devAllowsAddress("127.0.0.1")).toBe(true);
+    expect(await devAllowsAddress("10.0.0.1")).toBe(false);
+  });
 
   // Local development points webhooks and IdP discovery at localhost, so the
   // scheme requirement and the loopback ban are both relaxed there.

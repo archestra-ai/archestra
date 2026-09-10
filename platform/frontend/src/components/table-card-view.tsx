@@ -340,7 +340,14 @@ export function TableCard({
     selectionDisabled && selectionDisabledTooltip && selectionControl ? (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex cursor-not-allowed">
+          <span
+            className="inline-flex cursor-not-allowed"
+            title={
+              typeof selectionDisabledTooltip === "string"
+                ? selectionDisabledTooltip
+                : undefined
+            }
+          >
             {selectionControl}
           </span>
         </TooltipTrigger>

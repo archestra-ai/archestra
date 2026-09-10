@@ -220,7 +220,11 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
           </output>
         )}
         {run ? (
-          <AgentRunLogs run={run} canControl={isOwner && live} />
+          <AgentRunLogs
+            key={run.taskId}
+            run={run}
+            canControl={isOwner && live}
+          />
         ) : (
           <ExecTerminalStatus
             title="Starting agent"
@@ -237,7 +241,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       >
         {shellOpen && (
           <AgentRunTerminal
-            taskId={taskId}
+            taskId={run?.taskId ?? taskId}
             active
             title="Workspace shell"
             showManualCommand={false}
@@ -278,7 +282,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         }
       />
       <ShareAgentRunDialog
-        taskId={taskId}
+        taskId={run?.taskId ?? taskId}
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
       />

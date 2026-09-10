@@ -1,0 +1,254 @@
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import { ToolModel } from "@/models";
+import { syncA2aDelegations } from "@/services/a2a-outbound-assignments";
+import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
+import { expect, test } from "@/test";
+import { executeArchestraTool } from ".";
+import { getAgentTools, handleDelegation } from "./delegation";
+
+// Keep the dependency-free fixture as plain JavaScript while avoiding a
+// production declaration solely for a test helper.
+const fixtureModuleUrl = new URL(
+  "../../../e2e-tests/fixtures/a2a-test-agent/server.mjs",
+  import.meta.url,
+).href;
+const { createA2aFixtureServer } = (await import(fixtureModuleUrl)) as {
+  createA2aFixtureServer: (options: { authMode: string }) => Server;
+};
+
+test("blocks an outbound A2A delegation with the exact synthetic tool policy before network dispatch", async ({
+  makeAgent,
+  makeOrganization,
+  makeToolPolicy,
+}) => {
+  await withFixture(async ({ baseUrl, journal }) => {
+    const organization = await makeOrganization();
+    const parent = await makeAgent({
+      name: "Policy parent",
+      organizationId: organization.id,
+    });
+    const remote = await createA2aRemoteAgent({
+      organizationId: organization.id,
+      input: {
+        source: {
+          type: "inline_card",
+          agentCard: makeAgentCard(baseUrl),
+        },
+        auth: { type: "none" },
+      },
+    });
+    await syncA2aDelegations({
+      agentId: parent.id,
+      organizationId: organization.id,
+      connectionIds: [remote.connection.id],
+    });
+    const tool = await ToolModel.findById(remote.toolId);
+    if (!tool) throw new Error("expected synthetic outbound A2A tool");
+    await makeToolPolicy(tool.id, {
+      action: "block_always",
+      reason: "External classified-data transfer blocked",
+      conditions: [],
+    });
+
+    const result = await executeArchestraTool(
+      tool.name,
+      { message: "classified" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        contextIsTrusted: true,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining(
+        "External classified-data transfer blocked",
+      ),
+    });
+    const policyError = (
+      result.structuredContent as {
+        archestraError?: Record<string, unknown>;
+      }
+    )?.archestraError;
+    expect(policyError).toMatchObject({
+      type: "policy_denied",
+      toolName: tool.name,
+      toolId: tool.id,
+      input: { message: "classified" },
+    });
+    expect((await journal()).requests).toEqual([]);
+
+    const runs = await db
+      .select({ id: schema.a2aOutboundRunsTable.id })
+      .from(schema.a2aOutboundRunsTable)
+      .where(
+        eq(schema.a2aOutboundRunsTable.connectionId, remote.connection.id),
+      );
+    expect(runs).toEqual([]);
+  });
+});
+
+test("stamps guardrail defaults from the owning organization", async ({
+  makeOrganization,
+}) => {
+  const organization = await makeOrganization({
+    defaultDiscoveredToolInvocationPolicy: "allow_when_context_is_untrusted",
+    defaultDiscoveredToolResultPolicy: "mark_as_trusted",
+  });
+  const remote = await createA2aRemoteAgent({
+    organizationId: organization.id,
+    input: {
+      name: "Organization Defaults",
+      source: {
+        type: "inline_card",
+        agentCard: makeAgentCard("https://defaults.example.com"),
+      },
+      auth: { type: "none" },
+    },
+  });
+
+  const [invocationPolicy] = await db
+    .select({ action: schema.toolInvocationPoliciesTable.action })
+    .from(schema.toolInvocationPoliciesTable)
+    .where(eq(schema.toolInvocationPoliciesTable.toolId, remote.toolId));
+  const [resultPolicy] = await db
+    .select({ action: schema.trustedDataPoliciesTable.action })
+    .from(schema.trustedDataPoliciesTable)
+    .where(eq(schema.trustedDataPoliciesTable.toolId, remote.toolId));
+
+  expect(invocationPolicy.action).toBe("allow_when_context_is_untrusted");
+  expect(resultPolicy.action).toBe("mark_as_trusted");
+});
+
+test("hides and rejects an inaccessible external target for a real user while preserving headless execution", async ({
+  makeAgent,
+  makeMember,
+  makeOrganization,
+  makeUser,
+}) => {
+  await withFixture(async ({ baseUrl, journal }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    await makeMember(owner.id, organization.id);
+    await makeMember(viewer.id, organization.id, { role: ADMIN_ROLE_NAME });
+    const parent = await makeAgent({
+      name: "Visibility parent",
+      organizationId: organization.id,
+    });
+    const remote = await createA2aRemoteAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      input: {
+        source: { type: "inline_card", agentCard: makeAgentCard(baseUrl) },
+        auth: { type: "none" },
+        scope: "personal",
+      },
+    });
+    await syncA2aDelegations({
+      agentId: parent.id,
+      organizationId: organization.id,
+      connectionIds: [remote.connection.id],
+    });
+    const tool = await ToolModel.findById(remote.toolId);
+    if (!tool) throw new Error("expected synthetic outbound A2A tool");
+
+    const advertised = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: viewer.id,
+    });
+    expect(advertised.map((item) => item.name)).not.toContain(tool.name);
+
+    const advertisedWithLocalBypass = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: viewer.id,
+      skipAccessCheck: true,
+    });
+    expect(advertisedWithLocalBypass.map((item) => item.name)).not.toContain(
+      tool.name,
+    );
+
+    const denied = await handleDelegation(
+      tool.name,
+      { message: "private" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: viewer.id,
+      },
+    );
+    expect(denied.isError).toBe(true);
+    expect((await journal()).requests).toEqual([]);
+
+    const headless = await handleDelegation(
+      tool.name,
+      { message: "headless" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+      },
+    );
+    expect(headless.isError).not.toBe(true);
+    expect((await journal()).requests).toHaveLength(1);
+  });
+});
+
+function makeAgentCard(baseUrl: string) {
+  return {
+    name: "Policy Fixture Agent",
+    description: "External target used to verify outbound policy enforcement.",
+    version: "1.0.0",
+    supportedInterfaces: [
+      {
+        url: `${baseUrl}/a2a`,
+        protocolBinding: "JSONRPC",
+        protocolVersion: "1.0",
+      },
+    ],
+    capabilities: { streaming: false },
+    securitySchemes: {},
+    securityRequirements: [],
+    defaultInputModes: ["text/plain"],
+    defaultOutputModes: ["text/plain"],
+    skills: [],
+  };
+}
+
+async function withFixture(
+  run: (fixture: {
+    baseUrl: string;
+    journal: () => Promise<{ requests: unknown[] }>;
+  }) => Promise<void>,
+): Promise<void> {
+  const server = createA2aFixtureServer({ authMode: "none" }) as Server;
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  try {
+    await run({
+      baseUrl,
+      journal: () =>
+        fetch(`${baseUrl}/journal`).then(
+          (response) => response.json() as Promise<{ requests: unknown[] }>,
+        ),
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}

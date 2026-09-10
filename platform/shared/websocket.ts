@@ -107,6 +107,7 @@ const AgentRunAttachResizePayloadSchema = z.object({
   rows: z.number().int().min(1),
 });
 const SubscribeAgentRunLogsPayloadSchema = z.object({
+  includeSessionHistory: z.boolean().optional(),
   runId: z.string().uuid(),
   lines: z.number().int().min(1).max(10_000).optional(),
 });

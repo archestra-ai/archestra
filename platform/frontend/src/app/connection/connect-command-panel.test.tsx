@@ -224,6 +224,71 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("offers Desktop subscription installation without a configured API key", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    createSetupMock.mockResolvedValue({
+      id: "desktop-setup",
+      command: COMMAND,
+      installerUrl: "https://proxy.example/desktop-installer",
+      expiresAt: new Date().toISOString(),
+      tokenStart: "tok",
+      plugins: [],
+    });
+    renderPanel({ client: findClient("claude-desktop") });
+    await waitFor(() => {
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientId: "claude-desktop",
+          platform: "macos",
+          provider: "anthropic",
+          proxyAuth: "provider-key",
+          model: "claude-haiku-4-5-20251001",
+        }),
+      );
+    });
+    expect(
+      await screen.findByRole("link", { name: "Download installer" }),
+    ).toHaveAttribute("href", "https://proxy.example/desktop-installer");
+    expect(screen.getByText(COMMAND)).not.toBeVisible();
+    await userEvent.click(screen.getByText("Use terminal instead"));
+    expect(screen.getByText(COMMAND)).toBeVisible();
+    expect(createKeyMock).not.toHaveBeenCalled();
+  });
+
+  it("regenerates Desktop setup when the platform or API-key authentication changes", async () => {
+    const user = userEvent.setup();
+    renderPanel({ client: findClient("claude-desktop") });
+    await screen.findByText(COMMAND);
+    await user.click(screen.getByTestId("connect-change-platform"));
+    await user.click(screen.getByRole("tab", { name: "Windows" }));
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          platform: "windows",
+          proxyAuth: "provider-key",
+        }),
+      ),
+    );
+    await user.click(screen.getByTestId("connect-change-proxy"));
+    await user.click(screen.getByRole("tab", { name: "API key" }));
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          clientId: "claude-desktop",
+          platform: "windows",
+          proxyAuth: "virtual-key",
+          provider: "anthropic",
+        }),
+      ),
+    );
+    await user.click(screen.getByRole("tab", { name: "Claude subscription" }));
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ proxyAuth: "provider-key" }),
+      ),
+    );
+  });
+
   it("keeps approval compact while customized choices reach the approved setup", async () => {
     const decisions: unknown[] = [];
     const server = setupServer(

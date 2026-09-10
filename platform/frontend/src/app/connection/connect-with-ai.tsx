@@ -4,7 +4,14 @@ import { ArrowRight, Check, Copy, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { copyToClipboard } from "@/lib/clipboard";
+import { ClientIcon } from "./client-icon";
+import { CONNECT_CLIENTS } from "./clients";
 
 export function ConnectWithAi({
   onManualSetup,
@@ -81,9 +88,12 @@ export function ConnectWithAi({
         <p className="mt-4 text-sm text-muted-foreground">
           You review and approve the connection in your browser.
         </p>
-        <p className="mt-1 text-xs text-muted-foreground/70">
-          Claude Code, Codex, or Copilot CLI · Node.js 18+
-        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <ClientLogos
+            ids={["claude-code", "codex", "cursor", "copilot-cli"]}
+          />
+          <span className="text-xs text-muted-foreground/70">Node.js 18+</span>
+        </div>
         <div className="mt-6">
           <Button
             variant="link"
@@ -93,11 +103,32 @@ export function ConnectWithAi({
             <span>Other ways to connect</span>
             <ArrowRight className="size-3" />
           </Button>
-          <p className="mt-2 text-xs text-muted-foreground/70">
-            Claude Desktop, Cursor, n8n, and manual setup
-          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <ClientLogos ids={["claude-desktop", "cursor", "n8n"]} />
+            <span className="text-xs text-muted-foreground/70">
+              and manual setup
+            </span>
+          </div>
         </div>
       </div>
     </main>
+  );
+}
+
+function ClientLogos({ ids }: { ids: string[] }) {
+  return (
+    <div className="flex items-center gap-2">
+      {ids.map((id) => {
+        const client = CONNECT_CLIENTS.find((entry) => entry.id === id);
+        return client ? (
+          <Tooltip key={id}>
+            <TooltipTrigger aria-label={client.label} className="rounded-md">
+              <ClientIcon client={client} size={24} />
+            </TooltipTrigger>
+            <TooltipContent>{client.label}</TooltipContent>
+          </Tooltip>
+        ) : null;
+      })}
+    </div>
   );
 }

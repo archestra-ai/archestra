@@ -156,6 +156,9 @@ importers:
 
   backend:
     dependencies:
+      '@a2a-js/sdk':
+        specifier: 1.1.0
+        version: 1.1.0(@grpc/grpc-js@1.14.4)(express@5.2.0)
       '@ai-sdk/amazon-bedrock':
         specifier: 4.0.159
         version: 4.0.159(zod@4.3.6)
@@ -513,6 +516,9 @@ importers:
       safe-regex2:
         specifier: 5.1.0
         version: 5.1.0
+      sharp:
+        specifier: 0.35.4
+        version: 0.35.4(@types/node@25.5.0)
       tiktoken:
         specifier: ^1.0.22
         version: 1.0.22
@@ -1008,6 +1014,21 @@ importers:
         version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(@typescript/typescript6@6.0.1))(vite@7.3.5(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4))
 
 packages:
+
+  '@a2a-js/sdk@1.1.0':
+    resolution: {integrity: sha512-/Mhzw9C6VW7pFbY2Rq0pnrjT0Fy9PV0c46A7Gx1ppRlYq2u/6OV/bNRIoVBKChb8UZ8bE0WzzCc0pIr2CdmG+w==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.10.2
+      '@grpc/grpc-js': '>=1.14.4'
+      express: 5.2.0
+    peerDependenciesMeta:
+      '@bufbuild/protobuf':
+        optional: true
+      '@grpc/grpc-js':
+        optional: true
+      express:
+        optional: true
 
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
@@ -8424,6 +8445,9 @@ packages:
   jose@6.2.1:
     resolution: {integrity: sha512-jUaKr1yrbfaImV7R2TN/b3IcZzsw38/chqMpo2XJ7i2F8AfM/lA4G1goC3JVEwg0H7UldTmSt3P68nt31W7/mw==}
 
+  jose@6.2.10:
+    resolution: {integrity: sha512-iiW7J9qRFlGxvCOIBDBDxFePQSn7ZMAnrYGhrrOo6siO/MIqwfyilLR27pkfDgUk+raLuzADS8A3S/KLBisc0g==}
+
   jotai@2.18.0:
     resolution: {integrity: sha512-XI38kGWAvtxAZ+cwHcTgJsd+kJOJGf3OfL4XYaXWZMZ7IIY8e53abpIHvtVn1eAgJ5dlgwlGFnP4psrZ/vZbtA==}
     engines: {node: '>=12.20.0'}
@@ -10896,6 +10920,13 @@ packages:
 
 snapshots:
 
+  '@a2a-js/sdk@1.1.0(@grpc/grpc-js@1.14.4)(express@5.2.0)':
+    dependencies:
+      jose: 6.2.10
+    optionalDependencies:
+      '@grpc/grpc-js': 1.14.4
+      express: 5.2.0
+
   '@adobe/css-tools@4.4.4': {}
 
   '@ai-sdk/amazon-bedrock@4.0.159(zod@4.3.6)':
@@ -12720,8 +12751,7 @@ snapshots:
       '@iconify/types': 2.0.0
       mlly: 1.8.0
 
-  '@img/colour@1.1.0':
-    optional: true
+  '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.35.4':
     optionalDependencies:
@@ -19232,6 +19262,8 @@ snapshots:
 
   jose@6.2.1: {}
 
+  jose@6.2.10: {}
+
   jotai@2.18.0(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@19.2.14)(react@19.2.4):
     optionalDependencies:
       '@babel/core': 7.29.7
@@ -21263,7 +21295,6 @@ snapshots:
       '@img/sharp-win32-ia32': 0.35.4
       '@img/sharp-win32-x64': 0.35.4
       '@types/node': 25.5.0
-    optional: true
 
   shebang-command@2.0.0:
     dependencies:

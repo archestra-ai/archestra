@@ -280,6 +280,7 @@ interactive mode, but they will not accept follow-up messages in Chat.
 Interactive runs keep their agent process available between messages.
 Resuming an ended run starts a new process in the same workspace.
 The adapter restores saved conversation history. The completed A2A task stays completed.
+The session keeps its original URL across turns. Sharing a turn does not share later turns.
 Only the workspace's original actor can continue it, and only one turn can own it
 at a time.
 
@@ -491,6 +492,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Parent directory containing each turn's attached files. |
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST` | JSON manifest containing each input file's name, path, media type, and size. |
 | `ARCHESTRA_AGENT_RUNTIME_MODEL` | Provider-qualified model ID for generic clients. |
+| `ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR` | Optional image-wrapper override for isolated Codex, Hermes, or OpenClaw conversation state. Control files and terminal recording remain in the runtime directory. |
 | `ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL` | Provider-native model slug for clients that configure their provider separately. |
 | `ARCHESTRA_AGENT_RUNTIME_MODEL_CONTEXT_LENGTH`, `ARCHESTRA_AGENT_RUNTIME_MODEL_OUTPUT_LENGTH` | Known context and output limits for native client configuration. |
 | `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL` | Agent-scoped inference endpoint and its `openai_responses`, `openai_chat`, or `anthropic` protocol. |

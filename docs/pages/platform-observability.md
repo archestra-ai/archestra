@@ -2,7 +2,7 @@
 title: Observability
 category: Archestra Platform
 order: 4
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,7 +30,8 @@ Combined, these endpoints expose metrics including:
 - `llm_cache_cost_total` - Estimated cost in USD attributable to prompt-cache tokens (reads plus writes, including the higher 1-hour-TTL write surcharge), by provider, model, agent_id, agent_name, agent_type, and source. Lets you chart caching spend separately from total cost.
 - `llm_cache_savings_total` - Gross estimated USD saved by cache reads being billed at a discount versus the full input price, by provider, model, agent_id, agent_name, agent_type, and source. Read-side only (always non-negative); the signed net-of-write-surcharge savings is persisted per interaction rather than as a counter.
 - `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and source
-- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, source, and model. Helps developers choose models with lower initial response latency.
+- `llm_time_to_first_token_seconds` - Time from the upstream call to the first chunk the provider returns, by provider, agent_id, agent_name, agent_type, source, and model. Helps developers choose models with lower initial response latency. Buckets run to 300 seconds, so a stalled upstream is visible rather than folded into the top bucket.
+- `llm_time_to_first_byte_seconds` - Time from receiving a streaming request to the first byte written to the client, by the same labels. Includes everything before the upstream call — agent lookup, authentication, guardrails, tool policies. Compare it with `llm_time_to_first_token_seconds` to see how much of the client's wait is Archestra's own preflight.
 - `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, source, and model. Allows comparing model response speeds for latency-sensitive applications.
 - `llm_active_users` - Distinct users who made at least one attributed LLM request, by `window` (`24h` or `7d`). An org-wide adoption signal. The value is read from the database, so every replica reports the same number — aggregate it with `max()`, not `sum()`. Set `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS` to change how often it refreshes, or to `0` to turn it off.
 

@@ -32,11 +32,9 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import {
   ActiveFilterBadges,
-  ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -59,7 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
   usePluginLabelKeys,
@@ -158,8 +156,6 @@ function PluginsList() {
     isLoadingError,
     refetch,
   } = usePlugins(true, { labels: labelsFilter });
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
 
   const setFilter = useCallback(
     (name: string, value: string) => {
@@ -203,55 +199,10 @@ function PluginsList() {
               plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
             if (pluginRepo !== sourceRepo) return false;
           }
-          if (scopeFilter.scope && plugin.scope !== scopeFilter.scope)
-            return false;
-          const teamIds = scopeFilter.teamIds ?? [];
-          const authorIds = scopeFilter.authorIds ?? [];
-          const excludeAuthorIds = scopeFilter.excludeAuthorIds ?? [];
-          if (
-            scopeFilter.scope === "team" &&
-            teamIds.length > 0 &&
-            !plugin.teams.some((team) => teamIds.includes(team.id))
-          ) {
-            return false;
-          }
-          if (
-            scopeFilter.scope === "personal" &&
-            authorIds.length > 0 &&
-            (!plugin.authorId || !authorIds.includes(plugin.authorId))
-          ) {
-            return false;
-          }
-          if (
-            scopeFilter.scope === "personal" &&
-            excludeAuthorIds.length > 0 &&
-            plugin.authorId &&
-            excludeAuthorIds.includes(plugin.authorId)
-          ) {
-            return false;
-          }
-          if (
-            scopeFilter.excludeOtherPersonal &&
-            plugin.scope === "personal" &&
-            plugin.authorId &&
-            currentUserId &&
-            plugin.authorId !== currentUserId
-          ) {
-            return false;
-          }
           return true;
         })
         .sort(comparePluginCatalogOrder),
-    [
-      plugins,
-      search,
-      client,
-      platform,
-      source,
-      sourceRepo,
-      scopeFilter,
-      currentUserId,
-    ],
+    [plugins, search, client, platform, source, sourceRepo],
   );
 
   // Only imported plugins have a repository, so the filter stays hidden until
@@ -319,7 +270,6 @@ function PluginsList() {
       platform,
       source,
       sourceRepo,
-      scopeFilter,
       labels: labelsFilter,
     }),
   });
@@ -492,22 +442,7 @@ function PluginsList() {
         );
       },
     },
-    {
-      id: "visibility",
-      size: 190,
-      header: "Visibility",
-      cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.scope}
-          teams={row.original.teams}
-          users={row.original.users}
-          authorId={row.original.authorId}
-          authorName={undefined}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
-      ),
-    },
+
     {
       id: "actions",
       size: 110,
@@ -581,17 +516,6 @@ function PluginsList() {
                   leading
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   moreFilters={[
-                    {
-                      key: "visibility",
-                      label: "Visibility",
-                      active: scopeFilter.hasActiveScopeFilters,
-                      control: (
-                        <ResourceScopeFilter
-                          ownerLabelPlural="plugins"
-                          adminPermission={{ plugin: ["admin"] }}
-                        />
-                      ),
-                    },
                     {
                       key: "platform",
                       label: "Platform",
@@ -716,7 +640,7 @@ function PluginsList() {
                     })}
                   />
                 </FilterBar>
-                <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
+                <ActiveFilterBadges />
               </CollectionFilters>
 
               <BulkActions
@@ -822,15 +746,7 @@ function PluginsList() {
                                 plugin.clientType}
                             </span>
                           </Badge>
-                          <ResourceVisibilityBadge
-                            scope={plugin.scope}
-                            teams={plugin.teams}
-                            users={plugin.users}
-                            authorId={plugin.authorId}
-                            authorName={undefined}
-                            currentUserId={currentUserId}
-                            showSelfAsMe
-                          />
+
                           {!plugin.enabled ? (
                             <Badge variant="outline">Disabled</Badge>
                           ) : null}

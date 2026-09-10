@@ -1,15 +1,17 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import MemberModel from "@/models/member";
+import { describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
 import {
   MANIFEST,
   manifestNamed,
   seedImportedSkill,
+  useSkillRouteTestApp,
 } from "./skill.test-helpers";
 
 describe("PUT /api/skills/:id", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("replaces a skill's environment assignments", async () => {
     const skill = (
@@ -263,14 +265,15 @@ describe("PUT /api/skills/:id", () => {
   });
 
   test("a content-only edit does not 403 a team-admin who belongs to only one assigned team", async ({
-    makeMember,
     makeTeam,
     makeTeamMember,
   }) => {
     // editor holds skill:team-admin — may manage team-scoped skills
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: EDITOR_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      EDITOR_ROLE_NAME,
+    );
     const teamA = await makeTeam(ctx.organizationId, ctx.user.id);
     const teamB = await makeTeam(ctx.organizationId, ctx.user.id);
     await makeTeamMember(teamA.id, ctx.user.id);
@@ -303,12 +306,13 @@ describe("PUT /api/skills/:id", () => {
   });
 
   test("rejects clearing all teams of a team-scoped skill", async ({
-    makeMember,
     makeTeam,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const team = await makeTeam(ctx.organizationId, ctx.user.id);
     const skill = await seedImportedSkill({
       organizationId: ctx.organizationId,
@@ -335,7 +339,7 @@ describe("PUT /api/skills/:id", () => {
 });
 
 describe("PUT /api/skills/:id on a GitHub-synced skill", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   async function seedSynced() {
     const skill = await SkillModel.createWithFiles({

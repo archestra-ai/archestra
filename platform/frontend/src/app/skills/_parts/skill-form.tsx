@@ -28,6 +28,7 @@ import type { SkillDraft } from "./skill-draft";
  */
 export function SkillForm({
   draft,
+  creating = false,
   onChange,
   onFilesChange,
   labelsRef,
@@ -36,6 +37,7 @@ export function SkillForm({
   contentNotice,
 }: {
   draft: SkillDraft;
+  creating?: boolean;
   onChange: (patch: Partial<SkillDraft>) => void;
   onFilesChange: (
     update: (files: SkillDraft["files"]) => SkillDraft["files"],
@@ -122,6 +124,7 @@ export function SkillForm({
       <FormPanel>
         <fieldset disabled={readOnly} className="contents">
           <SkillAccessFields
+            creating={creating}
             ref={labelsRef}
             draft={draft}
             onChange={onChange}

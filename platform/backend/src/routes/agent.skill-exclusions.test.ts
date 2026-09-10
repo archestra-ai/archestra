@@ -6,6 +6,7 @@ import { getAgentTypePermissionChecker, hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { SkillTeamModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import SkillModel from "@/models/skill";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -228,6 +229,19 @@ describe("agent skill-exclusions routes", () => {
     const team = await makeTeam(organizationId, user.id);
     const teamSkill = await makeSkill({ scope: "team" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
+    const key = {
+      organizationId,
+      resource: "skill" as const,
+      scope: teamSkill.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ],
+    });
 
     const colleague = await makeUser();
     const theirPersonalSkill = await makeSkill({
@@ -267,6 +281,19 @@ describe("agent skill-exclusions routes", () => {
     const team = await makeTeam(organizationId, user.id);
     const teamSkill = await makeSkill({ scope: "team" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
+    const key = {
+      organizationId,
+      resource: "skill" as const,
+      scope: teamSkill.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ],
+    });
     await makeTeamMember(team.id, user.id);
 
     const seeded = await app.inject({
@@ -301,6 +328,19 @@ describe("agent skill-exclusions routes", () => {
     const team = await makeTeam(organizationId, user.id);
     const teamSkill = await makeSkill({ scope: "team" });
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
+    const key = {
+      organizationId,
+      resource: "skill" as const,
+      scope: teamSkill.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ],
+    });
 
     await makeTeamMember(team.id, user.id);
     const asMember = await app.inject({

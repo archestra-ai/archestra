@@ -7,6 +7,7 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
+  type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
@@ -86,11 +87,13 @@ import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamModel from "./team";
 import ToolModel from "./tool";
 
 type AgentListFilters = {
   organizationId?: string;
+  authorization?: { organizationId: string; baseReadTypes: AgentType[] };
   ids?: string[];
   name?: string;
   agentType?: AgentType;
@@ -631,6 +634,7 @@ class AgentModel {
        * itself so those assignments are not pre-excluded.
        */
       skipExclusionPrefill?: boolean;
+      initialPermissionGrants?: ResourcePermissionGrant[];
       /**
        * Skip auto-assigning the creation-default built-in tool set. Used by
        * clone and import, which set their own authoritative assignment set
@@ -683,17 +687,22 @@ class AgentModel {
         ? agent.slug || (await AgentModel.generateUniqueSlug(agent.name))
         : undefined;
 
-    const [createdAgent] = await AgentModel.insertWithSlugRetry({
-      ...agent,
-      // A staged policy is always inserted fail-closed. The policy service
-      // installs its exact rules and flips to the requested mode before the
-      // create route returns.
-      ...(activationSkillPolicy && { activationSkillMode: "manual" as const }),
-      ...(enableAccessAllTools && { accessAllTools: false }),
-      organizationId,
-      ...(slug && { slug }),
-      ...(authorId && { authorId }),
-    });
+    const [createdAgent] = await AgentModel.insertWithSlugRetry(
+      {
+        ...agent,
+        // A staged policy is always inserted fail-closed. The policy service
+        // installs its exact rules and flips to the requested mode before the
+        // create route returns.
+        ...(activationSkillPolicy && {
+          activationSkillMode: "manual" as const,
+        }),
+        ...(enableAccessAllTools && { accessAllTools: false }),
+        organizationId,
+        ...(slug && { slug }),
+        ...(authorId && { authorId }),
+      },
+      { grants: options?.initialPermissionGrants, teams, users },
+    );
 
     // Assign teams to the agent if provided
     if (teams && teams.length > 0) {
@@ -885,6 +894,7 @@ class AgentModel {
     isAgentAdmin?: boolean,
     options?: {
       agentType?: AgentType;
+      authorization?: { organizationId: string; baseReadTypes: AgentType[] };
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
       /**
@@ -926,7 +936,23 @@ class AgentModel {
     // Build where conditions
     const whereConditions: SQL[] = [
       getAgentStatusCondition(options?.status ?? "active"),
+      ...(userId ? [migratedAgentReadCondition(userId) as SQL] : []),
     ];
+    if (options?.authorization) {
+      if (!userId) return [];
+      const { organizationId, baseReadTypes } = options.authorization;
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, organizationId),
+      );
+      if (options.status !== "deleted") {
+        whereConditions.push(
+          or(
+            inArray(schema.agentsTable.agentType, baseReadTypes),
+            explicitAgentReadCondition(userId),
+          ) as SQL,
+        );
+      }
+    }
 
     // Filter by agentTypes if specified (array of types)
     if (options?.agentTypes && options.agentTypes.length > 0) {
@@ -965,11 +991,12 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.scope, options.scope));
     }
 
-    // Exclude other users' personal agents (show non-personal + own personal)
+    // Keep oversight-only personal agents hidden, while honoring explicit shares.
     if (options?.excludeOtherPersonalAgents && userId) {
       const condition = or(
         ne(schema.agentsTable.scope, "personal"),
         eq(schema.agentsTable.authorId, userId),
+        explicitAgentReadCondition(userId),
       );
       if (condition) {
         whereConditions.push(condition);
@@ -1341,6 +1368,35 @@ class AgentModel {
    * Personal agents are excluded because channels are shared — only org/team
    * scoped agents make sense for channel assignment.
    */
+  static async findUsableChatopsAgents(params: {
+    organizationId: string;
+    userId: string;
+  }) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    return db
+      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+          notDeleted(schema.agentsTable),
+          ResourcePermissionPolicyModel.grantCondition({
+            organizationId: schema.agentsTable.organizationId,
+            resource: "agent",
+            scopeColumn: schema.agentsTable.id,
+            userId: params.userId,
+            action: "use",
+          }),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name));
+    // SPDX-SnippetEnd
+  }
+
   static async findAllInternalAgents(): Promise<
     Pick<Agent, "id" | "name" | "scope" | "authorId">[]
   > {
@@ -1953,12 +2009,27 @@ class AgentModel {
     const { filters, userId, isAgentAdmin } = params;
     const whereConditions: SQL[] = [
       getAgentStatusCondition(filters?.status ?? "active"),
+      ...(userId ? [migratedAgentReadCondition(userId) as SQL] : []),
     ];
 
     if (filters?.organizationId) {
       whereConditions.push(
         eq(schema.agentsTable.organizationId, filters.organizationId),
       );
+    }
+    if (filters?.authorization) {
+      const { organizationId, baseReadTypes } = filters.authorization;
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, organizationId),
+      );
+      if (!userId) whereConditions.push(sql<boolean>`false`);
+      else if (filters.status !== "deleted")
+        whereConditions.push(
+          or(
+            inArray(schema.agentsTable.agentType, baseReadTypes),
+            explicitAgentReadCondition(userId),
+          ) as SQL,
+        );
     }
     if (filters?.ids) {
       whereConditions.push(
@@ -2039,6 +2110,7 @@ class AgentModel {
       const condition = or(
         ne(schema.agentsTable.scope, "personal"),
         eq(schema.agentsTable.authorId, userId),
+        explicitAgentReadCondition(userId),
       );
       if (condition) whereConditions.push(condition);
     }
@@ -2468,7 +2540,10 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
-  static async findAccessibleIdsForUser(userId: string): Promise<string[]> {
+  static async findAccessibleIdsForUser(
+    userId: string,
+    isAgentAdmin = false,
+  ): Promise<string[]> {
     const rows = await db
       .selectDistinct({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
@@ -2486,7 +2561,10 @@ class AgentModel {
       .where(
         and(
           notDeleted(schema.agentsTable),
+          migratedAgentReadCondition(userId),
           or(
+            explicitAgentReadCondition(userId),
+            isAgentAdmin ? sql`true` : undefined,
             eq(schema.agentsTable.scope, "org"),
             // A personal agent reaches its author, and anyone it has been
             // shared with individually. The grant sits beside the scope rather
@@ -2766,11 +2844,11 @@ class AgentModel {
   ): Promise<Agent | null> {
     // Check access control for non-agent admins
     if (userId && !isAgentAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        id,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: id,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }
@@ -3020,11 +3098,11 @@ class AgentModel {
     isAgentAdmin?: boolean,
   ): Promise<{ llmApiKeyId: string | null; modelId: string | null } | null> {
     if (userId && !isAgentAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        id,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: id,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }
@@ -3573,12 +3651,25 @@ class AgentModel {
   }
 
   static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
-    const count = await hardDelete(
-      tx ?? db,
-      schema.agentsTable,
-      eq(schema.agentsTable.id, id),
-    );
-    return count > 0;
+    const run = async (transaction: Transaction) => {
+      const count = await hardDelete(
+        transaction,
+        schema.agentsTable,
+        eq(schema.agentsTable.id, id),
+      );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (count > 0)
+        await ResourcePermissionPolicyModel.deleteForTarget({
+          tx: transaction,
+          resources: ["agent", "mcpGateway"],
+          scope: id,
+        });
+      // SPDX-SnippetEnd
+      return count > 0;
+    };
+    return tx ? run(tx) : withDbTransaction(run);
   }
 
   /**
@@ -4073,6 +4164,7 @@ class AgentModel {
    * Returns the newly created agent.
    */
   static async cloneAgent(params: {
+    initialGrants?: ResourcePermissionGrant[];
     sourceId: string;
     userId: string;
     /** Visibility for the clone; defaults to copying the source's scope. */
@@ -4130,7 +4222,10 @@ class AgentModel {
         cloneScope === "personal" ? userId : undefined,
         // Copy the source's assignments verbatim below; don't let create's
         // default assignment force built-ins the source lacked onto the clone.
-        { skipCreationDefaultTools: true },
+        {
+          skipCreationDefaultTools: true,
+          initialPermissionGrants: params.initialGrants,
+        },
       );
 
       await AgentToolModel.cloneAssignments({
@@ -4233,19 +4328,54 @@ class AgentModel {
 
   private static async insertWithSlugRetry(
     values: typeof schema.agentsTable.$inferInsert,
+    permissions: {
+      grants?: ResourcePermissionGrant[];
+      teams?: string[];
+      users?: string[];
+    },
   ) {
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        return await db
-          .insert(schema.agentsTable)
-          .values(
-            await CreatedByModel.forInsert({
-              data: { ...values, scope: values.scope ?? "personal" },
-              userIdField: "authorId",
-            }),
-          )
-          .returning();
+        if (values.agentType === "llm_proxy")
+          return await db
+            .insert(schema.agentsTable)
+            .values(
+              await CreatedByModel.forInsert({
+                data: { ...values, scope: values.scope ?? "personal" },
+                userIdField: "authorId",
+              }),
+            )
+            .returning();
+        return await withDbTransaction(async (tx) => {
+          const rows = await tx
+            .insert(schema.agentsTable)
+            .values(
+              await CreatedByModel.forInsert({
+                data: { ...values, scope: values.scope ?? "personal" },
+                userIdField: "authorId",
+                transaction: tx,
+              }),
+            )
+            .returning();
+          const row = rows[0];
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await ResourcePermissionPolicyModel.createInitial({
+            tx,
+            organizationId: row.organizationId,
+            resource: row.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+            scope: row.id,
+            grants: permissions.grants,
+            authorId: row.authorId,
+            visibility: row.scope,
+            teams: permissions.teams?.map((id) => ({ id })),
+            users: permissions.users,
+          });
+          // SPDX-SnippetEnd
+          return rows;
+        });
       } catch (error: unknown) {
         const isSlugConflict =
           error instanceof Error && error.message.includes("agents_slug_idx");
@@ -4390,7 +4520,18 @@ class AgentModel {
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((d) => ({ id: d.id, name: d.name }));
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     return {
+      resourcePermissions:
+        (
+          await ResourcePermissionPolicyModel.find({
+            organizationId,
+            resource: row.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+            scope: row.id,
+          })
+        )?.grants ?? [],
       id: row.id,
       name: row.name,
       organizationId: row.organizationId,
@@ -4485,6 +4626,7 @@ class AgentModel {
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };
+    // SPDX-SnippetEnd
   }
 }
 
@@ -4576,3 +4718,63 @@ const CHAT_AGENT_ROW_COLUMNS = {
     else null
   end`,
 };
+
+function explicitAgentReadCondition(userId: string) {
+  const table = schema.agentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(
+      inArray(table.agentType, ["agent", "profile"]),
+      ResourcePermissionPolicyModel.grantCondition({
+        organizationId: table.organizationId,
+        userId,
+        resource: "agent",
+        scopeColumn: table.id,
+        action: "read",
+      }),
+    ),
+    and(
+      eq(table.agentType, "mcp_gateway"),
+      ResourcePermissionPolicyModel.grantCondition({
+        organizationId: table.organizationId,
+        userId,
+        resource: "mcpGateway",
+        scopeColumn: table.id,
+        action: "read",
+      }),
+    ),
+  );
+  // SPDX-SnippetEnd
+}
+
+function migratedAgentReadCondition(userId: string) {
+  const table = schema.agentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return and(
+    or(
+      notInArray(table.agentType, ["agent", "profile"]),
+      ResourcePermissionPolicyModel.migratedAccessCondition({
+        organizationId: table.organizationId,
+        userId,
+        resource: "agent",
+        scopeColumn: table.id,
+        action: "read",
+      }),
+    ),
+    or(
+      ne(table.agentType, "mcp_gateway"),
+      ResourcePermissionPolicyModel.migratedAccessCondition({
+        organizationId: table.organizationId,
+        userId,
+        resource: "mcpGateway",
+        scopeColumn: table.id,
+        action: "read",
+      }),
+    ),
+  );
+  // SPDX-SnippetEnd
+}

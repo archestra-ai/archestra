@@ -1,5 +1,7 @@
-import { SkillModel, SkillTeamModel } from "@/models";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { SkillModel } from "@/models";
 import { builtInSkillSourceRef } from "@/skills/built-in-skills";
+import { beforeEach, useRouteTestApp } from "@/test";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 export const MANIFEST = [
@@ -79,10 +81,17 @@ export async function seedImportedSkill(params: {
       scope: params.scope,
     },
     files: [],
+    teamIds: params.teamIds,
   });
   if (!skill) throw new Error("seed failed");
-  if (params.teamIds?.length) {
-    await SkillTeamModel.syncSkillTeams(skill.id, params.teamIds);
-  }
   return skill;
+}
+
+/** Authenticated skill routes require a real organization membership. */
+export function useSkillRouteTestApp(routes: FastifyPluginAsyncZod) {
+  const ctx = useRouteTestApp(routes);
+  beforeEach(async ({ makeMember }) => {
+    await makeMember(ctx.user.id, ctx.organizationId);
+  });
+  return ctx;
 }

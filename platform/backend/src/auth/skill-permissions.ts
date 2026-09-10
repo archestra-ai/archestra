@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { hasScopedPermission } from "@archestra/shared";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { ResourcePermissions } from "@/services/resource-permissions";
+import { ApiError } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { requireScopedModifyPermission } from "./agent-type-permissions";
 import { getPermissionsForUserContext } from "./utils";
@@ -9,6 +14,8 @@ import { getPermissionsForUserContext } from "./utils";
  */
 
 export interface SkillPermissionChecker {
+  isMigrated?: boolean;
+  allowsScoped?: (skillId: string, action: "update" | "delete") => boolean;
   /** Holds `skill:read` — may view and use skills within their scope. */
   canRead: boolean;
   /** Holds `skill:admin` — bypasses scope restrictions. */
@@ -32,10 +39,43 @@ export async function getSkillPermissionChecker(params: {
     organizationId: params.organizationId,
   });
   const skill = permissions.skill ?? [];
+  const grants = await ResourcePermissions.resolveAll(params);
+  const policy = await ResourcePermissionPolicyModel.find({
+    organizationId: params.organizationId,
+    resource: "skill",
+    scope: "*",
+  });
   return {
-    canRead: skill.includes("read"),
-    isAdmin: skill.includes("admin"),
-    isTeamAdmin: skill.includes("team-admin"),
+    isMigrated: policy?.legacySharingMigrated ?? false,
+    allowsScoped: (skillId, action) =>
+      hasScopedPermission({
+        grants,
+        required: {
+          organizationId: params.organizationId,
+          resource: "skill",
+          scope: skillId,
+          action,
+        },
+      }),
+    canRead:
+      skill.includes("read") ||
+      grants.some(
+        (grant) => grant.resource === "skill" && grant.action === "read",
+      ),
+    isAdmin:
+      grants.some(
+        (grant) =>
+          grant.resource === "skill" &&
+          grant.scope === "*" &&
+          grant.action === "update",
+      ) || skill.includes("admin"),
+    isTeamAdmin:
+      grants.some(
+        (grant) =>
+          grant.resource === "skill" &&
+          grant.scope === "teams:*" &&
+          grant.action === "update",
+      ) || skill.includes("team-admin"),
   };
 }
 
@@ -45,12 +85,21 @@ export async function getSkillPermissionChecker(params: {
  */
 export function requireSkillModifyPermission(params: {
   checker: SkillPermissionChecker;
+  skillId?: string;
+  action?: "update" | "delete";
   scope: ResourceVisibilityScope;
   authorId: string | null;
   skillTeamIds: string[];
   userTeamIds: string[];
   userId: string;
 }): void {
+  if (
+    params.skillId &&
+    params.checker.allowsScoped?.(params.skillId, params.action ?? "update")
+  )
+    return;
+  if (params.checker.isMigrated)
+    throw new ApiError(403, "You do not have permission to modify this skill");
   requireScopedModifyPermission({
     isAdmin: params.checker.isAdmin,
     isTeamAdmin: params.checker.isTeamAdmin,

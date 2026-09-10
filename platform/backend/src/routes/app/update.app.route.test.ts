@@ -4,7 +4,9 @@ import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import AppModel from "@/models/app";
+import AppVersionModel from "@/models/app-version";
 import EnvironmentModel from "@/models/environment";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -225,7 +227,7 @@ describe("PATCH /api/apps/:appId", () => {
     expect(response.json().latestVersion).toBe(created.latestVersion + 1);
   });
 
-  test("an admin may re-scope another user's personal app without becoming its owner", async ({
+  test("retired visibility writes cannot change another creator’s app", async ({
     makeUser,
     makeMember,
     makeApp,
@@ -246,9 +248,9 @@ describe("PATCH /api/apps/:appId", () => {
       url: `/api/apps/${foreign.id}`,
       payload: { scope: "org" },
     });
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      scope: "org",
+    expect(response.statusCode).toBe(400);
+    expect(await AppModel.findById(foreign.id)).toMatchObject({
+      scope: "personal",
       authorId: otherAuthor.id,
     });
   });
@@ -283,7 +285,7 @@ describe("PATCH /api/apps/:appId", () => {
     expect(namePatch.statusCode).toBe(200);
   });
 
-  test("an admin cannot rewrite another user's personal app's html (that is chat-authoring, not settings)", async ({
+  test("a wildcard update grant permits editing another creator’s app content", async ({
     makeUser,
     makeMember,
     makeApp,
@@ -304,7 +306,17 @@ describe("PATCH /api/apps/:appId", () => {
       url: `/api/apps/${foreign.id}`,
       payload: { html: "<h1>admin rewrite</h1>" },
     });
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(200);
+    const latest = await AppModel.findById(foreign.id);
+    if (!latest) throw new Error("Expected persisted resource policy");
+    expect(
+      (
+        await AppVersionModel.findByAppAndVersion(
+          foreign.id,
+          latest.latestVersion,
+        )
+      )?.html,
+    ).toContain("admin rewrite");
   });
 
   test("renaming into an existing name returns 409", async () => {
@@ -422,10 +434,23 @@ describe("PATCH /api/apps/:appId", () => {
     // the form echoes the unchanged environmentId. The unchanged binding must
     // not be re-authorized, so the edit succeeds rather than 403.
     const role = await makeCustomRole(organizationId, {
-      permission: { app: ["admin"] },
+      permission: { app: ["read", "update", "admin"] },
     });
     const editor = await makeUser();
     await makeMember(editor.id, organizationId, { role: role.role });
+    const key = { organizationId, resource: "app" as const, scope: appId };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        ...(policy?.grants ?? []),
+        {
+          subject: { type: "user", id: editor.id },
+          actions: ["read", "update"],
+        },
+      ],
+    });
     user = editor;
 
     const renamed = await app.inject({
@@ -436,7 +461,7 @@ describe("PATCH /api/apps/:appId", () => {
     expect(renamed.statusCode).toBe(200);
     expect(renamed.json().name).toBe("Renamed");
   });
-  test("shares a personal app with named users, and revokes with an empty list", async ({
+  test("retired named-user sharing writes are rejected", async ({
     makeUser,
     makeMember,
     makeApp,
@@ -447,37 +472,19 @@ describe("PATCH /api/apps/:appId", () => {
       authorId: user.id,
     });
     const colleague = await makeUser();
-    await makeMember(colleague.id, organizationId, { role: "member" });
-
-    const shared = await app.inject({
-      method: "PATCH",
-      url: `/api/apps/${created.id}`,
-      payload: { userIds: [colleague.id] },
-    });
-    expect(shared.statusCode).toBe(200);
-    // The app stays personal — the grant sits beside the scope, not in it.
-    expect(shared.json().scope).toBe("personal");
-    // PATCH returns the app-with-warnings shape, so read the grant back from
-    // the detail route that actually surfaces it.
-    const afterShare = await app.inject({
-      method: "GET",
-      url: `/api/apps/${created.id}`,
-    });
-    expect(afterShare.json().users).toEqual([
-      expect.objectContaining({ id: colleague.id }),
-    ]);
-
-    const revoked = await app.inject({
-      method: "PATCH",
-      url: `/api/apps/${created.id}`,
-      payload: { userIds: [] },
-    });
-    expect(revoked.statusCode).toBe(200);
-    const afterRevoke = await app.inject({
-      method: "GET",
-      url: `/api/apps/${created.id}`,
-    });
-    expect(afterRevoke.json().users).toEqual([]);
+    await makeMember(colleague.id, organizationId);
+    for (const userIds of [[colleague.id], []]) {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/apps/${created.id}`,
+        payload: { userIds },
+      });
+      expect(response.statusCode).toBe(userIds.length ? 400 : 200);
+      if (userIds.length)
+        expect(response.json().error.message).toContain(
+          "resource permissions API",
+        );
+    }
   });
 
   test("rejects sharing with a user outside the organization", async ({

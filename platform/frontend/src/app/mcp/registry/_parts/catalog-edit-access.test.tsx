@@ -1,167 +1,59 @@
-import {
-  ADMIN_ROLE_NAME,
-  MEMBER_ROLE_NAME,
-  PLAYWRIGHT_MCP_CATALOG_ID,
-} from "@archestra/shared";
+import { PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/teams/team.query");
-
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useMyTeams } from "@/lib/teams/team.query";
+import { describe, expect, it } from "vitest";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 
-const CURRENT_USER = "user-self";
-
-type CatalogItem = Parameters<typeof useCanModifyCatalogItem>[0];
-
-function setup({
-  admin,
-  teams,
-  catalog,
-}: {
-  admin: boolean;
-  teams?: Array<{ id: string; myRole: string }>;
-  catalog: CatalogItem;
-}) {
-  vi.mocked(useSession).mockReturnValue({
-    data: { user: { id: CURRENT_USER } },
-    isPending: false,
-  } as ReturnType<typeof useSession>);
-  vi.mocked(useMyTeams).mockReturnValue({
-    data: teams ?? [],
-    isLoading: false,
-  } as unknown as ReturnType<typeof useMyTeams>);
-  vi.mocked(useHasPermissions).mockImplementation(((perm: {
-    mcpServerInstallation?: string[];
-    team?: string[];
-  }) => {
-    if (perm.mcpServerInstallation?.includes("admin"))
-      return { data: admin, isLoading: false };
-    if (perm.team?.includes("read")) return { data: true, isLoading: false };
-    return { data: false, isLoading: false };
-  }) as unknown as typeof useHasPermissions);
-  return renderHook(() => useCanModifyCatalogItem(catalog)).result.current
-    .canModify;
-}
-
+type CatalogItem = NonNullable<Parameters<typeof useCanModifyCatalogItem>[0]>;
 function catalogItem(overrides: Partial<CatalogItem> = {}): CatalogItem {
   return {
-    scope: "team",
-    authorId: "some-author",
+    id: "a326cad4-f47c-4cfa-a950-cc6f98a6e98c",
+    scope: "personal",
+    authorId: "user-self",
     teams: [],
+    effectiveActions: [],
     ...overrides,
   } as unknown as CatalogItem;
 }
 
-describe("useCanModifyCatalogItem", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("denies when there is no catalog item", () => {
-    expect(setup({ admin: false, catalog: null })).toBe(false);
-  });
-
-  it("denies editing managed Playwright even for an installation admin", () => {
-    expect(
-      setup({
-        admin: true,
-        catalog: catalogItem({ id: PLAYWRIGHT_MCP_CATALOG_ID, scope: "org" }),
-      }),
-    ).toBe(false);
-  });
-
-  it("permits an mcpServerInstallation admin at any scope", () => {
-    expect(setup({ admin: true, catalog: catalogItem({ scope: "org" }) })).toBe(
-      true,
+describe("catalog editing authority", () => {
+  it("follows the server's object grant and immediately reflects revocation", () => {
+    const catalog = catalogItem({ effectiveActions: ["read", "update"] });
+    const { result, rerender } = renderHook(
+      (item: CatalogItem) => useCanModifyCatalogItem(item),
+      { initialProps: catalog },
     );
-    expect(
-      setup({
-        admin: true,
-        catalog: catalogItem({ scope: "personal", authorId: "someone-else" }),
-      }),
-    ).toBe(true);
+    expect(result.current.canModify).toBe(true);
+    rerender({ ...catalog, effectiveActions: ["read"] });
+    expect(result.current.canModify).toBe(false);
   });
 
-  it("permits the author of a personal item, denies a non-author", () => {
-    expect(
-      setup({
-        admin: false,
-        catalog: catalogItem({ scope: "personal", authorId: CURRENT_USER }),
-      }),
-    ).toBe(true);
-    expect(
-      setup({
-        admin: false,
-        catalog: catalogItem({ scope: "personal", authorId: "someone-else" }),
-      }),
-    ).toBe(false);
-  });
-
-  it("denies a non-admin on an org item even when they authored it", () => {
-    expect(
-      setup({
-        admin: false,
-        catalog: catalogItem({ scope: "org", authorId: CURRENT_USER }),
-      }),
-    ).toBe(false);
-  });
-
-  it("permits an admin of a write-level team on the item", () => {
-    expect(
-      setup({
-        admin: false,
-        teams: [{ id: "t1", myRole: ADMIN_ROLE_NAME }],
-        catalog: catalogItem({
+  it("does not infer editing authority from authorship or old team sharing", () => {
+    const { result } = renderHook(() =>
+      useCanModifyCatalogItem(
+        catalogItem({
           scope: "team",
-          teams: [{ id: "t1", name: "T1", level: "write" }],
+          teams: [{ id: "team-a", name: "Engineering", level: "write" }],
+          effectiveActions: ["read", "use"],
         }),
-      }),
-    ).toBe(true);
+      ),
+    );
+    expect(result.current.canModify).toBe(false);
   });
 
-  it("denies an admin of a use-level team on the item", () => {
-    expect(
-      setup({
-        admin: false,
-        teams: [{ id: "t1", myRole: ADMIN_ROLE_NAME }],
-        catalog: catalogItem({
-          scope: "team",
-          teams: [{ id: "t1", name: "T1", level: "use" }],
+  it("keeps managed Playwright immutable even when the server reports update access", () => {
+    const { result } = renderHook(() =>
+      useCanModifyCatalogItem(
+        catalogItem({
+          id: PLAYWRIGHT_MCP_CATALOG_ID,
+          effectiveActions: ["update"],
         }),
-      }),
-    ).toBe(false);
+      ),
+    );
+    expect(result.current.canModify).toBe(false);
   });
 
-  it("denies a plain member of a write-level team on the item", () => {
-    expect(
-      setup({
-        admin: false,
-        teams: [{ id: "t1", myRole: MEMBER_ROLE_NAME }],
-        catalog: catalogItem({
-          scope: "team",
-          teams: [{ id: "t1", name: "T1", level: "write" }],
-        }),
-      }),
-    ).toBe(false);
-  });
-
-  it("permits when the write team is one of several on the item", () => {
-    expect(
-      setup({
-        admin: false,
-        teams: [{ id: "t2", myRole: ADMIN_ROLE_NAME }],
-        catalog: catalogItem({
-          scope: "team",
-          teams: [
-            { id: "t1", name: "T1", level: "use" },
-            { id: "t2", name: "T2", level: "write" },
-          ],
-        }),
-      }),
-    ).toBe(true);
+  it("denies editing while the resource is unavailable", () => {
+    const { result } = renderHook(() => useCanModifyCatalogItem(null));
+    expect(result.current.canModify).toBe(false);
   });
 });

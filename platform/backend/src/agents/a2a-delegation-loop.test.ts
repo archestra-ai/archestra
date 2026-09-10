@@ -185,13 +185,21 @@ describe("A2A delegation loop safeguards", () => {
   test("refuses to re-enter an agent already in the delegation chain", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
     makeAgentTool,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const legal = await makeInternalAgent({ name: "Legal Agent" });
-    const tech = await makeInternalAgent({ name: "Tech Agent" });
+    await makeMember(user.id, org.id);
+    const legal = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Legal Agent",
+    });
+    const tech = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Tech Agent",
+    });
 
     const toTech = await ToolModel.findOrCreateDelegationTool(tech.id);
     const toLegal = await ToolModel.findOrCreateDelegationTool(legal.id);
@@ -227,17 +235,21 @@ describe("A2A delegation loop safeguards", () => {
   test("refuses to delegate past the depth ceiling", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
     makeAgentTool,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
 
     // A strictly linear chain of distinct agents — no cycle, so only the depth
     // ceiling can stop it. One longer than the ceiling allows.
     const agents: Agent[] = [];
     for (let i = 0; i < MAX_DELEGATION_DEPTH + 1; i++) {
-      agents.push(await makeInternalAgent({ name: `Agent ${i}` }));
+      agents.push(
+        await makeInternalAgent({ organizationId: org.id, name: `Agent ${i}` }),
+      );
     }
     const nextHop: Record<string, Agent> = {};
     for (let i = 0; i < agents.length - 1; i++) {
@@ -267,13 +279,21 @@ describe("A2A delegation loop safeguards", () => {
   test("a legitimate non-cyclic delegation still executes", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
     makeAgentTool,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const planner = await makeInternalAgent({ name: "Planner Agent" });
-    const worker = await makeInternalAgent({ name: "Worker Agent" });
+    await makeMember(user.id, org.id);
+    const planner = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Planner Agent",
+    });
+    const worker = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Worker Agent",
+    });
 
     const toWorker = await ToolModel.findOrCreateDelegationTool(worker.id);
     await makeAgentTool(planner.id, toWorker.id);

@@ -81,7 +81,7 @@ describe("useCanReauthenticate", () => {
     ).toBe(true);
   });
 
-  it("permits a team connection for a team admin", () => {
+  it("team administration alone does not permit connection reauthentication", () => {
     const canReauth = setup({
       create: true,
       update: false,
@@ -93,7 +93,7 @@ describe("useCanReauthenticate", () => {
         },
       ],
     });
-    expect(canReauth({ scope: "team", teamId: TEAM_ID })).toBe(true);
+    expect(canReauth({ scope: "team", teamId: TEAM_ID })).toBe(false);
   });
 
   it("permits a team connection for a member with update, denies without it", () => {

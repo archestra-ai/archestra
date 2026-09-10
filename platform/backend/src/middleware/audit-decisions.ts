@@ -11,6 +11,7 @@ import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import HookFileModel from "@/models/hook-file";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -29,6 +30,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
@@ -116,6 +118,10 @@ export const AUDIT_DECISIONS = {
   a2aOutboundRunsTable: {
     audited: false,
     reason: "A2A execution state recorded by the outbound run ledger",
+  },
+  resourcePermissionPoliciesTable: {
+    audited: true,
+    model: ResourcePermissionPolicyModel,
   },
   runtimeCredentialDefinitionsTable: {
     audited: true,
@@ -594,10 +600,7 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // Children of audited parents
   // =========================================================================
-  hookFilesTable: {
-    audited: false,
-    reason: "agent-scoped hook script config; child of agent (audited)",
-  },
+  hookFilesTable: { audited: true, model: HookFileModel },
   skillTeamsTable: {
     audited: false,
     reason: "join: skill × team; parent (skill) audited",

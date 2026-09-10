@@ -2,6 +2,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import {
   classifyMcpRuntimeAlert,
   createMcpServerAlertFingerprint,
+  isBuiltInCatalogId,
   mcpRuntimeAlertSource,
   OAUTH_TOKEN_TYPE,
   RouteId,
@@ -9,10 +10,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
-import {
-  getCatalogWriteMembershipTeamIds,
-  requireMcpCatalogModifyPermission,
-} from "@/auth/mcp-catalog-permissions";
 import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
@@ -68,6 +65,7 @@ import {
   autoReinstallServer,
   reloadToolsForServer,
 } from "@/services/mcp-reinstall";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
   type Account,
@@ -376,6 +374,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         catalogItem = await InternalMcpCatalogModel.findById(
           serverData.catalogId,
           {
+            accessAction: "use",
             userId: user.id,
             isAdmin: isCatalogAdmin,
             organizationId,
@@ -384,6 +383,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (!catalogItem) {
           throw new ApiError(400, "Catalog item not found");
+        }
+
+        if (!isBuiltInCatalogId(catalogItem.id)) {
+          await ResourcePermissions.require({
+            organizationId,
+            userId: user.id,
+            resource: "mcpRegistry",
+            scope: catalogItem.id,
+            action: "use",
+          });
         }
 
         // App backing entities are created and managed via /api/apps and run
@@ -422,15 +431,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // members resolve through, so creating one is a write on the item —
         // `use` alone installs only for oneself.
         if (catalogItem.scope === "team" && serverData.scope !== "personal") {
-          requireMcpCatalogModifyPermission({
-            checker: { isAdmin: isCatalogAdmin },
-            scope: catalogItem.scope,
-            authorId: catalogItem.authorId,
-            catalogTeams: catalogItem.teams,
-            writeMembershipTeamIds: isCatalogAdmin
-              ? []
-              : await getCatalogWriteMembershipTeamIds(user.id),
+          await ResourcePermissions.require({
+            organizationId: organizationId,
             userId: user.id,
+            resource: "mcpRegistry",
+            scope: catalogItem.id,
+            action: "update",
           });
         }
 
@@ -3335,7 +3341,7 @@ async function assertLifecycleRoutePermission(params: {
  *       - revoke: owner OR mcpServerInstallation:update
  *       - re-authenticate / reinstall: owner only (these replace the
  *         connection's secret, so they must not be available to editors)
- *   - team:     team:create OR literal team admin OR (mcpServerInstallation:update AND user-in-team)
+ *   - team:     mcpServerInstallation:admin OR (mcpServerInstallation:update AND user-in-team)
  *   - org:      mcpServerInstallation:admin (no owner fallback)
  */
 async function assertScopedLifecycleAuthorization(params: {
@@ -3380,26 +3386,20 @@ async function assertScopedLifecycleAuthorization(params: {
       ) {
         throw new ApiError(404, "MCP server not found");
       }
-      const { success: canManageAllTeams } = await hasPermission(
-        { team: ["create"] },
+      const { success: isInstallationAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
         headers,
       );
-      if (canManageAllTeams) return;
+      if (isInstallationAdmin) return;
 
-      // Team deletion clears the FK but retains the connection. Global team
-      // managers can still manage it; former team membership grants no access.
+      // Team deletion clears the FK but retains the connection. Installation
+      // admins can still manage it; former team membership grants no access.
       if (!mcpServer.teamId) {
         throw new ApiError(
           403,
-          `Only organization-level team managers can ${action} connections whose team was deleted`,
+          `Only installation admins can ${action} connections whose team was deleted`,
         );
       }
-
-      const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(
-        mcpServer.teamId,
-        userId,
-      );
-      if (isLiteralTeamAdmin) return;
 
       const { success: hasMcpServerUpdate } = await hasPermission(
         { mcpServerInstallation: ["update"] },
@@ -3974,20 +3974,12 @@ async function validateScopeAndAuthorization(params: {
       throw new ApiError(404, "Team not found");
     }
 
-    const { success: canManageAllTeams } = await hasPermission(
-      { team: ["create"] },
+    const { success: isInstallationAdmin } = await hasPermission(
+      { mcpServerInstallation: ["admin"] },
       headers,
     );
 
-    if (!canManageAllTeams) {
-      const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(
-        teamId,
-        userId,
-      );
-      if (isLiteralTeamAdmin) {
-        return;
-      }
-
+    if (!isInstallationAdmin) {
       const { success: hasMcpServerUpdate } = await hasPermission(
         { mcpServerInstallation: ["update"] },
         headers,

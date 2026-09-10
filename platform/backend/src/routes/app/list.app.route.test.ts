@@ -520,7 +520,7 @@ describe("GET /api/apps", () => {
     ).toBe(false);
   });
 
-  test("hides another author's personal app from the default (All) listing; own apps stay, tagged viewerRole owner", async ({
+  test("wildcard read grants include every creator’s apps in the default listing", async ({
     makeUser,
     makeMember,
     makeApp,
@@ -552,7 +552,7 @@ describe("GET /api/apps", () => {
     const items = res.json().data as Array<Record<string, unknown>>;
     const ids = items.map((a) => a.id as string);
     expect(ids).toContain(ownPersonal.id);
-    expect(ids).not.toContain(foreignPersonal.id);
+    expect(ids).toContain(foreignPersonal.id);
     expect(items.find((i) => i.id === ownPersonal.id)?.viewerRole).toBe(
       "owner",
     );
@@ -592,7 +592,7 @@ describe("GET /api/apps", () => {
     expect(ids).not.toContain(ownPersonal.id);
 
     const foreignItem = items.find((i) => i.id === foreignPersonal.id);
-    expect(foreignItem?.viewerRole).toBe("admin");
+    expect(foreignItem?.viewerRole).toBe("shared");
     expect(foreignItem?.authorName).toBe("Grace Hopper");
   });
 

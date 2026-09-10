@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { requireScopedModifyPermission } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
 import { AppAccessModel, MemberModel, TeamModel } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 import type { AppScope } from "@/types/app";
 
@@ -102,7 +104,13 @@ export async function callerIsAppAdmin(
   userId: string,
   organizationId: string,
 ): Promise<boolean> {
-  return userHasPermission(userId, organizationId, "app", "admin");
+  return ResourcePermissions.allows({
+    userId,
+    organizationId,
+    resource: "app",
+    scope: "*",
+    action: "update",
+  });
 }
 
 /**
@@ -110,12 +118,23 @@ export async function callerIsAppAdmin(
  * scope/author/teams. For a re-scope, call once per scope (current + target).
  */
 export async function assertCallerMayModifyApp(params: {
+  appId?: string;
+  action?: "update" | "delete" | "manage-permissions";
   userId: string;
   organizationId: string;
   scope: AppScope;
   authorId: string | null;
   resourceTeamIds: string[];
 }): Promise<void> {
+  if (params.appId) {
+    await ResourcePermissions.require({
+      ...params,
+      resource: "app",
+      scope: params.appId,
+      action: params.action ?? "update",
+    });
+    return;
+  }
   const [isAdmin, isTeamAdmin, userTeamIds] = await Promise.all([
     userHasPermission(params.userId, params.organizationId, "app", "admin"),
     userHasPermission(
@@ -162,6 +181,7 @@ export async function assertCallerMayModifyApp(params: {
  * already reported a disabled app as not found).
  */
 export async function assertCallerMayAuthorApp(params: {
+  action?: "update" | "delete";
   userId: string;
   organizationId: string;
   app: {
@@ -209,6 +229,8 @@ export async function assertCallerMayAuthorApp(params: {
     );
   }
   await assertCallerMayModifyApp({
+    appId: params.app.id,
+    action: params.action,
     userId: params.userId,
     organizationId: params.organizationId,
     scope: params.app.scope,

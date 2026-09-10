@@ -17,6 +17,10 @@ type BadgeVariant = NonNullable<ComponentProps<typeof Badge>["variant"]>;
  * compile time.
  */
 export const ACTION_LABEL: Record<AuditEventName, string> = {
+  "hook.created": "Hook created",
+  "hook.updated": "Hook updated",
+  "hook.deleted": "Hook deleted",
+  "resourcePermissions.updated": "Resource permissions updated",
   // Agent
   "agent.created": "Agent created",
   "agent.updated": "Agent updated",

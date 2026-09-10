@@ -191,8 +191,8 @@ describe("AppSection cards", () => {
       screen.getByText("1 app selected", { selector: '[aria-hidden="true"]' }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Edit visibility" }),
-    ).toBeVisible();
+      screen.queryByRole("button", { name: "Edit visibility" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
   });
 
@@ -246,40 +246,6 @@ describe("AppSection cards", () => {
 
     expect(
       screen.getByText("2 apps selected", { selector: '[aria-hidden="true"]' }),
-    ).toBeVisible();
-  });
-
-  it("keeps Sharing compact while the app name absorbs table width", () => {
-    const { container } = renderAppSection([ownedApp], "table");
-
-    expect(container.querySelector('th[data-column-id="sharing"]')).toHaveStyle(
-      { width: "160px" },
-    );
-    expect(
-      (container.querySelector('th[data-column-id="name"]') as HTMLElement)
-        .style.width,
-    ).toBe("");
-  });
-
-  it("warns about losing chat authoring access in bulk visibility too", () => {
-    renderAppSection([
-      {
-        ...ownedApp,
-        scope: "team",
-        teams: [{ id: "leadership", name: "Leadership" }],
-      },
-    ]);
-
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Select My Owned App" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Edit visibility" }));
-
-    expect(
-      screen.getByText("You are not a member of the selected teams."),
-    ).toBeVisible();
-    expect(
-      screen.getByText(/will not be able to modify this app through chat/i),
     ).toBeVisible();
   });
 });

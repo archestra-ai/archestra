@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { urlSlugify } from "@archestra/shared";
+import { type ResourcePermissionGrant, urlSlugify } from "@archestra/shared";
 import {
   and,
   count,
@@ -33,6 +33,7 @@ import AppVersionModel, { type VersionPayload } from "./app-version";
 import CreatedByModel from "./created-by";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpCatalogUserModel from "./mcp-catalog-user";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /** Raw `apps` row (no `scope`/`environmentId`/`icon` — those live on the backing catalog). */
 type AppRow = typeof schema.appsTable.$inferSelect;
@@ -524,6 +525,7 @@ class AppModel {
     organizationId: string;
     userId?: string;
     isAppAdmin: boolean;
+    action?: "read" | "use";
   }): Promise<App | null> {
     const app = await AppModel.findByIdInOrg(params.id, params.organizationId);
     if (!app) return null;
@@ -532,6 +534,7 @@ class AppModel {
       userId: params.userId,
       app,
       isAppAdmin: params.isAppAdmin,
+      action: params.action,
     });
     return allowed ? app : null;
   }
@@ -544,7 +547,15 @@ class AppModel {
    * unique-constraint error from this insert, which the caller maps to 409.
    */
   static async create(
-    params: { app: InsertApp; payload: VersionPayload },
+    params: {
+      app: InsertApp;
+      payload: VersionPayload;
+      initialPermissionGrants?: ResourcePermissionGrant[];
+      initialVisibility?: {
+        scope: "personal" | "team" | "org";
+        teamIds: string[];
+      };
+    },
     tx?: Transaction,
   ): Promise<AppRow> {
     const run = async (tx: Transaction) => {
@@ -559,6 +570,20 @@ class AppModel {
         )
         .returning();
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: app.organizationId,
+        resource: "app",
+        scope: app.id,
+        grants: params.initialPermissionGrants,
+        authorId: app.authorId,
+        visibility: params.initialVisibility?.scope ?? "personal",
+        teams: params.initialVisibility?.teamIds.map((id) => ({ id })),
+      });
+      // SPDX-SnippetEnd
       await AppVersionModel.insertVersion(tx, {
         appId: app.id,
         version: 1,
@@ -852,6 +877,15 @@ class AppModel {
         .delete(schema.appVersionsTable)
         .where(eq(schema.appVersionsTable.appId, id));
       await tx.delete(schema.appsTable).where(eq(schema.appsTable.id, id));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["app"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
     });
   }
 
@@ -920,12 +954,24 @@ class AppModel {
       AppToolModel.getToolsForApp(id),
       AppLabelModel.getLabelsForApp(id),
     ]);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     return {
       ...row,
+      resourcePermissions:
+        (
+          await ResourcePermissionPolicyModel.find({
+            organizationId,
+            resource: "app",
+            scope: id,
+          })
+        )?.grants ?? [],
       icon: auditIcon(row.icon),
       tools: tools.map((t) => t.name).sort(),
       labels: labels.map((label) => `${label.key}:${label.value}`).sort(),
     };
+    // SPDX-SnippetEnd
   }
 }
 

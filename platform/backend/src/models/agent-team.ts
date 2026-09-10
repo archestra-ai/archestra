@@ -1,14 +1,54 @@
-import { and, eq, inArray } from "drizzle-orm";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type { AgentAccessContext, LabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
 import AgentUserModel from "./agent-user";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamModel from "./team";
 import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
+  static async credentialHasAgentAccess(params: {
+    organizationId: string;
+    agentId: string;
+    teamId: string | null;
+  }): Promise<boolean> {
+    const [agent] = await db
+      .select({
+        agentType: schema.agentsTable.agentType,
+        organizationId: schema.agentsTable.organizationId,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.agentId),
+          isNull(schema.agentsTable.deletedAt),
+        ),
+      );
+    if (!agent || agent.organizationId !== params.organizationId) return false;
+    const resource = agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+    const key = {
+      organizationId: params.organizationId,
+      resource,
+      scope: params.agentId,
+    } as const;
+    const policies = await ResourcePermissionPolicyModel.findApplicable(key);
+    if (policies.some((policy) => policy.legacySharingMigrated)) {
+      return ResourcePermissionPolicyModel.sharedCredentialHasAccess({
+        ...key,
+        teamId: params.teamId,
+        action: "use",
+      });
+    }
+    return (
+      params.teamId === null ||
+      AgentTeamModel.teamHasAgentAccess(params.agentId, params.teamId)
+    );
+  }
+
   /**
    * Get all agent IDs that a user has access to.
    * Three sources of access:
@@ -24,19 +64,10 @@ class AgentTeamModel {
       { userId, isAgentAdmin },
       "AgentTeamModel.getUserAccessibleAgentIds: starting",
     );
-    // Agent admins have access to all agents
-    if (isAgentAdmin) {
-      const accessibleAgentIds = await AgentModel.findAllIds();
-
-      logger.debug(
-        { userId, count: accessibleAgentIds.length },
-        "AgentTeamModel.getUserAccessibleAgentIds: admin access to all agents",
-      );
-      return accessibleAgentIds;
-    }
-
-    const accessibleAgentIds =
-      await AgentModel.findAccessibleIdsForUser(userId);
+    const accessibleAgentIds = await AgentModel.findAccessibleIdsForUser(
+      userId,
+      isAgentAdmin,
+    );
 
     logger.debug(
       { userId, agentCount: accessibleAgentIds.length },
@@ -53,31 +84,74 @@ class AgentTeamModel {
    * 3. scope = 'personal' → only the author has access
    * 4. scope = 'team' AND user is in one of agent's teams → true
    */
-  static async userHasAgentAccess(
-    userId: string,
-    agentId: string,
-    isAgentAdmin: boolean,
-    agentAccessContext?: AgentAccessContext | null,
-  ): Promise<boolean> {
+  static async userHasAgentAccess(params: {
+    userId: string;
+    agentId: string;
+    isAgentAdmin: boolean;
+    agentAccessContext?: AgentAccessContext | null;
+    action?: "read" | "use";
+  }): Promise<boolean> {
+    const {
+      userId,
+      agentId,
+      isAgentAdmin,
+      agentAccessContext,
+      action = "read",
+    } = params;
     logger.debug(
       { userId, agentId, isAgentAdmin },
       "AgentTeamModel.userHasAgentAccess: checking access",
     );
-    // 1. Admin → true
-    if (isAgentAdmin) {
-      logger.debug(
-        { userId, agentId },
-        "AgentTeamModel.userHasAgentAccess: admin has access",
-      );
-      return true;
-    }
-
     const agent =
       agentAccessContext ?? (await findAgentAccessContextById(agentId));
 
     if (!agent) {
       return false;
     }
+
+    const table = schema.agentsTable;
+    const [granted] = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(
+        and(
+          eq(table.id, agentId),
+          or(
+            and(
+              inArray(table.agentType, ["agent", "profile"]),
+              ResourcePermissionPolicyModel.grantCondition({
+                organizationId: table.organizationId,
+                userId,
+                resource: "agent",
+                scopeColumn: table.id,
+                action,
+              }),
+            ),
+            and(
+              eq(table.agentType, "mcp_gateway"),
+              ResourcePermissionPolicyModel.grantCondition({
+                organizationId: table.organizationId,
+                userId,
+                resource: "mcpGateway",
+                scopeColumn: table.id,
+                action,
+              }),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+    if (granted) return true;
+    const agentType = await AgentModel.getAgentType(agentId);
+    if (agentType !== "llm_proxy") {
+      const policies = await ResourcePermissionPolicyModel.findApplicable({
+        organizationId: agent.organizationId,
+        resource: agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+        scope: agentId,
+      });
+      if (policies.some((policy) => policy.legacySharingMigrated)) return false;
+    }
+    if (isAgentAdmin) return true;
 
     // 2. scope = 'org' → true
     if (agent.scope === "org") {

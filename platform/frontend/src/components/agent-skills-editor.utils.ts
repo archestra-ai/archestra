@@ -23,6 +23,8 @@ export interface SkillPublishability {
 }
 
 export interface SkillLike {
+  /** Server-resolved authority to share this skill through a gateway. */
+  canPublish?: boolean;
   name: string;
   scope: string;
   templated?: boolean | null;
@@ -78,7 +80,18 @@ export function getSkillPublishability(params: {
       reason: `Delegates to agent "${skill.agentName}" — no equivalent over MCP`,
     };
   }
-  if (skill.scope === "personal" && !isAuthoredBy(skill, currentUserId)) {
+  if (skill.canPublish === false) {
+    return {
+      publishable: false,
+      reason:
+        "Permission to manage this skill’s access is required to publish it",
+    };
+  }
+  if (
+    skill.canPublish === undefined &&
+    skill.scope === "personal" &&
+    !isAuthoredBy(skill, currentUserId)
+  ) {
     return {
       publishable: false,
       reason: "Personal — only its author can publish it",

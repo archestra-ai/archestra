@@ -170,10 +170,12 @@ describe("InteractionModel", () => {
     test("returns chat errors for chat conversation sessions", async ({
       makeUser,
       makeOrganization,
+      makeMember,
       makeAgent,
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
+      await makeMember(user.id, org.id);
       const agent = await makeAgent({ organizationId: org.id });
       const conversation = await ConversationModel.create({
         userId: user.id,
@@ -600,12 +602,16 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
     }) => {
       const user1 = await makeUser();
       const user2 = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user2.id, org.id);
+      await makeMember(user1.id, org.id);
 
       // Create teams and add users
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
@@ -616,11 +622,13 @@ describe("InteractionModel", () => {
 
       // Create agents with team assignments
       const agent1 = await AgentModel.create({
+        organizationId: org.id,
         name: "Agent 1",
         teams: [team1.id],
         scope: "team",
       });
       const agent2 = await AgentModel.create({
+        organizationId: org.id,
         name: "Agent 2",
         teams: [team2.id],
         scope: "team",
@@ -664,11 +672,16 @@ describe("InteractionModel", () => {
 
     test("member with no access sees only org-wide agent interactions", async ({
       makeUser,
+      makeOrganization,
+      makeMember,
     }) => {
       const user = await makeUser();
+      const organization = await makeOrganization();
+      await makeMember(user.id, organization.id);
 
       // Teamless agent is org-wide, visible to all members
       const agent1 = await AgentModel.create({
+        organizationId: organization.id,
         name: "Agent 1",
         teams: [],
         scope: "org",
@@ -733,17 +746,21 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       // Create team and add user
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
       const agent = await AgentModel.create({
+        organizationId: org.id,
         name: "Test Agent",
         teams: [team.id],
         scope: "team",
@@ -773,11 +790,16 @@ describe("InteractionModel", () => {
 
     test("findById returns interaction for org-wide agent", async ({
       makeUser,
+      makeOrganization,
+      makeMember,
     }) => {
       const user = await makeUser();
+      const organization = await makeOrganization();
+      await makeMember(user.id, organization.id);
 
       // Teamless agent is org-wide
       const agent = await AgentModel.create({
+        organizationId: organization.id,
         name: "Test Agent",
         teams: [],
         scope: "org",
@@ -1000,22 +1022,27 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
       const accessibleAgent = await AgentModel.create({
+        organizationId: org.id,
         name: "Accessible Agent",
         teams: [team.id],
         scope: "team",
       });
       // Org-wide agent (no teams) is also accessible
       const orgWideAgent = await AgentModel.create({
+        organizationId: org.id,
         name: "Org-Wide Agent",
         teams: [],
         scope: "org",
@@ -3454,22 +3481,28 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
     }) => {
       const user = await makeUser({ name: "Regular User" });
       const otherUser = await makeUser({ name: "Other User" });
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(otherUser.id, org.id);
+      await makeMember(user.id, org.id);
 
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
       const accessibleAgent = await AgentModel.create({
+        organizationId: org.id,
         name: "Accessible Agent",
         teams: [team.id],
         scope: "team",
       });
       const orgWideAgent = await AgentModel.create({
+        organizationId: org.id,
         name: "Org-Wide Agent",
         teams: [],
         scope: "org",
@@ -3573,17 +3606,21 @@ describe("InteractionModel", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
 
       // Give user access to the team
       const team = await makeTeam(org.id, admin.id);
       await TeamModel.addMember(team.id, user.id);
 
       const agent = await AgentModel.create({
+        organizationId: org.id,
         name: "Agent To Delete",
         teams: [team.id],
         scope: "team",
@@ -3952,11 +3989,13 @@ describe("InteractionModel", () => {
       makeAgent,
       makeUser,
       makeOrganization,
+      makeMember,
       makeVirtualApiKey,
     }) => {
       const agent = await makeAgent();
       const user = await makeUser();
       const org = await makeOrganization();
+      await makeMember(user.id, org.id);
       const virtualKey = await makeVirtualApiKey(org.id);
 
       const userLimit = await LimitModel.create({
@@ -4011,11 +4050,13 @@ describe("InteractionModel", () => {
     test("still updates agent/team/org limits as before (regression)", async ({
       makeAgent,
       makeOrganization,
+      makeMember,
       makeAdmin,
       makeTeam,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
+      await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({ teams: [team.id], scope: "team" });
 
@@ -4080,11 +4121,13 @@ describe("InteractionModel", () => {
     test("updates team all-models limit via interaction flow", async ({
       makeAgent,
       makeOrganization,
+      makeMember,
       makeAdmin,
       makeTeam,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
+      await makeMember(admin.id, org.id, { role: "admin" });
       const team = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({ teams: [team.id], scope: "team" });
 
@@ -4127,11 +4170,13 @@ describe("InteractionModel", () => {
     test("updates team all-models limit with multiple teams", async ({
       makeAgent,
       makeOrganization,
+      makeMember,
       makeAdmin,
       makeTeam,
     }) => {
       const org = await makeOrganization();
       const admin = await makeAdmin();
+      await makeMember(admin.id, org.id, { role: "admin" });
       const team1 = await makeTeam(org.id, admin.id);
       const team2 = await makeTeam(org.id, admin.id);
       const agent = await makeAgent({

@@ -1,7 +1,8 @@
 import { SkillModel, SkillTeamModel, SkillUserModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import MemberModel from "@/models/member";
+import { describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
-import { MANIFEST } from "./skill.test-helpers";
+import { MANIFEST, useSkillRouteTestApp } from "./skill.test-helpers";
 
 /**
  * Sharing a skill with named people. Such a skill stays `scope = 'personal'`
@@ -9,12 +10,14 @@ import { MANIFEST } from "./skill.test-helpers";
  * cannot express, and the boundary where widening the scope drops the grants.
  */
 describe("per-user skill sharing", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("creating a personal skill with userIds grants and returns them", async ({
     makeUser,
+    makeMember,
   }) => {
     const grantee = await makeUser({ email: "grantee@test.com" });
+    await makeMember(grantee.id, ctx.organizationId);
 
     const response = await ctx.app.inject({
       method: "POST",
@@ -33,8 +36,10 @@ describe("per-user skill sharing", () => {
 
   test("a grantee reaches the skill the author kept personal", async ({
     makeUser,
+    makeMember,
   }) => {
     const grantee = await makeUser({ email: "reader@test.com" });
+    await makeMember(grantee.id, ctx.organizationId);
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
@@ -55,11 +60,14 @@ describe("per-user skill sharing", () => {
     ).toBe(true);
   });
 
-  test("updating replaces the grants rather than adding to them", async ({
+  test("retired userIds updates cannot replace existing grants", async ({
     makeUser,
+    makeMember,
   }) => {
     const first = await makeUser({ email: "first@test.com" });
+    await makeMember(first.id, ctx.organizationId);
     const second = await makeUser({ email: "second@test.com" });
+    await makeMember(second.id, ctx.organizationId);
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
@@ -73,17 +81,17 @@ describe("per-user skill sharing", () => {
       payload: { content: MANIFEST, userIds: [second.id] },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(
-      response.json().users.map((user: { id: string }) => user.id),
-    ).toEqual([second.id]);
-    expect(await SkillUserModel.userHasGrant(skillId, first.id)).toBe(false);
+    expect(response.statusCode).toBe(400);
+    expect(await SkillUserModel.userHasGrant(skillId, first.id)).toBe(true);
+    expect(await SkillUserModel.userHasGrant(skillId, second.id)).toBe(false);
   });
 
   test("an edit that omits userIds leaves existing grants alone", async ({
     makeUser,
+    makeMember,
   }) => {
     const grantee = await makeUser({ email: "kept@test.com" });
+    await makeMember(grantee.id, ctx.organizationId);
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
@@ -104,18 +112,19 @@ describe("per-user skill sharing", () => {
     ).toEqual([grantee.id]);
   });
 
-  test("widening the scope past personal clears the grants", async ({
+  test("retired visibility writes preserve existing grants", async ({
     makeUser,
     makeMember,
   }) => {
     const grantee = await makeUser({ email: "dropped@test.com" });
+    await makeMember(grantee.id, ctx.organizationId);
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: MANIFEST, userIds: [grantee.id] },
     });
     const skillId = created.json().id;
-    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    await MemberModel.updateRole(ctx.user.id, ctx.organizationId, "admin");
 
     const response = await ctx.app.inject({
       method: "PUT",
@@ -123,12 +132,9 @@ describe("per-user skill sharing", () => {
       payload: { content: MANIFEST, scope: "org" },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().scope).toBe("org");
-    // Grants left behind on an org-wide skill would be misleading rows that
-    // claim to narrow access the scope has already opened.
-    expect(response.json().users).toEqual([]);
-    expect(await SkillUserModel.userHasGrant(skillId, grantee.id)).toBe(false);
+    expect(response.statusCode).toBe(400);
+    expect((await SkillModel.findById(skillId))?.scope).toBe("personal");
+    expect(await SkillUserModel.userHasGrant(skillId, grantee.id)).toBe(true);
   });
 
   test("userIds on a team-scoped create are ignored", async ({
@@ -137,7 +143,8 @@ describe("per-user skill sharing", () => {
     makeTeam,
   }) => {
     const grantee = await makeUser({ email: "ignored@test.com" });
-    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    await makeMember(grantee.id, ctx.organizationId);
+    await MemberModel.updateRole(ctx.user.id, ctx.organizationId, "admin");
     const team = await makeTeam(ctx.organizationId, ctx.user.id);
 
     const response = await ctx.app.inject({
@@ -157,8 +164,10 @@ describe("per-user skill sharing", () => {
 
   test("the list payload carries grantees so a shared skill reads as shared", async ({
     makeUser,
+    makeMember,
   }) => {
     const grantee = await makeUser({ email: "listed@test.com" });
+    await makeMember(grantee.id, ctx.organizationId);
     await ctx.app.inject({
       method: "POST",
       url: "/api/skills",

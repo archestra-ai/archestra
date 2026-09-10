@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatMissingPermissions,
   formatPermissionConstraint,
+  hasPagePermissions,
   hasPermissions,
 } from "./auth.utils";
 
@@ -105,5 +106,55 @@ describe("formatPermissionConstraint", () => {
     expect(formatPermissionConstraint({ project: ["admin", "delete"] })).toBe(
       "Available to roles with the Projects (admin, delete) permission",
     );
+  });
+});
+
+describe("scoped page discovery", () => {
+  const capabilities = [
+    {
+      organizationId: "org-1",
+      resource: "mcpRegistry" as const,
+      scope: "00000000-0000-4000-8000-000000000001",
+      action: "read" as const,
+    },
+  ];
+  it("opens the resource page for an object-only reader without granting mutations", () => {
+    expect(
+      hasPagePermissions({
+        userPermissions: {},
+        required: { mcpRegistry: ["read"] },
+        capabilities,
+      }),
+    ).toBe(true);
+    expect(
+      hasPagePermissions({
+        userPermissions: {},
+        required: { mcpRegistry: ["update"] },
+        capabilities,
+      }),
+    ).toBe(false);
+    expect(hasPermissions({}, { mcpRegistry: ["read"] })).toBe(false);
+  });
+  it("does not let a grant for another resource satisfy page access", () => {
+    expect(
+      hasPagePermissions({
+        userPermissions: {},
+        required: { agent: ["read"] },
+        capabilities,
+      }),
+    ).toBe(false);
+  });
+  it("still requires every other page permission", () => {
+    const required: Permissions = { mcpRegistry: ["read"], team: ["read"] };
+    expect(
+      hasPagePermissions({ userPermissions: {}, required, capabilities }),
+    ).toBe(false);
+    expect(
+      hasPagePermissions({
+        userPermissions: { team: ["read"] },
+        required,
+        capabilities,
+      }),
+    ).toBe(true);
   });
 });

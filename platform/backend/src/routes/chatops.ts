@@ -52,8 +52,10 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { assertMessagingChannelAllowed } from "@/services/integration-overrides";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   type ChatOpsConnectionMode,
@@ -1426,20 +1428,54 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
-        request.headers,
-      );
-      const targetAgent = await AgentModel.findById(
-        request.body.targetAgentId,
-        request.user.id,
-        isAgentAdmin,
-      );
+      const targetAgent = await AgentModel.findById(request.body.targetAgentId);
       if (
         !targetAgent ||
         targetAgent.organizationId !== request.organizationId
       ) {
         throw new ApiError(404, "Agent not found");
+      }
+      if (targetAgent.agentType !== "agent")
+        throw new ApiError(
+          400,
+          "Only internal agents can be assigned to ChatOps.",
+        );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "agent",
+        scope: request.body.targetAgentId,
+        action: "use",
+      });
+      // SPDX-SnippetEnd
+      const assignedBindings = await ChatOpsChannelBindingModel.findByIds(
+        request.body.updates
+          .filter((update) => update.nextAgentId === request.body.targetAgentId)
+          .map((update) => update.bindingId),
+        request.organizationId,
+      );
+      if (
+        assignedBindings.some(
+          (binding) =>
+            !binding.isDm ||
+            binding.dmOwnerEmail?.toLowerCase() !==
+              request.user.email.toLowerCase(),
+        )
+      ) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          resource: "agent",
+          scope: request.body.targetAgentId,
+          action: "manage-permissions",
+        });
+        // SPDX-SnippetEnd
       }
       for (const { provider } of request.body.directMessages) {
         await assertMessagingChannelAllowed({
@@ -2207,6 +2243,48 @@ async function validateAgentChannelAssignment(params: {
 
   if (agent.agentType !== "agent") {
     throw new ApiError(400, "Only internal agents can be assigned to ChatOps.");
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const migrationPolicy = await ResourcePermissionPolicyModel.find({
+    organizationId: params.organizationId,
+    resource: "agent",
+    scope: "*",
+  });
+  // SPDX-SnippetEnd
+  if (migrationPolicy?.legacySharingMigrated) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissions.require({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "agent",
+      scope: params.agentId,
+      action: "use",
+    });
+    // SPDX-SnippetEnd
+    if (
+      !params.isDm ||
+      params.dmOwnerEmails?.some(
+        (email) => email?.toLowerCase() !== params.userEmail.toLowerCase(),
+      )
+    ) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        resource: "agent",
+        scope: params.agentId,
+        action: "manage-permissions",
+      });
+      // SPDX-SnippetEnd
+    }
+    return;
   }
 
   if (agent.scope !== "personal") return;

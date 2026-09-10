@@ -6,10 +6,12 @@ import {
   SkillModel,
   SkillTeamModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   explainAssignmentRejection,
   publishesSkills,
 } from "@/services/agent-skill-resolution";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type AgentSkillAssignments,
   type AgentSkillAssignmentsResponse,
@@ -31,10 +33,10 @@ import { isForeignKeyConstraintError } from "@/utils/db";
  *
  * Validation happens here, at assignment time, rather than only when the
  * gateway serves. A skill the caller cannot publish — a per-user template, an
- * agent delegation, someone else's personal skill, or a skill outside the
+ * agent delegation, a skill the caller cannot share, or a skill outside the
  * gateway's environment — is rejected outright, so an admin gets an error
- * instead of an assignment that silently does nothing. For personal skills
- * assignment time is the ONLY check: at serve time a gateway token carries no
+ * instead of an assignment that silently does nothing. For manually published skills
+ * assignment time is the delegation check: at serve time a gateway token carries no
  * user to judge against, so the assignment is the authority there.
  *
  * Both PUTs are full replaces whose body is the GET response, so validation
@@ -58,6 +60,51 @@ import { isForeignKeyConstraintError } from "@/utils/db";
  * nothing new.
  */
 class AgentSkillAssignmentService {
+  /** Publication delegates content access to every user of the gateway. */
+  async getPublicationPermissions(params: {
+    organizationId: string;
+    userId: string;
+    skillIds: string[];
+  }): Promise<Map<string, boolean>> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const [grants, policies] = await Promise.all([
+      ResourcePermissions.resolveAll(params),
+      ResourcePermissionPolicyModel.findApplicableBatch({
+        organizationId: params.organizationId,
+        resource: "skill",
+        scopes: params.skillIds,
+      }),
+    ]);
+    // SPDX-SnippetEnd
+    const result = new Map<string, boolean>();
+    for (const id of params.skillIds) {
+      const applicable = policies.filter(
+        (policy) => policy.scope === "*" || policy.scope === id,
+      );
+      if (!applicable.some((policy) => policy.legacySharingMigrated)) continue;
+      result.set(
+        id,
+        grants.some(
+          (grant) =>
+            grant.resource === "skill" &&
+            grant.action === "manage-permissions" &&
+            (grant.scope === "*" || grant.scope === id),
+        ) ||
+          applicable.some((policy) =>
+            policy.grants.some(
+              (grant) =>
+                grant.subject.type === "organization" &&
+                grant.subject.id === "*" &&
+                grant.actions.includes("use"),
+            ),
+          ),
+      );
+    }
+    return result;
+  }
+
   async getAssignments(
     agentId: string,
   ): Promise<AgentSkillAssignmentsResponse> {
@@ -101,12 +148,18 @@ class AgentSkillAssignmentService {
       skills.map((skill) => skill.id),
     );
 
+    const publicationPermissions = await this.getPublicationPermissions({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      skillIds: skills.map((skill) => skill.id),
+    });
     for (const skill of skills) {
       const rejection = explainAssignmentRejection({
         skill,
         agent,
         userId: params.userId,
         skillEnvironmentIds: environmentIdsBySkill.get(skill.id) ?? [],
+        canPublish: publicationPermissions.get(skill.id),
       });
       if (rejection) {
         throw new ApiError(422, rejection);

@@ -69,7 +69,7 @@ When the caller is an application — a backend service, automation job, or anot
 
 Register one in **Settings > OAuth Clients**, which lists every OAuth client in the deployment — those for MCP gateways and agents alongside those for the LLM Proxy. Each client is scoped to an explicit list of Agents and gateways. Creation returns a `client_id` and a one-time `client_secret`, which you can rotate later. A client can only mint tokens for resources on its list.
 
-Like agents and gateways, each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `mcpOauthClient:team-admin`, organization-wide visibility requires `mcpOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
+Each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `mcpOauthClient:team-admin`, organization-wide visibility requires `mcpOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
 
 The client exchanges its credentials for a short-lived (1-hour) bearer token at `POST /api/auth/oauth2/token` with:
 
@@ -105,6 +105,10 @@ To restrict OAuth flows to pre-registered clients only, set `ARCHESTRA_AUTH_DCR_
 ### Bearer Token
 
 For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Tokens can be scoped to a specific user, team, or organization. Your personal token is in **Personal Settings** — click your name in the sidebar. Team tokens are on each team in **Settings > Teams**. The organization token is in **Settings > Organization**.
+
+Team and organization tokens require matching gateway use grants. Team tokens receive team and organization grants. Organization tokens receive organization grants. Team administration does not grant access to token values or token rotation. Those operations require the access-control update permission.
+
+Service accounts support individual [resource grants](/docs/platform-access-control#resource-permission-grants). Their tokens use the service account's current grants and role assignments.
 
 Bearer tokens authenticate the client to Archestra. They are not enterprise assertions by themselves. If Archestra also needs to exchange the matched user's IdP token and use the result on the downstream MCP request, it must still have a usable IdP token for that user.
 
@@ -174,7 +178,7 @@ This credential resolution supports a common setup: an admin installs upstream M
 - The JWT `iss` claim must match the IdP's issuer URL
 - The IdP must have a client ID, and the JWT `aud` claim must match it
 - The JWT must carry an email that matches an existing Archestra user
-- The user must have `profile:admin` permission or be a member of at least one team associated with the gateway they are trying to use
+- The user must hold a `use` grant for the gateway
 
 #### Namespaced Email Claims
 

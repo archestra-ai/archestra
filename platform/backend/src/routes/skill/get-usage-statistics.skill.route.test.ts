@@ -1,10 +1,11 @@
 import { SkillModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import skillRoutes from "./skill.routes";
+import { useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("GET /api/skills/:id/usage-statistics", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("returns per-user daily counts for the last month", async ({
     makeUser,

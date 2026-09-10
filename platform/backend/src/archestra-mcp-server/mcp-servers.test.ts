@@ -524,17 +524,17 @@ describe("deploy_mcp_server", () => {
     makeUser,
   }) => {
     const org = await makeOrganization();
-    const teamAdmin = await makeUser();
-    await makeMember(teamAdmin.id, org.id, { role: "member" });
-    const team = await makeTeam(org.id, teamAdmin.id);
-    await makeTeamMember(team.id, teamAdmin.id, { role: "admin" });
+    const teamMember = await makeUser();
+    await makeMember(teamMember.id, org.id, { role: "editor" });
+    const team = await makeTeam(org.id, teamMember.id);
+    await makeTeamMember(team.id, teamMember.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
     const ctx: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },
-      userId: teamAdmin.id,
+      userId: teamMember.id,
       organizationId: org.id,
     };
-    // Team-scoped item where the admin's team holds only `use`.
+    // Team-scoped item where the member's team holds only `use`.
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       scope: "team",
@@ -549,7 +549,9 @@ describe("deploy_mcp_server", () => {
 
     // A shared team install is the connection others resolve through — a write.
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toMatch(/write access/i);
+    expect((result.content[0] as any).text).toContain(
+      "permission to perform this action",
+    );
   });
 
   test("shared team install of a write-level team item succeeds", async ({
@@ -562,14 +564,14 @@ describe("deploy_mcp_server", () => {
     makeUser,
   }) => {
     const org = await makeOrganization();
-    const teamAdmin = await makeUser();
-    await makeMember(teamAdmin.id, org.id, { role: "member" });
-    const team = await makeTeam(org.id, teamAdmin.id);
-    await makeTeamMember(team.id, teamAdmin.id, { role: "admin" });
+    const teamMember = await makeUser();
+    await makeMember(teamMember.id, org.id, { role: "editor" });
+    const team = await makeTeam(org.id, teamMember.id);
+    await makeTeamMember(team.id, teamMember.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
     const ctx: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },
-      userId: teamAdmin.id,
+      userId: teamMember.id,
       organizationId: org.id,
     };
     const catalog = await makeInternalMcpCatalog({

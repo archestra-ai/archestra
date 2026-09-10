@@ -96,6 +96,7 @@ export function AgentActions({
   if (isDeleted) {
     return (
       <TableRowActions
+        permissionScope={agent.id}
         itemName={agent.name}
         actions={[
           {
@@ -253,6 +254,7 @@ export function AgentActions({
     <ResourceTableRowActions
       kind="agent"
       resource={agent}
+      permissionScope={agent.id}
       itemName={agent.name}
       actions={primaryActions}
       dropdownActions={dropdownActions}

@@ -36,7 +36,6 @@ import { projectVisibilityToScope } from "@/components/projects/project-visibili
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ResourceDeletedStatusFilter,
-  ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -284,20 +283,13 @@ function ProjectsList() {
               {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
               {!isDeletedView && (
-                <>
-                  <ResourceScopeFilter
-                    ownerLabelPlural="projects"
-                    allLabel="All projects"
-                    adminPermission={{ project: ["admin"] }}
-                  />
-                  <EntityLabelFilter
-                    useLabelKeys={useProjectLabelKeys}
-                    useLabelValues={useProjectLabelValues}
-                    className={filterControlClass({
-                      active: Boolean(labelsFilter),
-                    })}
-                  />
-                </>
+                <EntityLabelFilter
+                  useLabelKeys={useProjectLabelKeys}
+                  useLabelValues={useProjectLabelValues}
+                  className={filterControlClass({
+                    active: Boolean(labelsFilter),
+                  })}
+                />
               )}
               {/* Gated on `project:admin`, matching the slice the backend serves:
               anyone else switching to Deleted would get an empty table. */}

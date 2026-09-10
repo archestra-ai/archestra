@@ -13,6 +13,7 @@ import {
   connectorWwwAuthenticate,
 } from "@/services/apps/app-connector-resource";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, type App, UuidIdSchema } from "@/types";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import {
@@ -120,6 +121,7 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         app =
           (await AppModel.findByIdForCaller({
+            action: "use",
             id: appId,
             organizationId,
             userId,
@@ -135,6 +137,19 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "You don't have access to this MCP App, or it doesn't exist.",
         );
       }
+
+      // Re-evaluate grants on every call, including cache hits after revocation.
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId,
+        userId,
+        resource: "app",
+        scope: appId,
+        action: "use",
+      });
+      // SPDX-SnippetEnd
 
       // Gate tools/call on the per-app allowlist + the tool's app visibility.
       // Archestra tools (the App Data Store) are exempt — they are dispatched

@@ -101,7 +101,6 @@ import {
 } from "@/lib/a2a-remote-agents.query";
 import {
   useBulkDeleteProfiles,
-  useBulkUpdateProfileVisibility,
   useDefaultAgentId,
   useDeleteProfile,
   useExportAgent,
@@ -114,7 +113,11 @@ import {
   useAgentCatalog,
   useAllMatchingAgentCatalog,
 } from "@/lib/agent-catalog.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import {
   type BulkOutcome,
   reportBulkOutcome,
@@ -305,16 +308,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     status: undefined,
     pinned: true,
   });
+  const scopedCapabilities = useScopedCapabilities();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
-  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
-  const { data: isAgentTeamAdmin } = useHasPermissions({
-    agent: ["team-admin"],
-  });
+  const { data: isAgentAdmin } = useHasPermissions({ agent: ["update"] }, "*");
+  const { data: isAgentTeamAdmin } = useHasPermissions(
+    { agent: ["update"] },
+    "teams:*",
+  );
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 
   const { data: environmentList } = useEnvironments();
@@ -441,7 +446,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     filterSignature: string;
     allMatching: boolean;
   } | null>(null);
-  const bulkAgentVisibility = useBulkUpdateProfileVisibility();
   const bulkExternalAgentVisibility = useBulkUpdateA2aRemoteAgentVisibility();
   const pinAgent = usePinAgent();
   // Derived from what is on screen rather than read straight out of
@@ -519,10 +523,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const allMatchingSelectionUnavailable =
     allMatchingSelected &&
     (isFetchingAllMatching || isAllMatchingError || bulkSelectionOverLimit);
-  const {
-    agents: bulkVisibilityRegularAgents,
-    externalAgents: bulkVisibilityExternalAgents,
-  } = partitionAgentRows(bulkVisibilityRows);
+  // Access to internal agents is a grant policy edited on each agent's
+  // Permissions tab; only external A2A agents still carry a visibility scope.
+  const { externalAgents: bulkVisibilityExternalAgents } =
+    partitionAgentRows(bulkVisibilityRows);
   const openBulkVisibility = async () => {
     const requestedFilterSignature = filterSignature;
     const requestedAllMatching = allMatchingSelected;
@@ -578,12 +582,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     (canManageExternalAgents
       ? (catalogResponse?.totals.externalAgents ?? 0)
       : 0);
-  const bulkVisibilityPermissions = {
-    ...(selectedRegularAgents.length > 0 ? { agent: ["update" as const] } : {}),
-    ...(selectedExternalAgents.length > 0
-      ? { agentSettings: ["update" as const] }
-      : {}),
-  };
+  const bulkVisibilityPermissions = { agentSettings: ["update" as const] };
+  const showBulkVisibility =
+    selectedExternalAgents.length > 0 && selectedRegularAgents.length === 0;
   const bulkDeletePermissions = {
     ...(selectedRegularAgents.length > 0 ? { agent: ["delete" as const] } : {}),
     ...(selectedExternalAgents.length > 0
@@ -593,7 +594,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const bulkBusy =
     bulkDeleteAgents.isPending ||
     bulkDeleteExternalAgents.isPending ||
-    bulkAgentVisibility.isPending ||
     bulkExternalAgentVisibility.isPending ||
     isFetchingAllMatching;
   const bulkDeleteDescription = (() => {
@@ -641,6 +641,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   const renderAgentActions = (agent: AgentData) => {
     const canModify = computeCanModifyAgent({
+      scopedGrants: scopedCapabilities.data ?? [],
       agent,
       isAdmin: !!isAgentAdmin,
       isTeamAdmin: !!isAgentTeamAdmin,
@@ -799,15 +800,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         footer={<AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <ResourceVisibilityBadge
-            scope={agent.scope}
-            teams={agent.teams}
-            users={agent.users}
-            authorId={agent.authorId}
-            authorName={agent.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
           {/* Badge row, not the title line: the title shares its line with
               the action cluster and clips at phone width. */}
           {agent.runtime != null && (
@@ -908,19 +900,31 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       header: "Accessible to",
       enableSorting: false,
       size: 160,
-      cell: ({ row }) => (
-        <RowClickShield>
-          <ResourceVisibilityBadge
-            scope={row.original.value.scope}
-            teams={row.original.value.teams}
-            users={row.original.value.users}
-            authorId={row.original.value.authorId}
-            authorName={row.original.value.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
-        </RowClickShield>
-      ),
+      // Internal agents answer to a grant policy, shown on their Permissions
+      // tab; only external A2A agents still carry a visibility scope here.
+      cell: ({ row }) =>
+        row.original.type === "external" ? (
+          <RowClickShield>
+            <ResourceVisibilityBadge
+              scope={row.original.value.scope}
+              teams={row.original.value.teams}
+              users={row.original.value.users}
+              authorId={row.original.value.authorId}
+              authorName={row.original.value.authorName}
+              currentUserId={currentUserId}
+              showSelfAsMe
+            />
+          </RowClickShield>
+        ) : (
+          <RowClickShield>
+            <Link
+              href={`${agentDetailHref("agent", row.original.value.id)}?section=permissions`}
+              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Permissions
+            </Link>
+          </RowClickShield>
+        ),
     },
     {
       id: "provider",
@@ -1140,8 +1144,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   <ResourceScopeFilter
                     showBuiltIn
                     showLabels
-                    ownerLabelPlural="agents"
-                    adminPermission={{ agent: ["admin"] }}
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ProviderKeyFilterSelect
@@ -1162,10 +1164,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     permissions={[{ resource: "team", action: "read" }]}
                   />
                 )}
-                <ActiveFilterBadges
-                  adminPermission={{ agent: ["admin"] }}
-                  queryParamsAdapter={queryParamsAdapter}
-                />
+                <ActiveFilterBadges queryParamsAdapter={queryParamsAdapter} />
               </CollectionFilters>
 
               <BulkActions
@@ -1187,16 +1186,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     : "match the current filters",
                 }}
               >
-                <PermissionButton
-                  permissions={bulkVisibilityPermissions}
-                  disabled={allMatchingSelectionUnavailable}
-                  variant="outline"
-                  size="sm"
-                  onClick={openBulkVisibility}
-                >
-                  <Pencil className="h-4 w-4" />
-                  <span>Edit visibility</span>
-                </PermissionButton>
+                {showBulkVisibility && (
+                  <PermissionButton
+                    permissions={bulkVisibilityPermissions}
+                    disabled={allMatchingSelectionUnavailable}
+                    variant="outline"
+                    size="sm"
+                    onClick={openBulkVisibility}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span>Edit visibility</span>
+                  </PermissionButton>
+                )}
                 <PermissionButton
                   permissions={bulkDeletePermissions}
                   disabled={allMatchingSelectionUnavailable}
@@ -1242,14 +1243,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
               {bulkVisibilityOpen && (
                 <BulkVisibilityDialog
-                  items={[
-                    ...bulkVisibilityRegularAgents.map((profile) => ({
-                      ...profile,
-                      teams: profile.teams ?? [],
-                      users: profile.users ?? [],
-                    })),
-                    ...bulkVisibilityExternalAgents,
-                  ]}
+                  items={bulkVisibilityExternalAgents}
                   noun="agent"
                   plural="agents"
                   open={bulkVisibilityOpen}
@@ -1260,10 +1254,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                       setBulkVisibilityContext(null);
                     }
                   }}
-                  isPending={
-                    bulkAgentVisibility.isPending ||
-                    bulkExternalAgentVisibility.isPending
-                  }
+                  isPending={bulkExternalAgentVisibility.isPending}
                   applyDisabled={allMatchingSelectionUnavailable}
                   renderSelector={
                     bulkVisibilityExternalAgents.length > 0
@@ -1275,16 +1266,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   onApply={async (change) => {
                     if (allMatchingSelectionUnavailable) return false;
                     const outcomes: BulkOutcome[] = [];
-                    if (bulkVisibilityRegularAgents.length > 0) {
-                      outcomes.push(
-                        await bulkAgentVisibility.mutateAsync({
-                          profiles: bulkVisibilityRegularAgents,
-                          scope: change.scope,
-                          teamIds: change.teamIds,
-                          userIds: change.userIds,
-                        }),
-                      );
-                    }
                     if (bulkVisibilityExternalAgents.length > 0) {
                       outcomes.push(
                         await bulkExternalAgentVisibility.mutateAsync({

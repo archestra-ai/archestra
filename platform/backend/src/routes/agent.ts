@@ -6,6 +6,7 @@ import {
   isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourcePermissionGrantSchema,
   RouteId,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
@@ -72,6 +73,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
   AgentActivationSkillPolicyResponseSchema,
@@ -289,7 +291,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { limit, offset },
         { sortBy, sortDirection },
         {
-          organizationId,
+          authorization: {
+            organizationId,
+            baseReadTypes: checker.getAgentTypesWithPermission("read"),
+          },
           name,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
@@ -470,6 +475,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send(
         await AgentModel.findAll(user.id, isAdmin, {
+          authorization: {
+            organizationId,
+            baseReadTypes: checker.getAgentTypesWithPermission("read"),
+          },
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
@@ -590,11 +599,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateAgent,
         description: "Create a new agent",
         tags: ["Agents"],
-        body: InsertAgentSchema,
+        body: InsertAgentSchema.extend({
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
+        }),
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ body, user, organizationId }, reply) => {
+    async ({ body: requestBody, user, organizationId }, reply) => {
+      const { initialGrants, ...body } = requestBody;
+      const resourceId = crypto.randomUUID();
       // Check create permission for the specific agent type
       const agentType = body.agentType ?? "mcp_gateway";
       if (agentType === "llm_proxy") {
@@ -643,35 +659,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
       });
-
-      // Validate scope-based permissions for agent creation
-      if (!checker.isAdmin(agentType)) {
-        const scope = body.scope ?? "personal";
-        if (scope === "org") {
-          throw new ApiError(403, "Only admins can create org-scoped agents");
-        }
-        if (scope === "team" || body.teams.length > 0) {
-          if (!checker.isTeamAdmin(agentType)) {
-            throw new ApiError(
-              403,
-              "You need team-admin permission to create team-scoped agents",
-            );
-          }
-
-          // team-admin can only assign teams they are a member of
-          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-          const userTeamIdSet = new Set(userTeamIds);
-          const invalidTeams = body.teams.filter(
-            (id) => !userTeamIdSet.has(id),
-          );
-          if (invalidTeams.length > 0) {
-            throw new ApiError(
-              403,
-              "You can only assign teams you are a member of",
-            );
-          }
-        }
-      }
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -764,8 +751,29 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // `builtInAgentConfig` is server-owned: only the seeder sets it, and it
       // is a trust attribute (the advisor discriminator drives the delegation
       // environment exception), so a client-supplied value is dropped here.
+      if (initialGrants !== undefined) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+          grants: initialGrants,
+          target: {
+            id: resourceId,
+            name: body.name,
+            authorId: user.id,
+            scope: body.scope ?? "personal",
+            teams: body.teams.map((id) => ({ id })),
+            users: [],
+          },
+        });
+        // SPDX-SnippetEnd
+      }
       const createData = {
         ...body,
+        id: resourceId,
         organizationId,
         environmentId,
         builtInAgentConfig: null,
@@ -785,6 +793,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.create(createData, user.id, {
         defaultExcludedSubagentIds,
         deferInitialVersionFork: body.activationSkillPolicy !== undefined,
+        initialPermissionGrants: initialGrants,
       });
       if (body.activationSkillPolicy) {
         try {
@@ -982,7 +991,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Restoring is an update in permission terms
       // (return 404 to avoid leaking existence)
       try {
-        checker.require(existingAgent.agentType, "update");
+        checker.require(existingAgent.agentType, {
+          action: "update",
+          scope: existingAgent.id,
+        });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -991,6 +1003,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
       requireAgentModifyPermission({
+        agentId: existingAgent.id,
+        action: "update",
         checker,
         agentType: existingAgent.agentType,
         agentScope: existingAgent.scope,
@@ -1024,7 +1038,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CloneAgent,
         description:
-          "Clone an agent and all its associations. Optionally override the clone's visibility (scope/teams); by default the source's visibility is copied.",
+          "Clone an agent and its associations with explicit permission grants. The creator receives full access; source sharing is not copied.",
         tags: ["Agents"],
         params: z.object({
           id: UuidIdSchema,
@@ -1066,7 +1080,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check read + create permission (return 404 to avoid leaking existence)
       try {
-        checker.require(sourceAgent.agentType, "read");
+        checker.require(sourceAgent.agentType, {
+          action: "read",
+          scope: sourceAgent.id,
+        });
         checker.require(sourceAgent.agentType, "create");
       } catch {
         throw new ApiError(404, "Agent not found");
@@ -1077,6 +1094,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
       requireAgentModifyPermission({
+        agentId: sourceAgent.id,
+        action: "update",
         checker,
         agentType: sourceAgent.agentType,
         agentScope: sourceAgent.scope,
@@ -1086,46 +1105,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // The clone is a new agent, so an explicitly requested visibility is
-      // validated like agent creation (mirrors POST /api/agents).
-      const targetScope = body?.scope ?? sourceAgent.scope;
-      const requestedTeams = body?.teams ?? [];
-
-      // A team-scoped clone must land on ≥1 team (issue #6624) and may only
-      // target teams in this organization. Effective teams default to the
-      // source's when the caller omits them, matching AgentModel.cloneAgent.
-      // Applies to admins too.
-      await assertAgentTeams({
-        scope: targetScope,
-        teamIds: body?.teams ?? sourceAgent.teams.map((t) => t.id),
+      const initialGrants = body?.initialGrants ?? [];
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
         organizationId,
+        userId: user.id,
+        resource:
+          sourceAgent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+        grants: initialGrants,
+        target: {
+          ...sourceAgent,
+          scope: "personal",
+          authorId: user.id,
+          users: [],
+          teams: [],
+        },
       });
-
-      if (!checker.isAdmin(sourceAgent.agentType)) {
-        if (targetScope === "org") {
-          throw new ApiError(403, "Only admins can create org-scoped agents");
-        }
-        if (targetScope === "team" || requestedTeams.length > 0) {
-          if (!checker.isTeamAdmin(sourceAgent.agentType)) {
-            throw new ApiError(
-              403,
-              "You need team-admin permission to create team-scoped agents",
-            );
-          }
-
-          // team-admin can only assign teams they are a member of
-          const userTeamIdSet = new Set(userTeamIds);
-          const invalidTeams = requestedTeams.filter(
-            (teamId) => !userTeamIdSet.has(teamId),
-          );
-          if (invalidTeams.length > 0) {
-            throw new ApiError(
-              403,
-              "You can only assign teams you are a member of",
-            );
-          }
-        }
-      }
+      // SPDX-SnippetEnd
 
       // Validate knowledgeBaseIds if provided
       if ((sourceAgent.knowledgeBaseIds?.length ?? 0) > 0) {
@@ -1159,12 +1157,26 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body?.scope !== undefined || body?.teams !== undefined) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.rejectLegacySharing({
+          organizationId,
+          resource:
+            sourceAgent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+          scope: sourceAgent.id,
+        });
+        // SPDX-SnippetEnd
+      }
+
       // Delegate cloning logic to the model
       const clonedAgent = await AgentModel.cloneAgent({
         sourceId: sourceAgent.id,
         userId: user.id,
-        scope: body?.scope,
-        teams: body?.teams,
+        scope: "personal",
+        teams: [],
+        initialGrants,
       });
 
       return reply.send(clonedAgent);
@@ -1222,7 +1234,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       try {
-        checker.require(agent.agentType, "read");
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1274,7 +1286,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check read permission (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "read");
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1327,7 +1339,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Editing exclusions requires the same permission as agent update
       // (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "update");
+        checker.require(agent.agentType, { action: "update", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1337,6 +1349,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "update",
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,
@@ -1390,7 +1404,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check read permission (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "read");
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1443,7 +1457,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Editing exclusions requires the same permission as agent update
       // (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "update");
+        checker.require(agent.agentType, { action: "update", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1453,6 +1467,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "update",
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,
@@ -1926,7 +1942,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Check update permission (return 404 to avoid leaking existence)
       try {
-        checker.require(existingAgent.agentType, "update");
+        checker.require(existingAgent.agentType, {
+          action: "update",
+          scope: existingAgent.id,
+        });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -1941,8 +1960,33 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
 
-      // Enforce scope-based modify permissions on the existing agent
+      const sharingChanged =
+        (body.scope !== undefined && body.scope !== existingAgent.scope) ||
+        (body.teams !== undefined &&
+          !sameRecipientIds(
+            body.teams,
+            existingAgent.teams.map((team) => team.id),
+          )) ||
+        (body.users !== undefined &&
+          !sameRecipientIds(
+            body.users,
+            (existingAgent.users ?? []).map((recipient) => recipient.id),
+          ));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (sharingChanged)
+        await ResourcePermissions.rejectLegacySharing({
+          organizationId,
+          resource:
+            existingAgent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+          scope: existingAgent.id,
+        });
+      // SPDX-SnippetEnd
+      // Content editing does not authorize changing who can access the agent.
       requireAgentModifyPermission({
+        agentId: existingAgent.id,
+        action: sharingChanged ? "manage-permissions" : "update",
         checker,
         agentType: existingAgent.agentType,
         agentScope: existingAgent.scope,
@@ -1952,8 +1996,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Validate scope escalation for non-admin users
-      if (!checker.isAdmin(existingAgent.agentType)) {
+      // Re-authorize sharing changes; echoed visibility is not a new grant.
+      if (sharingChanged && !checker.isAdmin(existingAgent.agentType)) {
         if (body.scope === "org") {
           throw new ApiError(403, "Only admins can set scope to org");
         }
@@ -2283,7 +2327,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ).map((agent) => [agent.id, agent]),
           ),
         describe: (agent) => agent.name,
-        authorize: (agent) => {
+        authorize: async (agent) => {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await ResourcePermissions.rejectLegacySharing({
+            organizationId,
+            resource:
+              agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+            scope: agent.id,
+          });
+          // SPDX-SnippetEnd
           if (agent.agentType === "llm_proxy") {
             throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
           }
@@ -2291,13 +2345,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // single-agent update does, so a batch never confirms an agent
           // exists that the caller was not allowed to see.
           try {
-            checker.require(agent.agentType, "update");
+            checker.require(agent.agentType, {
+              action: "update",
+              scope: agent.id,
+            });
           } catch {
             throw new ApiError(404, "Agent not found");
           }
 
           const isAdmin = checker.isAdmin(agent.agentType);
           requireAgentModifyPermission({
+            agentId: agent.id,
+            action: "manage-permissions",
             checker,
             agentType: agent.agentType,
             agentScope: agent.scope,
@@ -2419,11 +2478,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
           }
           try {
-            checker.require(agent.agentType, "delete");
+            checker.require(agent.agentType, {
+              action: "delete",
+              scope: agent.id,
+            });
           } catch {
             throw new ApiError(404, "Agent not found");
           }
           requireAgentModifyPermission({
+            agentId: agent.id,
+            action: "delete",
             checker,
             agentType: agent.agentType,
             agentScope: agent.scope,
@@ -2494,7 +2558,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       try {
-        checker.require(agent.agentType, "delete");
+        checker.require(agent.agentType, { action: "delete", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -2504,6 +2568,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "delete",
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,
@@ -2574,7 +2640,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       try {
-        checker.require(agent.agentType, "delete");
+        checker.require(agent.agentType, { action: "delete", scope: agent.id });
       } catch {
         throw new ApiError(404, "Agent not found");
       }
@@ -2583,6 +2649,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? await TeamModel.getUserTeamIds(user.id)
         : [];
       requireAgentModifyPermission({
+        agentId: agent.id,
+        action: "delete",
         checker,
         agentType: agent.agentType,
         agentScope: agent.scope,
@@ -2889,7 +2957,7 @@ async function requireReadableAgent(params: {
     organizationId: params.organizationId,
   });
   try {
-    checker.require(agent.agentType, "read");
+    checker.require(agent.agentType, { action: "read", scope: agent.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -2897,12 +2965,12 @@ async function requireReadableAgent(params: {
   if (!checker.isAdmin(agent.agentType)) {
     // Team/author visibility, mirroring GetAgent's non-admin filter. The
     // already-fetched agent serves as the access context — no re-fetch.
-    const hasAccess = await AgentTeamModel.userHasAgentAccess(
-      params.userId,
-      params.id,
-      false,
-      agent,
-    );
+    const hasAccess = await AgentTeamModel.userHasAgentAccess({
+      userId: params.userId,
+      agentId: params.id,
+      isAgentAdmin: false,
+      agentAccessContext: agent,
+    });
     if (!hasAccess) {
       throw new ApiError(404, "Agent not found");
     }
@@ -2963,15 +3031,24 @@ function getPermittedAgentTypesForList(params: {
   status: "active" | "deleted" | undefined;
 }): AgentType[] | undefined {
   const action = params.status === "deleted" ? "delete" : "read";
+  const scopedTypes =
+    params.status === "deleted"
+      ? []
+      : (params.checker.getAgentTypesWithScopedPermission?.("read") ?? []);
 
   if (params.effectiveTypes) {
     for (const type of params.effectiveTypes) {
-      params.checker.require(type, action);
+      if (!scopedTypes.includes(type)) params.checker.require(type, action);
     }
     return undefined;
   }
 
-  const permittedTypes = params.checker.getAgentTypesWithPermission(action);
+  const permittedTypes = [
+    ...new Set([
+      ...params.checker.getAgentTypesWithPermission(action),
+      ...scopedTypes,
+    ]),
+  ];
   if (permittedTypes.length === 0) {
     throw new ApiError(403, AGENT_READ_FORBIDDEN_MESSAGE);
   }
@@ -3064,7 +3141,7 @@ async function requireAgentReadAccess(params: {
   });
 
   try {
-    checker.require(agent.agentType, "read");
+    checker.require(agent.agentType, { action: "read", scope: agent.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -3104,7 +3181,7 @@ async function requireAgentUpdateAccess(params: {
   });
 
   try {
-    checker.require(agent.agentType, "update");
+    checker.require(agent.agentType, { action: "update", scope: agent.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -3113,6 +3190,8 @@ async function requireAgentUpdateAccess(params: {
     ? await TeamModel.getUserTeamIds(user.id)
     : [];
   requireAgentModifyPermission({
+    agentId: agent.id,
+    action: "update",
     checker,
     agentType: agent.agentType,
     agentScope: agent.scope,
@@ -3263,4 +3342,12 @@ function sameIdSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const setB = new Set(b);
   return a.every((id) => setB.has(id));
+}
+
+function sameRecipientIds(requested: string[], existing: string[]): boolean {
+  const current = new Set(existing);
+  return (
+    new Set(requested).size === current.size &&
+    requested.every((id) => current.has(id))
+  );
 }

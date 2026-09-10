@@ -211,7 +211,10 @@ describe("agent knowledge-source-exclusions routes", () => {
       url: `/api/agents/${agent.id}/knowledge-source-exclusions`,
     });
     expect(getResponse.statusCode).toBe(404);
-    expect(requireMock).toHaveBeenCalledWith(agent.agentType, "read");
+    expect(requireMock).toHaveBeenCalledWith(agent.agentType, {
+      action: "read",
+      scope: agent.id,
+    });
 
     const putResponse = await app.inject({
       method: "PUT",
@@ -219,6 +222,9 @@ describe("agent knowledge-source-exclusions routes", () => {
       payload: { excludedConnectorIds: [] },
     });
     expect(putResponse.statusCode).toBe(404);
-    expect(requireMock).toHaveBeenCalledWith(agent.agentType, "update");
+    expect(requireMock).toHaveBeenCalledWith(agent.agentType, {
+      action: "update",
+      scope: agent.id,
+    });
   });
 });

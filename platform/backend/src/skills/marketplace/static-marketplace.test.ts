@@ -4,6 +4,7 @@ import {
   SkillModel,
   UserTokenModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
 import {
   loadMarketplaceSkills,
@@ -229,6 +230,44 @@ describe("loadMarketplaceSkills", () => {
     });
 
     expect(skills.map((s) => s.name).sort()).toEqual(["org-wide", "theirs"]);
+  });
+
+  test("global update does not expose private skills without read grants", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: org.id,
+      resource: "skill",
+      scope: "*",
+    });
+    if (!policy) throw new Error("Missing permission policy fixture");
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: org.id,
+      resource: "skill",
+      scope: "*",
+      revision: policy.revision,
+      grants: [
+        ...policy.grants,
+        { subject: { type: "user", id: user.id }, actions: ["update"] },
+      ],
+    });
+    await seedSkill({ organizationId: org.id, name: "shared", scope: "org" });
+    await seedSkill({
+      organizationId: org.id,
+      name: "private",
+      scope: "personal",
+    });
+    const skills = await loadMarketplaceSkills({
+      organizationId: org.id,
+      userId: user.id,
+      isSkillAdmin: true,
+    });
+    expect(skills.map((skill) => skill.name)).toEqual(["shared"]);
   });
 
   test("soft-deleted skills drop out of the marketplace", async ({

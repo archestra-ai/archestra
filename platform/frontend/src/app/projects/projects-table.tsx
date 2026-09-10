@@ -20,7 +20,6 @@ import { LabelTags } from "@/components/label-tags";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
-import { ScopeBadge } from "@/components/scope-badge";
 import {
   type TableRowAction,
   TableRowActions,
@@ -111,11 +110,6 @@ export function ProjectsTable({
         const project = row.original;
         return (
           <span className="flex flex-wrap items-center gap-1">
-            <ScopeBadge
-              scope={projectVisibilityToScope(project.visibility)}
-              teamNames={project.shareTeamNames}
-              userNames={project.shareUserNames}
-            />
             {project.viewerRole === "admin" && project.visibility === null && (
               <Badge variant="secondary">
                 {project.ownerName

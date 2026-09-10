@@ -40,13 +40,16 @@ describe("delegation tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
-  beforeEach(async ({ makeAgent }) => {
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
     vi.clearAllMocks();
     testAgent = await makeAgent({ name: "Test Agent" });
+    const caller = await makeUser();
+    await makeMember(caller.id, testAgent.organizationId);
     mockContext = {
+      userId: caller.id,
       agent: { id: testAgent.id, name: testAgent.name },
       agentId: testAgent.id,
-      organizationId: "org-123",
+      organizationId: testAgent.organizationId,
     };
   });
 
@@ -66,7 +69,7 @@ describe("delegation tool execution", () => {
   test("returns error when agentId is missing from context", async () => {
     const noAgentContext: ArchestraContext = {
       agent: { id: testAgent.id, name: testAgent.name },
-      organizationId: "org-123",
+      organizationId: testAgent.organizationId,
     };
     const result = await executeArchestraTool(
       `${AGENT_TOOL_PREFIX}some_agent`,
@@ -113,6 +116,7 @@ describe("delegation tool execution", () => {
     const previous = config.agentRuntime.enabled;
     config.agentRuntime.enabled = true;
     const targetAgent = await makeAgent({
+      organizationId: testAgent.organizationId,
       name: "Background Worker",
       runtime: {
         image: "example.invalid/background-worker:test",
@@ -138,7 +142,7 @@ describe("delegation tool execution", () => {
     });
     const context = {
       ...mockContext,
-      userId: "user-1",
+      userId: mockContext.userId,
       sessionId: "chatops:slack:thread-1",
       chatOpsBindingId: "binding-1",
       chatOpsThreadId: "thread-1",
@@ -169,8 +173,12 @@ describe("delegation tool execution", () => {
   }) => {
     const previous = config.agentRuntime.enabled;
     config.agentRuntime.enabled = true;
-    const router = await makeAgent({ name: "Coding Task Router" });
+    const router = await makeAgent({
+      organizationId: testAgent.organizationId,
+      name: "Coding Task Router",
+    });
     const worker = await makeAgent({
+      organizationId: testAgent.organizationId,
       name: "Selected Coding Worker",
       runtime: {
         image: "example.invalid/coding-worker:test",
@@ -193,7 +201,7 @@ describe("delegation tool execution", () => {
 
     const rootContext = {
       ...mockContext,
-      userId: "user-1",
+      userId: mockContext.userId,
       sessionId: "chatops:slack:thread-1",
       chatOpsBindingId: "binding-1",
       chatOpsThreadId: "thread-1",
@@ -268,7 +276,10 @@ describe("delegation tool execution", () => {
     }) => {
       config.openappa.enabled = enabled;
       await GuardrailsDeploymentModel.setEnabled(true);
-      const targetAgent = await makeAgent({ name: "Security Review Agent" });
+      const targetAgent = await makeAgent({
+        organizationId: testAgent.organizationId,
+        name: "Security Review Agent",
+      });
       const delegationTool = await ToolModel.findOrCreateDelegationTool(
         targetAgent.id,
       );
@@ -298,7 +309,7 @@ describe("delegation tool execution", () => {
           agentId: targetAgent.id,
           message: "Review the latest findings.",
           organizationId: mockContext.organizationId,
-          userId: "system",
+          userId: mockContext.userId,
           parentDelegationChain: testAgent.id,
           parentContextIsTrusted: false,
         }),
@@ -375,7 +386,10 @@ describe("delegation tool execution", () => {
     makeAgent,
     makeAgentTool,
   }) => {
-    const targetAgent = await makeAgent({ name: "ChatOps Worker" });
+    const targetAgent = await makeAgent({
+      organizationId: testAgent.organizationId,
+      name: "ChatOps Worker",
+    });
     const delegationTool = await ToolModel.findOrCreateDelegationTool(
       targetAgent.id,
     );
@@ -416,7 +430,10 @@ describe("delegation tool execution", () => {
     makeAgent,
     makeAgentTool,
   }) => {
-    const targetAgent = await makeAgent({ name: "Research Agent" });
+    const targetAgent = await makeAgent({
+      organizationId: testAgent.organizationId,
+      name: "Research Agent",
+    });
     const delegationTool = await ToolModel.findOrCreateDelegationTool(
       targetAgent.id,
     );
@@ -440,7 +457,7 @@ describe("delegation tool execution", () => {
         agentId: targetAgent.id,
         message: "Investigate the issue.",
         organizationId: mockContext.organizationId,
-        userId: "system",
+        userId: mockContext.userId,
         parentDelegationChain: testAgent.id,
         parentContextIsTrusted: undefined,
       }),

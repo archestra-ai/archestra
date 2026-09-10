@@ -1,4 +1,6 @@
 import {
+  isBuiltInCatalogId,
+  ResourcePermissionGrantSchema,
   redactCatalogToolArguments,
   redactLocalConfigSecrets,
   TOOL_CREATE_AGENT_SHORT_NAME,
@@ -19,9 +21,7 @@ import { z } from "zod";
 import {
   assertMcpCatalogTeams,
   authorizeMcpCatalogScope,
-  getCatalogWriteMembershipTeamIds,
   getMcpCatalogPermissionChecker,
-  requireMcpCatalogModifyPermission,
 } from "@/auth/mcp-catalog-permissions";
 import { userHasPermission } from "@/auth/utils";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
@@ -47,6 +47,7 @@ import {
 } from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { refreshMcpSkillMetadata } from "@/skills/mcp-external";
 import {
   ApiError,
@@ -374,6 +375,7 @@ const EditMcpConfigToolArgsSchema = z
   .strict();
 
 const CreateMcpServerToolArgsSchema = CatalogMetadataToolSchema.extend({
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   serverType: InsertInternalMcpCatalogSchema.shape.serverType
     .exclude(["app"])
     .optional()
@@ -559,6 +561,14 @@ async function handleSearchPrivateMcpRegistry(
         isAdmin,
         organizationId,
         environmentId,
+        readGrantContext: (await userHasPermission(
+          context.userId,
+          organizationId,
+          "mcpRegistry",
+          "read",
+        ))
+          ? undefined
+          : { userId: context.userId, organizationId },
       });
     } else {
       catalogItems = await InternalMcpCatalogModel.findAll({
@@ -567,6 +577,14 @@ async function handleSearchPrivateMcpRegistry(
         isAdmin,
         organizationId,
         environmentId,
+        readGrantContext: (await userHasPermission(
+          context.userId,
+          organizationId,
+          "mcpRegistry",
+          "read",
+        ))
+          ? undefined
+          : { userId: context.userId, organizationId },
       });
     }
 
@@ -639,6 +657,14 @@ async function handleGetMcpServers(
       isAdmin,
       organizationId,
       environmentId,
+      readGrantContext: (await userHasPermission(
+        context.userId,
+        organizationId,
+        "mcpRegistry",
+        "read",
+      ))
+        ? undefined
+        : { userId: context.userId, organizationId },
     });
 
     const items = catalogItems.map((c) => ({
@@ -702,6 +728,28 @@ async function handleGetMcpServerTools(
       );
     }
 
+    if (!isBuiltInCatalogId(catalogItem.id)) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId,
+        userId: context.userId,
+        resource: "mcpRegistry",
+        scope: catalogItem.id,
+        action: "read",
+      });
+      // SPDX-SnippetEnd
+    } else if (
+      !(await userHasPermission(
+        context.userId,
+        organizationId,
+        "mcpRegistry",
+        "read",
+      ))
+    ) {
+      return errorResult("You do not have permission to view this MCP server.");
+    }
     const tools = await ToolModel.findByCatalogId(args.mcpServerId);
     return structuredSuccessResult({ tools }, JSON.stringify(tools, null, 2));
   } catch (error) {
@@ -731,6 +779,7 @@ async function handleEditMcpDescription(
     });
 
     const existing = await InternalMcpCatalogModel.findById(args.id, {
+      accessAction: "update",
       // Only scope and teams are read here, so hydrating would buy nothing and
       // would put expanded secrets one added field away from being persisted.
       expandSecrets: false,
@@ -763,31 +812,42 @@ async function handleEditMcpDescription(
       (newTeamIds.length !== existingTeamIds.length ||
         !newTeamIds.every((teamId) => existingTeamIds.includes(teamId)));
     try {
-      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
-        ? [[], []]
-        : await Promise.all([
-            TeamModel.getUserTeamIds(context.userId),
-            getCatalogWriteMembershipTeamIds(context.userId),
-          ]);
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(context.userId);
       // Gate at the item's current scope (lets an admin of one of the item's
       // `write` teams edit it; blocks editing someone else's personal item)…
-      requireMcpCatalogModifyPermission({
-        checker,
-        scope: existing.scope,
-        authorId: existing.authorId,
-        catalogTeams: existing.teams,
-        writeMembershipTeamIds,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: organizationId,
         userId: context.userId,
+        resource: "mcpRegistry",
+        scope: existing.id,
+        action: "update",
       });
+      // SPDX-SnippetEnd
       // …then gate the target scope/teams only when they actually change.
       if (scopeChanged || teamsChanged) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId,
+          userId: context.userId,
+          resource: "mcpRegistry",
+          scope: existing.id,
+          action: "manage-permissions",
+        });
+        // SPDX-SnippetEnd
         authorizeMcpCatalogScope({
           checker,
           scope: newScope,
           authorId: existing.authorId,
           requestedTeamIds: newTeamIds,
           userTeamIds,
-          writeMembershipTeamIds,
+
           userId: context.userId,
         });
         await assertMcpCatalogTeams({
@@ -889,6 +949,7 @@ async function handleEditMcpConfig(
     });
 
     const existing = await InternalMcpCatalogModel.findById(args.id, {
+      accessAction: "update",
       // Never hydrate on a write path: the merged config is persisted and
       // echoed, so an expanded secret would land back in the jsonb column and
       // in the tool result.
@@ -918,16 +979,17 @@ async function handleEditMcpConfig(
     }
 
     try {
-      requireMcpCatalogModifyPermission({
-        checker,
-        scope: existing.scope,
-        authorId: existing.authorId,
-        catalogTeams: existing.teams,
-        writeMembershipTeamIds: checker.isAdmin
-          ? []
-          : await getCatalogWriteMembershipTeamIds(context.userId),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: organizationId,
         userId: context.userId,
+        resource: "mcpRegistry",
+        scope: existing.id,
+        action: "update",
       });
+      // SPDX-SnippetEnd
     } catch (error) {
       return errorResult(
         error instanceof Error
@@ -1105,19 +1167,16 @@ async function handleCreateMcpServer(
       organizationId,
     });
     try {
-      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
-        ? [[], []]
-        : await Promise.all([
-            TeamModel.getUserTeamIds(context.userId),
-            getCatalogWriteMembershipTeamIds(context.userId),
-          ]);
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(context.userId);
       authorizeMcpCatalogScope({
         checker,
         scope,
         authorId: context.userId,
         requestedTeamIds: teamIdsForScope,
         userTeamIds,
-        writeMembershipTeamIds,
+
         userId: context.userId,
       });
       await assertMcpCatalogTeams({
@@ -1193,6 +1252,26 @@ async function handleCreateMcpServer(
     if (teamIdsForScope.length > 0) createParams.teams = teamIdsForScope;
 
     const validatedParams = InsertInternalMcpCatalogSchema.parse(createParams);
+    if (args.initialGrants !== undefined) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
+        organizationId,
+        userId: context.userId,
+        resource: "mcpRegistry",
+        grants: args.initialGrants,
+        target: {
+          id: crypto.randomUUID(),
+          name,
+          authorId: context.userId,
+          scope: validatedParams.scope ?? "personal",
+          teams: teamIdsForScope.map((id) => ({ id })),
+          users: [],
+        },
+      });
+      // SPDX-SnippetEnd
+    }
     await moveCatalogSecretsToBag({
       updateData: validatedParams as Record<string, unknown>,
       catalogName: name,
@@ -1202,6 +1281,7 @@ async function handleCreateMcpServer(
     const created = await InternalMcpCatalogModel.create(validatedParams, {
       organizationId,
       authorId: context.userId,
+      initialPermissionGrants: args.initialGrants,
     });
 
     const lines = [
@@ -1257,6 +1337,7 @@ async function handleDeployMcpServer(
       "admin",
     );
     const catalogItem = await InternalMcpCatalogModel.findById(args.catalogId, {
+      accessAction: "use",
       userId: context.userId,
       isAdmin,
       organizationId,
@@ -1269,6 +1350,20 @@ async function handleDeployMcpServer(
       }))
     ) {
       return errorResult("catalog item not found.");
+    }
+
+    if (!isBuiltInCatalogId(catalogItem.id)) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId,
+        userId: context.userId,
+        resource: "mcpRegistry",
+        scope: catalogItem.id,
+        action: "use",
+      });
+      // SPDX-SnippetEnd
     }
 
     if (catalogItem.requiresAuth || catalogItem.oauthConfig) {
@@ -1305,16 +1400,17 @@ async function handleDeployMcpServer(
     // the REST install route).
     if (catalogItem.scope === "team" && scope !== "personal") {
       try {
-        requireMcpCatalogModifyPermission({
-          checker: { isAdmin },
-          scope: catalogItem.scope,
-          authorId: catalogItem.authorId,
-          catalogTeams: catalogItem.teams,
-          writeMembershipTeamIds: isAdmin
-            ? []
-            : await getCatalogWriteMembershipTeamIds(context.userId),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId: organizationId,
           userId: context.userId,
+          resource: "mcpRegistry",
+          scope: catalogItem.id,
+          action: "update",
         });
+        // SPDX-SnippetEnd
       } catch (error) {
         return errorResult(
           error instanceof Error
@@ -1435,6 +1531,7 @@ async function handleDeployMcpServer(
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    if (error instanceof ApiError) return errorResult(error.message);
     return catchError(error, "deploying MCP server");
   }
 }
@@ -1826,18 +1923,13 @@ async function authorizeDeployScope(params: {
     if (!team) {
       return "Team not found.";
     }
-    const canManageAllTeams = await userHasPermission(
+    const isInstallationAdmin = await userHasPermission(
       userId,
       organizationId,
-      "team",
-      "create",
+      "mcpServerInstallation",
+      "admin",
     );
-    if (canManageAllTeams) {
-      return null;
-    }
-
-    const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(teamId, userId);
-    if (isLiteralTeamAdmin) {
+    if (isInstallationAdmin) {
       return null;
     }
 

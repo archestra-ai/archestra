@@ -387,11 +387,12 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: existing.actorUserId,
           organizationId,
         });
-        const actorHasAgentAccess = await AgentTeamModel.userHasAgentAccess(
-          existing.actorUserId,
-          body.agentId,
-          actorIsAgentAdmin,
-        );
+        const actorHasAgentAccess = await AgentTeamModel.userHasAgentAccess({
+          userId: existing.actorUserId,
+          agentId: body.agentId,
+          isAgentAdmin: actorIsAgentAdmin,
+          action: "use",
+        });
         if (!actorHasAgentAccess) {
           throw new ApiError(
             400,

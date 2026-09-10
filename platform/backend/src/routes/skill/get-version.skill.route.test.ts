@@ -1,10 +1,11 @@
 import { SkillModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 import skillRoutes from "./skill.routes";
+import { useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("GET /api/skills/:id/versions/:version", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   async function seedSkillWithTwoVersions(): Promise<Skill> {
     const skill = await SkillModel.createWithFiles({

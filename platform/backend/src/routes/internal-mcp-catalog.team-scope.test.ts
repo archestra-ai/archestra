@@ -1,3 +1,4 @@
+// Pre-migration compatibility. Migrated resources use the scoped-grants route suites.
 import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
@@ -32,7 +33,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
 
-    organizationId = (await makeOrganization()).id;
+    organizationId = (await makeOrganization({ legacyPermissions: true })).id;
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -105,7 +106,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     ).toEqual([team.id]);
   });
 
-  test("a plain member of a team cannot promote an item to it", async ({
+  test("an editor can share their own item with a team without administering it", async ({
     makeUser,
     makeMember,
     makeTeam,
@@ -124,8 +125,8 @@ describe("internal MCP catalog — team-scope RBAC", () => {
       teams: [team.id],
     });
 
-    expect(res.statusCode).toBe(403);
-    expect(res.json().error.message).toMatch(/team-admin/i);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().scope).toBe("team");
   });
 
   test("editor cannot promote to a team they are not a member of", async ({
@@ -185,7 +186,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  test("an admin of a write-level team can content-edit, preserving teams they don't control", async ({
+  test("a member of a write-level team can content-edit, preserving other teams", async ({
     makeUser,
     makeMember,
     makeTeam,
@@ -197,7 +198,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });
     const teamA = await makeTeam(organizationId, admin.id);
     const teamB = await makeTeam(organizationId, admin.id);
-    await makeTeamMember(teamA.id, editor.id, { role: ADMIN_ROLE_NAME }); // editor administers A only
+    await makeTeamMember(teamA.id, editor.id, { role: MEMBER_ROLE_NAME }); // editor belongs to A only
 
     currentUser = admin;
     const created = await post(
@@ -214,7 +215,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     currentUser = editor;
     const edited = await put(created.json().id, {
       ...remotePayload({ name: created.json().name }),
-      description: "edited by team-admin",
+      description: "edited by team member",
       scope: "team",
       teams: [teamA.id, teamB.id],
     });
@@ -301,10 +302,12 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     });
 
     expect(res.statusCode).toBe(403);
-    expect(res.json().error.message).toMatch(/write access/i);
+    expect(res.json().error.message).toContain(
+      "permission to perform this action",
+    );
   });
 
-  test("member without team-admin cannot promote to team", async ({
+  test("a member with catalog sharing authority can share with their team", async ({
     makeUser,
     makeMember,
     makeTeam,
@@ -323,8 +326,8 @@ describe("internal MCP catalog — team-scope RBAC", () => {
       teams: [team.id],
     });
 
-    expect(res.statusCode).toBe(403);
-    expect(res.json().error.message).toMatch(/team-admin/i);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().scope).toBe("team");
   });
 
   test("admin bypasses membership and can assign arbitrary teams", async ({

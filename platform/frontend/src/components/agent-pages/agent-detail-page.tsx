@@ -33,6 +33,7 @@ import { KebabItem } from "@/components/kebab-item";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourcePermissions } from "@/components/resource-permissions";
 import { TransferAgentOwnershipDialog } from "@/components/transfer-agent-ownership-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -316,6 +317,7 @@ function AgentDetails({
         ]),
     ...(showConnect && !connectFirst ? (["connect"] as const) : []),
     ...(hasAgentRuntime ? (["runs"] as const) : []),
+    ...(!isBuiltIn ? (["permissions"] as const) : []),
   ];
   const sectionParam = searchParams.get("section");
   const section = resolveAgentDetailSection(sections, sectionParam);
@@ -613,7 +615,15 @@ function AgentDetails({
         />
       )}
       <div className="min-w-0">
-        {section === "runs" ? (
+        {section === "permissions" ? (
+          <ResourcePermissions
+            resource={
+              agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent"
+            }
+            scope={agent.id}
+            onDirtyChange={setIsDirty}
+          />
+        ) : section === "runs" ? (
           <AgentRuns agentId={agent.id} />
         ) : section === "connect" ? (
           <AgentConnectContent kind={kind} agent={agent} />
@@ -781,6 +791,7 @@ function sectionLabel(
 }
 
 const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
+  permissions: "Permissions",
   settings: "Settings",
   general: "General",
   tools: "Tools, Skills & Knowledge",

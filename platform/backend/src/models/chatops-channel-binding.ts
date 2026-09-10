@@ -205,7 +205,23 @@ class ChatOpsChannelBindingModel {
         }
       }
 
-      if (targetAgent.scope === "personal") {
+      const [migrationPolicy] = await tx
+        .select()
+        .from(schema.resourcePermissionPoliciesTable)
+        .where(
+          and(
+            eq(
+              schema.resourcePermissionPoliciesTable.organizationId,
+              params.organizationId,
+            ),
+            eq(schema.resourcePermissionPoliciesTable.resource, "agent"),
+            eq(schema.resourcePermissionPoliciesTable.scope, "*"),
+          ),
+        );
+      if (
+        !migrationPolicy?.legacySharingMigrated &&
+        targetAgent.scope === "personal"
+      ) {
         const assignedBindings = params.updates.flatMap((update) => {
           if (update.nextAgentId !== params.targetAgentId) return [];
           const binding = bindingsById.get(update.bindingId);

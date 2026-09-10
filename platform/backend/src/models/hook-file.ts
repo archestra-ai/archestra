@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type {
@@ -11,6 +12,16 @@ import AgentModel from "./agent";
 import AgentVersionModel from "./agent-version";
 
 class HookFileModel {
+  static async findByIdForAudit(id: string, organizationId: string) {
+    const hook = await HookFileModel.findById(id, organizationId);
+    if (!hook) return null;
+    const { content, ...metadata } = hook;
+    return {
+      ...metadata,
+      contentHash: createHash("sha256").update(content).digest("hex"),
+    };
+  }
+
   static async create(data: InsertHookFile): Promise<HookFile> {
     const parsed = InsertHookFileSchema.parse(data);
     const [row] = await db

@@ -168,7 +168,7 @@ function submitForm() {
 
 // Fields are split across General/Tools/Access sidebar sections; interacting
 // with a non-General field means clicking its nav item first.
-function goToSection(label: "General" | "Tools" | "Access") {
+function goToSection(label: "General" | "Tools" | "Status") {
   fireEvent.click(screen.getByRole("button", { name: label }));
 }
 
@@ -199,28 +199,6 @@ beforeEach(() => {
 });
 
 describe("AppSettingsForm save", () => {
-  test("warns an app admin who is outside every selected team", () => {
-    vi.mocked(useAssignableTeams).mockReturnValue({
-      data: [{ id: "leadership", name: "Leadership" }],
-    } as ReturnType<typeof useAssignableTeams>);
-
-    renderForm({
-      app: {
-        ...APP,
-        scope: "team",
-        teams: [{ id: "leadership", name: "Leadership" }],
-      },
-    });
-
-    goToSection("Access");
-    expect(
-      screen.getByText("You are not a member of the selected teams."),
-    ).toBeVisible();
-    expect(
-      screen.getByText(/you will not be able to modify this app through chat/i),
-    ).toBeVisible();
-  });
-
   test("keeps labels under Advanced and saves an in-progress label", async () => {
     const user = userEvent.setup();
     const { onOpenChange } = renderForm();
@@ -251,7 +229,7 @@ describe("AppSettingsForm save", () => {
     await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.type(screen.getByLabelText("Label key"), "region");
     await user.type(screen.getByLabelText("Label value"), "eu");
-    goToSection("Access");
+    goToSection("Status");
     submitForm();
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -276,11 +254,6 @@ describe("AppSettingsForm save", () => {
     expect(updateMutateAsync).toHaveBeenCalledWith({
       appId: "app-1",
       body: {
-        scope: "personal",
-        teamIds: [],
-        // Both share lists are always sent, so switching away from Teams or
-        // Users revokes what it left behind instead of stranding it.
-        userIds: [],
         name: "Budget v2",
         description: "Team budget tracker",
         environmentId: null,

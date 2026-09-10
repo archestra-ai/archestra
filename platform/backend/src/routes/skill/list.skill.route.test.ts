@@ -5,6 +5,7 @@ import {
   EnvironmentModel,
   SkillModel,
 } from "@/models";
+import MemberModel from "@/models/member";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -13,10 +14,11 @@ import {
   MANIFEST,
   manifestNamed,
   seedImportedSkill,
+  useSkillRouteTestApp,
 } from "./skill.test-helpers";
 
 describe("GET /api/skills", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("forAgentId restricts the list to the agent's environment", async ({
     makeAgent,
@@ -359,13 +361,14 @@ describe("GET /api/skills", () => {
   });
 
   test("scope and teamIds filter the list by visibility", async ({
-    makeMember,
     makeTeam,
     makeUser,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const otherAuthor = await makeUser();
     const teamA = await makeTeam(ctx.organizationId, ctx.user.id);
     const teamB = await makeTeam(ctx.organizationId, ctx.user.id);
@@ -432,7 +435,6 @@ describe("GET /api/skills", () => {
   });
 
   test("author filters apply for admins and are ignored for non-admins", async ({
-    makeMember,
     makeUser,
   }) => {
     const otherAuthor = await makeUser();
@@ -469,9 +471,11 @@ describe("GET /api/skills", () => {
         .sort();
     };
 
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     expect(
       await listNames(`?scope=personal&authorIds=${otherAuthor.id}`),
     ).toEqual(["other-personal-skill"]);
@@ -487,12 +491,13 @@ describe("GET /api/skills", () => {
   });
 
   test("non-admins cannot use author filters to see other users' personal skills", async ({
-    makeMember,
     makeUser,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: MEMBER_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      MEMBER_ROLE_NAME,
+    );
     const otherAuthor = await makeUser();
     await seedImportedSkill({
       organizationId: ctx.organizationId,
@@ -520,9 +525,7 @@ describe("GET /api/skills", () => {
     ]);
   });
 
-  test("status=deleted returns only the trash for an admin and exposes deletedAt", async ({
-    makeMember,
-  }) => {
+  test("status=deleted returns only the trash for an admin and exposes deletedAt", async () => {
     const active = (
       await ctx.app.inject({
         method: "POST",
@@ -542,9 +545,11 @@ describe("GET /api/skills", () => {
       url: `/api/skills/${trashed.id}`,
     });
 
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const trash = await ctx.app.inject({
       method: "GET",
       url: "/api/skills?status=deleted",
@@ -565,12 +570,12 @@ describe("GET /api/skills", () => {
     expect(activeIds).not.toContain(trashed.id);
   });
 
-  test("members cannot view the deleted-skills trash", async ({
-    makeMember,
-  }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: MEMBER_ROLE_NAME,
-    });
+  test("members cannot view the deleted-skills trash", async () => {
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      MEMBER_ROLE_NAME,
+    );
     const response = await ctx.app.inject({
       method: "GET",
       url: "/api/skills?status=deleted",

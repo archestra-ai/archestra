@@ -1,6 +1,5 @@
 "use client";
 
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { useCallback } from "react";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMyTeams } from "@/lib/teams/team.query";
@@ -15,7 +14,7 @@ type ReauthCandidate = {
  * Per-connection re-authentication permission, shared by the registry card and
  * the connections dialog so both gate the OAuth re-auth entry point identically.
  * Installation admins may act across every scope. Otherwise: personal owner;
- * team admin or a member with update; org denied. All paths require create.
+ * team member with update; org denied. All paths require create.
  */
 export function useCanReauthenticate() {
   const { data: session } = useSession();
@@ -46,14 +45,6 @@ export function useCanReauthenticate() {
       const team = server.teamId
         ? userTeams?.find((t) => t.id === server.teamId)
         : undefined;
-      const isTeamAdmin =
-        !!currentUserId &&
-        (team?.members?.some(
-          (member) =>
-            member.userId === currentUserId && member.role === ADMIN_ROLE_NAME,
-        ) ??
-          false);
-      if (isTeamAdmin) return true;
       if (!hasUpdatePermission) return false;
       return !!team;
     },

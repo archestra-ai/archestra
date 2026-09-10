@@ -1,9 +1,9 @@
 import { TOOL_TRANSFER_CREDENTIAL_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
-import { userHasPermission } from "@/auth/utils";
-import { AgentModel, AgentTeamModel } from "@/models";
+import { AgentModel } from "@/models";
 import { transferPersonalRuntimeCredential } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   catchError,
   defineArchestraTool,
@@ -82,22 +82,21 @@ const registry = defineArchestraTools([
         if (!agent || agent.organizationId !== actor.organizationId) {
           return errorResult("Agent not found");
         }
-        const isAgentAdmin = await userHasPermission(
-          actor.id,
-          actor.organizationId,
-          "agent",
-          "admin",
-        );
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         if (
-          !(await AgentTeamModel.userHasAgentAccess(
-            actor.id,
-            agent.id,
-            isAgentAdmin,
-            agent,
-          ))
+          !(await ResourcePermissions.allows({
+            organizationId: actor.organizationId,
+            userId: actor.id,
+            resource: "agent",
+            scope: agent.id,
+            action: "read",
+          }))
         ) {
           return errorResult("Agent not found");
         }
+        // SPDX-SnippetEnd
 
         const runtime = resolveAgentRuntime(agent);
         if (!runtime) {

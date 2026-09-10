@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
+  permissionScope?: string;
   tooltip?: string;
   noPermissionHandle?: "tooltip" | "hide";
 };
@@ -45,13 +46,17 @@ type PermissionButtonProps = ButtonProps & {
  */
 export function PermissionButton({
   permissions,
+  permissionScope,
   tooltip,
   children,
   noPermissionHandle = "tooltip",
   className,
   ...props
 }: PermissionButtonProps) {
-  const { data: hasPermission } = useHasPermissions(permissions);
+  const { data: hasPermission } = useHasPermissions(
+    permissions,
+    permissionScope,
+  );
   const reasonId = useId();
 
   // An enabled control the caller holds the permission for: the tooltip is a

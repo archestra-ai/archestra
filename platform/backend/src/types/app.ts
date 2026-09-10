@@ -1,5 +1,6 @@
 import {
   CreatedByNullableSchema,
+  ResourcePermissionGrantSchema,
   ResourceVisibilityScopeSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -338,6 +339,7 @@ const htmlField = z
   });
 
 export const CreateAppSchema = z.object({
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH),
   // Omitted: derived from the name (AppModel.generateUniqueSlug).
   slug: AppSlugSchema.optional(),
@@ -364,6 +366,7 @@ export const CreateAppSchema = z.object({
 // template (no html), so the staged authoring flow is scaffold → edit_app.
 // strictObject so apps.ts can extend it with the tool-assignment `tools` param.
 export const ScaffoldAppSchema = z.strictObject({
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).describe("App name."),
   description: z
     .string()

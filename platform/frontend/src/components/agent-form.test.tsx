@@ -311,6 +311,10 @@ const {
   })),
 }));
 
+vi.mock("@/components/initial-resource-permissions", () => ({
+  InitialResourcePermissions: () => null,
+}));
+
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual("@tanstack/react-query");
   return {
@@ -3271,11 +3275,8 @@ describe("AgentForm save payload and failure handling", () => {
       "description",
       "icon",
       "name",
-      "scope",
       // The instructions are part of this panel now, so one save covers them.
       "systemPrompt",
-      "teams",
-      "users",
     ]);
   });
 

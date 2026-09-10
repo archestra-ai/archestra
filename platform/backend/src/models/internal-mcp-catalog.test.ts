@@ -600,7 +600,7 @@ describe("InternalMcpCatalogModel", () => {
       makeOrganization,
     }) => {
       const user = await makeUser();
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       const catalog = await InternalMcpCatalogModel.create(
         {
@@ -623,7 +623,7 @@ describe("InternalMcpCatalogModel", () => {
       makeTeam,
     }) => {
       const user = await makeUser();
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const team = await makeTeam(org.id, user.id);
 
       const catalog = await InternalMcpCatalogModel.create(
@@ -648,7 +648,7 @@ describe("InternalMcpCatalogModel", () => {
     }) => {
       const author = await makeUser();
       const otherUser = await makeUser();
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       const catalog = await makeInternalMcpCatalog({
         scope: "personal",
@@ -688,7 +688,7 @@ describe("InternalMcpCatalogModel", () => {
       makeInternalMcpCatalog,
     }) => {
       const user = await makeUser();
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const team1 = await makeTeam(org.id, user.id);
       const team2 = await makeTeam(org.id, user.id);
 
@@ -713,7 +713,7 @@ describe("InternalMcpCatalogModel", () => {
     }) => {
       const author = await makeUser();
       const otherUser = await makeUser();
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
 
       await makeInternalMcpCatalog({
         name: "searchscope-personal-item",
@@ -800,7 +800,7 @@ describe("InternalMcpCatalogModel", () => {
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const source = await makeInternalMcpCatalog({ organizationId: org.id });
       const clone = await makeInternalMcpCatalog({
         organizationId: org.id,
@@ -817,7 +817,7 @@ describe("InternalMcpCatalogModel", () => {
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const source = await makeInternalMcpCatalog({ organizationId: org.id });
       const clone = await makeInternalMcpCatalog({
         organizationId: org.id,
@@ -845,7 +845,7 @@ describe("InternalMcpCatalogModel", () => {
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const source = await makeInternalMcpCatalog({ organizationId: org.id });
       await ToolModel.create({
         catalogId: source.id,

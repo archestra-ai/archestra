@@ -660,6 +660,7 @@ describe("McpToolCallModel", () => {
 
     test("non-admin cannot see MCP tool call with deleted agent (null agentId)", async ({
       makeUser,
+      makeMember,
       makeAdmin,
       makeOrganization,
       makeTeam,
@@ -667,6 +668,7 @@ describe("McpToolCallModel", () => {
       const user = await makeUser();
       const admin = await makeAdmin();
       const org = await makeOrganization();
+      await makeMember(user.id, org.id);
 
       // Give user access to the team
       const team = await makeTeam(org.id, admin.id);
@@ -675,6 +677,7 @@ describe("McpToolCallModel", () => {
 
       const agent = await AgentModel.create({
         name: "Agent To Delete",
+        organizationId: org.id,
         teams: [team.id],
         scope: "team",
         knowledgeBaseIds: [],

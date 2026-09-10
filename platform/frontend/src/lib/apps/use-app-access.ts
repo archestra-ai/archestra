@@ -1,9 +1,14 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import type { archestraApiTypes, ScopedPermission } from "@archestra/shared";
 import { useMemo } from "react";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import { notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useMyTeams } from "@/lib/teams/team.query";
@@ -12,6 +17,7 @@ type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 
 export interface AppAccessContext {
+  scopedGrants?: ScopedPermission[];
   isAdmin: boolean;
   isTeamAdmin: boolean;
   canUpdate: boolean;
@@ -28,7 +34,10 @@ export interface AppAccessContext {
  * sufficient on its own.
  */
 export function computeAppAccess(
-  app: Pick<OwnedApp, "scope" | "authorId" | "teams"> | null | undefined,
+  app:
+    | (Pick<OwnedApp, "scope" | "authorId" | "teams"> & { id?: string })
+    | null
+    | undefined,
   context: AppAccessContext,
 ) {
   const canModify = computeCanModifyAgent({
@@ -39,11 +48,32 @@ export function computeAppAccess(
     userTeamIds: context.userTeamIds,
   });
 
+  const scopedActions =
+    context.scopedGrants
+      ?.filter(
+        (grant) =>
+          grant.resource === "app" &&
+          (grant.scope === "*" || grant.scope === app?.id),
+      )
+      .map((grant) => grant.action) ?? [];
+  const scopedUpdate = scopedActions.includes("update");
+  const scopedDelete = scopedActions.includes("delete");
   return {
     ...context,
-    canModify,
-    canEdit: context.canUpdate && canModify,
-    canDeleteApp: context.canDelete && canModify,
+    canUpdate: context.canUpdate || scopedUpdate,
+    canDelete: context.canDelete || scopedDelete,
+    canModify:
+      context.scopedGrants !== undefined
+        ? scopedUpdate || scopedDelete
+        : canModify,
+    canEdit:
+      context.scopedGrants !== undefined
+        ? scopedUpdate
+        : context.canUpdate && canModify,
+    canDeleteApp:
+      context.scopedGrants !== undefined
+        ? scopedDelete
+        : context.canDelete && canModify,
   };
 }
 
@@ -52,7 +82,7 @@ export function appActionDisabledReason({
   access,
   action,
 }: {
-  app: Pick<OwnedApp, "scope" | "authorId" | "teams">;
+  app: Pick<OwnedApp, "scope" | "authorId" | "teams"> & { id?: string };
   access: ReturnType<typeof computeAppAccess>;
   action: "update" | "delete";
 }): string | undefined {
@@ -71,11 +101,14 @@ export function appActionDisabledReason({
 
 /** Fetch the caller-level facts once for collections such as the Apps table. */
 export function useAppAccessContext(): AppAccessContext {
-  const { data: isAdmin, isPending: isAdminPending } = useHasPermissions({
-    app: ["admin"],
-  });
+  const { data: isAdmin, isPending: isAdminPending } = useHasPermissions(
+    {
+      app: ["update"],
+    },
+    "*",
+  );
   const { data: isTeamAdmin, isPending: isTeamAdminPending } =
-    useHasPermissions({ app: ["team-admin"] });
+    useHasPermissions({ app: ["update"] }, "teams:*");
   const { data: canUpdate, isPending: isUpdatePending } = useHasPermissions({
     app: ["update"],
   });
@@ -88,9 +121,11 @@ export function useAppAccessContext(): AppAccessContext {
     enabled: !!canReadTeams,
   });
   const { data: session } = useSession();
+  const capabilities = useScopedCapabilities();
 
   return useMemo(
     () => ({
+      scopedGrants: capabilities.data ?? [],
       isAdmin: !!isAdmin,
       isTeamAdmin: !!isTeamAdmin,
       canUpdate: !!canUpdate,
@@ -98,6 +133,7 @@ export function useAppAccessContext(): AppAccessContext {
       currentUserId: session?.user?.id,
       userTeamIds: new Set((userTeams ?? []).map((team) => team.id)),
       isPending:
+        capabilities.isPending ||
         isAdminPending ||
         isTeamAdminPending ||
         isUpdatePending ||
@@ -106,6 +142,8 @@ export function useAppAccessContext(): AppAccessContext {
         isTeamsLoading,
     }),
     [
+      capabilities.data,
+      capabilities.isPending,
       canDelete,
       canUpdate,
       isAdmin,
@@ -123,7 +161,10 @@ export function useAppAccessContext(): AppAccessContext {
 }
 
 export function useAppAccess(
-  app: Pick<OwnedApp, "scope" | "authorId" | "teams"> | null | undefined,
+  app:
+    | (Pick<OwnedApp, "scope" | "authorId" | "teams"> & { id?: string })
+    | null
+    | undefined,
 ) {
   return computeAppAccess(app, useAppAccessContext());
 }

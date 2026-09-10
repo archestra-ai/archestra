@@ -1,9 +1,9 @@
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
-import { MANIFEST } from "./skill.test-helpers";
+import { MANIFEST, useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("DELETE /api/skills/:id", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("deletes a skill", async () => {
     const created = (

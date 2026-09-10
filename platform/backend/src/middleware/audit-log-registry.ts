@@ -13,6 +13,7 @@ import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import HookFileModel from "@/models/hook-file";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KbDirectoryModel from "@/models/kb-directory";
 import KbFileModel from "@/models/kb-file";
@@ -32,6 +33,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
@@ -185,9 +187,35 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  "/api/resource-permissions/:resource/:scope": {
+    resourceType: "resourcePermissions",
+    resourceIdParam: "scope",
+    action: "resourcePermissions.updated",
+    fetchById: (id, organizationId, routeParams) =>
+      ResourcePermissionPolicyModel.findByIdForAudit(
+        id,
+        organizationId,
+        routeParams,
+      ),
+    onlyWhenChanged: true,
+  },
+  // SPDX-SnippetEnd
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
+  },
+  "/api/hooks": {
+    resourceType: "hook",
+    fetchById: (id, organizationId) =>
+      HookFileModel.findByIdForAudit(id, organizationId),
+  },
+  "/api/hooks/:id": {
+    resourceType: "hook",
+    fetchById: (id, organizationId) =>
+      HookFileModel.findByIdForAudit(id, organizationId),
   },
   // Agents
   "/api/agents": {

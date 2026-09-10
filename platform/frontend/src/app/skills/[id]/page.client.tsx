@@ -15,6 +15,7 @@ import { AgentBadge } from "@/components/agent-badge";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { PageLayout } from "@/components/page-layout";
+import { ResourcePermissions } from "@/components/resource-permissions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,7 @@ const SECTION_DESCRIPTIONS: Record<SkillDetailSection, string> = {
   // instead; this stands in only when the skill has none.
   settings: SKILL_DESCRIPTION_FALLBACK,
   usage: "Who has run this skill, and when.",
+  permissions: "Who can view, use, and manage this skill.",
 };
 
 /**
@@ -202,7 +204,8 @@ function SkillDetailView({
     version: skill.latestVersion,
   });
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const isDirty = isSkillDraftDirty(draft, base.draft);
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  const isDirty = isSkillDraftDirty(draft, base.draft) || permissionsDirty;
   const ownership = useResourceOwnershipTransfer({
     kind: "skill",
     resource: skill,
@@ -420,7 +423,13 @@ function SkillDetailView({
         </div>
       }
     >
-      {section === "usage" ? (
+      {section === "permissions" ? (
+        <ResourcePermissions
+          resource="skill"
+          scope={skill.id}
+          onDirtyChange={setPermissionsDirty}
+        />
+      ) : section === "usage" ? (
         <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
       ) : (
         <div className="flex flex-col gap-4">
@@ -480,6 +489,7 @@ function SkillDetailView({
               <div className="flex items-center gap-2">
                 <PermissionButton
                   permissions={{ skill: ["update"] }}
+                  permissionScope={skill.id}
                   disabled={!isDirty || !contentComplete || isGone || isSaving}
                   onClick={handleSave}
                 >

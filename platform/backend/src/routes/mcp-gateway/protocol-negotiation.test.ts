@@ -55,8 +55,8 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     makeAgent: (args?: Record<string, unknown>) => Promise<{ id: string }>;
     makeOrganization: () => Promise<{ id: string }>;
   }) {
-    const agent = await makeAgent();
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",
@@ -399,8 +399,8 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     makeTool,
     makeAgentTool,
   }) => {
-    const agent = await makeAgent();
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",

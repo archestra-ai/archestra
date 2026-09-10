@@ -15,6 +15,7 @@ import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-trac
 import config from "@/config";
 import {
   FileModel,
+  MemberModel,
   MessageModel,
   ModelModel,
   ProjectModel,
@@ -133,10 +134,17 @@ describe("POST /api/chat slim error payload", () => {
   let conversationId: string;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
 
       const agent = await makeAgent({
         organizationId,
@@ -264,10 +272,11 @@ describe("POST /api/chat missing MCP connection enforcement", () => {
       },
     });
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     user = await makeUser();
     const organization = await makeOrganization({ name: "Test Org" });
     organizationId = organization.id;
+    await makeMember(user.id, organizationId);
 
     mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
     mockGetChatMcpTools.mockResolvedValue({});
@@ -383,7 +392,13 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   let writerWrites: unknown[];
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       capturedInnerOnError = undefined;
       capturedInnerOnFinish = undefined;
       executionPromise = undefined;
@@ -392,6 +407,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
 
       const agent = await makeAgent({
         organizationId,
@@ -762,6 +778,13 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   });
 
   test("passes compacted messages to streamText", async () => {
+    for (const value of Object.values(config.chat)) {
+      if (value && typeof value === "object" && "apiKey" in value)
+        value.apiKey = "";
+    }
+    config.chat.defaultProvider = "anthropic";
+    config.chat.defaultModel = "claude-sonnet-4-5";
+
     const compactedMessages = [
       {
         role: "user",
@@ -903,6 +926,13 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   });
 
   test("caps output tokens at the unknown-model budget when the model is unsynced", async () => {
+    for (const value of Object.values(config.chat)) {
+      if (value && typeof value === "object" && "apiKey" in value)
+        value.apiKey = "";
+    }
+    config.chat.defaultProvider = "anthropic";
+    config.chat.defaultModel = "claude-sonnet-4-5";
+
     mockStreamText.mockClear();
 
     const response = await app.inject({
@@ -2245,10 +2275,8 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     );
   });
 
-  test("lists the agent's skills in the system prompt when it can activate them", async ({
-    makeMember,
-  }) => {
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+  test("lists the agent's skills in the system prompt when it can activate them", async () => {
+    await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     await SkillModel.createWithFiles({
       skill: {
         organizationId,
@@ -2295,10 +2323,8 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(systemPrompt).toContain("You are helpful.");
   });
 
-  test("omits the skill catalog when the agent has no skill tools", async ({
-    makeMember,
-  }) => {
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+  test("omits the skill catalog when the agent has no skill tools", async () => {
+    await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     await SkillModel.createWithFiles({
       skill: {
         organizationId,
@@ -2756,7 +2782,13 @@ describe("POST /api/chat handler composition", () => {
   let runExecute = true;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       executionPromise = undefined;
       capturedOuterErrorPayload = undefined;
       writerEvents = [];
@@ -2766,6 +2798,7 @@ describe("POST /api/chat handler composition", () => {
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
       const agent = await makeAgent({
         organizationId,
         name: "Router Agent",
@@ -3104,10 +3137,8 @@ describe("POST /api/chat handler composition", () => {
     expect(usageWrites).toHaveLength(0);
   });
 
-  test("injects slash-command skill activation into the model-bound messages but not the persisted ones", async ({
-    makeMember,
-  }) => {
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+  test("injects slash-command skill activation into the model-bound messages but not the persisted ones", async () => {
+    await MemberModel.updateRole(user.id, organizationId, ADMIN_ROLE_NAME);
     const { default: OrganizationModel } = await import(
       "@/models/organization"
     );

@@ -172,15 +172,7 @@ describe("VirtualKeysPage provider-key filter", () => {
       within(table)
         .getAllByRole("columnheader")
         .map((header) => header.textContent),
-    ).toEqual([
-      "",
-      "Name",
-      "Token",
-      "Providers",
-      "Accessible to",
-      "Activity",
-      "Actions",
-    ]);
+    ).toEqual(["", "Name", "Token", "Providers", "Activity", "Actions"]);
     expect(
       within(table).queryByRole("columnheader", { name: "Type" }),
     ).toBeNull();

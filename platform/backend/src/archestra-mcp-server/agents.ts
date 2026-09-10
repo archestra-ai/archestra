@@ -7,7 +7,10 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
+import {
+  getAgentTypePermissionChecker,
+  isAgentTypeAdmin,
+} from "@/auth/agent-type-permissions";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
@@ -288,12 +291,29 @@ const registry = defineArchestraTools([
               })
             : false;
 
+        const checker =
+          context.userId && context.organizationId
+            ? await getAgentTypePermissionChecker({
+                userId: context.userId,
+                organizationId: context.organizationId,
+              })
+            : null;
         const results = await AgentModel.findAllPaginated(
           { limit, offset: 0 },
           undefined,
           {
             organizationId: context.organizationId,
             agentType: "agent",
+            ...(checker && context.organizationId
+              ? {
+                  authorization: {
+                    organizationId: context.organizationId,
+                    baseReadTypes: checker.hasBaseAction?.("agent", "read")
+                      ? ["agent" as const]
+                      : [],
+                  },
+                }
+              : {}),
             ...(args.name ? { name: args.name } : {}),
             providerApiKeyId: args.providerApiKeyId,
             // Hide other users' personal agents. MCP tools only need the

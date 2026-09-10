@@ -1,4 +1,6 @@
-import { HookFileModel } from "@/models";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { AuditLogModel, HookFileModel, MemberModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -10,11 +12,12 @@ describe("hook routes", () => {
   let organizationId: string;
   let agentId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser, makeAgent }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeAgent, makeMember }) => {
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
-    const agent = await makeAgent({ organizationId });
+    await makeMember(user.id, organizationId, { role: "admin" });
+    const agent = await makeAgent({ organizationId, agentType: "agent" });
     agentId = agent.id;
 
     app = createFastifyInstance();
@@ -28,11 +31,91 @@ describe("hook routes", () => {
     });
 
     const { default: hookRoutes } = await import("./hook");
+    registerAuditLogHook(app);
     await app.register(hookRoutes);
   });
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("scoped hook editing denies another agent and revocation; changes are audited without script content", async ({
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    const key = { organizationId, resource: "agent" as const, scope: agentId };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "update"] },
+      ],
+    });
+    const payload = {
+      agentId,
+      event: "session_start",
+      fileName: "check.py",
+      content: "print('private script')",
+    };
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/hooks",
+      payload,
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    const other = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      scope: "personal",
+    });
+    const deniedCreate = await app.inject({
+      method: "POST",
+      url: "/api/hooks",
+      payload: { ...payload, agentId: other.id },
+    });
+    expect(deniedCreate.statusCode).toBe(403);
+    const deniedList = await app.inject({
+      method: "GET",
+      url: `/api/hooks?agentId=${other.id}`,
+    });
+    expect(deniedList.statusCode).toBe(403);
+    const edited = await app.inject({
+      method: "PUT",
+      url: `/api/hooks/${id}`,
+      payload: { content: "print('updated private script')" },
+    });
+    expect(edited.statusCode, edited.body).toBe(200);
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: id,
+      limit: 10,
+      offset: 0,
+    });
+    const update = audit.data.find((entry) => entry.action === "hook.updated");
+    expect(update).toBeDefined();
+    expect(update?.before).not.toEqual(update?.after);
+    expect(JSON.stringify(audit.data)).not.toContain("private script");
+    const current = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: current?.revision ?? 0,
+      grants: [{ subject: { type: "user", id: user.id }, actions: ["read"] }],
+    });
+    for (const method of ["PUT", "DELETE"] as const) {
+      const denied = await app.inject({
+        method,
+        url: `/api/hooks/${id}`,
+        ...(method === "PUT" ? { payload: { enabled: false } } : {}),
+      });
+      expect(denied.statusCode, denied.body).toBe(403);
+    }
+    expect((await HookFileModel.findById(id, organizationId))?.enabled).toBe(
+      true,
+    );
   });
 
   describe("POST /api/hooks", () => {

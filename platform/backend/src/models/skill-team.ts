@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import SkillUserModel from "./skill-user";
 import TeamModel from "./team";
 
@@ -24,17 +26,45 @@ class SkillTeamModel {
   static async getUserAccessibleSkillIds(params: {
     organizationId: string;
     userId?: string;
+    onlyExplicitGrants?: boolean;
+    isSkillAdmin?: boolean;
   }): Promise<string[]> {
     const { organizationId, userId } = params;
     if (userId === undefined) {
       const result = await db.execute<{ id: string }>(sql`
         SELECT id FROM skills
-        WHERE scope = 'org' AND organization_id = ${organizationId}
+        WHERE organization_id = ${organizationId}
+          AND ${ResourcePermissionPolicyModel.organizationAccessCondition({
+            organizationId,
+            resource: "skill",
+            scopeColumn: schema.skillsTable.id,
+            action: "read",
+            legacyCondition: eq(schema.skillsTable.scope, "org"),
+          })}
       `);
       return result.rows.map((r) => r.id);
     }
 
+    const explicit = ResourcePermissionPolicyModel.grantCondition({
+      organizationId,
+      userId,
+      resource: "skill",
+      action: "read",
+      scopeColumn: schema.skillsTable.id,
+    });
+    if (params.onlyExplicitGrants) {
+      const rows = await db
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(eq(schema.skillsTable.organizationId, organizationId), explicit),
+        );
+      return rows.map((row) => row.id);
+    }
     const result = await db.execute<{ id: string }>(sql`
+      WITH visible AS (
+      SELECT id FROM skills WHERE organization_id = ${organizationId} AND ${params.isSkillAdmin ?? false}
+      UNION
       SELECT id FROM skills
         WHERE scope = 'org' AND organization_id = ${organizationId}
       UNION
@@ -55,6 +85,10 @@ class SkillTeamModel {
         WHERE ${TeamModel.effectiveMembershipCondition({ userId, teamIdColumn: schema.skillTeamsTable.teamId })}
           AND s.scope = 'team'
           AND s.organization_id = ${organizationId}
+      UNION
+      SELECT id FROM skills WHERE organization_id = ${organizationId} AND ${explicit}
+      ) SELECT skills.id FROM skills JOIN visible ON visible.id = skills.id
+      WHERE ${ResourcePermissionPolicyModel.migratedAccessCondition({ organizationId, userId, resource: "skill", scopeColumn: schema.skillsTable.id, action: "read" })}
     `);
     return result.rows.map((r) => r.id);
   }
@@ -79,9 +113,50 @@ class SkillTeamModel {
       authorId: string | null;
     };
     isSkillAdmin: boolean;
+    action?: "read" | "use";
   }): Promise<boolean> {
     const { skill, organizationId, userId } = params;
     if (skill.organizationId !== organizationId) return false;
+    if (userId !== undefined) {
+      const [granted] = await db
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(
+            eq(schema.skillsTable.id, skill.id),
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId,
+              userId,
+              resource: "skill",
+              action: params.action ?? "read",
+              scopeColumn: schema.skillsTable.id,
+            }),
+          ),
+        )
+        .limit(1);
+      if (granted) return true;
+    }
+
+    const policies = await ResourcePermissionPolicyModel.findApplicable({
+      organizationId,
+      resource: "skill",
+      scope: skill.id,
+    });
+    if (
+      userId === undefined &&
+      policies.some(
+        (policy) =>
+          (policy.scope === "*" || policy.scope === skill.id) &&
+          policy.grants.some(
+            (grant) =>
+              grant.subject.type === "organization" &&
+              grant.subject.id === "*" &&
+              grant.actions.includes(params.action ?? "read"),
+          ),
+      )
+    )
+      return true;
+    if (policies.some((policy) => policy.legacySharingMigrated)) return false;
     if (params.isSkillAdmin) return true;
 
     switch (skill.scope) {

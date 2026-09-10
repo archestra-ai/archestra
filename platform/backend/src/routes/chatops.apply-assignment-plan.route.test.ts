@@ -28,10 +28,11 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
   let originalOwner: Agent;
   let targetAgent: Agent;
 
-  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeAgent, makeOrganization, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     activeOrganizationId = organizationId;
     user = await makeAdmin({ email: "operator@example.com" });
+    await makeMember(user.id, organizationId, { role: "admin" });
     originalOwner = await makeAgent({
       organizationId,
       authorId: user.id,
@@ -240,7 +241,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     });
   });
 
-  test("enforces target agent type and personal-agent restrictions", async ({
+  test("enforces internal-agent type and permits scoped publication despite legacy visibility", async ({
     makeAgent,
     makeUser,
   }) => {
@@ -317,15 +318,15 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
     });
 
     expect(nonInternal.statusCode).toBe(400);
-    expect(personalChannel.statusCode).toBe(400);
-    expect(otherPersonalDm.statusCode).toBe(403);
-    expect(wrongOwnerDm.statusCode).toBe(403);
+    expect(personalChannel.statusCode, personalChannel.body).toBe(200);
+    expect(otherPersonalDm.statusCode, otherPersonalDm.body).toBe(200);
+    expect(wrongOwnerDm.statusCode, wrongOwnerDm.body).toBe(200);
     expect(
       (await ChatOpsChannelBindingModel.findById(channelBinding.id))?.agentId,
-    ).toBe(originalOwner.id);
+    ).toBe(ownPersonalAgent.id);
     expect(
       (await ChatOpsChannelBindingModel.findById(dmBinding.id))?.agentId,
-    ).toBe(originalOwner.id);
+    ).toBe(otherPersonalAgent.id);
   });
 
   test("rolls back binding updates when a pending DM conflicts", async () => {
@@ -447,8 +448,10 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
   test("creates pending DMs for the same email independently in each organization", async ({
     makeAgent,
     makeOrganization,
+    makeMember,
   }) => {
     const otherOrganization = await makeOrganization();
+    await makeMember(user.id, otherOrganization.id, { role: "admin" });
     const otherTarget = await makeAgent({
       organizationId: otherOrganization.id,
       authorId: user.id,
@@ -520,10 +523,7 @@ describe("POST /api/chatops/bindings/assignment-plan", () => {
       ],
     });
 
-    expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({
-      error: { message: "Agent not found" },
-    });
+    expect(response.statusCode).toBe(403);
     expect(
       (await ChatOpsChannelBindingModel.findById(binding.id))?.agentId,
     ).toBe(originalOwner.id);

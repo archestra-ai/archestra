@@ -1,10 +1,16 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   type Action,
   getResourceForAgentType,
+  hasScopedPermission,
   type Resource,
+  ResourcePermissionActionSchema,
+  ScopedResourceSchema,
 } from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { TeamModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { type AgentScope, type AgentType, ApiError } from "@/types";
 import { getPermissionsForUserContext, userHasPermission } from "./utils";
 
@@ -46,13 +52,8 @@ export async function isAgentTypeAdmin(params: {
   organizationId: string;
   agentType: AgentType;
 }): Promise<boolean> {
-  const resource = getResourceForAgentType(params.agentType);
-  return userHasPermission(
-    params.userId,
-    params.organizationId,
-    resource,
-    "admin",
-  );
+  const checker = await getAgentTypePermissionChecker(params);
+  return checker.isAdmin(params.agentType);
 }
 
 /**
@@ -75,7 +76,8 @@ export async function hasAnyAgentTypeAdminPermission(params: {
   userId: string;
   organizationId: string;
 }): Promise<boolean> {
-  return hasAnyAgentTypePermission({ ...params, action: "admin" });
+  const checker = await getAgentTypePermissionChecker(params);
+  return checker.hasAnyAdminPermission();
 }
 
 /**
@@ -87,11 +89,63 @@ export async function getAgentTypePermissionChecker(params: {
   userId: string;
   organizationId: string;
 }): Promise<AgentTypePermissionChecker> {
-  const permissions = await getPermissionsForUserContext(params);
+  const [permissions, grants, migratedPolicies] = await Promise.all([
+    getPermissionsForUserContext(params),
+    ResourcePermissions.resolveAll(params),
+    Promise.all(
+      (["agent", "mcpGateway"] as const).map((resource) =>
+        ResourcePermissionPolicyModel.find({ ...params, resource, scope: "*" }),
+      ),
+    ),
+  ]);
+  const allowsScoped = (target: {
+    agentType: AgentType;
+    agentId: string;
+    action: Action | "manage-permissions";
+  }) => {
+    const resource = ScopedResourceSchema.safeParse(
+      getResourceForAgentType(target.agentType),
+    );
+    const action = ResourcePermissionActionSchema.safeParse(target.action);
+    return (
+      resource.success &&
+      action.success &&
+      hasScopedPermission({
+        grants,
+        required: {
+          organizationId: params.organizationId,
+          resource: resource.data,
+          action: action.data,
+          scope: target.agentId,
+        },
+      })
+    );
+  };
   return {
-    require(agentType: AgentType, action: Action): void {
+    isMigrated: (agentType) =>
+      migratedPolicies.some(
+        (policy) =>
+          policy?.resource === getResourceForAgentType(agentType) &&
+          policy.legacySharingMigrated,
+      ),
+    allowsScoped,
+    hasBaseAction: (agentType, action) =>
+      permissions[getResourceForAgentType(agentType)]?.includes(action) ??
+      false,
+    require(
+      agentType: AgentType,
+      requested: Action | { action: Action; scope: string },
+    ): void {
+      const action =
+        typeof requested === "string" ? requested : requested.action;
       const resource = getResourceForAgentType(agentType);
-      if (!(permissions[resource]?.includes(action) ?? false)) {
+      if (
+        !(permissions[resource]?.includes(action) ?? false) &&
+        !(
+          typeof requested !== "string" &&
+          allowsScoped({ agentType, agentId: requested.scope, action })
+        )
+      ) {
         throw new ApiError(
           403,
           buildForbiddenErrorMessage({
@@ -102,26 +156,73 @@ export async function getAgentTypePermissionChecker(params: {
     },
     isAdmin(agentType: AgentType): boolean {
       const resource = getResourceForAgentType(agentType);
-      return permissions[resource]?.includes("admin") ?? false;
+      return (
+        allowsScoped({ agentType, agentId: "*", action: "update" }) ||
+        (!migratedPolicies.some(
+          (policy) =>
+            policy?.resource === resource && policy.legacySharingMigrated,
+        ) &&
+          (permissions[resource]?.includes("admin") ?? false))
+      );
     },
     isTeamAdmin(agentType: AgentType): boolean {
       const resource = getResourceForAgentType(agentType);
-      return permissions[resource]?.includes("team-admin") ?? false;
+      return (
+        grants.some(
+          (grant) =>
+            grant.resource === resource &&
+            grant.scope === "teams:*" &&
+            grant.action === "update",
+        ) ||
+        (!migratedPolicies.some(
+          (policy) =>
+            policy?.resource === resource && policy.legacySharingMigrated,
+        ) &&
+          (permissions[resource]?.includes("team-admin") ?? false))
+      );
     },
     hasAnyReadPermission(): boolean {
       return AGENT_TYPE_RESOURCES.some(
-        (r) => permissions[r]?.includes("read") ?? false,
+        (r) =>
+          (permissions[r]?.includes("read") ?? false) ||
+          grants.some(
+            (grant) => grant.resource === r && grant.action === "read",
+          ),
       );
     },
     getAgentTypesWithPermission(action: Action): AgentType[] {
       return GENERIC_AGENT_TYPES.filter((agentType) => {
         const resource = getResourceForAgentType(agentType);
-        return permissions[resource]?.includes(action) ?? false;
+        return (
+          (permissions[resource]?.includes(action) ?? false) ||
+          grants.some(
+            (grant) => grant.resource === resource && grant.action === action,
+          )
+        );
       });
+    },
+    getAgentTypesWithScopedPermission(action: Action): AgentType[] {
+      return GENERIC_AGENT_TYPES.filter((agentType) =>
+        grants.some(
+          (grant) =>
+            grant.resource === getResourceForAgentType(agentType) &&
+            grant.action === action,
+        ),
+      );
     },
     hasAnyAdminPermission(): boolean {
       return AGENT_TYPE_RESOURCES.some(
-        (r) => permissions[r]?.includes("admin") ?? false,
+        (r) =>
+          grants.some(
+            (grant) =>
+              grant.resource === r &&
+              grant.action === "update" &&
+              grant.scope === "*",
+          ) ||
+          (!migratedPolicies.some(
+            (policy) => policy?.resource === r && policy.legacySharingMigrated,
+          ) &&
+            (permissions[r]?.includes("admin") ?? false)),
       );
     },
   };
@@ -145,7 +246,34 @@ export function requireAgentModifyPermission(params: {
   agentTeamIds: string[];
   userTeamIds: string[];
   userId: string;
+  agentId?: string;
+  action?: "update" | "delete" | "manage-permissions";
 }): void {
+  if (
+    params.agentId &&
+    params.action &&
+    params.checker.allowsScoped?.({
+      agentType: params.agentType,
+      agentId: params.agentId,
+      action: params.action,
+    })
+  )
+    return;
+  if (
+    params.action === "manage-permissions" &&
+    !params.checker.hasBaseAction?.(params.agentType, "update")
+  ) {
+    throw new ApiError(
+      403,
+      "You do not have permission to manage access to this resource",
+    );
+  }
+  if (params.checker.isMigrated?.(params.agentType)) {
+    throw new ApiError(
+      403,
+      "You do not have permission to modify this resource",
+    );
+  }
   requireScopedModifyPermission({
     isAdmin: params.checker.isAdmin(params.agentType),
     isTeamAdmin: params.checker.isTeamAdmin(params.agentType),
@@ -302,8 +430,18 @@ export function assertAssignableAgentTeams(params: {
 /** @public — exported for testability */
 export interface AgentTypePermissionChecker {
   /** Throws ApiError(403) if the user lacks the action on the agent type's resource. */
-  require(agentType: AgentType, action: Action): void;
+  require(
+    agentType: AgentType,
+    action: Action | { action: Action; scope: string },
+  ): void;
+  allowsScoped?(params: {
+    agentType: AgentType;
+    agentId: string;
+    action: Action | "manage-permissions";
+  }): boolean;
+  hasBaseAction?(agentType: AgentType, action: Action): boolean;
   /** Returns true if the user has admin on the agent type's resource. */
+  isMigrated?(agentType: AgentType): boolean;
   isAdmin(agentType: AgentType): boolean;
   /** Returns true if the user has team-admin on the agent type's resource. */
   isTeamAdmin(agentType: AgentType): boolean;
@@ -311,6 +449,7 @@ export interface AgentTypePermissionChecker {
   hasAnyReadPermission(): boolean;
   /** Returns agent types for which the user has the requested permission. */
   getAgentTypesWithPermission(action: Action): AgentType[];
+  getAgentTypesWithScopedPermission?(action: Action): AgentType[];
   /** Returns true if the user has admin on any of the agent-type resources. */
   hasAnyAdminPermission(): boolean;
 }

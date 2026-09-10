@@ -13,7 +13,6 @@ import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { BulkConnectorVisibilityDialog } from "@/app/knowledge/connectors/_parts/bulk-connector-visibility-dialog";
-import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { GoogleDriveOAuthResultToast } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
@@ -330,16 +329,7 @@ function ConnectorsList() {
         />
       ),
     },
-    {
-      id: "accessibleTo",
-      header: "Accessible to",
-      cell: ({ row }) => (
-        <ConnectorAccessBadge
-          visibility={row.original.visibility}
-          teamIds={row.original.teamIds}
-        />
-      ),
-    },
+
     {
       id: "schedule",
       header: "Schedule",
@@ -588,12 +578,7 @@ function ConnectorsList() {
                             />
                           </div>
                         }
-                      >
-                        <ConnectorAccessBadge
-                          visibility={connector.visibility}
-                          teamIds={connector.teamIds}
-                        />
-                      </TableCard>
+                      ></TableCard>
                     ))}
                   </TableCardList>
                 }

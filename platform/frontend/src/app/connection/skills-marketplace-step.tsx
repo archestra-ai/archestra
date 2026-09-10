@@ -26,7 +26,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useDeferredEnabled } from "@/lib/hooks/use-deferred-enabled";
 import {
   type SkillShareLink,
@@ -94,7 +97,15 @@ function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
   const { data: marketplace, isPending: marketplacePending } =
     useSkillMarketplace();
   const { data: totalSkills, isPending: skillsPending } = useTotalSkillCount();
-  const { data: canAdmin } = useHasPermissions({ skill: ["admin"] });
+  const { data: skillGrants } = useScopedCapabilities();
+  const canAdmin = ["read", "use", "manage-permissions"].every((action) =>
+    skillGrants?.some(
+      (grant) =>
+        grant.resource === "skill" &&
+        grant.scope === "*" &&
+        grant.action === action,
+    ),
+  );
 
   if (marketplacePending || skillsPending) {
     return (

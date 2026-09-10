@@ -18,6 +18,7 @@ import {
   SkillTeamModel,
   ToolModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import SkillModel from "@/models/skill";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -49,8 +50,19 @@ describe("agent skills routes", () => {
       require: requireMock,
       isAdmin: vi.fn().mockReturnValue(true),
       isTeamAdmin: vi.fn().mockReturnValue(true),
+      isMigrated: vi.fn().mockReturnValue(false),
+      allowsScoped: vi.fn().mockReturnValue(true),
+      hasBaseAction: vi.fn().mockReturnValue(true),
       hasAnyReadPermission: vi.fn().mockReturnValue(true),
       hasAnyAdminPermission: vi.fn().mockReturnValue(true),
+      // The list route asks which agent types the caller may read at all, so
+      // the mock answers with every generic type, matching its admin stance.
+      getAgentTypesWithPermission: vi
+        .fn()
+        .mockReturnValue(["profile", "mcp_gateway", "agent"]),
+      getAgentTypesWithScopedPermission: vi
+        .fn()
+        .mockReturnValue(["profile", "mcp_gateway", "agent"]),
     });
     mockHasPermission.mockResolvedValue({ success: true, error: null });
 
@@ -558,7 +570,10 @@ describe("agent skills routes", () => {
       url: `/api/agents/${agent.id}/skills`,
     });
     expect(getResponse.statusCode).toBe(404);
-    expect(requireMock).toHaveBeenCalledWith(agent.agentType, "read");
+    expect(requireMock).toHaveBeenCalledWith(agent.agentType, {
+      action: "read",
+      scope: agent.id,
+    });
 
     const putResponse = await app.inject({
       method: "PUT",
@@ -566,7 +581,10 @@ describe("agent skills routes", () => {
       payload: { accessAllSkills: false, skillIds: [] },
     });
     expect(putResponse.statusCode).toBe(404);
-    expect(requireMock).toHaveBeenCalledWith(agent.agentType, "update");
+    expect(requireMock).toHaveBeenCalledWith(agent.agentType, {
+      action: "update",
+      scope: agent.id,
+    });
   });
 
   test("returns 403 when the caller's role has no skill:read", async ({
@@ -652,7 +670,7 @@ describe("agent skills routes", () => {
     expect(assignments.json()).toMatchObject({ skillIds: [] });
   });
 
-  test("PUT publishes a team skill for a member of that team", async ({
+  test("PUT requires sharing authority before publishing a team skill", async ({
     makeAgent,
     makeTeam,
     makeTeamMember,
@@ -663,6 +681,38 @@ describe("agent skills routes", () => {
     await SkillTeamModel.syncSkillTeams(teamSkill.id, [team.id]);
     await makeTeamMember(team.id, user.id);
 
+    const key = {
+      organizationId,
+      resource: "skill" as const,
+      scope: teamSkill.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    const granted = await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ],
+    });
+    expect(granted).not.toBeNull();
+    if (!granted) throw new Error("Expected persisted resource policy");
+    const denied = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/skills`,
+      payload: { accessAllSkills: false, skillIds: [teamSkill.id] },
+    });
+    expect(denied.statusCode).toBe(422);
+    expect(denied.json().error.message).toContain("manage permissions");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: granted.revision,
+      grants: [
+        {
+          subject: { type: "team", id: team.id },
+          actions: ["read", "use", "manage-permissions"],
+        },
+      ],
+    });
     const response = await app.inject({
       method: "PUT",
       url: `/api/agents/${agent.id}/skills`,
@@ -732,12 +782,11 @@ describe("agent skills routes", () => {
     expect(response.json()).toMatchObject({ skillIds: [mine.id] });
   });
 
-  test("PUT answers 422 for someone else's personal skill a skill admin can read", async ({
+  test("PUT permits a wildcard permission manager to publish another creator’s skill", async ({
     makeAgent,
     makeUser,
   }) => {
-    // `skill:admin` widens reading, not publishing: the access check passes,
-    // and the publishability check still insists the publisher be the author.
+    // Publication authority follows scoped grants, independently of authorship.
     const agent = await makeAgent({ organizationId });
     const colleague = await makeUser();
     const theirs = await makeSkill({
@@ -751,8 +800,8 @@ describe("agent skills routes", () => {
       url: `/api/agents/${agent.id}/skills`,
       payload: { accessAllSkills: false, skillIds: [theirs.id] },
     });
-    expect(response.statusCode).toBe(422);
-    expect(response.json().error.message).toMatch(/by its author/i);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().skillIds).toEqual([theirs.id]);
   });
 
   test("PUT surfaces unpublishable skills as a 422 with the reason", async ({

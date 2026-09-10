@@ -14,6 +14,7 @@ export function ChatWithSkillButton({ skillId }: { skillId: string }) {
   return (
     <PermissionButton
       permissions={action.permissions}
+      permissionScope={skillId}
       variant="outline"
       asChild
     >

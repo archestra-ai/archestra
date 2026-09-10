@@ -24,6 +24,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -32,6 +33,7 @@ import {
   TeamTokenModel,
   UserTokenModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   appConnectorAudienceRef,
   buildConnectorResourceUri,
@@ -39,6 +41,7 @@ import {
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
+import { buildAppUiResource } from "./mcp-app-gateway.utils";
 import mcpAppProxyRoutes from "./mcp-app-proxy";
 
 // The app HTML envelope (injection bytes) lives in app_runtime_core and is
@@ -135,6 +138,115 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
 
   afterEach(async () => {
     if (app) await app.close();
+  });
+
+  test("revoking a use grant denies the next request even after the app access cache is warm", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const owner = await makeUser();
+    const created = await makeApp({
+      authorId: owner.id,
+      scope: "personal",
+      enabled: true,
+    });
+    const caller = await makeUser();
+    const role = await makeCustomRole(created.organizationId, {
+      permission: {},
+    });
+    await makeMember(caller.id, created.organizationId, { role: role.role });
+    const key = {
+      organizationId: created.organizationId,
+      resource: "app" as const,
+      scope: created.id,
+    };
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+      grants: [{ subject: { type: "user", id: caller.id }, actions: ["use"] }],
+    });
+    app = await buildApp(caller.id, created.organizationId);
+    const invoke = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/mcp/app/${created.id}`,
+        headers: JSON_RPC_HEADERS,
+        payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+      });
+    const allowed = await invoke();
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+      grants: [],
+    });
+    expect((await invoke()).statusCode).toBe(403);
+  });
+
+  test("rendering an app resource needs use, including through the generic gateway", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const owner = await makeUser();
+    const created = await makeApp({
+      authorId: owner.id,
+      scope: "personal",
+      enabled: true,
+    });
+    const caller = await makeUser();
+    const role = await makeCustomRole(created.organizationId, {
+      permission: {},
+    });
+    await makeMember(caller.id, created.organizationId, { role: role.role });
+    const key = {
+      organizationId: created.organizationId,
+      resource: "app" as const,
+      scope: created.id,
+    };
+    const subject = { type: "user" as const, id: caller.id };
+    const auth = {
+      userId: caller.id,
+      organizationId: created.organizationId,
+      tokenId: "resource-viewer",
+      teamId: null,
+      isOrganizationToken: false,
+    };
+    const uri = getArchestraAppResourceUri(created.id);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+      grants: [{ subject, actions: ["read"] }],
+    });
+    await expect(buildAppUiResource(created.id, uri, auth)).rejects.toThrow(
+      "permission",
+    );
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+      grants: [{ subject, actions: ["use"] }],
+    });
+    const rendered = await mcpClient.readResource(
+      uri,
+      crypto.randomUUID(),
+      auth,
+    );
+    expect(rendered.contents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ uri, mimeType: RESOURCE_MIME_TYPE }),
+      ]),
+    );
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: (await ResourcePermissionPolicyModel.find(key))?.revision ?? 0,
+      grants: [],
+    });
+    await expect(buildAppUiResource(created.id, uri, auth)).rejects.toThrow(
+      "permission",
+    );
   });
 
   test("returns 403 when the user cannot access the app", async ({

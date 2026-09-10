@@ -97,6 +97,10 @@ import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityFields } from "@/components/identity-fields";
 import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
+import {
   type KnowledgeSourceOption,
   KnowledgeSourcesEditor,
 } from "@/components/knowledge-sources-editor";
@@ -225,7 +229,6 @@ import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
-import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn, isReportedApiError } from "@/lib/utils";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
@@ -1425,7 +1428,6 @@ export function AgentForm({
   });
   const cannotReadLlmConfiguration =
     !canReadLlmProviderApiKeys && !canReadLlmModels;
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
@@ -1469,19 +1471,6 @@ export function AgentForm({
   // What the form is seeded from, and so what "did this field change?" is
   // measured against: the fresh read once it lands, the caller's row until then.
   const persistedAgent = freshAgent || agent;
-  const resource = getResourceForAgentType(agentType);
-  const { data: isAdmin } = useHasPermissions({
-    [resource]: ["admin"],
-  });
-  const { data: isTeamAdmin } = useHasPermissions({
-    [resource]: ["team-admin"],
-  });
-  // Picker offers all teams to a full resource-admin, otherwise only the teams
-  // the user belongs to (the only ones the backend lets a team-admin assign).
-  const { data: teams } = useAssignableTeams({
-    isResourceAdmin: !!isAdmin,
-    enabled: !!canReadTeams,
-  });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
   const agentToolExclusionsEditorRef =
@@ -1549,6 +1538,9 @@ export function AgentForm({
   // read a tools-only edit as nothing to save.
   const [hasPendingToolChanges, setHasPendingToolChanges] = useState(false);
   const [scope, setScope] = useState<AgentScope>("personal");
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
@@ -1877,24 +1869,16 @@ export function AgentForm({
   // exempts already-selected rows from its `disabled` check. Dropping it would
   // leave the count saying three while two chips showed, with the third
   // re-submitted verbatim on every save and reachable from nowhere.
-  const orgScopedSkills = useMemo(() => {
-    const excluded = new Set([
-      ...(currentSkillExclusions?.excludedSkillIds ?? []),
-      ...excludedSkillIds,
-    ]);
-    return mergeSkillsById(
-      skillsPage?.data,
-      skillSearchPage?.data,
-      currentSkillExclusions?.skills,
-      pickedExcludedSkills,
-    ).filter((skill) => skill.scope === "org" || excluded.has(skill.id));
-  }, [
-    skillsPage,
-    skillSearchPage,
-    currentSkillExclusions,
-    excludedSkillIds,
-    pickedExcludedSkills,
-  ]);
+  const availableSkillsForExclusion = useMemo(
+    () =>
+      mergeSkillsById(
+        skillsPage?.data,
+        skillSearchPage?.data,
+        currentSkillExclusions?.skills,
+        pickedExcludedSkills,
+      ),
+    [skillsPage, skillSearchPage, currentSkillExclusions, pickedExcludedSkills],
+  );
 
   // Reset the form on mount and whenever the agent (or its fresh read) changes.
   useEffect(() => {
@@ -1925,6 +1909,7 @@ export function AgentForm({
             knowledgeBaseIds: agentData.knowledgeBaseIds,
             connectorIds: agentData.connectorIds,
             scope: agentData.scope,
+            initialGrants: [],
             autoConfigureOnToolDiscovery:
               agentData.builtInAgentConfig?.name ===
               BUILT_IN_AGENT_IDS.POLICY_CONFIG
@@ -1965,6 +1950,7 @@ export function AgentForm({
             knowledgeBaseIds: [],
             connectorIds: [],
             scope: "personal",
+            initialGrants: [],
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
@@ -1994,6 +1980,7 @@ export function AgentForm({
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
       setConnectorIds(nextValues.connectorIds);
       setScope(nextValues.scope);
+      setInitialGrants(nextValues.initialGrants);
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setAgentRuntime(nextValues.runtime);
       setToolExposureMode(nextValues.toolExposureMode);
@@ -2438,12 +2425,6 @@ export function AgentForm({
     handleLlmApiKeyChange(requiredSubscriptionKey.id);
   }, [agent, handleLlmApiKeyChange, requiredSubscriptionKey]);
 
-  // A team-scoped agent must have at least one team, otherwise it is
-  // inaccessible to everyone (issue #6624). Applies to admins too.
-  const requiresTeamSelection =
-    scope === "team" && assignedTeamIds.length === 0;
-  const hasNoAvailableTeams = !teams || teams.length === 0;
-
   // An update sends the section groups the caller mounted and nothing else:
   // the PUT is partial, and a field the user could not see is held here as
   // whatever this mount was seeded with — re-sending it forks a config version
@@ -2490,12 +2471,6 @@ export function AgentForm({
 
     if (!trimmedName) {
       toast.error("Name is required");
-      return false;
-    }
-
-    // A team-scoped agent must have at least one team (issue #6624)
-    if (scope === "team" && assignedTeamIds.length === 0) {
-      toast.error("Please select at least one team");
       return false;
     }
 
@@ -2626,9 +2601,6 @@ export function AgentForm({
                   modelId: llmModel || null,
                 }),
               }),
-              teams: assignedTeamIds,
-              users: assignedUserIds,
-              scope,
             }),
             // The Advanced group: labels, the identity provider, security,
             // header passthrough.
@@ -2677,6 +2649,12 @@ export function AgentForm({
       } else {
         // Create new agent
         const created = await createAgent.mutateAsync({
+          ...(agentType !== "llm_proxy" && {
+            initialGrants: initialGrants.map(({ subject, actions }) => ({
+              subject,
+              actions,
+            })),
+          }),
           name: trimmedName,
           icon: icon || null,
           agentType: agentType,
@@ -2705,10 +2683,8 @@ export function AgentForm({
           missingCredentialBehavior,
           accessAllTools,
           ...(supportsSubagents && { accessAllSubagents }),
-          teams: assignedTeamIds,
-          users: assignedUserIds,
           labels: updatedLabels,
-          scope,
+          scope: "personal",
           ...(showSecurity && { considerContextUntrusted }),
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
@@ -2923,8 +2899,6 @@ export function AgentForm({
     description,
     systemPrompt,
     suggestedPrompts,
-    assignedTeamIds,
-    assignedUserIds,
     labels,
     considerContextUntrusted,
     llmApiKeyId,
@@ -2935,7 +2909,7 @@ export function AgentForm({
     environmentChanged,
     knowledgeBaseIds,
     connectorIds,
-    scope,
+    initialGrants,
     agentType,
     agent,
     isBuiltIn,
@@ -3001,10 +2975,6 @@ export function AgentForm({
       toast.error("Name is required");
       return;
     }
-    if (!isAdmin && scope === "team" && assignedTeamIds.length === 0) {
-      toast.error("Please select at least one team");
-      return;
-    }
     if (
       !requiredSubscriptionSatisfied ||
       needsClaudeProviderKey ||
@@ -3043,9 +3013,6 @@ export function AgentForm({
   }, [
     agent,
     name,
-    isAdmin,
-    scope,
-    assignedTeamIds,
     hasCompleteLlmSelection,
     requiredSubscriptionSatisfied,
     needsClaudeProviderKey,
@@ -3096,6 +3063,7 @@ export function AgentForm({
     knowledgeBaseIds,
     connectorIds,
     scope,
+    initialGrants,
     autoConfigureOnToolDiscovery,
     dualLlmMaxRounds,
     passthroughHeaders,
@@ -3170,15 +3138,13 @@ export function AgentForm({
     !createAgent.isPending &&
     !updateAgent.isPending &&
     (!showActivationSkills || readOnly || activationSkillsReady) &&
-    !requiresTeamSelection &&
     requiredSubscriptionSatisfied &&
     hasCompleteLlmSelection &&
     !needsClaudeProviderKey &&
     !needsRuntimeImage &&
     !runtimeModelIncompatibility &&
     mcpEnvConflicts.length === 0 &&
-    !environmentConflicts.blocksSave &&
-    !(scope === "team" && hasNoAvailableTeams);
+    !environmentConflicts.blocksSave;
   const footerState: AgentFormFooterState = {
     formId,
     isCreate: !agent,
@@ -3544,33 +3510,14 @@ export function AgentForm({
                     </div>
                   )}
 
-                  {/* Visibility: an ordinary field of the record, not a
-                      section of its own — who may use it is as much a part of
-                      what it is as its name. */}
-                  {!isBuiltIn && (
-                    <div>
-                      <AccessLevelSelector
-                        scope={scope}
-                        onScopeChange={(newScope) => {
-                          setScope(newScope);
-                          if (newScope === "org") {
-                            setAssignedTeamIds([]);
-                          }
-                        }}
-                        isAdmin={!!isAdmin}
-                        isTeamAdmin={!!isTeamAdmin}
-                        initialScope={agent?.scope}
-                        agentType={agentType}
-                        teams={teams}
-                        canReadTeams={!!canReadTeams}
-                        assignedTeamIds={assignedTeamIds}
-                        onTeamIdsChange={setAssignedTeamIds}
-                        assignedUserIds={assignedUserIds}
-                        onUserIdsChange={setAssignedUserIds}
-                        hasNoAvailableTeams={hasNoAvailableTeams}
-                        showTeamRequired={true}
-                      />
-                    </div>
+                  {!agent && agentType !== "llm_proxy" && (
+                    <InitialResourcePermissions
+                      resource={
+                        agentType === "mcp_gateway" ? "mcpGateway" : "agent"
+                      }
+                      grants={initialGrants}
+                      onChange={setInitialGrants}
+                    />
                   )}
 
                   {!agent && isInternalAgent && agentRuntimeEnabled && (
@@ -4223,7 +4170,7 @@ export function AgentForm({
                         <AvailableSkillsDialog
                           source={{
                             kind: "gateway",
-                            skills: orgScopedSkills,
+                            skills: availableSkillsForExclusion,
                             excludedIds: excludedSkillIds,
                           }}
                         />
@@ -4233,19 +4180,20 @@ export function AgentForm({
                           <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
                             <li className="flex gap-2">
                               <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Publishes every organization-scoped skill in this{" "}
+                              Publishes skills with organization-wide use
+                              permission in this{" "}
                               {agentTypeDisplayName[agentType] || "agent"}
                               's environment — new ones included automatically
                             </li>
                             <li className="flex gap-2">
                               <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Team and personal skills are never published
-                              automatically; assign them in Manual instead
+                              Other skills require permission to share them and
+                              a manual assignment
                             </li>
                           </ul>
                           <div className="space-y-1.5">
                             <AgentSkillsEditor
-                              availableSkills={orgScopedSkills}
+                              availableSkills={availableSkillsForExclusion}
                               selectedSkillIds={excludedSkillIds}
                               onSelectionChange={setExcludedSkillIds}
                               gateway={skillGateway}
@@ -4723,6 +4671,7 @@ export function AgentForm({
 }
 
 type AgentFormFields = {
+  initialGrants: InitialPermissionGrant[];
   name: string;
   icon: string | null;
   description: string;

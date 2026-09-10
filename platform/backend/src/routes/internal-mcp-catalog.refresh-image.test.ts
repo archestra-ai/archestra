@@ -207,7 +207,7 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toMatch(/admin/i);
+    expect(response.json().error.message).toMatch(/permission/i);
     expect(mockReinstallMultitenantCatalog).not.toHaveBeenCalled();
   });
 

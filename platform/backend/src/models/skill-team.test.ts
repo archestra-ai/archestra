@@ -31,12 +31,15 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
   test("returns org skills, own personal skills, and team skills", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
     makeTeamMember,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const other = await makeUser();
+    await makeMember(other.id, org.id);
     const team = await makeTeam(org.id, user.id);
     await makeTeamMember(team.id, user.id);
 
@@ -80,11 +83,14 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
   test("excludes team skills for non-members", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
   }) => {
     const org = await makeOrganization();
     const owner = await makeUser();
+    await makeMember(owner.id, org.id);
     const outsider = await makeUser();
+    await makeMember(outsider.id, org.id);
     const team = await makeTeam(org.id, owner.id);
 
     const teamSkill = await seedSkill({
@@ -106,10 +112,12 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
   test("without a userId returns only org-scoped skills", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
+    await makeMember(author.id, org.id);
     const team = await makeTeam(org.id, author.id);
 
     const orgSkill = await seedSkill({
@@ -143,10 +151,12 @@ describe("SkillTeamModel.getUserAccessibleSkillIds", () => {
   test("does not return another organization's org skills", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const orgA = await makeOrganization();
     const orgB = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, orgA.id);
 
     const orgSkillA = await seedSkill({
       organizationId: orgA.id,
@@ -168,9 +178,11 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
   test("org skills are accessible to everyone", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const skill = await seedSkill({
       organizationId: org.id,
       name: "org-skill",
@@ -190,10 +202,13 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
   test("personal skills are accessible only to the author", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
+    await makeMember(author.id, org.id);
     const other = await makeUser();
+    await makeMember(other.id, org.id);
     const skill = await seedSkill({
       organizationId: org.id,
       name: "personal-skill",
@@ -217,7 +232,7 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         isSkillAdmin: false,
       }),
     ).toBe(false);
-    // admins bypass scope
+    // A legacy admin hint cannot bypass the authoritative policy.
     expect(
       await SkillTeamModel.userHasSkillAccess({
         organizationId: org.id,
@@ -225,18 +240,21 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
         skill,
         isSkillAdmin: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   test("team skills are accessible only to team members", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
     makeTeamMember,
   }) => {
     const org = await makeOrganization();
     const member = await makeUser();
+    await makeMember(member.id, org.id);
     const outsider = await makeUser();
+    await makeMember(outsider.id, org.id);
     const team = await makeTeam(org.id, member.id);
     await makeTeamMember(team.id, member.id);
 
@@ -268,10 +286,12 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
   test("a skill from another organization is never accessible", async ({
     makeOrganization,
     makeUser,
+    makeMember,
   }) => {
     const orgA = await makeOrganization();
     const orgB = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, orgA.id);
     const orgSkillA = await seedSkill({
       organizationId: orgA.id,
       name: "org-skill",
@@ -293,10 +313,12 @@ describe("SkillTeamModel.userHasSkillAccess", () => {
   test("without a userId only org-scoped skills are accessible", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeTeam,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
+    await makeMember(author.id, org.id);
     const team = await makeTeam(org.id, author.id);
 
     const orgSkill = await seedSkill({

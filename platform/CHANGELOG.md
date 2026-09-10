@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.3.56](https://github.com/archestra-ai/archestra/compare/platform-v1.3.55...platform-v1.3.56) (2026-09-10)
+
+
+### Features
+
+* **frontend:** backport floating edit-page save bars to release/1.3 ([#7770](https://github.com/archestra-ai/archestra/issues/7770)) ([5d7f692](https://github.com/archestra-ai/archestra/commit/5d7f692447d7ed1b283604a12bbe93dc8936b727))
+
+
+### Bug Fixes
+
+* **dev:** bound Next.js memory and reduce shared-module reloads (1.3) ([#7783](https://github.com/archestra-ai/archestra/issues/7783)) ([cf16c61](https://github.com/archestra-ai/archestra/commit/cf16c61773f2515616fc6393b9a2732a046f7a0c))
+* **frontend:** keep environment warnings visible below page tabs (1.3) ([#7785](https://github.com/archestra-ai/archestra/issues/7785)) ([9702863](https://github.com/archestra-ai/archestra/commit/9702863758e37153142c7abfc2090e163c686d75))
+* **frontend:** simplify plugins table and widen visibility (1.3) ([#7780](https://github.com/archestra-ai/archestra/issues/7780)) ([c0b93c7](https://github.com/archestra-ai/archestra/commit/c0b93c7052d42139d0ae503e9c5ee2bd7ac050df))
+* **frontend:** update browser titles for chat and connect pages (1.3) ([#7775](https://github.com/archestra-ai/archestra/issues/7775)) ([c7649d1](https://github.com/archestra-ai/archestra/commit/c7649d1ad3e89e4e405a454ede5a3f1e6f007924))
+
+
+### Miscellaneous Chores
+
+* consolidate shared agent instructions and skills (1.3) ([#7793](https://github.com/archestra-ai/archestra/issues/7793)) ([1a88678](https://github.com/archestra-ai/archestra/commit/1a8867860f30a8b82737168456804622d032e594))
+
 ## [1.3.55](https://github.com/archestra-ai/archestra/compare/platform-v1.3.54...platform-v1.3.55) (2026-09-09)
 
 

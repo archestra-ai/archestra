@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.4.0-beta.4](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.3...platform-v1.4.0-beta.4) (2026-09-10)
+
+
+### Features
+
+* **agent-runtime:** replace Jobs with durable Agent Sandbox workspaces ([#7777](https://github.com/archestra-ai/archestra/issues/7777)) ([8a0bc3f](https://github.com/archestra-ai/archestra/commit/8a0bc3ff977fd16f28f8600b3c98d23743864d1d))
+* **connection:** connect coding agents from a prompt with browser approval ([#7731](https://github.com/archestra-ai/archestra/issues/7731)) ([2ccc6e5](https://github.com/archestra-ai/archestra/commit/2ccc6e555bfe37d781872c5ca3bcb9bc913ab9ac))
+
+
+### Bug Fixes
+
+* **agent-runtime:** preserve session identity and history across continuations ([#7791](https://github.com/archestra-ai/archestra/issues/7791)) ([15980c8](https://github.com/archestra-ai/archestra/commit/15980c81d08eff9d9f6a91368b33028be8c9b72d))
+* **agents:** prompt for all missing runtime credentials from setup links ([#7788](https://github.com/archestra-ai/archestra/issues/7788)) ([fd32e25](https://github.com/archestra-ai/archestra/commit/fd32e25804b393f6553f19e0df10dbb16984424c))
+* **dev:** bound Next.js memory and reduce shared-module reloads ([#7782](https://github.com/archestra-ai/archestra/issues/7782)) ([0806ab4](https://github.com/archestra-ai/archestra/commit/0806ab412a934dc7eb776a58aba6055525a2aab0))
+* **frontend:** keep environment warnings visible below page tabs ([#7784](https://github.com/archestra-ai/archestra/issues/7784)) ([140eacd](https://github.com/archestra-ai/archestra/commit/140eacd674476327c742954361c176e92222aab2))
+* **frontend:** simplify plugins table and widen visibility ([#7779](https://github.com/archestra-ai/archestra/issues/7779)) ([79278c9](https://github.com/archestra-ai/archestra/commit/79278c916be80867bcfcf959ec28136fa9c85920))
+* **frontend:** unify collection card styling ([#7786](https://github.com/archestra-ai/archestra/issues/7786)) ([ac14a76](https://github.com/archestra-ai/archestra/commit/ac14a76a3b321d26983a3948cd0f3ea4104bb60c))
+* **frontend:** update browser titles for chat and connect pages ([#7776](https://github.com/archestra-ai/archestra/issues/7776)) ([b046a41](https://github.com/archestra-ai/archestra/commit/b046a416d23c9121a6706e3b36b785258ef1a608))
+
+
+### Documentation
+
+* add branch layout diagram to release checklist ([#7794](https://github.com/archestra-ai/archestra/issues/7794)) ([5c92891](https://github.com/archestra-ai/archestra/commit/5c92891d43750dc07d6f625887247e74b44adfd2))
+
+
+### Miscellaneous Chores
+
+* consolidate shared agent instructions and skills ([#7792](https://github.com/archestra-ai/archestra/issues/7792)) ([3020dc0](https://github.com/archestra-ai/archestra/commit/3020dc0da9806f72ce79bbe3da78c418f96a3eb2))
+
 ## [1.4.0-beta.3](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.2...platform-v1.4.0-beta.3) (2026-09-09)
 
 

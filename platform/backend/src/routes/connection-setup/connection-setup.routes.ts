@@ -12,6 +12,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import { CacheKey } from "@/cache-manager";
 import config, { getConnectionBaseUrlSources } from "@/config";
@@ -759,6 +760,8 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           origin: proxyBaseUrlToOrigin(setup.baseUrl),
           rawToken: token,
           platform: setup.platform,
+          appName: archestraMcpBranding.appName,
+          iconLogo: archestraMcpBranding.iconLogo,
         });
         return reply
           .header("Cache-Control", "no-store")

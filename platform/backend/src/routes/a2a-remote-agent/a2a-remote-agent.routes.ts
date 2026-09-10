@@ -299,14 +299,18 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteA2aRemoteAgent,
         description:
-          "Delete an outbound A2A agent that is not assigned as a subagent.",
+          "Delete an outbound A2A agent and remove its subagent assignments.",
         tags: ["Outbound A2A Agents"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async ({ organizationId, params }, reply) => {
-      await deleteA2aRemoteAgent({ id: params.id, organizationId });
+      const affectedAgentIds = await deleteA2aRemoteAgent({
+        id: params.id,
+        organizationId,
+      });
+      for (const agentId of affectedAgentIds) clearChatMcpClient(agentId);
       return reply.send({ success: true });
     },
   );

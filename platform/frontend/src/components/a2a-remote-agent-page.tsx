@@ -33,6 +33,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
 import {
   useA2aRemoteAgent,
   useCreateA2aRemoteAgent,
@@ -229,7 +230,7 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Remove external A2A agent?"
-        description={`This removes ${agent.name} and its stored connection credential.`}
+        description={getA2aRemoteAgentDeleteDescription(agent)}
         isPending={deleteMutation.isPending}
         onConfirm={() => {
           deleteMutation.mutate(agent.id, {

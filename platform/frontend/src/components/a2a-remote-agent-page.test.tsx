@@ -69,6 +69,8 @@ const remoteAgent = {
     hasCredential: true,
   },
   toolId: "tool-1",
+  assignmentCount: 2,
+  lastUsedAt: null,
 } as const;
 
 const server = setupServer(
@@ -674,6 +676,32 @@ describe("external A2A agent routed pages", () => {
 
     await user.click(screen.getByRole("button", { name: /Personal/ }));
     expect(screen.getByRole("button", { name: /Organization/ })).toBeEnabled();
+  });
+
+  it("warns assigned agents before deletion from the detail page", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
+    );
+
+    renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
+    await screen.findByLabelText("Agent base URL");
+    await user.click(
+      screen.getByRole("button", {
+        name: `More actions ${remoteAgent.name}`,
+      }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Remove external A2A agent?",
+    });
+    expect(dialog).toHaveTextContent(
+      "currently assigned as a subagent to 2 agents",
+    );
+    expect(dialog).toHaveTextContent(
+      "those agents will no longer be able to delegate to it",
+    );
   });
 
   it("pauses delegation from the detail actions", async () => {

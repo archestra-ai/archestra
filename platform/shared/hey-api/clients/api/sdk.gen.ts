@@ -105,7 +105,7 @@ export const createA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Delete an outbound A2A agent that is not assigned as a subagent.
+ * Delete an outbound A2A agent and remove its subagent assignments.
  *
  * Authentication:
  *

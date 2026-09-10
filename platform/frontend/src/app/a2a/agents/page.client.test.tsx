@@ -281,9 +281,43 @@ describe("OutboundA2aAgentsPage", () => {
     const dialog = screen.getByRole("dialog", {
       name: "Remove external A2A agent?",
     });
+    expect(dialog).toHaveTextContent(
+      "currently assigned as a subagent to 2 agents",
+    );
+    expect(dialog).toHaveTextContent(
+      "those agents will no longer be able to delegate to it",
+    );
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(deletedId).toBe(remoteAgent.id));
+  });
+
+  it("summarizes affected assignments before bulk deletion", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(REGISTRY_URL, () =>
+        HttpResponse.json([remoteAgent, teamRemoteAgent]),
+      ),
+    );
+
+    renderPage();
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Select Payments Agent" }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select Reporting Agent" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Delete external A2A agents",
+    });
+    expect(dialog).toHaveTextContent(
+      "selected external agents have 3 subagent assignments",
+    );
+    expect(dialog).toHaveTextContent(
+      "those assigned agents will no longer be able to delegate to them",
+    );
   });
 
   it("renders accessible agents as read-only for users without management permission", async () => {

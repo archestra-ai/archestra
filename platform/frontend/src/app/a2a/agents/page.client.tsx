@@ -55,6 +55,10 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  getA2aRemoteAgentDeleteDescription,
+  getBulkA2aRemoteAgentDeleteDescription,
+} from "@/lib/a2a-remote-agent-delete";
+import {
   type A2aRemoteAgent,
   useA2aRemoteAgents,
   useBulkUpdateA2aRemoteAgentVisibility,
@@ -608,9 +612,7 @@ export default function OutboundA2aAgentsPage() {
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Remove external A2A agent?"
         description={
-          deleteTarget
-            ? `This removes ${deleteTarget.name} and its stored connection credential.`
-            : ""
+          deleteTarget ? getA2aRemoteAgentDeleteDescription(deleteTarget) : ""
         }
         isPending={deleteMutation.isPending}
         onConfirm={() => {
@@ -624,11 +626,9 @@ export default function OutboundA2aAgentsPage() {
         open={bulkDeleteOpen}
         onOpenChange={setBulkDeleteOpen}
         title="Delete external A2A agents"
-        description={`Delete ${selectedRemoteAgents.length} ${
-          selectedRemoteAgents.length === 1
-            ? "external A2A agent"
-            : "external A2A agents"
-        }? This cannot be undone.`}
+        description={getBulkA2aRemoteAgentDeleteDescription(
+          selectedRemoteAgents,
+        )}
         isPending={bulkDeleteMutation.isPending}
         onConfirm={() => void handleBulkDelete()}
         confirmLabel="Delete external A2A agents"

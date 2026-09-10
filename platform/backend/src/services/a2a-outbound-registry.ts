@@ -330,27 +330,21 @@ export async function updateA2aRemoteAgent(params: {
 export async function deleteA2aRemoteAgent(params: {
   id: string;
   organizationId: string;
-}): Promise<void> {
+}): Promise<string[]> {
   const existing = await requireRemoteAgent(params);
-  await db.transaction(async (tx) => {
-    // Lock the referenced tool before checking assignments. Concurrent
+  const affectedAgentIds = await db.transaction(async (tx) => {
+    // Lock the referenced tool while capturing affected agents. Concurrent
     // agent_tools inserts need a foreign-key key-share lock and therefore
-    // cannot slip between this check and the cascading delete.
+    // cannot slip between this snapshot and the cascading delete.
     await tx
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.id, existing.toolId))
       .for("update");
     const assignments = await tx
-      .select({ id: schema.agentToolsTable.id })
+      .select({ agentId: schema.agentToolsTable.agentId })
       .from(schema.agentToolsTable)
       .where(eq(schema.agentToolsTable.toolId, existing.toolId));
-    if (assignments.length > 0) {
-      throw new ApiError(
-        409,
-        `Outbound A2A agent is assigned to ${assignments.length} agent(s). Remove those subagent assignments first.`,
-      );
-    }
     // The run ledger intentionally survives target removal. Null all three
     // references explicitly before the cascading connection/tool deletes:
     // PostgreSQL can otherwise evaluate the overlapping SET NULL paths in an
@@ -364,12 +358,14 @@ export async function deleteA2aRemoteAgent(params: {
     await tx
       .delete(schema.a2aRemoteAgentsTable)
       .where(eq(schema.a2aRemoteAgentsTable.id, existing.remoteAgent.id));
+    return assignments.map(({ agentId }) => agentId);
   });
   if (existing.connection.secretId) {
     await secretManager()
       .deleteSecret(existing.connection.secretId)
       .catch(() => {});
   }
+  return affectedAgentIds;
 }
 
 // === Internal ===

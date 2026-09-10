@@ -244,6 +244,8 @@ class SkillModel {
     accessibleSkillIds?: string[];
     /** When set, excludes these skill IDs (agent All-mode blocklist). */
     excludedSkillIds?: string[];
+    /** Keep only rows that can be served over the MCP skill surface. */
+    publishableOverMcp?: boolean;
     /**
      * When set (null = Default environment), restricts results to skills
      * visible from that environment: strict match, built-in skills exempt.
@@ -292,6 +294,8 @@ class SkillModel {
     accessibleSkillIds?: string[];
     /** Same agent-policy exclusion filter as `findByOrganization`. */
     excludedSkillIds?: string[];
+    /** Same MCP-publication filter as `findByOrganization`. */
+    publishableOverMcp?: boolean;
     /** Same environment-visibility filter as `findByOrganization`. */
     environmentId?: string | null;
     scope?: ResourceVisibilityScope;
@@ -1594,6 +1598,7 @@ function buildOrgFilters(params: {
   sourceRepo?: string;
   accessibleSkillIds?: string[];
   excludedSkillIds?: string[];
+  publishableOverMcp?: boolean;
   environmentId?: string | null;
   scope?: ResourceVisibilityScope;
   teamIds?: string[];
@@ -1620,6 +1625,7 @@ function buildOrgFilters(params: {
     ...(params.excludedSkillIds?.length
       ? [notInArray(schema.skillsTable.id, params.excludedSkillIds)]
       : []),
+    ...(params.publishableOverMcp ? [publishableSkillPredicate()] : []),
     ...(params.labelFilteredIds !== undefined
       ? [inArray(schema.skillsTable.id, params.labelFilteredIds)]
       : []),

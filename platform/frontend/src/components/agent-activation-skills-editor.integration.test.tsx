@@ -5,7 +5,15 @@ import userEvent from "@testing-library/user-event";
 import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useRef, useState } from "react";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   AgentActivationSkillsEditor,
   type AgentActivationSkillsEditorRef,
@@ -38,6 +46,12 @@ const externalSkill = {
 };
 
 const server = setupServer();
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/agents/agent-1",
+  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
@@ -100,12 +114,14 @@ describe("AgentActivationSkillsEditor", () => {
     expect(
       screen.getByRole("button", { name: "Remove research" }),
     ).toBeVisible();
+    expect(screen.queryByText("MCP")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Add" }));
     await user.click(await screen.findByText("incident-response"));
     expect(
       screen.getByRole("button", { name: "Remove incident-response" }),
     ).toBeVisible();
+    expect(screen.queryByText("Skill library")).toBeNull();
 
     await user.click(screen.getByRole("tab", { name: "All" }));
     expect(
@@ -127,6 +143,40 @@ describe("AgentActivationSkillsEditor", () => {
         ],
       }),
     );
+  });
+
+  it("opens the shared read-only skills view from All mode", async () => {
+    server.use(
+      http.get(POLICY_URL, () =>
+        HttpResponse.json({
+          mode: "all",
+          revision: 0,
+          allowedReferences: [],
+          excludedReferences: [],
+          hiddenAllowedCount: 0,
+          hiddenExcludedCount: 0,
+          allowedSkills: [],
+          excludedSkills: [],
+        }),
+      ),
+      http.get(CATALOG_URL, () =>
+        HttpResponse.json(catalog([nativeSkill, externalSkill])),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderEditor();
+
+    await user.click(
+      await screen.findByRole("button", { name: "View all 2 skills" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Skills available in All mode" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("columnheader", { name: "Visibility" }),
+    ).toBeVisible();
+    expect(screen.getByText("Research Server")).toBeVisible();
   });
 
   it("does not show editable defaults while policy state is loading", async () => {

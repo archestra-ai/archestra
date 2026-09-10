@@ -1,5 +1,10 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import { EnvironmentModel, SkillModel } from "@/models";
+import {
+  AgentExcludedSkillModel,
+  AgentModel,
+  EnvironmentModel,
+  SkillModel,
+} from "@/models";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
@@ -32,10 +37,12 @@ describe("GET /api/skills", () => {
       name: "Env Agent",
       organizationId: ctx.organizationId,
       environmentId: staging.id,
+      agentType: "agent",
     });
     const defaultAgent = await makeAgent({
       name: "Default Agent",
       organizationId: ctx.organizationId,
+      agentType: "agent",
     });
 
     // no environments = available to agents in every environment
@@ -106,6 +113,7 @@ describe("GET /api/skills", () => {
     const agent = await makeAgent({
       name: "Manual Skill Agent",
       organizationId: ctx.organizationId,
+      agentType: "agent",
     });
     const allowed = await ctx.app.inject({
       method: "POST",
@@ -141,6 +149,126 @@ describe("GET /api/skills", () => {
     expect(response.json().pagination.total).toBe(1);
   });
 
+  test("forAgentId lists the effective Auto-mode skills published by a gateway", async ({
+    makeAgent,
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const gateway = await makeAgent({
+      name: "Skill Gateway",
+      organizationId: ctx.organizationId,
+      agentType: "mcp_gateway",
+    });
+    await AgentModel.setAccessAllSkills(gateway.id, true);
+
+    const published = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("published-skill"), scope: "org" },
+    });
+    const excluded = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("excluded-skill"), scope: "org" },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("team-skill"), scope: "team" },
+    });
+    await AgentExcludedSkillModel.replaceExclusions({
+      agentId: gateway.id,
+      skillIds: [excluded.json().id],
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?forAgentId=${gateway.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().pagination.total).toBe(1);
+    expect(
+      response.json().data.map((skill: { id: string }) => skill.id),
+    ).toEqual([published.json().id]);
+
+    const eligible = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?forAgentId=${gateway.id}&agentSkillView=eligible&mcpGatewayEnvironment=default`,
+    });
+    expect(eligible.statusCode).toBe(200);
+    expect(eligible.json().pagination.total).toBe(2);
+    expect(
+      eligible
+        .json()
+        .data.map((skill: { id: string }) => skill.id)
+        .sort(),
+    ).toEqual([excluded.json().id, published.json().id].sort());
+  });
+
+  test("previews All-mode skills for a draft gateway environment", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const staging = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Gateway staging",
+    });
+    const production = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Gateway production",
+    });
+    const everywhere = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("gateway-everywhere"), scope: "org" },
+    });
+    const inStaging = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: manifestNamed("gateway-staging"),
+        scope: "org",
+        environmentIds: [staging.id],
+      },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: manifestNamed("gateway-production"),
+        scope: "org",
+        environmentIds: [production.id],
+      },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: manifestNamed("gateway-team-skill"),
+        scope: "team",
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?mcpGatewayEnvironment=${staging.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().pagination.total).toBe(2);
+    expect(
+      response
+        .json()
+        .data.map((skill: { id: string }) => skill.id)
+        .sort(),
+    ).toEqual([everywhere.json().id, inStaging.json().id].sort());
+  });
+
   test("forAgentId does not disclose an unreadable agent's policy", async ({
     makeAgent,
     makeMember,
@@ -153,6 +281,7 @@ describe("GET /api/skills", () => {
     const privateAgent = await makeAgent({
       name: "Private Skill Agent",
       organizationId: ctx.organizationId,
+      agentType: "agent",
       scope: "personal",
       authorId: otherAuthor.id,
     });

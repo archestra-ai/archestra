@@ -91,6 +91,8 @@ type SkillsPaginatedParams = Pick<
   | "search"
   | "sourceRepo"
   | "forAgentId"
+  | "mcpGatewayEnvironment"
+  | "agentSkillView"
   | "scope"
   | "teamIds"
   | "authorIds"

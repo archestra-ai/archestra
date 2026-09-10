@@ -372278,7 +372278,42 @@
             "in": "query",
             "name": "forAgentId",
             "required": false,
-            "description": "Restrict results to native skills allowed by this agent's skill policy and visible from its environment."
+            "description": "Restrict results to native skills available through this internal agent or eligible for publication by this saved MCP gateway."
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "default"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "mcpGatewayEnvironment",
+            "required": false,
+            "description": "Preview skills eligible for MCP Gateway All mode using this form environment. Use `default` for the Default environment."
+          },
+          {
+            "schema": {
+              "default": "effective",
+              "type": "string",
+              "enum": [
+                "effective",
+                "eligible"
+              ]
+            },
+            "in": "query",
+            "name": "agentSkillView",
+            "required": false,
+            "description": "Effective applies the saved skill policy. Eligible previews the skills that All mode can include before its exclusions."
           },
           {
             "schema": {

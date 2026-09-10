@@ -87,6 +87,7 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
+import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -4069,6 +4070,15 @@ export function AgentForm({
                         excludedCount: excludedSkillIds.length,
                         assignedCount: assignedSkillIds.length,
                       })}
+                      availableSkillsView={
+                        <AvailableSkillsDialog
+                          source={{
+                            kind: "gateway",
+                            gatewayId: agent?.id,
+                            environmentId,
+                          }}
+                        />
+                      }
                       allEditor={
                         <div className="space-y-2">
                           <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">

@@ -96347,9 +96347,17 @@ export type GetSkillsData = {
         search?: string;
         sourceRepo?: string;
         /**
-         * Restrict results to native skills allowed by this agent's skill policy and visible from its environment.
+         * Restrict results to native skills available through this internal agent or eligible for publication by this saved MCP gateway.
          */
         forAgentId?: string;
+        /**
+         * Preview skills eligible for MCP Gateway All mode using this form environment. Use `default` for the Default environment.
+         */
+        mcpGatewayEnvironment?: string | 'default';
+        /**
+         * Effective applies the saved skill policy. Eligible previews the skills that All mode can include before its exclusions.
+         */
+        agentSkillView?: 'effective' | 'eligible';
         /**
          * Filter by visibility scope: personal, team, or org.
          */

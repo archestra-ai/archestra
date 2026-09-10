@@ -9,6 +9,7 @@ interface SkillAccessModeEditorProps {
   mode: SkillAccessMode;
   onModeChange: (mode: SkillAccessMode) => void;
   summary: ReactNode;
+  availableSkillsView?: ReactNode;
   allEditor: ReactNode;
   manualEditor: ReactNode;
 }
@@ -18,13 +19,17 @@ export function SkillAccessModeEditor({
   mode,
   onModeChange,
   summary,
+  availableSkillsView,
   allEditor,
   manualEditor,
 }: SkillAccessModeEditorProps) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{summary}</p>
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          <p>{summary}</p>
+          {mode === "all" && availableSkillsView}
+        </div>
         <Tabs
           value={mode}
           onValueChange={(value) =>

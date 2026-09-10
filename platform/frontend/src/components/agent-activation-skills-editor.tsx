@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { SkillAccessModeEditor } from "@/components/skill-access-mode-editor";
 import {
   SkillSelectionEditor,
@@ -342,6 +343,11 @@ export const AgentActivationSkillsEditor = forwardRef<
           hiddenAllowedCount,
           hiddenExcludedCount,
         })}
+        availableSkillsView={
+          <AvailableSkillsDialog
+            source={{ kind: "agent", agentId, environmentId }}
+          />
+        }
         allEditor={
           <div className="space-y-2">
             <p className="pt-1 text-xs text-muted-foreground">
@@ -464,7 +470,6 @@ function toSelectionItem(skill: AgentActivationSkill): SkillSelectionItem {
       .filter(Boolean)
       .join(" "),
     badge: skill.providerName ? `${skill.providerName} · ${source}` : source,
-    chipBadge: source,
     icon: <BookOpen className="h-3.5 w-3.5 shrink-0" />,
   };
 }

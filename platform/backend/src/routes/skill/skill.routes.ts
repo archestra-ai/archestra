@@ -14,6 +14,7 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   getAgentTypePermissionChecker,
+  getResourceForAgentType,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import {
@@ -26,7 +27,9 @@ import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentActivationSkillRuleModel,
+  AgentExcludedSkillModel,
   AgentModel,
+  AgentSkillModel,
   CreatedByModel,
   lookupCreator,
   MemberModel,
@@ -44,6 +47,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { publishesSkills } from "@/services/agent-skill-resolution";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
@@ -367,9 +371,22 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: z.string().optional(),
           sourceRepo: z.string().optional(),
           forAgentId: UuidIdSchema.optional().describe(
-            "Restrict results to native skills allowed by this agent's " +
-              "skill policy and visible from its environment.",
+            "Restrict results to native skills available through this internal " +
+              "agent or eligible for publication by this saved MCP gateway.",
           ),
+          mcpGatewayEnvironment: z
+            .union([UuidIdSchema, z.literal("default")])
+            .optional()
+            .describe(
+              "Preview skills eligible for MCP Gateway All mode using this " +
+                "form environment. Use `default` for the Default environment.",
+            ),
+          agentSkillView: z
+            .enum(["effective", "eligible"])
+            .default("effective")
+            .describe(
+              "Effective applies the saved skill policy. Eligible previews the skills that All mode can include before its exclusions.",
+            ),
           scope: ResourceVisibilityScopeSchema.optional().describe(
             "Filter by visibility scope: personal, team, or org.",
           ),
@@ -419,6 +436,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           sourceRepo,
           forAgentId,
+          mcpGatewayEnvironment,
+          agentSkillView,
           scope,
           teamIds,
           authorIds,
@@ -450,7 +469,29 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let environmentId: string | null | undefined;
       let allowedSkillIds: string[] | undefined;
       let excludedSkillIds: string[] | undefined;
-      if (forAgentId !== undefined) {
+      let effectiveScope = scope;
+      let publishableOverMcp = false;
+      if (forAgentId === undefined && mcpGatewayEnvironment !== undefined) {
+        const agentChecker = await getAgentTypePermissionChecker({
+          userId: user.id,
+          organizationId,
+        });
+        agentChecker.require("mcp_gateway", "create");
+        environmentId =
+          mcpGatewayEnvironment === "default" ? null : mcpGatewayEnvironment;
+        await assertCanAssignEnvironment({
+          environmentId,
+          organizationId,
+          canDeployToRestricted: await userHasPermission(
+            user.id,
+            organizationId,
+            "mcpGateway",
+            "deploy-to-restricted",
+          ),
+        });
+        effectiveScope = "org";
+        publishableOverMcp = true;
+      } else if (forAgentId !== undefined) {
         const agent = await AgentModel.findById(forAgentId, user.id, true);
         if (!agent || agent.organizationId !== organizationId) {
           throw new ApiError(404, "Agent not found");
@@ -470,24 +511,76 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           throw new ApiError(404, "Agent not found");
         }
-        const policy =
-          await AgentActivationSkillRuleModel.findPolicySnapshot(forAgentId);
-        if (!policy) {
-          throw new ApiError(404, "Agent not found");
-        }
         environmentId = agent.environmentId ?? null;
-        if (policy.mode === "manual") {
-          allowedSkillIds = policy.rules.flatMap((rule) =>
-            rule.disposition === "allow" && rule.reference.source === "native"
-              ? [rule.reference.skillId]
-              : [],
-          );
+        if (publishesSkills(agent.agentType)) {
+          publishableOverMcp = true;
+          if (
+            mcpGatewayEnvironment !== undefined &&
+            agentSkillView !== "eligible"
+          ) {
+            throw new ApiError(
+              400,
+              "mcpGatewayEnvironment requires agentSkillView=eligible",
+            );
+          }
+          if (agentSkillView === "eligible") {
+            effectiveScope = "org";
+            if (mcpGatewayEnvironment !== undefined) {
+              agentChecker.require(agent.agentType, "update");
+              environmentId =
+                mcpGatewayEnvironment === "default"
+                  ? null
+                  : mcpGatewayEnvironment;
+              await assertCanAssignEnvironment({
+                environmentId,
+                organizationId,
+                canDeployToRestricted: await userHasPermission(
+                  user.id,
+                  organizationId,
+                  getResourceForAgentType(agent.agentType),
+                  "deploy-to-restricted",
+                ),
+              });
+            }
+          } else if (agent.accessAllSkills) {
+            effectiveScope = "org";
+            excludedSkillIds =
+              await AgentExcludedSkillModel.findSkillIdsByAgent(forAgentId);
+          } else {
+            allowedSkillIds =
+              await AgentSkillModel.findSkillIdsByAgent(forAgentId);
+          }
+        } else if (agent.agentType === "agent") {
+          if (mcpGatewayEnvironment !== undefined) {
+            throw new ApiError(
+              400,
+              "mcpGatewayEnvironment is available only for MCP gateways",
+            );
+          }
+          const policy =
+            await AgentActivationSkillRuleModel.findPolicySnapshot(forAgentId);
+          if (!policy) {
+            throw new ApiError(404, "Agent not found");
+          }
+          if (agentSkillView === "eligible") {
+            // The generic Skills table is native-only. The activation-skills
+            // route supplies the editor's complete cross-source eligible view.
+          } else if (policy.mode === "manual") {
+            allowedSkillIds = policy.rules.flatMap((rule) =>
+              rule.disposition === "allow" && rule.reference.source === "native"
+                ? [rule.reference.skillId]
+                : [],
+            );
+          } else {
+            excludedSkillIds = policy.rules.flatMap((rule) =>
+              rule.disposition === "exclude" &&
+              rule.reference.source === "native"
+                ? [rule.reference.skillId]
+                : [],
+            );
+          }
         } else {
-          excludedSkillIds = policy.rules.flatMap((rule) =>
-            rule.disposition === "exclude" && rule.reference.source === "native"
-              ? [rule.reference.skillId]
-              : [],
-          );
+          throw new ApiError(400, "This agent type does not expose skills");
         }
       }
       // Non-admins see only skills within their scope; admins see all.
@@ -508,7 +601,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Author filters are an admin oversight surface (mirrors the agents
       // list); non-admins are already restricted to their own scope.
       const scopeFilters = {
-        scope,
+        scope: effectiveScope,
         teamIds,
         authorIds: checker.isAdmin ? authorIds : undefined,
         excludeAuthorIds: checker.isAdmin ? excludeAuthorIds : undefined,
@@ -533,6 +626,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           excludedSkillIds,
+          publishableOverMcp,
           environmentId,
           labelFilteredIds,
           ...scopeFilters,
@@ -544,6 +638,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           excludedSkillIds,
+          publishableOverMcp,
           environmentId,
           labelFilteredIds,
           ...scopeFilters,

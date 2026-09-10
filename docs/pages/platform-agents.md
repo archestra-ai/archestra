@@ -144,6 +144,8 @@ Auto delegation resolves per calling user. It applies in chat and other flows th
 
 When an agent delegates work to another agent, Archestra tracks the full call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state, so downstream tool policy enforcement does not reset mid-run.
 
+An agent can also delegate to an [external A2A agent](/docs/platform-outbound-a2a-agents). External targets use the same subagent picker but are always assigned explicitly.
+
 For durable work, an Agent can optionally use [Agent Runtime](/docs/platform-agent-runtime). Direct conversations always stay in the foreground Agent loop. A delegated task uses the target Agent's isolated deployment only when that target has Agent Runtime configured.
 
 ## Convert to Skill

@@ -21,6 +21,13 @@ export type BulkVisibilityChange = {
   userIds: string[];
 };
 
+type BulkVisibilitySelectorProps = BulkVisibilityChange & {
+  subject: string;
+  onScopeChange: (scope: ResourceVisibilityScope) => void;
+  onTeamIdsChange: (ids: string[]) => void;
+  onUserIdsChange: (ids: string[]) => void;
+};
+
 /**
  * Set one visibility across a selection.
  *
@@ -43,6 +50,7 @@ export function BulkVisibilityDialog({
   onOpenChange,
   onApply,
   isPending,
+  renderSelector,
   renderTeamSelectionNotice,
 }: {
   items: readonly BulkVisibilityItem[];
@@ -57,6 +65,8 @@ export function BulkVisibilityDialog({
    */
   onApply: (change: BulkVisibilityChange) => Promise<boolean>;
   isPending: boolean;
+  /** Override when a resource has different visibility permission rules. */
+  renderSelector?: (props: BulkVisibilitySelectorProps) => ReactNode;
   /** Optional resource-specific consequence of the staged team selection. */
   renderTeamSelectionNotice?: (teamIds: readonly string[]) => ReactNode;
 }) {
@@ -73,6 +83,17 @@ export function BulkVisibilityDialog({
 
   const count = (n: number) =>
     `${n} ${n === 1 ? noun : (plural ?? `${noun}s`)}`;
+  const subject =
+    items.length === 1 ? `this ${noun}` : `these ${plural ?? `${noun}s`}`;
+  const selectorProps: BulkVisibilitySelectorProps = {
+    subject,
+    scope,
+    teamIds,
+    userIds,
+    onScopeChange: setScope,
+    onTeamIdsChange: setTeamIds,
+    onUserIdsChange: setUserIds,
+  };
 
   const handleApply = async () => {
     const moved = await onApply({
@@ -96,19 +117,11 @@ export function BulkVisibilityDialog({
       size="medium"
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <SkillScopeSelector
-          subject={
-            items.length === 1
-              ? `this ${noun}`
-              : `these ${plural ?? `${noun}s`}`
-          }
-          scope={scope}
-          onScopeChange={setScope}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
-          userIds={userIds}
-          onUserIdsChange={setUserIds}
-        />
+        {renderSelector ? (
+          renderSelector(selectorProps)
+        ) : (
+          <SkillScopeSelector {...selectorProps} />
+        )}
         {scope === "team" && renderTeamSelectionNotice ? (
           <div className="mt-3">{renderTeamSelectionNotice(teamIds)}</div>
         ) : null}

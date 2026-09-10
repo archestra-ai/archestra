@@ -1804,6 +1804,7 @@ function decodeListTasksPageToken(token: string): {
 const PUSH_URL_REJECTION_DETAIL: Record<OutboundUrlRejection, string> = {
   not_a_url: "the url is not a valid absolute URL",
   scheme_not_https: "the url must use https",
+  userinfo_not_allowed: "the url must not contain embedded user credentials",
   private_or_loopback_host:
     "the url must not point at a private or loopback address",
 };

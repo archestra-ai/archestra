@@ -4,7 +4,7 @@ import {
   isAgentTool,
   isSkillTool,
 } from "@archestra/shared";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
@@ -367,6 +367,7 @@ class TrustedDataPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
     context: PolicyEvaluationContext,
+    resolvedToolId?: string,
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;
@@ -378,6 +379,7 @@ class TrustedDataPolicyModel {
       agentId,
       [{ toolName, toolOutput }],
       context,
+      resolvedToolId ? new Map([[toolName, resolvedToolId]]) : undefined,
     );
     return (
       results.get("0") || {
@@ -409,6 +411,7 @@ class TrustedDataPolicyModel {
       isRunToolDispatchTarget?: boolean;
     }>,
     context: PolicyEvaluationContext,
+    resolvedToolIdByName?: Map<string, string>,
   ): Promise<
     Map<
       string,
@@ -458,6 +461,7 @@ class TrustedDataPolicyModel {
     }
 
     const toolNames = nonArchestraToolCalls.map(({ toolName }) => toolName);
+    const resolvedToolIds = [...new Set(resolvedToolIdByName?.values() ?? [])];
 
     // Fetch all policies and tool info in one query (tool-global, not agent-scoped)
     const allPoliciesAndTools = await db
@@ -482,7 +486,14 @@ class TrustedDataPolicyModel {
         schema.trustedDataPoliciesTable,
         eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
       )
-      .where(inArray(schema.toolsTable.name, toolNames));
+      .where(
+        resolvedToolIds.length > 0
+          ? or(
+              inArray(schema.toolsTable.name, toolNames),
+              inArray(schema.toolsTable.id, resolvedToolIds),
+            )
+          : inArray(schema.toolsTable.name, toolNames),
+      );
 
     // Group policies by tool name
     const policiesByTool = new Map<
@@ -494,9 +505,19 @@ class TrustedDataPolicyModel {
         action: TrustedData.TrustedDataPolicyAction | null;
       }>
     >();
+    const policiesByToolId = new Map<
+      string,
+      Array<{
+        policyId: string | null;
+        policyDescription: string | null;
+        conditions: ResultPolicyCondition[];
+        action: TrustedData.TrustedDataPolicyAction | null;
+      }>
+    >();
 
     // Track tools that exist in the database
     const knownTools = new Set<string>();
+    const knownToolIds = new Set<string>();
     // A name resolves to an owned-app launch tool only when EVERY tool sharing
     // it is an app backing (serverType "app"). Names are unique only per catalog
     // and evaluateBulk resolves by name, so a name a non-app catalog also uses is
@@ -504,11 +525,14 @@ class TrustedDataPolicyModel {
     // register a colliding name to skip the guardrail.
     const appNameTools = new Set<string>();
     const nonAppNameTools = new Set<string>();
+    const ownedAppToolIds = new Set<string>();
 
     for (const row of allPoliciesAndTools) {
       knownTools.add(row.toolName);
+      knownToolIds.add(row.toolId);
       if (row.serverType === "app") {
         appNameTools.add(row.toolName);
+        ownedAppToolIds.add(row.toolId);
       } else {
         nonAppNameTools.add(row.toolName);
       }
@@ -518,6 +542,15 @@ class TrustedDataPolicyModel {
       }
 
       policiesByTool.get(row.toolName)?.push({
+        policyId: row.policyId,
+        policyDescription: row.policyDescription,
+        conditions: row.conditions as ResultPolicyCondition[],
+        action: row.action,
+      });
+      if (!policiesByToolId.has(row.toolId)) {
+        policiesByToolId.set(row.toolId, []);
+      }
+      policiesByToolId.get(row.toolId)?.push({
         policyId: row.policyId,
         policyDescription: row.policyDescription,
         conditions: row.conditions as ResultPolicyCondition[],
@@ -534,6 +567,7 @@ class TrustedDataPolicyModel {
     // Process each tool call
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName, toolOutput } = toolCalls[i];
+      const resolvedToolId = resolvedToolIdByName?.get(toolName);
 
       // Skip policy-bypassing Archestra tools (already handled above);
       // policy-evaluated built-ins like `query_knowledge_sources` fall through.
@@ -544,7 +578,11 @@ class TrustedDataPolicyModel {
       // An owned-app launch tool ("Open <app>") returns only a platform render
       // pointer, so its result is trusted — opening an app must not flip the
       // context to sensitive and block the next call.
-      if (ownedAppLaunchTools.has(toolName)) {
+      if (
+        resolvedToolId
+          ? ownedAppToolIds.has(resolvedToolId)
+          : ownedAppLaunchTools.has(toolName)
+      ) {
         results.set(i.toString(), {
           isTrusted: true,
           isBlocked: false,
@@ -555,7 +593,11 @@ class TrustedDataPolicyModel {
       }
 
       // If tool doesn't exist in the database, treat as untrusted
-      if (!knownTools.has(toolName)) {
+      if (
+        resolvedToolId
+          ? !knownToolIds.has(resolvedToolId)
+          : !knownTools.has(toolName)
+      ) {
         // A run_tool dispatch target with no tool row anywhere cannot have
         // produced upstream data: run_tool refuses dispatches to names it
         // cannot resolve, so the result is the platform's own refusal text —
@@ -583,7 +625,9 @@ class TrustedDataPolicyModel {
         continue;
       }
 
-      const policies = policiesByTool.get(toolName) || [];
+      const policies = resolvedToolId
+        ? policiesByToolId.get(resolvedToolId) || []
+        : policiesByTool.get(toolName) || [];
 
       // Filter to actual policies (not null from LEFT JOIN)
       const actualPolicies = policies.filter((p) => p.policyId !== null);

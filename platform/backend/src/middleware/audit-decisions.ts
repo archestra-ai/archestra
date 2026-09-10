@@ -1,5 +1,6 @@
 import config from "@/config";
 import type { schema } from "@/database";
+import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
@@ -86,6 +87,24 @@ export const AUDIT_DECISIONS = {
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
+  a2aRemoteAgentsTable: { audited: true, model: A2aRemoteAgentModel },
+  a2aRemoteAgentTeamsTable: {
+    audited: false,
+    reason: "Association changes are captured on the parent outbound A2A agent",
+  },
+  a2aRemoteAgentUsersTable: {
+    audited: false,
+    reason: "Association changes are captured on the parent outbound A2A agent",
+  },
+  a2aConnectionsTable: {
+    audited: false,
+    reason:
+      "credential-bearing child configuration audited through its remote agent resource",
+  },
+  a2aOutboundRunsTable: {
+    audited: false,
+    reason: "A2A execution state recorded by the outbound run ledger",
+  },
   runtimeCredentialDefinitionsTable: {
     audited: true,
     model: RuntimeCredentialDefinitionModel,

@@ -34,3 +34,6 @@ docs/superpowers/specs
 ai-labs/experiments/
 ai-labs/analyzer/target/
 ai-labs/**/.trajectory-analysis-*/
+
+# Local verification evidence
+.artifacts/

@@ -1,3 +1,4 @@
+import ipaddr from "ipaddr.js";
 import config from "@/config";
 import {
   isLoopbackAddress,
@@ -14,6 +15,7 @@ import {
 export type OutboundUrlRejection =
   | "not_a_url"
   | "scheme_not_https"
+  | "userinfo_not_allowed"
   | "private_or_loopback_host";
 
 type OutboundUrlValidation =
@@ -61,6 +63,10 @@ export function validateOutboundUrl(rawUrl: string): OutboundUrlValidation {
     return { ok: false, reason: "scheme_not_https" };
   }
 
+  if (url.username || url.password) {
+    return { ok: false, reason: "userinfo_not_allowed" };
+  }
+
   if (
     isPrivateOrLoopbackHostname(url.hostname) &&
     !(allowLocalTargets && isLoopbackHost(url.hostname))
@@ -69,6 +75,27 @@ export function validateOutboundUrl(rawUrl: string): OutboundUrlValidation {
   }
 
   return { ok: true, url };
+}
+
+/** Reject DNS answers that could route an outbound request into a trusted network. */
+export function isAllowedA2aAddress(address: string): boolean {
+  let parsed: ipaddr.IPv4 | ipaddr.IPv6;
+  try {
+    parsed = ipaddr.parse(address);
+  } catch {
+    return false;
+  }
+  if (parsed.kind() === "ipv6") {
+    const ipv6 = parsed as ipaddr.IPv6;
+    if (ipv6.isIPv4MappedAddress()) {
+      parsed = ipv6.toIPv4Address();
+    }
+  }
+  const range = parsed.range();
+  if (range === "unicast") return true;
+  const allowLocalTargets =
+    !config.production || config.test.enableE2eTestEndpoints;
+  return allowLocalTargets && range === "loopback";
 }
 
 /** localhost / *.localhost / 127.0.0.0.0/8 / ::1 — the dev-only exception. */

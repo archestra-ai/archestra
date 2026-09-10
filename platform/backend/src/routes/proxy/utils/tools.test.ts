@@ -126,7 +126,7 @@ describe("persistTools", () => {
       .from(schema.toolInvocationPoliciesTable)
       .where(eq(schema.toolInvocationPoliciesTable.toolId, nativeTool.id));
     expect(nativePolicy.action).toBe("allow_when_context_is_untrusted");
-    expect(nativePolicy.reason).toContain("Native Claude client tool");
+    expect(nativePolicy.reason).toContain("Native Claude Code client tool");
 
     // The result policy is NOT overridden: native results still flip the
     // session sensitive so downstream guardrails keep working.

@@ -39,6 +39,10 @@ Content rules:
 15. No "Future Considerations" section and no generic "Best Practices" section.
 16. Good docs are short docs. Keep every page as concise as the feature allows.
 
+## Markdown Formatting
+
+Keep each prose paragraph on a single source line, matching the existing docs. Do not insert line breaks after every sentence or hard-wrap paragraphs at a fixed column width. Short-sentence guidance concerns wording, not line breaks. Use blank lines between paragraphs; preserve Markdown structure for headings, lists, tables, and code blocks.
+
 ## Calibration Examples
 
 | Rejected | Accepted |

@@ -7,8 +7,8 @@ import type { SupportedProvider } from "../model-constants";
  * `X-Archestra-Agent-Id` header (e.g. the connect-page setup scripts send
  * {@link CLAUDE_CODE_CLIENT_ID} / {@link CLAUDE_DESKTOP_CLIENT_ID}) or, when
  * absent, from auto-discovery of a Claude client (recorded as the generic
- * {@link CLAUDE_CLIENT_ID}). Every Claude-family id renders as a single
- * {@link CLAUDE_CLIENT_LABEL} in the UI.
+ * {@link CLAUDE_CLIENT_ID}). Explicit Desktop ids render a Desktop badge; generic Claude attribution
+ * is treated as Claude Code for compatibility with older installations.
  */
 
 /**
@@ -21,8 +21,8 @@ import type { SupportedProvider } from "../model-constants";
  */
 export const CLIENT_MCP_TOOL_NAME_PREFIX = "mcp__";
 
-/** Human-readable label for every Claude client id in the UI. */
-export const CLAUDE_CLIENT_LABEL = "Claude";
+/** Label for Claude Code, including legacy generic Claude attribution. */
+export const CLAUDE_CLIENT_LABEL = "Claude Code";
 
 /** Human-readable label for the Codex client id in the UI. */
 export const CODEX_CLIENT_LABEL = "Codex";
@@ -253,6 +253,8 @@ export const CURSOR_CLIENT_FILTER = "cursor";
 
 export const ClientFilterSchema = z.enum([
   CLAUDE_CLIENT_FILTER,
+  "claude-code",
+  "claude-desktop",
   CODEX_CLIENT_FILTER,
   COPILOT_CLI_CLIENT_FILTER,
   CURSOR_CLIENT_FILTER,
@@ -287,11 +289,21 @@ export interface ClientFamily {
  */
 const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
   {
-    filter: CLAUDE_CLIENT_FILTER,
+    filter: "claude-code",
     label: CLAUDE_CLIENT_LABEL,
     provider: "anthropic",
-    agentIds: CLAUDE_CLIENT_AGENT_IDS,
-    isClientAgentId: isClaudeClientAgentId,
+    agentIds: [CLAUDE_CLIENT_ID, CLAUDE_CODE_CLIENT_ID],
+    isClientAgentId: (id) =>
+      id?.trim().toLowerCase() === CLAUDE_CLIENT_ID ||
+      id?.trim().toLowerCase() === CLAUDE_CODE_CLIENT_ID,
+  },
+  {
+    filter: "claude-desktop",
+    label: "Claude Desktop",
+    provider: "anthropic",
+    agentIds: [CLAUDE_DESKTOP_CLIENT_ID],
+    isClientAgentId: (id) =>
+      id?.trim().toLowerCase() === CLAUDE_DESKTOP_CLIENT_ID,
   },
   {
     filter: CODEX_CLIENT_FILTER,
@@ -339,7 +351,11 @@ export function clientFilterToAgentIds(
   filter: ClientFilter,
 ): ReadonlyArray<string> {
   return (
-    CLIENT_FAMILIES.find((family) => family.filter === filter)?.agentIds ?? []
+    CLIENT_FAMILIES.find(
+      (family) =>
+        family.filter ===
+        (filter === CLAUDE_CLIENT_FILTER ? "claude-code" : filter),
+    )?.agentIds ?? []
   );
 }
 

@@ -82,6 +82,23 @@ describe("fetchAnthropicModels", () => {
     config.llm.anthropic.wif = originalWif;
   });
 
+  test("discovers models with a subscription bearer instead of an API key", async () => {
+    const fetchMock = stubAnthropicFetch();
+
+    await expect(
+      fetchAnthropicModels(
+        "sk-ant-oat01-subscription",
+        "https://api.anthropic.com",
+      ),
+    ).resolves.toMatchObject([{ id: "claude-sonnet-4-6" }]);
+
+    expect(modelsRequestHeaders(fetchMock)).toEqual({
+      Authorization: "Bearer sk-ant-oat01-subscription",
+      "anthropic-beta": "oauth-2025-04-20",
+      "anthropic-version": "2023-06-01",
+    });
+  });
+
   test("uses a federated bearer token for keyless fetches when WIF is enabled", async () => {
     config.llm.anthropic.wif = { ...WIF_CONFIG };
     const fetchMock = stubAnthropicFetch();

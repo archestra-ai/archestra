@@ -37953,7 +37953,7 @@ export type GetClientConnectionInstallerResponses = {
 
 export type StartClientConnectionData = {
     body: {
-        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'cursor';
+        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor';
         platform: 'macos' | 'linux' | 'windows';
     };
     path?: never;
@@ -38206,7 +38206,7 @@ export type GetClientConnectionResponses = {
      * Default Response
      */
     200: {
-        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'cursor';
+        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor';
         platform: 'macos' | 'linux' | 'windows';
         userCode: string;
         expiresAt: string;
@@ -38300,7 +38300,7 @@ export type DecideClientConnectionResponses = {
      */
     200: {
         status: 'approved' | 'denied';
-        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'cursor';
+        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor';
         platform: 'macos' | 'linux' | 'windows';
     };
 };
@@ -38719,7 +38719,7 @@ export type GetConnectionHealthResponse = GetConnectionHealthResponses[keyof Get
 
 export type CreateConnectionSetupData = {
     body: {
-        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'cursor';
+        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor';
         platform?: 'macos' | 'linux' | 'windows';
         baseUrl: string;
         mcpGatewayId?: string;
@@ -38811,6 +38811,7 @@ export type CreateConnectionSetupResponses = {
     200: {
         id: string;
         command: string;
+        installerUrl?: string;
         expiresAt: string;
         tokenStart: string;
         creditWarning?: {
@@ -38821,7 +38822,7 @@ export type CreateConnectionSetupResponses = {
             id: string;
             pluginSlug: string;
             displayName: string;
-            clientType: 'claude-code' | 'codex' | 'copilot-cli' | 'cursor';
+            clientType: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor';
         }>;
     };
 };
@@ -39009,7 +39010,9 @@ export type GetConnectionSetupScriptData = {
     path: {
         token: string;
     };
-    query?: never;
+    query?: {
+        download?: 'desktop';
+    };
     url: '/api/connection-setups/script/{token}';
 };
 
@@ -51782,7 +51785,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude' | 'codex' | 'copilot-cli' | 'cursor';
+        client?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor';
         /**
          * Filter by session ID
          */
@@ -101951,7 +101954,7 @@ export type GetToolsWithAssignmentsData = {
         /**
          * Only tools observed from this client app family (e.g. claude, codex)
          */
-        observedByClient?: 'claude' | 'codex' | 'copilot-cli' | 'cursor';
+        observedByClient?: 'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor';
         /**
          * Hide built-in Archestra tools
          */
@@ -102178,7 +102181,7 @@ export type GetToolObserversResponses = {
             name: string;
             email: string;
         }>;
-        clients: Array<'claude' | 'codex' | 'copilot-cli' | 'cursor'>;
+        clients: Array<'claude' | 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor'>;
     };
 };
 

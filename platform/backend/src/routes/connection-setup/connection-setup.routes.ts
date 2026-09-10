@@ -12,6 +12,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import { CacheKey } from "@/cache-manager";
 import config, { getConnectionBaseUrlSources } from "@/config";
@@ -36,6 +37,7 @@ import {
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
+import { buildDesktopInstallerBundle } from "@/services/connection-setup-desktop-bundle";
 import {
   buildSetupCommand,
   proxyBaseUrlToOrigin,
@@ -74,6 +76,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   readonly SupportedProvider[]
 > = {
   "claude-code": ["anthropic", "bedrock"],
+  "claude-desktop": ["anthropic"],
   codex: ["openai"],
   cursor: ["openai"],
   "copilot-cli": [
@@ -152,6 +155,7 @@ const ConnectionCreditWarningSchema = z.object({
 const CreateConnectionSetupResponseSchema = z.object({
   id: z.string().uuid(),
   command: z.string(),
+  installerUrl: z.string().optional(),
   expiresAt: z.date(),
   tokenStart: z.string(),
   /** Present when the bound Anthropic key has no (confirmable) credit. */
@@ -325,10 +329,26 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `${provider} is not supported for ${clientId} setups`,
         );
       }
-      if (model && clientId !== "copilot-cli") {
+      if (clientId === "claude-desktop") {
+        const endpoint = new URL(baseUrl);
+        if (
+          endpoint.protocol !== "https:" &&
+          !["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)
+        ) {
+          throw new ApiError(
+            400,
+            "Claude Desktop requires HTTPS, or HTTP on localhost, for connectors and marketplaces.",
+          );
+        }
+      }
+      if (
+        model &&
+        clientId !== "copilot-cli" &&
+        clientId !== "claude-desktop"
+      ) {
         throw new ApiError(
           400,
-          "model is only supported for copilot-cli setups",
+          "model is only supported for copilot-cli and claude-desktop setups",
         );
       }
 
@@ -403,7 +423,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Copilot CLI (GitHub Copilot subscription, via COPILOT_PROVIDER_HEADERS).
           // Best-effort: silently skipped without llmVirtualKey:create.
           attributePassthrough &&
-          ((clientId === "claude-code" &&
+          (((clientId === "claude-code" || clientId === "claude-desktop") &&
             (provider === "anthropic" || provider === "bedrock")) ||
             (clientId === "codex" && provider === "openai") ||
             (clientId === "copilot-cli" && provider === "github-copilot"))
@@ -486,6 +506,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
       } else if (
+        clientId !== "claude-desktop" &&
         config.plugins.enabled &&
         organization.connectionPluginsEnabled
       ) {
@@ -550,6 +571,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           rawToken,
           platform,
         }),
+        installerUrl:
+          clientId === "claude-desktop"
+            ? `${proxyBaseUrlToOrigin(baseUrl)}${CONNECTION_SETUP_SCRIPT_PREFIX}/${rawToken}?download=desktop`
+            : undefined,
         expiresAt: setup.expiresAt,
         tokenStart: setup.tokenStart,
         creditWarning,
@@ -698,6 +723,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "consumed atomically on the first successful render.",
         tags: ["Connection Setups"],
         params: z.object({ token: z.string().min(20).max(256) }),
+        querystring: z.object({ download: z.literal("desktop").optional() }),
         // no `response` schema: this endpoint returns text/plain bash, not
         // JSON. The global error handler still formats 4xx/5xx as JSON, and
         // the generated command uses `curl -f`, so error bodies are never
@@ -714,6 +740,39 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { token } = request.params;
+      if (request.query.download === "desktop") {
+        const setup = await ConnectionSetupModel.findByToken(token);
+        if (!setup) throw new ApiError(404, "Unknown setup token");
+        if (setup.consumedAt || setup.expiresAt <= new Date()) {
+          throw new ApiError(
+            410,
+            "This installer has expired or was already used. Download a new installer from Connect.",
+          );
+        }
+        if (setup.clientId !== "claude-desktop")
+          throw new ApiError(
+            400,
+            "Desktop installer requires a Claude Desktop setup.",
+          );
+        // Downloading never consumes the ticket or packages a provider credential.
+        // The existing script endpoint revalidates permissions when installation runs.
+        const bundle = await buildDesktopInstallerBundle({
+          origin: proxyBaseUrlToOrigin(setup.baseUrl),
+          rawToken: token,
+          platform: setup.platform,
+          appName: archestraMcpBranding.appName,
+          iconLogo: archestraMcpBranding.iconLogo,
+        });
+        return reply
+          .header("Cache-Control", "no-store")
+          .header(
+            "Content-Disposition",
+            'attachment; filename="Connect-Claude-Desktop.mcpb"',
+          )
+          .header("X-Content-Type-Options", "nosniff")
+          .type("application/octet-stream")
+          .send(bundle);
+      }
 
       // Claim FIRST (atomic, exactly one fetch wins), so the re-validation
       // reads below observe any revocation committed before the claim — the
@@ -848,7 +907,7 @@ interface MarketplaceRenderContext {
   skillIds: string[];
   pluginIds: string[];
   pluginNames: string[];
-  pluginClientType: ConnectionSetupClientId | null;
+  pluginClientType: Exclude<ConnectionSetupClientId, "claude-desktop"> | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
 }
@@ -1025,7 +1084,10 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       skillIds,
       pluginIds,
       pluginNames,
-      pluginClientType: pluginIds.length > 0 ? setup.clientId : null,
+      pluginClientType:
+        pluginIds.length > 0 && setup.clientId !== "claude-desktop"
+          ? setup.clientId
+          : null,
       pluginPlatform:
         pluginIds.length > 0 ? resolvePluginPlatform(setup.platform) : null,
       marketplaceName,

@@ -1,5 +1,6 @@
 import { archestraApiSdk, type Permissions } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
+import { cache } from "react";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 
@@ -10,6 +11,12 @@ export async function serverCanAccessPage(pathname: string): Promise<boolean> {
 export async function serverHasPermissions(
   permissionsToCheck: Permissions,
 ): Promise<boolean> {
+  return hasPermissions(await getServerPermissions(), permissionsToCheck);
+}
+
+// React cache is scoped to one server render, not shared between users or
+// requests. Page access and optional sections can reuse the same lookup.
+const getServerPermissions = cache(async () => {
   const headers = await getServerApiHeaders();
   const {
     data: userPermissions,
@@ -34,5 +41,5 @@ export async function serverHasPermissions(
     );
   }
 
-  return hasPermissions(userPermissions ?? undefined, permissionsToCheck);
-}
+  return userPermissions ?? undefined;
+});

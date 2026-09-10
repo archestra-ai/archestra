@@ -212,6 +212,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     limit: pageSize,
     offset,
     initialData: initialData?.agents ?? undefined,
+    initialDataExcludeOtherPersonalAgents: true,
     ...listFilters,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });

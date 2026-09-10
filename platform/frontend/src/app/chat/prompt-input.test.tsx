@@ -477,7 +477,7 @@ describe("ArchestraPromptInput", () => {
 
     expect(
       screen.getByText(
-        "Starts Codex in its dedicated runtime. This becomes its live terminal when ready.",
+        "Starts Codex in its dedicated runtime. Messages and tools appear here when ready.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveAttribute(

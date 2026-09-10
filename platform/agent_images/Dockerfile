@@ -5,7 +5,7 @@ FROM node:24-bookworm-slim AS agent-base
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl git gh jq less openssh-client \
-      procps python3 python3-pip python3-venv ripgrep tmux \
+      procps python3 python3-pip python3-venv ripgrep util-linux tini \
  && rm -rf /var/lib/apt/lists/*
 
 ENV PNPM_HOME=/usr/local/share/pnpm

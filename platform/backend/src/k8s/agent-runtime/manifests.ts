@@ -23,9 +23,6 @@ const DNS_PORTS = [
   { protocol: "TCP" as const, port: 53 },
 ];
 
-/** Session used by the workspace shell or a legacy terminal client. */
-export const AGENT_RUNTIME_TMUX_SESSION = "agent";
-
 /** Container name in the Job spec; exec and log reads both address it. */
 export const AGENT_RUNTIME_CONTAINER_NAME = "agent-runtime";
 
@@ -72,7 +69,6 @@ export function buildAgentRuntimeTurnScript(
     TERM: "xterm-256color",
     ENV: AGENT_RUNTIME_SHELL_INIT_SCRIPT,
     PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
-    ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",
     ARCHESTRA_AGENT_RUNTIME_INPUT_FILE_COUNT: "0",
     ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR: AGENT_RUNTIME_ATTACHMENTS_DIR,
     ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_MANIFEST:
@@ -83,7 +79,7 @@ export function buildAgentRuntimeTurnScript(
   };
   return [
     "set -eu",
-    // A retained tmux server inherits the initial Pod environment. Remove its
+    // A retained supervisor inherits the initial Pod environment. Remove its
     // managed variables before applying this turn, including removed credentials.
     ...inheritedVariableNames.map((name) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
@@ -106,9 +102,9 @@ export function buildAgentRuntimeTurnScript(
  */
 export function buildAgentRuntimeTerminalIntegrationScript(): string {
   return [
-    `printf '%s\\n' '#!/bin/sh' 'tmux set-option -t ${AGENT_RUNTIME_TMUX_SESSION} mouse on' 'exec tmux attach -t ${AGENT_RUNTIME_TMUX_SESSION}' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
+    `printf '%s\\n' '#!/bin/sh' 'date +%s > /var/run/archestra/development-activity' 'exec /bin/sh -i' > ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
     `chmod 755 ${AGENT_RUNTIME_ATTACH_SCRIPT}`,
-    `printf '%s\\n' 'if [ -t 0 ] && [ -t 1 ]; then date +%s > /var/run/archestra/development-activity; fi' 'if [ "\${ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null; then exec ${AGENT_RUNTIME_ATTACH_SCRIPT}; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
+    `printf '%s\\n' 'if [ -t 0 ] && [ -t 1 ]; then date +%s > /var/run/archestra/development-activity; fi' > ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
     `chmod 644 ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
   ].join("\n");
 }
@@ -116,7 +112,7 @@ export function buildAgentRuntimeTerminalIntegrationScript(): string {
 /**
  * Exit code the bootstrap uses when the image cannot host an Agent Runtime run. Distinct
  * from any exit code the agent itself produces, so "your image is missing
- * tmux" never reads as "your agent failed".
+ * setsid" never reads as "your agent failed".
  */
 const AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE = 78;
 
@@ -138,11 +134,9 @@ export type KubernetesAgentRunLaunchSpec = Omit<
 /**
  * PID 1 for every Agent Runtime run, whatever the image.
  *
- * Maintained agents use their native pipe protocols. tmux supplies their
- * diagnostic shell and hosts legacy/custom terminal clients. The FIFO remains
- * available for custom clients that consume messages at turn boundaries.
+ * Agents use pipe protocols; an independent exec shell provides workspace access.
  *
- * The workspace supervisor owns PID 1; agent command completion is independent
+ * Tini reaps orphaned processes; agent command completion is independent
  * of Pod completion. Durable request markers prevent replay after replacement.
  */
 function buildAgentRuntimeBootstrapScript(): string {
@@ -160,8 +154,8 @@ function buildAgentRuntimeBootstrapScript(): string {
     "  done",
     "fi",
     `[ -p "${AGENT_RUNTIME_STEER_FIFO}" ] || mkfifo -m 600 "${AGENT_RUNTIME_STEER_FIFO}"`,
-    "if ! command -v tmux >/dev/null 2>&1; then",
-    '  echo "agent-runtime: this image has no tmux, which Agent Runtime runs require for attach and steering" >&2',
+    "if ! command -v setsid >/dev/null 2>&1; then",
+    '  echo "agent-runtime: this image requires setsid (util-linux) to supervise agent processes" >&2',
     `  exit ${AGENT_RUNTIME_UNUSABLE_IMAGE_EXIT_CODE}`,
     "fi",
     'case "$ARCHESTRA_AGENT_RUNTIME_TASK_ID" in ""|*[!a-zA-Z0-9-]*) echo "Invalid runtime task ID" >&2; exit 78;; esac',
@@ -290,21 +284,24 @@ export function buildAgentRuntimeSandbox(
             {
               name: AGENT_RUNTIME_CONTAINER_NAME,
               image: spec.image,
-              command: ["/bin/sh", "-c", buildAgentRuntimeBootstrapScript()],
+              command: [
+                "/usr/bin/tini",
+                "-s",
+                "--",
+                "/bin/sh",
+                "-c",
+                buildAgentRuntimeBootstrapScript(),
+              ],
               env: [
                 ...Object.entries({
-                  // tmux decides whether a client supports Unicode from its
-                  // locale. Kubernetes does not provide one by default, which
-                  // made Claude Code replace bullets, emoji, and line art with
-                  // underscores in both kubectl and the browser terminal.
+                  // Preserve Unicode in native text and workspace shell output.
                   LANG: "C.UTF-8",
                   LC_ALL: "C.UTF-8",
                   TERM: "xterm-256color",
                   // k9s opens `bash` or `sh` directly. These standard shell
-                  // hooks join the already-running tmux pane on first prompt.
+                  // hooks record activity on each shell prompt.
                   ENV: AGENT_RUNTIME_SHELL_INIT_SCRIPT,
                   PROMPT_COMMAND: `. ${AGENT_RUNTIME_SHELL_INIT_SCRIPT}`,
-                  ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "1",
                   ...spec.env,
                 }).map(([name, value]) => ({ name, value })),
                 {
@@ -491,7 +488,6 @@ function resolveEntrypoint(command: string[] | null): string {
   return [
     "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
     'if [ -f /var/run/archestra/session-interface ]; then export ARCHESTRA_AGENT_RUNTIME_INTERFACE="$(cat /var/run/archestra/session-interface)"; fi',
-    "if ! command -v archestra-agent-session >/dev/null 2>&1; then unset ARCHESTRA_AGENT_RUNTIME_INTERFACE; fi",
     `exec ${resolved}`,
   ].join("\n");
 }

@@ -117,41 +117,6 @@ describe("buildAgentRuntimeSandbox", () => {
     );
   });
 
-  it("makes direct interactive shells join the agent session", () => {
-    const env =
-      buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]?.env;
-
-    expect(env).toEqual(
-      expect.arrayContaining([
-        { name: "ENV", value: "/var/run/archestra/shell-init" },
-        {
-          name: "PROMPT_COMMAND",
-          value: ". /var/run/archestra/shell-init",
-        },
-        {
-          name: "ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH",
-          value: "1",
-        },
-      ]),
-    );
-    expect(
-      buildAgentRuntimeSandbox({
-        ...SPEC,
-        env: {
-          ...SPEC.env,
-          ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH: "0",
-        },
-      }).spec?.podTemplate.spec?.containers[0]?.env,
-    ).toEqual(
-      expect.arrayContaining([
-        {
-          name: "ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH",
-          value: "0",
-        },
-      ]),
-    );
-  });
-
   it("holds the entrypoint until declared input files are staged", () => {
     const container = buildAgentRuntimeSandbox({ ...SPEC, inputFileCount: 2 })
       .spec?.podTemplate.spec?.containers[0];
@@ -257,7 +222,6 @@ describe("buildAgentRuntimeSandbox", () => {
       [
         "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
         'if [ -f /var/run/archestra/session-interface ]; then export ARCHESTRA_AGENT_RUNTIME_INTERFACE="$(cat /var/run/archestra/session-interface)"; fi',
-        "if ! command -v archestra-agent-session >/dev/null 2>&1; then unset ARCHESTRA_AGENT_RUNTIME_INTERFACE; fi",
         `exec 'claude' '--task' 'it'\\''s a '\\''quoted'\\'' task; rm -rf /'`,
       ].join("\n"),
     );
@@ -272,7 +236,6 @@ describe("buildAgentRuntimeSandbox", () => {
     expect(entrypoint?.value).toBe(
       "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi\n" +
         'if [ -f /var/run/archestra/session-interface ]; then export ARCHESTRA_AGENT_RUNTIME_INTERFACE="$(cat /var/run/archestra/session-interface)"; fi\n' +
-        "if ! command -v archestra-agent-session >/dev/null 2>&1; then unset ARCHESTRA_AGENT_RUNTIME_INTERFACE; fi\n" +
         "exec archestra-runtime-agent",
     );
   });
@@ -289,68 +252,14 @@ describe("buildAgentRuntimeSandbox", () => {
 
 describe("the container bootstrap", () => {
   const script = () =>
-    buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec?.containers[0]
-      ?.command?.[2] ?? "";
+    buildAgentRuntimeSandbox(
+      SPEC,
+    ).spec?.podTemplate.spec?.containers[0]?.command?.at(-1) ?? "";
 
-  it("fails with a distinct code when the image cannot host a session", () => {
-    // Distinct from any exit code the agent itself produces, so "this image
-    // has no tmux" never reads as "your agent failed".
-    expect(script()).toContain("command -v tmux");
-    expect(script()).toContain("exit 78");
-  });
-
-  it("creates the steer FIFO and retains the workspace supervisor", () => {
-    expect(script()).toContain("mkfifo -m 600");
-    expect(script()).toContain("remain-on-exit on");
-  });
-
-  it("drains the stdout mirror before the pane exits", () => {
-    // A one-shot agent writes its whole answer in its final instant; without
-    // the drain the pane exit tears down pipe-pane first and the transcript
-    // ends up empty.
-    expect(script()).toContain("sleep 2; printf");
-  });
-
-  it("frames a bounded readable transcript after terminal capture ends", () => {
-    const bootstrap = script();
-
-    expect(bootstrap).toContain(
-      '[ "$(wc -c < /var/run/archestra/readable-transcript.json)" -le 16777216 ]',
-    );
-    expect(bootstrap).toContain("archestra-readable-transcript=base64");
-    expect(bootstrap).toContain("archestra-readable-transcript=end");
-    expect(bootstrap.indexOf('while [ ! -f "$turn.result" ]')).toBeLessThan(
-      bootstrap.indexOf("archestra-readable-transcript=base64"),
-    );
-  });
-
-  it("gives detached TUIs a browser-sized canvas before anyone attaches", () => {
-    expect(script()).toContain("tmux new-session -d -x 120 -y 40 -s agent");
-  });
-
-  it("lets terminal wheel events scroll tmux history", () => {
-    expect(script()).toContain("tmux set-option -t agent mouse on");
-    expect(script().indexOf("mouse on")).toBeLessThan(
-      script().indexOf("tmux respawn-pane"),
-    );
-  });
-
-  it("shows runtime-reported attention states in every attached terminal", () => {
-    expect(script()).toContain("@archestra_attention 0");
-    expect(script()).toContain("@archestra_attention_label");
-    expect(script()).toContain("status-left");
-    expect(script().indexOf("status-left")).toBeLessThan(
-      script().indexOf("tmux respawn-pane"),
-    );
-  });
-
-  it("installs a portable attach command for exec clients", () => {
-    expect(script()).toContain("> /var/run/archestra/attach");
-    expect(script()).toContain("chmod 755 /var/run/archestra/attach");
-    expect(script()).toContain("exec /var/run/archestra/attach");
-    expect(script().indexOf("/var/run/archestra/attach")).toBeLessThan(
-      script().indexOf("tmux new-session"),
-    );
+  it("installs the workspace shell and starts agents under independent process groups", () => {
+    expect(script()).toContain("exec /bin/sh -i");
+    expect(script()).toContain('setsid /bin/sh "$turn.session"');
+    expect(script()).not.toContain("tmux");
   });
 });
 

@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 export type RpcObject = Record<string, unknown>;
@@ -107,12 +108,28 @@ export class SessionRpc {
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
   }
 
+  async terminate(): Promise<void> {
+    const exited =
+      this.child.exitCode !== null || this.child.signalCode !== null
+        ? Promise.resolve()
+        : new Promise<void>((resolve) =>
+            this.child.once("exit", () => resolve()),
+          );
+    this.close();
+    await exited;
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    const descendants = this.descendants();
+    for (const [pid, started] of descendants)
+      signalProcess(pid, started, "SIGTERM");
     this.child.kill("SIGTERM");
     const child = this.child;
     const timer = setTimeout(() => {
+      for (const [pid, started] of descendants)
+        signalProcess(pid, started, "SIGKILL");
       if (child.exitCode === null) child.kill("SIGKILL");
     }, 3_000);
     timer.unref();
@@ -123,9 +140,65 @@ export class SessionRpc {
     this.pending.clear();
   }
 
+  private descendants(): Map<number, string> {
+    const result = new Map<number, string>();
+    if (process.platform !== "linux" || !this.child.pid) return result;
+    const parents = new Set([this.child.pid]);
+    const processes = readdirSync("/proc")
+      .filter((name) => /^\d+$/.test(name))
+      .flatMap((name) => {
+        try {
+          const fields =
+            readFileSync(`/proc/${name}/stat`, "utf8")
+              .split(") ")
+              .at(-1)
+              ?.split(" ") ?? [];
+          if (!fields[19]) return [];
+          return [
+            {
+              pid: Number(name),
+              parent: Number(fields[1]),
+              started: fields[19],
+            },
+          ];
+        } catch {
+          return [];
+        }
+      });
+    let added = true;
+    while (added) {
+      added = false;
+      for (const info of processes)
+        if (parents.has(info.parent) && !parents.has(info.pid)) {
+          parents.add(info.pid);
+          result.set(info.pid, info.started);
+          added = true;
+        }
+    }
+    return result;
+  }
+
   private fail(error: Error, onExit: (error: Error) => void): void {
     if (this.closed) return;
     this.close();
     onExit(error);
+  }
+}
+
+function signalProcess(
+  pid: number,
+  started: string,
+  signal: NodeJS.Signals,
+): void {
+  try {
+    // A delayed cleanup must never signal a PID reused by an unrelated process.
+    const fields =
+      readFileSync(`/proc/${pid}/stat`, "utf8")
+        .split(") ")
+        .at(-1)
+        ?.split(" ") ?? [];
+    if (fields[19] === started) process.kill(pid, signal);
+  } catch {
+    /* The process has already exited. */
   }
 }

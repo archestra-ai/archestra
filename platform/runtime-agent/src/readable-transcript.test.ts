@@ -16,6 +16,49 @@ afterEach(async () => {
 });
 
 describe("writeReadableTranscript", () => {
+  test("settles unfinished tool calls when an interrupted turn becomes idle", async () => {
+    const runtimeDir = await mkdtemp(
+      path.join(tmpdir(), "archestra-transcript-"),
+    );
+    temporaryDirectories.push(runtimeDir);
+    const messages: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolName: "run_command",
+            toolCallId: "sleep",
+            input: { command: "sleep 90" },
+          },
+        ],
+      },
+    ];
+    await writeReadableTranscript({
+      runtimeDir,
+      messages,
+      sessionState: "working",
+    });
+    const read = async () =>
+      JSON.parse(
+        await readFile(
+          path.join(runtimeDir, "readable-transcript.json"),
+          "utf8",
+        ),
+      );
+    expect((await read()).entries).toHaveLength(1);
+    await writeReadableTranscript({
+      runtimeDir,
+      messages,
+      sessionState: "idle",
+    });
+    expect((await read()).entries.at(-1)).toMatchObject({
+      type: "tool_result",
+      toolCallId: "sleep",
+      isError: true,
+    });
+  });
+
   test.each([
     undefined,
     null,

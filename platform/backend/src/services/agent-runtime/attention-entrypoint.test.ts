@@ -19,33 +19,11 @@ const ENTRYPOINT = path.resolve(
 );
 
 describe("Agent Runtime attention reporter", () => {
-  test("updates tmux and reports only state transitions", async () => {
+  test("reports only attention state transitions", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-attention-"));
     try {
       const bin = path.join(root, "bin");
       await mkdir(bin, { recursive: true });
-      await writeExecutable(
-        path.join(bin, "tmux"),
-        `#!/bin/sh
-case "$1:$5" in
-  show-option:@archestra_attention)
-    [ -f "$TEST_ROOT/state" ] && cat "$TEST_ROOT/state"
-    ;;
-  show-option:@archestra_attention_label)
-    [ -f "$TEST_ROOT/label" ] && cat "$TEST_ROOT/label"
-    ;;
-esac
-case "$1:$4" in
-  set-option:@archestra_attention)
-    printf '%s\n' "$5" > "$TEST_ROOT/state"
-    ;;
-  set-option:@archestra_attention_label)
-    printf '%s\n' "$5" > "$TEST_ROOT/label"
-    ;;
-esac
-printf '%s\n' "$*" >> "$TEST_ROOT/tmux-calls"
-`,
-      );
       await writeExecutable(
         path.join(bin, "curl"),
         `#!/bin/sh
@@ -57,7 +35,7 @@ printf '%s\n' "$*" >> "$TEST_ROOT/curl-calls"
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
         TEST_ROOT: root,
-        TMUX_PANE: "%4",
+        ARCHESTRA_AGENT_RUNTIME_DIR: root,
         ARCHESTRA_AGENT_RUNTIME_TASK_ID: "12345678-abcd-4000-8000-123456789abc",
         ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
@@ -68,12 +46,6 @@ printf '%s\n' "$*" >> "$TEST_ROOT/curl-calls"
       await execFileAsync(ENTRYPOINT, ["set", "Permission needed"], { env });
       await execFileAsync(ENTRYPOINT, ["clear"], { env });
       await execFileAsync(ENTRYPOINT, ["clear"], { env });
-
-      const tmuxCalls = await readFile(path.join(root, "tmux-calls"), "utf8");
-      expect(tmuxCalls).toContain(
-        "set-option -t %4 @archestra_attention_label Waiting for input",
-      );
-      expect(tmuxCalls).toContain("set-option -t %4 @archestra_attention 0");
 
       const curlCalls = (await readFile(path.join(root, "curl-calls"), "utf8"))
         .trim()

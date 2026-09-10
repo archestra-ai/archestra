@@ -51,7 +51,6 @@ import {
 import { execAgentRuntimeCommand } from "./exec";
 import {
   AGENT_RUNTIME_CONTAINER_NAME,
-  AGENT_RUNTIME_TMUX_SESSION,
   AGENT_SANDBOX_API,
   type AgentSandbox,
   buildAgentRuntimePlatformEgressPolicy,
@@ -467,33 +466,14 @@ class AgentRuntimeManager {
   ): Promise<boolean> {
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) return false;
-    const output = await execAgentRuntimeCommand({
-      exec: this.requireClients().exec,
-      namespace: session.runtimeScope,
-      podName: pod.metadata.name,
-      container: AGENT_RUNTIME_CONTAINER_NAME,
-      command: [
-        "tmux",
-        "display-message",
-        "-p",
-        "-t",
-        "agent",
-        "#{pane_dead}:#{@archestra_retained_task}",
-      ],
-    }).catch(() => "");
-    return output.trim() === `0:${session.taskId}`;
+    return true;
   }
 
   async releaseRun(
     session: AgentRunRecord,
-    options?: { retainInteractiveSession?: boolean },
+    _options?: { retainInteractiveSession?: boolean },
   ): Promise<void> {
-    if (
-      !options?.retainInteractiveSession ||
-      !(await this.hasRetainedTerminal(session))
-    ) {
-      await this.revokeVirtualKey(session);
-    }
+    await this.revokeVirtualKey(session);
     const clients = this.requireClients();
     // Keep the names for continuation's inherited-env unset list, but prevent
     // replacement Pods and their exec shells from receiving stale credentials.
@@ -584,7 +564,7 @@ class AgentRuntimeManager {
       command: [
         "/bin/sh",
         "-c",
-        "{ cat /var/run/archestra/development-activity 2>/dev/null; tmux list-clients -F '#{client_activity}' 2>/dev/null; } | sort -nr | head -1",
+        "cat /var/run/archestra/development-activity 2>/dev/null",
       ],
     });
     if (!/^\d+$/.test(output.trim())) return null;
@@ -711,56 +691,22 @@ class AgentRuntimeManager {
     if (response.error) throw new ApiError(409, response.error);
   }
 
-  /**
-   * Deliver a message into a live session.
-   *
-   * `pipe` writes to the FIFO the runtime-agent reads, so the message lands at a
-   * turn boundary and can never interleave with a tool call in flight.
-   * `tmux_keys` types into the session, the only option for a CLI that owns its
-   * own input loop.
-   */
+  /** Deliver follow-up instructions through the native session mailbox. */
   async steer(params: {
     session: AgentRunRecord;
     steerMode: AgentRuntimeSteerMode;
     message: string;
   }): Promise<void> {
-    const podName = await this.findPodName(params.session);
-    if (!podName) {
-      throw new Error("This session has no running pod to steer");
-    }
-    // A steer is one message. Newlines are stripped rather than escaped because
-    // both delivery paths treat them as submit: send-keys passes them to the
-    // pty as Enter, and the FIFO reader takes a line at a time.
-    const message = params.message.replace(/[\r\n]+/g, " ").trim();
-    if (!message) {
-      throw new Error("A steer message cannot be only whitespace");
-    }
-
-    const command =
-      params.steerMode === "tmux_keys"
-        ? [
-            "/bin/sh",
-            "-c",
-            // `--` stops tmux reading a message beginning with a dash as its
-            // own options; Enter is sent separately as the submit.
-            `tmux send-keys -t ${AGENT_RUNTIME_TMUX_SESSION} -l -- ${shellQuote(message)} && tmux send-keys -t ${AGENT_RUNTIME_TMUX_SESSION} Enter`,
-          ]
-        : [
-            "/bin/sh",
-            "-c",
-            `printf '%s\\n' ${shellQuote(message)} > "$ARCHESTRA_AGENT_RUNTIME_STEER_FIFO"`,
-          ];
-
-    await this.execInPod({ session: params.session, podName, command });
+    await this.controlSession({
+      session: params.session,
+      commandId: crypto.randomUUID(),
+      control: { type: "message", text: params.message },
+    });
     reportAgentRuntimeSteer(params.steerMode);
   }
 
   /**
-   * Attach a caller's streams to the live tmux session.
-   *
-   * `tmux attach` rather than a fresh shell: the point is to land in the pane
-   * the agent is already working in. Detaching leaves it running, so closing a
-   * browser tab never ends a session mid-task.
+   * Open an independent workspace shell. Agent execution is unaffected by disconnects.
    */
   async attach(params: {
     session: AgentRunRecord;
@@ -803,7 +749,7 @@ class AgentRuntimeManager {
     if (!podName) {
       throw new Error("This session has no running pod to attach to");
     }
-    await this.waitForTmuxSession({
+    await this.waitForWorkspaceShell({
       session: params.session,
       podName,
       onProgress: params.onProgress,
@@ -1457,10 +1403,10 @@ done`
 
   /**
    * Pod Running only means the container process was accepted by Kubernetes;
-   * its bootstrap may still be creating tmux. Wait for the actual attachable
+   * its bootstrap may still be installing the workspace shell. Wait for the actual attachable
    * session so the first browser connection is as reliable as a refresh.
    */
-  private async waitForTmuxSession(params: {
+  private async waitForWorkspaceShell(params: {
     session: AgentRunRecord;
     podName: string;
     onProgress?: AgentRuntimeStartupProgressReporter;
@@ -1476,11 +1422,7 @@ done`
       const ready = await this.execInPod({
         session: params.session,
         podName: params.podName,
-        command: [
-          "/bin/sh",
-          "-c",
-          `tmux has-session -t ${AGENT_RUNTIME_TMUX_SESSION} 2>/dev/null`,
-        ],
+        command: ["/bin/sh", "-c", `test -x ${AGENT_RUNTIME_ATTACH_SCRIPT}`],
       })
         .then(() => true)
         .catch(() => false);

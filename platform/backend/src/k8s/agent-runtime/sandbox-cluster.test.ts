@@ -44,7 +44,7 @@ describe.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
         expect(exec(`cat /var/run/archestra/turns/${taskId}.log`)).toContain(
           "turn-finished",
         );
-        expect(exec("tmux has-session -t agent; echo attached")).toBe(
+        expect(exec("test -x /var/run/archestra/attach; echo attached")).toBe(
           "attached",
         );
         const originalPodUid = JSON.parse(

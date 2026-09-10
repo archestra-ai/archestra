@@ -41,6 +41,7 @@ interface EditableUserMessageProps {
   text: string;
   isEditing: boolean;
   editDisabled?: boolean;
+  readOnly?: boolean;
   attachments?: FileAttachment[];
   /**
    * The conversation these attachments belong to. Needed to open them in a
@@ -74,6 +75,7 @@ export function EditableUserMessage({
   text,
   isEditing,
   editDisabled = false,
+  readOnly = false,
   attachments = [],
   conversationId,
   canSaveToKnowledge = true,
@@ -225,8 +227,8 @@ export function EditableUserMessage({
             <div className="absolute right-full top-1/2 -translate-y-1/2 pr-2">
               <MessageActions
                 textToCopy={text}
-                onEditClick={handleStartEdit}
-                onRegenerateClick={handleRegenerateClick}
+                onEditClick={readOnly ? undefined : handleStartEdit}
+                onRegenerateClick={readOnly ? undefined : handleRegenerateClick}
                 isRegenerateConfirming={isRegenerateConfirming}
                 editDisabled={editDisabled}
                 className={cn(

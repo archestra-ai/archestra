@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Keep the gateway and its tools beneath the native bridge's process boundary.
+# An interrupted session can stop this whole tree before restoring its history.
+runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+openclaw gateway run --allow-unconfigured --bind loopback --auth token --port 18789 > "${runtime_dir}/openclaw-gateway.log" 2>&1 &
+gateway_pid=$!
+trap 'kill "$gateway_pid" 2>/dev/null || true' EXIT
+ready=false
+for attempt in $(seq 1 60); do
+  if openclaw gateway health --url ws://127.0.0.1:18789 --token "${OPENCLAW_GATEWAY_TOKEN}" >/dev/null 2>&1; then ready=true; break; fi
+  kill -0 "$gateway_pid" 2>/dev/null || break
+  sleep 1
+done
+if [[ "$ready" != true ]]; then echo "The agent gateway could not start" >&2; exit 1; fi
+openclaw acp --url ws://127.0.0.1:18789 --token-file "$1" --session "$2" --no-prefix-cwd

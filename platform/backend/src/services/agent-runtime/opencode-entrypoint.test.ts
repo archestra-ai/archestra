@@ -20,8 +20,8 @@ const ENTRYPOINT = path.resolve(
 
 describe("OpenCode image entrypoint", () => {
   test.each([
-    ["one_shot", ["--auto", "--model"]],
-    ["interactive", ["--auto", "--model"]],
+    ["one_shot", ["opencode", "opencode", "acp"]],
+    ["interactive", ["opencode", "opencode", "acp"]],
   ] as const)("configures and starts %s run", async (mode, prefix) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-opencode-"));
     try {
@@ -32,51 +32,13 @@ describe("OpenCode image entrypoint", () => {
         mkdir(bin, { recursive: true }),
         mkdir(workspace, { recursive: true }),
       ]);
+      // The native session bridge is the subprocess boundary; provider protocol
+      // behavior is exercised by the runtime package and image integration tests.
       await writeExecutable(
-        path.join(bin, "opencode"),
+        path.join(bin, "archestra-agent-session"),
         `#!/bin/sh
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
 env > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-env"
-if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
-  plugin_path="$(jq -r '.plugin[] | select(contains("opencode-transcript")) | sub("^file://"; "")' "$OPENCODE_CONFIG")"
-  PLUGIN_PATH="$plugin_path" node --input-type=module <<'JS'
-const plugin = await import("file://" + process.env.PLUGIN_PATH);
-const { access } = await import("node:fs/promises");
-const hooks = await plugin.ArchestraTranscript({
-  client: {
-    session: {
-      get: async ({ path }) => ({
-        data: path.id === "subagent-session" ? { id: path.id, parentID: "session-1" } : { id: path.id },
-      }),
-      messages: async () => ({
-        data: [
-          { info: { role: "user", time: { created: 1788516000000 } }, parts: [{ type: "text", text: "Inspect the file." }] },
-          {
-            info: { role: "assistant", time: { created: 1788516001000 } },
-            parts: [
-              { type: "text", text: "I will inspect it." },
-              { type: "tool", tool: "read_file", callID: "call-1", state: { status: "completed", input: { path: "src/app.ts" }, output: "export const ready = true;" } },
-            ],
-          },
-          { info: { role: "assistant", time: { created: 1788516002000 } }, parts: [{ type: "text", text: "OpenCode finished the task." }] },
-        ],
-      }),
-    },
-  },
-  directory: process.cwd(),
-});
-await hooks.event({ event: { type: "session.idle", properties: { sessionID: "subagent-session" } } });
-try {
-  await access(process.env.ARCHESTRA_AGENT_RUNTIME_DIR + "/turn-complete");
-  throw new Error("subagent completion settled the run");
-} catch (error) {
-  if (error.code !== "ENOENT") throw error;
-}
-await hooks.event({ event: { type: "session.idle", properties: { sessionID: "session-1" } } });
-JS
-  trap 'exit 0' TERM
-  while :; do sleep 1; done
-fi
 `,
       );
 
@@ -98,7 +60,7 @@ fi
         OPENAI_API_KEY: "test-key",
         OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
       };
-      const result = await execFileAsync("bash", [ENTRYPOINT], {
+      await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
         env,
       });
@@ -146,54 +108,6 @@ fi
         path.join(runtime, "opencode-attention.js"),
         `file://${runtime}/opencode-transcript.js`,
       ]);
-      if (mode === "one_shot") {
-        expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
-        expect(result.stdout).toContain("OpenCode finished the task.");
-        expect(
-          JSON.parse(
-            await readFile(
-              path.join(runtime, "readable-transcript.json"),
-              "utf8",
-            ),
-          ),
-        ).toEqual({
-          version: 1,
-          provider: "opencode",
-          entries: [
-            {
-              type: "message",
-              role: "user",
-              text: "Inspect the file.",
-              timestamp: "2026-09-04T10:00:00.000Z",
-            },
-            {
-              type: "message",
-              role: "assistant",
-              text: "I will inspect it.",
-              timestamp: "2026-09-04T10:00:01.000Z",
-            },
-            {
-              type: "tool_call",
-              name: "read_file",
-              input: '{"path":"src/app.ts"}',
-              toolCallId: "call-1",
-              timestamp: "2026-09-04T10:00:01.000Z",
-            },
-            {
-              type: "tool_result",
-              text: "export const ready = true;",
-              toolCallId: "call-1",
-              timestamp: "2026-09-04T10:00:01.000Z",
-            },
-            {
-              type: "message",
-              role: "assistant",
-              text: "OpenCode finished the task.",
-              timestamp: "2026-09-04T10:00:02.000Z",
-            },
-          ],
-        });
-      }
       expect(
         await readFile(path.join(runtime, "opencode-instructions.md"), "utf8"),
       ).toBe("Follow the configured Agent instructions.\n");
@@ -203,8 +117,7 @@ fi
         .split("\n");
       expect(args.slice(0, prefix.length)).toEqual(prefix);
       expect(args).not.toContain("--pure");
-      expect(args).toContain("archestra/test-model");
-      expect(args.at(-1)).toBe("Run the task.");
+      expect(args).not.toContain("Run the task.");
 
       const capturedEnv = await readFile(
         path.join(runtime, "captured-env"),

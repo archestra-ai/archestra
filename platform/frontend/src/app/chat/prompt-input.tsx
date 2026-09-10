@@ -218,6 +218,8 @@ export interface ArchestraPromptInputProps
   /** Render the new-chat composer as a dedicated runtime launcher. */
   runtimeMode?: boolean;
   runtimeAgentName?: string;
+  /** Runtime draft identity; does not query the ordinary conversation API. */
+  runtimeTaskId?: string;
 }
 
 type SlashCommand = {
@@ -281,6 +283,7 @@ const PromptInputContent = ({
   externalMcpSkillAttachment,
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
+  runtimeTaskId,
   runtimeMode = false,
   runtimeAgentName,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -416,7 +419,9 @@ const PromptInputContent = ({
   // Keyed by conversation only — NOT by agentId. Keying the new-chat draft by
   // agent made the restore effect below re-run on every agent switch and clear
   // the input, dropping the user's in-progress prompt.
-  const storageKey = chatDraftStorageKey(conversationId);
+  const storageKey = chatDraftStorageKey(
+    runtimeTaskId ? `runtime:${runtimeTaskId}` : conversationId,
+  );
 
   const isRestored = useRef(false);
 
@@ -1012,12 +1017,12 @@ const PromptInputContent = ({
           edge, carrying the explanation that used to live in the toggle's
           tooltip. Paired with the dashed composer border below so an
           locked chat is unmistakable while composing. */}
-      {runtimeMode && (
+      {runtimeMode && !runtimeTaskId && (
         <div className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2">
           <TerminalSquare className="size-3.5 text-primary" />
           <span>
             Starts {runtimeAgentName ?? "this Agent"} in its dedicated runtime.
-            This becomes its live terminal when ready.
+            Messages and tools appear here when ready.
           </span>
         </div>
       )}
@@ -1060,7 +1065,9 @@ const PromptInputContent = ({
           <PromptInputTextarea
             placeholder={
               runtimeMode
-                ? "Describe the task to run..."
+                ? runtimeTaskId
+                  ? "Message the agent..."
+                  : "Describe the task to run..."
                 : conversationId
                   ? "Ask a follow-up..."
                   : (chatPlaceholder ?? "What would you like to get done?")
@@ -1135,6 +1142,11 @@ const PromptInputContent = ({
               <TooltipTrigger asChild>
                 <PromptInputSubmit
                   className="!h-8"
+                  aria-label={
+                    isResponseInFlight && onStop && !isQueueingSubmit
+                      ? "Stop response"
+                      : "Submit"
+                  }
                   status={submitStatus}
                   disabled={
                     composerLocked ||
@@ -1228,6 +1240,7 @@ const ArchestraPromptInput = ({
   externalMcpSkillAttachment,
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
+  runtimeTaskId,
   runtimeMode,
   runtimeAgentName,
 }: ArchestraPromptInputProps) => {
@@ -1339,6 +1352,7 @@ const ArchestraPromptInput = ({
           sandboxAvailable={sandboxAvailable}
           lockedChat={lockedChat}
           onLockedChatChange={onLockedChatChange}
+          runtimeTaskId={runtimeTaskId}
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}
           prefillText={prefillText}

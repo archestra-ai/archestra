@@ -23,7 +23,7 @@ describe("Hermes image entrypoint", () => {
     "one_shot",
     "interactive",
     "continuation",
-  ] as const)("configures and starts %s run in the native TUI", async (mode) => {
+  ] as const)("configures and starts %s run through the native session protocol", async (mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-hermes-"));
     try {
       const bin = path.join(root, "bin");
@@ -35,68 +35,13 @@ describe("Hermes image entrypoint", () => {
         mkdir(workspace, { recursive: true }),
         mkdir(home, { recursive: true }),
       ]);
+      // The native session bridge is the subprocess boundary; provider protocol
+      // behavior is exercised by the runtime package and image integration tests.
       await writeExecutable(
-        path.join(bin, "hermes"),
+        path.join(bin, "archestra-agent-session"),
         `#!/bin/sh
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
-  hook_script="$(jq -r '.hooks.post_llm_call[0].command' "$HERMES_HOME/config.yaml")"
-  printf '%s' '{"hook_event_name":"on_session_start","session_id":"main-session","extra":{}}' | "$hook_script"
-  printf '%s' '{"hook_event_name":"post_llm_call","session_id":"subagent-session","extra":{"assistant_response":"Ignore this subagent answer."}}' | "$hook_script"
-  test ! -e "$ARCHESTRA_AGENT_RUNTIME_DIR/turn-complete"
-  python3 - "$HERMES_HOME/state.db" <<'PYTHON'
-import json
-import os
-import sqlite3
-import sys
-import time
-
-with sqlite3.connect(sys.argv[1]) as database:
-    database.execute("CREATE TABLE sessions (id TEXT, source TEXT, parent_session_id TEXT, started_at REAL)")
-    database.execute("CREATE TABLE messages (id INTEGER, session_id TEXT, role TEXT, content TEXT, tool_call_id TEXT, tool_calls TEXT, tool_name TEXT, timestamp REAL, active INTEGER, finish_reason TEXT)")
-    database.execute("INSERT INTO sessions VALUES ('main-session', 'tui', NULL, 1)")
-    if os.environ.get("ARCHESTRA_AGENT_RUNTIME_CONTINUE") == "1":
-        database.execute("INSERT INTO messages VALUES (-1, 'main-session', 'assistant', 'Previous turn answer.', NULL, NULL, NULL, 1788515999, 1, 'stop')")
-    database.execute("INSERT INTO messages VALUES (1, 'main-session', 'user', 'Run the task.', NULL, NULL, NULL, 1788516000, 1, NULL)")
-    tool_calls = json.dumps([{"id": "call-1", "function": {"name": "read_file", "arguments": json.dumps({"path": "src/app.ts"})}}])
-    database.execute("INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (2, 'main-session', 'assistant', 'I will inspect it.', None, tool_calls, None, 1788516001, 1, None))
-    database.execute("INSERT INTO messages VALUES (3, 'main-session', 'tool', 'export const ready = true;', 'call-1', NULL, 'read_file', 1788516002, 1, NULL)")
-    database.commit()
-    time.sleep(1)
-    assert not os.path.exists(os.path.join(os.environ["ARCHESTRA_AGENT_RUNTIME_DIR"], "turn-complete")), "previous answer completed the new turn"
-    database.execute("INSERT INTO messages VALUES (4, 'main-session', 'assistant', 'Hermes finished the task.', NULL, NULL, NULL, 1788516003, 1, 'stop')")
-PYTHON
-if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
-  trap 'exit 0' TERM
-  while :; do sleep 1; done
-else
-  rm "$ARCHESTRA_AGENT_RUNTIME_DIR/hermes-main-session"
-  python3 - "$HERMES_HOME/plugins/archestra-attention/__init__.py" <<'PYTHON'
-import importlib.util
-import os
-import sqlite3
-import sys
-import threading
-spec = importlib.util.spec_from_file_location("plugin", sys.argv[1])
-plugin = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(plugin)
-callbacks = {}
-class Context:
-    def register_hook(self, name, callback):
-        callbacks[name] = callback
-plugin.register(Context())
-callbacks["on_session_start"](session_id="main-session")
-# The final export must survive a short exclusive writer transaction.
-writer = sqlite3.connect(os.path.join(os.environ["HERMES_HOME"], "state.db"), check_same_thread=False)
-writer.execute("BEGIN EXCLUSIVE")
-release = threading.Timer(1, writer.commit)
-release.start()
-try:
-    callbacks["on_session_end"](session_id="main-session", completed=True)
-finally:
-    release.join()
-    writer.close()
-PYTHON
-fi
+env > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-env"
 `,
       );
 
@@ -129,7 +74,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         OPENAI_BASE_URL: "http://localhost:9000/v1/model-router/test",
       };
 
-      const result = await execFileAsync("bash", [ENTRYPOINT], {
+      await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
         env,
       });
@@ -148,83 +93,13 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         on_session_end: [{ command: `${runtime}/hermes-runtime-hook.sh` }],
       });
       expect(config.hooks_auto_accept).toBe(true);
-      if (mode !== "interactive") {
-        expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
-        expect(result.stdout).toContain("Hermes finished the task.");
-        expect(
-          JSON.parse(
-            await readFile(
-              path.join(runtime, "readable-transcript.json"),
-              "utf8",
-            ),
-          ),
-        ).toEqual({
-          version: 1,
-          provider: "hermes",
-          entries: [
-            ...(mode === "continuation"
-              ? [
-                  {
-                    type: "message",
-                    role: "assistant",
-                    text: "Previous turn answer.",
-                    timestamp: "2026-09-04T09:59:59Z",
-                  },
-                ]
-              : []),
-            {
-              type: "message",
-              role: "user",
-              text: "Run the task.",
-              timestamp: "2026-09-04T10:00:00Z",
-            },
-            {
-              type: "message",
-              role: "assistant",
-              text: "I will inspect it.",
-              timestamp: "2026-09-04T10:00:01Z",
-            },
-            {
-              type: "tool_call",
-              name: "read_file",
-              input: '{"path":"src/app.ts"}',
-              toolCallId: "call-1",
-              timestamp: "2026-09-04T10:00:01Z",
-            },
-            {
-              type: "tool_result",
-              text: "export const ready = true;",
-              toolCallId: "call-1",
-              timestamp: "2026-09-04T10:00:02Z",
-            },
-            {
-              type: "message",
-              role: "assistant",
-              text: "Hermes finished the task.",
-              timestamp: "2026-09-04T10:00:03Z",
-            },
-          ],
-        });
-      } else {
-        const transcript = JSON.parse(
-          await readFile(
-            path.join(runtime, "readable-transcript.json"),
-            "utf8",
-          ),
-        );
-        expect(
-          transcript.entries.map((entry: { type: string }) => entry.type),
-        ).toEqual([
-          "message",
-          "message",
-          "tool_call",
-          "tool_result",
-          "message",
-        ]);
-        expect(transcript.entries.at(-1).text).toBe(
-          "Hermes finished the task.",
-        );
-        await writeFile(path.join(runtime, "attention-calls"), "");
+      const args = (await readFile(path.join(runtime, "captured-args"), "utf8"))
+        .trim()
+        .split("\n");
+      expect(args.slice(0, 3)).toEqual(["hermes", "hermes", "acp"]);
+      expect(args).not.toContain("--tui");
+      expect(args).not.toContain("Run the task.");
+      if (mode === "interactive") {
         const plugin = path.join(
           runtime,
           "hermes",
@@ -238,42 +113,6 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         ).toBe(
           "set Input requested\nclear\nset Permission needed\nclear\nclear\nset Waiting for input\n",
         );
-      }
-
-      const args = (await readFile(path.join(runtime, "captured-args"), "utf8"))
-        .trim()
-        .split("\n");
-      expect(args[0]).toBe("chat");
-      expect(args).toContain("--tui");
-      expect(args).toContain("--accept-hooks");
-      expect(args.at(-1)).toBe("Run the task.");
-      if (mode === "continuation") {
-        await execFileAsync("python3", [
-          "-c",
-          `
-import pathlib, sqlite3, subprocess, sys, time
-runtime = pathlib.Path(sys.argv[1])
-done = runtime / "repeated-prompt-complete"
-answer = runtime / "repeated-prompt-answer"
-watcher = subprocess.Popen([sys.executable, str(runtime / "hermes-completion-watch.py"), str(runtime / "hermes/state.db"), "Run the task.", str(answer), str(done), "4"])
-try:
-    time.sleep(.6)
-    assert not done.exists(), "matched a previous copy of the same prompt"
-    with sqlite3.connect(runtime / "hermes/state.db") as database:
-        database.execute("INSERT INTO messages VALUES (5, 'main-session', 'user', 'Run the task.', NULL, NULL, NULL, 1788516010, 1, NULL)")
-    time.sleep(.6)
-    assert not done.exists(), "matched the previous turn answer"
-    with sqlite3.connect(runtime / "hermes/state.db") as database:
-        database.execute("INSERT INTO messages VALUES (6, 'main-session', 'assistant', 'New repeated-prompt answer.', NULL, NULL, NULL, 1788516011, 1, 'stop')")
-    assert watcher.wait(timeout=5) == 0
-    assert answer.read_text().strip() == "New repeated-prompt answer."
-finally:
-    if watcher.poll() is None:
-        watcher.terminate()
-    watcher.wait(timeout=5)
-`,
-          runtime,
-        ]);
       }
     } finally {
       await rm(root, { recursive: true, force: true });

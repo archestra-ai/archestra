@@ -22,7 +22,7 @@ describe("Claude Code image entrypoint", () => {
   test.each([
     "one_shot",
     "interactive",
-  ] as const)("configures and starts %s run in the native TUI", async (mode) => {
+  ] as const)("configures and starts %s run through the native session protocol", async (mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-claude-code-"));
     try {
       const bin = path.join(root, "bin");
@@ -35,33 +35,17 @@ describe("Claude Code image entrypoint", () => {
         mkdir(workspace, { recursive: true }),
         mkdir(home, { recursive: true }),
       ]);
+      // The native session bridge is the subprocess boundary; provider protocol
+      // behavior is exercised by the runtime package and image integration tests.
       await writeExecutable(
-        path.join(bin, "claude"),
+        path.join(bin, "archestra-agent-session"),
         `#!/bin/sh
 printf '%s\n' "$@" > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-args"
-if [ "$ARCHESTRA_AGENT_RUNTIME_MODE" = "one_shot" ]; then
-  settings=""
-  previous=""
-  for argument in "$@"; do
-    if [ "$previous" = "--settings" ]; then settings="$argument"; fi
-    previous="$argument"
-  done
-  transcript="$ARCHESTRA_AGENT_RUNTIME_DIR/transcript.jsonl"
-  printf '%s\n' \
-    '{"type":"user","timestamp":"2026-09-04T10:00:00Z","message":{"content":"Build the feature."}}' \
-    '{"type":"assistant","timestamp":"2026-09-04T10:00:01Z","message":{"content":[{"type":"text","text":"I will inspect the code."},{"type":"tool_use","id":"tool-1","name":"Read","input":{"file_path":"src/app.ts"}}]}}' \
-    '{"type":"user","timestamp":"2026-09-04T10:00:02Z","message":{"content":[{"type":"tool_result","tool_use_id":"tool-1","content":"export const ready = true;"}]}}' \
-    '{"type":"assistant","timestamp":"2026-09-04T10:00:03Z","message":{"content":[{"type":"text","text":"Claude finished the task."}]}}' \
-    > "$transcript"
-  hook_script="$(jq -r '.hooks.Stop[0].hooks[0].command' "$settings")"
-  printf '{"transcript_path":"%s"}' "$transcript" | "$hook_script"
-  trap 'exit 0' TERM
-  while :; do sleep 1; done
-fi
+env > "$ARCHESTRA_AGENT_RUNTIME_DIR/captured-env"
 `,
       );
 
-      const result = await execFileAsync("bash", [ENTRYPOINT], {
+      await execFileAsync("bash", [ENTRYPOINT], {
         cwd: workspace,
         env: {
           ...process.env,
@@ -94,8 +78,9 @@ fi
         .trim()
         .split("\n");
       expect(args).toContain("--strict-mcp-config");
-      expect(args.at(-1)).toBe("Run the task.");
-      expect(args.includes("--print")).toBe(false);
+      expect(args.slice(0, 2)).toEqual(["claude-code", "claude"]);
+      expect(args).toContain("--print");
+      expect(args).toContain("stream-json");
       const settings = JSON.parse(
         await readFile(path.join(runtime, "claude-settings.json"), "utf8"),
       );
@@ -103,55 +88,6 @@ fi
         path.join(runtime, "transcript-hook.sh"),
       );
 
-      if (mode === "one_shot") {
-        expect(args).toContain("--settings");
-        expect(result.stdout).toContain("===ARCHESTRA-FINAL-ANSWER===");
-        expect(result.stdout).toContain("Claude finished the task.");
-        expect(
-          JSON.parse(
-            await readFile(
-              path.join(runtime, "readable-transcript.json"),
-              "utf8",
-            ),
-          ),
-        ).toEqual({
-          version: 1,
-          provider: "claude-code",
-          entries: [
-            {
-              type: "message",
-              role: "user",
-              text: "Build the feature.",
-              timestamp: "2026-09-04T10:00:00Z",
-            },
-            {
-              type: "message",
-              role: "assistant",
-              text: "I will inspect the code.",
-              timestamp: "2026-09-04T10:00:01Z",
-            },
-            {
-              type: "tool_call",
-              name: "Read",
-              input: '{"file_path":"src/app.ts"}',
-              toolCallId: "tool-1",
-              timestamp: "2026-09-04T10:00:01Z",
-            },
-            {
-              type: "tool_result",
-              text: "export const ready = true;",
-              toolCallId: "tool-1",
-              timestamp: "2026-09-04T10:00:02Z",
-            },
-            {
-              type: "message",
-              role: "assistant",
-              text: "Claude finished the task.",
-              timestamp: "2026-09-04T10:00:03Z",
-            },
-          ],
-        });
-      }
       // The native transcript is flushed asynchronously. A Stop payload must
       // preserve its final response even when the JSONL ends at a tool result.
       const laggingTranscript = path.join(runtime, "lagging.jsonl");

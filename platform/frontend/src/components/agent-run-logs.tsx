@@ -12,7 +12,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { AgentRunConversation } from "@/components/agent-run-conversation";
 import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import type { AgentRun } from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -29,7 +29,7 @@ export function AgentRunLogs({
 }) {
   const [terminalContent, setTerminalContent] = useState("");
   const [readableContent, setReadableContent] = useState("");
-  const [view, setView] = useState<"readable" | "terminal">("readable");
+
   const [snapshot, setSnapshot] = useState<AgentRunReadableTranscript | null>(
     null,
   );
@@ -54,8 +54,7 @@ export function AgentRunLogs({
     }
     return value;
   }, [snapshot, savedSnapshot, run.endedAt]);
-  const hasReadableTranscript = !!conversation;
-  const showReadable = hasReadableTranscript && view === "readable";
+
   const [error, setError] = useState<string>();
   const [isStreaming, setIsStreaming] = useState(!run.endedAt);
   const [retainedStatus, setRetainedStatus] = useState<{
@@ -75,7 +74,6 @@ export function AgentRunLogs({
     };
     setTerminalContent("");
     setReadableContent("");
-    setView("readable");
     setSnapshot(null);
     setError(undefined);
     setIsStreaming(!run.endedAt);
@@ -165,69 +163,27 @@ export function AgentRunLogs({
     };
   }, [run.endedAt, run.taskId]);
 
-  if (showReadable && conversation)
+  if (conversation)
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-medium">
-            {title === "Live terminal" ? "Conversation" : title}
-          </span>
-          <Tabs value="readable" onValueChange={() => setView("terminal")}>
-            <TabsList aria-label="Output view">
-              <TabsTrigger value="readable">Conversation</TabsTrigger>
-              <TabsTrigger value="terminal">Terminal</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        <AgentRunConversation
-          key={run.taskId}
-          transcript={conversation}
-          taskId={run.taskId}
-          canControl={canControl && !run.endedAt && !!conversation.session}
-        />
-      </div>
+      <AgentRunConversation
+        key={run.taskId}
+        transcript={conversation}
+        taskId={run.taskId}
+        agentId={run.agentId}
+        agentName="Agent"
+        canControl={canControl && !run.endedAt && !!conversation.session}
+      />
     );
-
-  if (liveTerminal)
-    return (
-      <div className="flex min-h-0 flex-1 flex-col gap-2">
-        {conversation && (
-          <Tabs value="terminal" onValueChange={() => setView("readable")}>
-            <TabsList>
-              <TabsTrigger value="readable">Conversation</TabsTrigger>
-              <TabsTrigger value="terminal">Terminal</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
-        {liveTerminal}
-      </div>
-    );
+  if (liveTerminal) return liveTerminal;
 
   return (
     <DeploymentLogPanel
       className="min-w-0"
       title={title}
-      actions={
-        hasReadableTranscript ? (
-          <Tabs
-            value={showReadable ? "readable" : "terminal"}
-            onValueChange={(value) =>
-              setView(value === "readable" ? "readable" : "terminal")
-            }
-          >
-            <TabsList aria-label="Output view">
-              <TabsTrigger value="readable">Conversation</TabsTrigger>
-              <TabsTrigger value="terminal">Terminal</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        ) : undefined
-      }
       content={terminalContent}
-      contentRenderer={
-        showReadable
-          ? undefined
-          : (output) => <TerminalRecording key={run.taskId} content={output} />
-      }
+      contentRenderer={(output) => (
+        <TerminalRecording key={run.taskId} content={output} />
+      )}
       error={error}
       emptyIcon={run.endedAt ? FileX2 : TerminalSquare}
       emptyMessage={run.endedAt ? "No output recorded" : "Waiting for output"}
@@ -248,10 +204,6 @@ export function AgentRunLogs({
             </span>
             <span>Streaming</span>
           </div>
-        ) : showReadable ? (
-          <span className="font-mono text-xs text-slate-500">
-            Readable transcript
-          </span>
         ) : terminalContent ? (
           <RetainedTranscriptStatus status={retainedStatus} />
         ) : null

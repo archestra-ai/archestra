@@ -1,19 +1,15 @@
-"""Exercise the installed Hermes TUI with a stalled package index and local APIs.
+"""Exercise the installed Hermes ACP session with a stalled package index and local APIs.
 
 Run inside agent-hermes; no external network or provider credentials are needed.
 """
 
-import fcntl
 import json
 import os
 from pathlib import Path
-import pty
 import select
 import signal
-import struct
 import subprocess
 import tempfile
-import termios
 import threading
 import time
 import unittest
@@ -54,18 +50,16 @@ class HermesStartupTest(unittest.TestCase):
             # target (which overrides HERMES_DISABLE_LAZY_INSTALLS).
             "HERMES_LAZY_INSTALL_TARGET": str(root / "optional-packages"),
         }
-        master, slave = pty.openpty()
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 160, 0, 0))
         process = subprocess.Popen(
             ["archestra-hermes"],
             cwd=home,
             env=env,
-            stdin=slave,
-            stdout=slave,
-            stderr=slave,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        os.close(slave)
+        master = process.stdout.fileno()
         output = bytearray()
         started = time.monotonic()
         followup_sent = False
@@ -85,10 +79,11 @@ class HermesStartupTest(unittest.TestCase):
                     except json.JSONDecodeError:
                         continue
                     answers = count_answers(entries)
-                    if answers == 1 and not followup_sent and server.input_ready.is_set():
-                        os.write(master, b"Reply STARTUP_OK again.")
-                        time.sleep(0.2)
-                        os.write(master, b"\r")
+                    if answers == 1 and not followup_sent and json.loads(transcript.read_text()).get("session", {}).get("state") == "idle":
+                        mailbox = runtime / "turns/startup-test.controls"
+                        pending = mailbox / "abcdef.tmp"
+                        pending.write_text(json.dumps({"type": "message", "text": "Reply STARTUP_OK again."}))
+                        pending.rename(mailbox / "abcdef.json")
                         followup_sent = True
                     if answers == 2:
                         break
@@ -103,14 +98,10 @@ class HermesStartupTest(unittest.TestCase):
             entries = json.loads(transcript.read_text())["entries"]
             self.assertGreater(count_answers(entries), 0, entries)
             if mode == "one_shot":
-                self.assertEqual(
-                    (runtime / "final-answer.txt").read_text().strip(), "STARTUP_OK"
-                )
                 self.assertEqual(process.wait(timeout=5), 0)
-                self.assertTrue((runtime / "turn-complete").exists())
             else:
                 self.assertIsNone(
-                    process.poll(), "Interactive TUI must stay available for input"
+                    process.poll(), "Interactive agent must stay available for input"
                 )
                 self.assertEqual(count_answers(entries), 2, entries)
             print(
@@ -124,7 +115,7 @@ class HermesStartupTest(unittest.TestCase):
             except ProcessLookupError:
                 pass
             process.wait(timeout=5)
-            os.close(master)
+            process.stdout.close()
             server.release_packages.set()
             server.shutdown()
             server.server_close()
@@ -240,7 +231,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 def count_answers(entries):
     return sum(
-        entry.get("role") == "assistant" and entry.get("text") == "STARTUP_OK"
+        entry.get("role") == "assistant" and entry.get("text", "").strip() == "STARTUP_OK"
         for entry in entries
     )
 

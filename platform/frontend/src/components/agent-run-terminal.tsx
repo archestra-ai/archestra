@@ -8,7 +8,6 @@ import type {
   AgentRunAttachStartedMessage,
 } from "@archestra/shared";
 import { useMemo } from "react";
-import { AgentRunLogs } from "@/components/agent-run-logs";
 import {
   type ExecSessionTransport,
   ExecTerminal,
@@ -17,7 +16,7 @@ import type { ExecSessionProgress } from "@/components/exec/exec-terminal-progre
 import { useMyAgentRun } from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
 
-/** Shared tmux terminal for Agent detail and Chat run sessions. */
+/** Independent workspace shell. */
 export function AgentRunTerminal({
   taskId,
   active,
@@ -63,11 +62,7 @@ export function AgentRunTerminal({
       onClosed={onClosed}
     />
   );
-  return run ? (
-    <AgentRunLogs run={run} title={title} canControl liveTerminal={terminal} />
-  ) : (
-    terminal
-  );
+  return terminal;
 }
 
 export function createAgentRunTransport(taskId: string): ExecSessionTransport {

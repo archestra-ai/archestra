@@ -46,9 +46,8 @@ export type AgentRunAttentionState = z.infer<
 /**
  * How a steer message reaches the running process.
  *
- * `pipe` writes to the runtime-agent FIFO so the loop injects it at the next
- * turn boundary. `tmux_keys` types directly into the tmux session for CLIs
- * that own their own input loop, such as Claude Code.
+ * Both values use the native session protocol. `tmux_keys` remains accepted
+ * only for previously saved configurations; no tmux process is started.
  */
 export const AgentRuntimeSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
 export type AgentRuntimeSteerMode = z.infer<typeof AgentRuntimeSteerModeSchema>;

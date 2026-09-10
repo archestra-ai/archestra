@@ -54,7 +54,7 @@ export function getAgentCatalogTemplates(
       image: image(archestraImage, "claude-code"),
       command: ["archestra-claude-code"],
       inferenceProtocol: "anthropic",
-      steerMode: "tmux_keys",
+      steerMode: "pipe",
       additionalCredentials: [
         {
           key: "CLAUDE_CODE_OAUTH_TOKEN",
@@ -76,7 +76,7 @@ export function getAgentCatalogTemplates(
       image: image(archestraImage, "codex"),
       command: ["archestra-codex"],
       inferenceProtocol: "openai_responses",
-      steerMode: "tmux_keys",
+      steerMode: "pipe",
       requiredSubscriptionKind: "chatgpt",
     }),
     template({
@@ -88,7 +88,7 @@ export function getAgentCatalogTemplates(
       image: image(archestraImage, "opencode"),
       command: ["archestra-opencode"],
       inferenceProtocol: "openai_responses",
-      steerMode: "tmux_keys",
+      steerMode: "pipe",
     }),
     template({
       id: "hermes",
@@ -99,7 +99,7 @@ export function getAgentCatalogTemplates(
       image: image(archestraImage, "hermes"),
       command: ["archestra-hermes"],
       inferenceProtocol: "openai_chat",
-      steerMode: "tmux_keys",
+      steerMode: "pipe",
     }),
     template({
       id: "openclaw",
@@ -110,7 +110,7 @@ export function getAgentCatalogTemplates(
       image: image(archestraImage, "openclaw"),
       command: ["archestra-openclaw"],
       inferenceProtocol: "openai_chat",
-      steerMode: "tmux_keys",
+      steerMode: "pipe",
     }),
   ] as const;
 }

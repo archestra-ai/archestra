@@ -1,7 +1,7 @@
 # Curated Agent images
 
 These are the maintained container images behind the Agent catalog. Every
-image satisfies the same runtime contract: a POSIX shell and `tmux`, a
+image satisfies the same runtime contract: a POSIX shell, tini, util-linux, procps, a
 non-root working directory, an Archestra LLM proxy virtual key, and the
 invoking user's Agent-scoped MCP gateway endpoint.
 
@@ -40,12 +40,12 @@ All maintained clients send the task ID as both `X-Archestra-Run-Id`
 and `X-Archestra-Session-Id` on LLM and MCP requests. Do the same in any new
 wrapper so the platform can group interactions and tool calls with the run.
 
-All six targets also export their native message and tool history to
-`$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json`. The control plane
-validates and persists this provider-neutral artifact independently of the
-terminal recording. Custom images can opt into the same completed-run view by
-implementing the versioned contract documented under **Agent Runtime → Bring
-Your Own Image → Readable transcript**.
+All six targets stream native messages, tools, and input requests into Chat.
+They persist the same history in `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json`.
+The control plane validates and retains this versioned artifact.
+Custom images implement **Agent Runtime → Bring Your Own Image → Custom Conversation Integration**.
+Tmux and terminal-only client launchers are no longer supported.
+Rebuild derivative images against an updated maintained base.
 
 Files attached to the initial Chat instruction are written under
 `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` before the client

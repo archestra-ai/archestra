@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 
-// This exercises real tmux, process exit and Pod replacement semantics. Enable
+// This exercises real process groups, process exit and Pod replacement semantics. Enable
 // explicitly where Docker and a maintained runtime image are available.
 describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
   "sandbox supervisor",
@@ -12,13 +12,14 @@ describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
       const result = runInContainer(
         `
 mkdir -p /var/run/archestra/turns
-printf 'test ! -t 0; echo native-output; touch /var/run/archestra/ready; sleep 60; touch /var/run/archestra/unwanted\\n' > /var/run/archestra/turns/1.request
+printf 'test ! -t 0; echo native-output; setsid sleep 61 & echo $! > /var/run/archestra/child; touch /var/run/archestra/ready; sleep 60; touch /var/run/archestra/unwanted\\n' > /var/run/archestra/turns/1.request
 wait_for /var/run/archestra/ready
-tmux send-keys -t agent 'touch /var/run/archestra/shell-worked' Enter
+/bin/sh -c 'touch /var/run/archestra/shell-worked'
 wait_for /var/run/archestra/shell-worked
 touch /var/run/archestra/turns/1.cancel
 wait_for /var/run/archestra/turns/1.exit
 test "$(cat /var/run/archestra/turns/1.exit)" = 130
+! kill -0 "$(cat /var/run/archestra/child)" 2>/dev/null
 test ! -f /var/run/archestra/unwanted
 grep -q native-output /var/run/archestra/turns/1.log
 printf 'echo second-native-turn\\n' > /var/run/archestra/turns/2.request
@@ -28,78 +29,6 @@ echo VERIFIED
 `,
         true,
       );
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("VERIFIED");
-    }, 30_000);
-
-    it("keeps the same CLI and tmux contents interactive after completing a turn", () => {
-      const result = runInContainer(`
-mkdir -p /var/run/archestra/turns
-cat > /tmp/interactive.py <<'PYTHON'
-import os
-from pathlib import Path
-Path('/tmp/original-pid').write_text(str(os.getpid()))
-print('First answer', flush=True)
-Path('/tmp/answer').write_text('First answer')
-Path('/tmp/done').touch()
-message = input()
-print('Follow-up: ' + message, flush=True)
-Path('/tmp/followup-pid').write_text(str(os.getpid()))
-input()
-PYTHON
-printf 'archestra-tui-run /tmp/done /tmp/answer python3 /tmp/interactive.py\\n' > /var/run/archestra/turns/1.request
-wait_for /var/run/archestra/turns/1.exit
-test "$(cat /var/run/archestra/turns/1.exit)" = 0
-test "$(tmux display-message -p -t agent '#{pane_dead}:#{@archestra_retained_task}')" = '0:1'
-tmux capture-pane -p -t agent | grep -q 'First answer'
-tmux send-keys -t agent 'hello again' Enter
-wait_for /tmp/followup-pid
-test "$(cat /tmp/original-pid)" = "$(cat /tmp/followup-pid)"
-tmux capture-pane -p -t agent | grep -q 'Follow-up: hello again'
-printf 'echo next-turn\\n' > /var/run/archestra/turns/2.request
-wait_for /var/run/archestra/turns/2.exit
-! kill -0 "$(cat /tmp/original-pid)" 2>/dev/null
-test "$(tmux show-option -v -t agent @archestra_retained_task)" = ''
-echo VERIFIED
-`);
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("VERIFIED");
-    }, 30_000);
-
-    it("records terminal input and detachment without treating daemon output as activity", () => {
-      const result = runInContainer(`
-python3 - <<'PY'
-import os, pty, subprocess, time
-pid, terminal = pty.fork()
-if pid == 0:
-    os.environ["TERM"] = "xterm-256color"
-    os.execvp("tmux", ["tmux", "attach", "-t", "agent"])
-def activity():
-    try:
-        return int(open("/var/run/archestra/development-activity").read())
-    except (FileNotFoundError, ValueError):
-        return 0
-def until(check):
-    for _ in range(50):
-        if check(): return
-        time.sleep(.1)
-    raise AssertionError("development activity was not recorded")
-until(lambda: activity() > 0)
-initial = activity()
-subprocess.run(["tmux", "respawn-pane", "-k", "-t", "agent", "while :; do echo daemon-output; sleep 1; done"], check=True)
-time.sleep(2)
-assert activity() == initial, "daemon output refreshed idle retention"
-os.write(terminal, b"hello")
-until(lambda: activity() > initial)
-typed = activity()
-time.sleep(1.1)
-os.write(terminal, bytes([2]) + b"d")
-until(lambda: activity() > typed)
-os.waitpid(pid, 0)
-os.close(terminal)
-PY
-echo VERIFIED
-`);
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("VERIFIED");
     }, 30_000);
@@ -177,8 +106,11 @@ function runInContainer(assertions: string, structured = false) {
       "--network=none",
       "-v",
       `${path.resolve("../agent_images/bin")}:/usr/local/bin:ro`,
-      "--entrypoint=/bin/sh",
+      "--entrypoint=/usr/bin/tini",
       process.env.ARCHESTRA_TEST_SANDBOX_IMAGE ?? "",
+      "-s",
+      "--",
+      "/bin/sh",
       "-s",
     ],
     {

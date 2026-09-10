@@ -264,33 +264,4 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   terminal_command=(opencode run --interactive --continue --auto --model "archestra/${model}" -- "$(cat "${task_file}")")
 fi
 # Structured sessions preserve the maintained configuration/bootstrap contract.
-if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
   exec archestra-agent-session opencode opencode acp --cwd "$PWD"
-fi
-
-case "${runtime_mode}" in
-  interactive)
-    exec "${terminal_command[@]}"
-    ;;
-  one_shot)
-    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
-      export OPENCODE_PURE=1
-      exec opencode run \
-        "${resume_args[@]}" \
-        --pure \
-        --auto \
-        --model "archestra/${model}" \
-        -- "$(cat "${task_file}")"
-    fi
-
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    exec "${script_dir}/archestra-tui-run" \
-      "${runtime_dir}/turn-complete" \
-      "${runtime_dir}/final-answer.txt" \
-      "${terminal_command[@]}"
-    ;;
-  *)
-    echo "archestra: unknown Agent Runtime mode" >&2
-    exit 78
-    ;;
-esac

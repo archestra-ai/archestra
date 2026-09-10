@@ -4,168 +4,112 @@ import type {
   AgentRunControl,
   AgentRunReadableTranscript,
 } from "@archestra/shared";
-import { ArrowDown, Loader2, Send, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Response } from "@/components/ai-elements/response";
+import ArchestraPromptInput from "@/app/chat/prompt-input";
+import { ChatMessages } from "@/components/chat/chat-messages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { runtimeChatMessages } from "@/lib/chat/runtime-chat-messages";
 import websocketService from "@/lib/websocket/websocket";
 
 export function AgentRunConversation({
   transcript,
   taskId,
   canControl,
+  agentId,
+  agentName,
 }: {
   transcript: AgentRunReadableTranscript;
   taskId: string;
   canControl: boolean;
+  agentId: string;
+  agentName: string;
 }) {
-  const viewport = useRef<HTMLElement>(null);
-  const following = useRef(true);
-  const [showLatest, setShowLatest] = useState(false);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   const [connected, setConnected] = useState(websocketService.isConnected());
-  const submittedMessage = useRef(false);
-  const form = useForm({ defaultValues: { message: "" } });
+  const acknowledgement = useRef<{
+    id: string;
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
   const state = transcript.session?.state;
   const working = state === "working" || state === "input_required";
-
+  const messages = useMemo(() => runtimeChatMessages(transcript), [transcript]);
   useEffect(() => websocketService.onConnectionChange(setConnected), []);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Streamed content changes the viewport height.
   useEffect(() => {
-    if (following.current && viewport.current)
-      viewport.current.scrollTop = viewport.current.scrollHeight;
-  }, [transcript]);
-  useEffect(
-    () =>
-      websocketService.subscribe("agent_run_control_result", (message) => {
+    const unsubscribe = websocketService.subscribe(
+      "agent_run_control_result",
+      (message) => {
+        const current = acknowledgement.current;
         if (
           message.payload.runId !== taskId ||
-          message.payload.commandId !== pending
+          message.payload.commandId !== current?.id
         )
           return;
-        setPending(null);
-        setError(message.payload.error);
-        if (!message.payload.error && submittedMessage.current) form.reset();
-      }),
-    [taskId, pending, form],
-  );
-  useEffect(() => {
-    if (!pending) return;
-    const timer = setTimeout(() => {
-      setPending(null);
-      setError(
-        "No acknowledgement received. Check the conversation before sending again.",
-      );
-    }, 15_000);
-    return () => clearTimeout(timer);
-  }, [pending]);
-  const send = (control: AgentRunControl) => {
-    if (!connected || pending) return;
-    const commandId = crypto.randomUUID();
-    submittedMessage.current = control.type === "message";
-    setPending(commandId);
+        clearTimeout(current.timer);
+        acknowledgement.current = null;
+        setPending(false);
+        if (message.payload.error) {
+          setError(message.payload.error);
+          current.reject(new Error(message.payload.error));
+        } else current.resolve();
+      },
+    );
+    return () => {
+      unsubscribe();
+      const current = acknowledgement.current;
+      if (current) {
+        clearTimeout(current.timer);
+        current.reject(new Error("Conversation closed before acknowledgement"));
+        acknowledgement.current = null;
+      }
+    };
+  }, [taskId]);
+  const send = (control: AgentRunControl): Promise<void> => {
+    if (!connected || acknowledgement.current)
+      return Promise.reject(new Error("Agent connection is not ready"));
+    setPending(true);
     setError(undefined);
-    websocketService.send({
-      type: "agent_run_control",
-      payload: { runId: taskId, commandId, control },
+    return new Promise((resolve, reject) => {
+      const id = crypto.randomUUID();
+      const timer = setTimeout(() => {
+        acknowledgement.current = null;
+        setPending(false);
+        const message =
+          "No acknowledgement received. Check the conversation before sending again.";
+        setError(message);
+        reject(new Error(message));
+      }, 15_000);
+      acknowledgement.current = { id, resolve, reject, timer };
+      websocketService.send({
+        type: "agent_run_control",
+        payload: { runId: taskId, commandId: id, control },
+      });
     });
   };
-
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border bg-background">
-      <section
-        ref={viewport}
-        aria-label="Agent conversation"
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: The scrollable history must be keyboard accessible.
-        tabIndex={0}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6"
-        onScroll={() => {
-          const node = viewport.current;
-          if (!node) return;
-          following.current =
-            node.scrollHeight - node.scrollTop - node.clientHeight < 40;
-          setShowLatest(!following.current);
-        }}
-      >
-        <div className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-5">
-          {transcript.entries.map((entry, index) =>
-            entry.type === "message" ? (
-              <article
-                key={entry.id ?? index}
-                className="min-w-0 break-words text-sm [overflow-wrap:anywhere]"
-              >
-                <div className="mb-1 text-xs font-medium text-muted-foreground">
-                  {entry.role === "user" ? "You" : "Assistant"}
-                </div>
-                {entry.role === "assistant" ? (
-                  <Response>{entry.text}</Response>
-                ) : (
-                  <div className="whitespace-pre-wrap">{entry.text}</div>
-                )}
-              </article>
-            ) : (
-              <details
-                key={entry.id ?? index}
-                className="min-w-0 rounded-md border bg-muted/20 p-3 text-sm"
-              >
-                <summary className="cursor-pointer break-words">
-                  {entry.type === "tool_call"
-                    ? entry.name
-                    : entry.isError
-                      ? "Tool error"
-                      : "Tool result"}
-                </summary>
-                <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs [overflow-wrap:anywhere]">
-                  {entry.type === "tool_call" ? entry.input : entry.text}
-                </pre>
-              </details>
-            ),
-          )}
-          {state === "starting" && (
-            <output className="text-sm text-muted-foreground">
-              Starting agent…
-            </output>
-          )}
-          {working && (
-            <output className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              <span>
-                {state === "input_required"
-                  ? "Waiting for your response"
-                  : "Working…"}
-              </span>
-            </output>
-          )}
-          {transcript.session?.error && (
-            <p role="alert" className="text-sm text-destructive">
-              {transcript.session.error}
-            </p>
-          )}
-        </div>
-      </section>
-      {showLatest && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mx-auto my-2"
-          onClick={() => {
-            following.current = true;
-            if (viewport.current)
-              viewport.current.scrollTop = viewport.current.scrollHeight;
-            setShowLatest(false);
-          }}
-        >
-          <ArrowDown />
-          <span>Latest messages</span>
-        </Button>
-      )}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <ChatMessages
+        readOnlyHistory
+        conversationId={undefined}
+        agentId={agentId}
+        agentName={agentName}
+        messages={messages}
+        status={
+          working ? "streaming" : state === "starting" ? "submitted" : "ready"
+        }
+        error={
+          transcript.session?.error
+            ? new Error(transcript.session.error)
+            : undefined
+        }
+      />
       {canControl && (
-        <div className="max-h-[60%] shrink-0 space-y-3 overflow-y-auto border-t p-3">
+        <div className="mx-auto w-full max-w-4xl shrink-0 space-y-3 px-4 pb-4">
           {!connected && (
             <output className="text-sm text-muted-foreground">
               Reconnecting…
@@ -180,47 +124,27 @@ export function AgentRunConversation({
             <SessionQuestion
               key={request.id}
               request={request}
-              disabled={!connected || !!pending}
-              onRespond={send}
+              disabled={!connected || pending}
+              onRespond={(control) => {
+                void send(control).catch(() => {});
+              }}
             />
           ))}
-          <form
-            className="flex items-end gap-2"
-            onSubmit={form.handleSubmit(({ message }) =>
-              send({ type: "message", text: message }),
-            )}
-          >
-            <Textarea
-              {...form.register("message", {
-                required: true,
-                validate: (text) => !!text.trim(),
-              })}
-              aria-label="Message the agent"
-              placeholder={
-                working ? "Write your next instruction…" : "Message the agent…"
-              }
-              className="max-h-48 min-h-16 resize-y"
-            />
-            {working ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!connected || !!pending}
-                onClick={() => send({ type: "interrupt" })}
-              >
-                <Square />
-                <span>Interrupt</span>
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                disabled={!connected || !!pending || state !== "idle"}
-                aria-label="Send message"
-              >
-                <Send />
-              </Button>
-            )}
-          </form>
+          <ArchestraPromptInput
+            agentId={agentId}
+            runtimeMode
+            runtimeTaskId={taskId}
+            selectedModel=""
+            onModelChange={() => {}}
+            status={working ? "streaming" : "ready"}
+            sendDisabled={
+              !connected || pending || (!working && state !== "idle")
+            }
+            onStop={() => {
+              void send({ type: "interrupt" }).catch(() => {});
+            }}
+            onSubmit={({ text }) => send({ type: "message", text })}
+          />
         </div>
       )}
     </div>

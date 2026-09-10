@@ -226,27 +226,6 @@ export function AgentRuntimeFields({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="agent-runtime-steering">Steering</Label>
-                <FieldDescription>
-                  Turn boundary delivers follow-up instructions between Agent
-                  turns. Terminal input types directly into an interactive CLI.
-                </FieldDescription>
-                <Select
-                  value={config.steerMode}
-                  onValueChange={(steerMode: "pipe" | "tmux_keys") =>
-                    update({ steerMode })
-                  }
-                >
-                  <SelectTrigger id="agent-runtime-steering" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pipe">Turn boundary</SelectItem>
-                    <SelectItem value="tmux_keys">Terminal input</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <NumberField
                 id="runtime-idle-timeout"
                 label="Idle timeout (minutes)"

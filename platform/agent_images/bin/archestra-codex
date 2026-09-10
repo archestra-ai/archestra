@@ -241,34 +241,4 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
 fi
 
 # Structured sessions preserve the maintained configuration/bootstrap contract.
-if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
   exec archestra-agent-session codex codex app-server --stdio
-fi
-
-case "${runtime_mode}" in
-  interactive)
-    # No subcommand means Codex's native full-screen TUI. The positional prompt
-    # starts the first turn; subsequent terminal input stays in the same Codex
-    # conversation until the person exits or stops the execution.
-    exec codex "${common_args[@]}" -- "$(cat "${task_file}")"
-    ;;
-  one_shot)
-    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
-      exec codex exec \
-        --color always \
-        "${common_args[@]}" \
-        --skip-git-repo-check \
-        -- "$(cat "${task_file}")"
-    fi
-
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    exec "${script_dir}/archestra-tui-run" \
-      "${runtime_dir}/turn-complete" \
-      "${runtime_dir}/final-answer.txt" \
-      codex "${common_args[@]}" -- "$(cat "${task_file}")"
-    ;;
-  *)
-    echo "archestra: unknown Agent Runtime mode" >&2
-    exit 78
-    ;;
-esac

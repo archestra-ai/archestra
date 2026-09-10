@@ -80,6 +80,33 @@ test("Codex streams Unicode, tools and input requests, then restores the provide
   );
 });
 
+test("Codex interruption restores the same thread without replaying the user prompt", async () => {
+  const runtimeDir = await mkdtemp(path.join(tmpdir(), "agent-session-"));
+  directories.push(runtimeDir);
+  const session = makeSession({ provider: "codex", runtimeDir, script: CODEX });
+  await session.start("Read the file");
+  await vi.waitFor(() =>
+    expect(session.snapshot.session.state).toBe("input_required"),
+  );
+  await session.control({ type: "interrupt" });
+  await vi.waitFor(() => expect(session.snapshot.session.state).toBe("idle"));
+  expect(session.snapshot.session.requests).toEqual([]);
+  expect(
+    session.snapshot.entries.filter(
+      (entry) => entry.type === "message" && entry.role === "user",
+    ),
+  ).toHaveLength(1);
+  await vi.waitFor(() =>
+    expect(session.snapshot.entries).toContainEqual(
+      expect.objectContaining({ text: "resumed thread-1" }),
+    ),
+  );
+  await session.control({ type: "message", text: "Next instruction" });
+  await vi.waitFor(() =>
+    expect(session.snapshot.session.state).toBe("input_required"),
+  );
+});
+
 test.each([
   "opencode",
   "hermes",
@@ -94,7 +121,7 @@ test.each([
   );
   expect(
     session.snapshot.entries.find((entry) => entry.type === "tool_result"),
-  ).toMatchObject({ text: "", isError: false });
+  ).toBeUndefined();
   const request = session.snapshot.session.requests[0];
   if (!request) throw new Error("Missing request");
   await expect(
@@ -132,6 +159,38 @@ test.each([
       (entry) => entry.type === "message" && entry.text === "Read complete",
     ),
   ).toHaveLength(1);
+});
+
+test.each([
+  "hermes",
+  "openclaw",
+] as const)("%s cancellation preserves the session and settles pending tools", async (provider) => {
+  const runtimeDir = await mkdtemp(path.join(tmpdir(), "agent-session-"));
+  directories.push(runtimeDir);
+  const session = makeSession({ provider, runtimeDir, script: ACP });
+  await session.start("Inspect the file");
+  await vi.waitFor(() =>
+    expect(session.snapshot.session.state).toBe("input_required"),
+  );
+  await session.control({ type: "interrupt" });
+  await vi.waitFor(() => expect(session.snapshot.session.state).toBe("idle"));
+  expect(session.snapshot.entries).toContainEqual(
+    expect.objectContaining({
+      type: "tool_result",
+      toolCallId: "call-1",
+      isError: true,
+      text: "Interrupted",
+    }),
+  );
+  expect(
+    session.snapshot.entries.filter(
+      (entry) => entry.type === "message" && entry.role === "user",
+    ),
+  ).toHaveLength(1);
+  await session.control({ type: "message", text: "Follow up" });
+  await vi.waitFor(() =>
+    expect(session.snapshot.session.state).toBe("input_required"),
+  );
 });
 
 test("Claude reconciles streamed text when completed output omits a thinking block", async () => {
@@ -205,6 +264,7 @@ if (message.method==='thread/start'||message.method==='thread/resume') {
   result(message.id,{thread:{id:'thread-1'}});
   if(message.method==='thread/resume') send({method:'item/completed',params:{item:{id:'resume',type:'agentMessage',text:'resumed '+message.params.threadId}}});
 }
+if(message.method==='turn/interrupt') result(message.id, {});
 if(message.method==='turn/start') {
  result(message.id,{turn:{id:'turn-1'}});
  send({method:'item/agentMessage/delta',params:{threadId:'thread-1',itemId:'answer',delta:'Hello 🌱'}});
@@ -225,6 +285,7 @@ if(message.method==='session/load') {
  send({method:'session/update',params:{sessionId:'session-1',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Read complete'}}}});
  result(message.id,{});
 }
+if(message.method==='session/cancel') send({id:globalThis.promptId,error:{message:'Cancelled'}});
 if(message.method==='session/prompt') {
  globalThis.promptId=message.id;
  send({method:'session/update',params:{sessionId:'session-1',update:{sessionUpdate:'tool_call',toolCallId:'call-1',title:'Read file',rawInput:{path:'file'},content:[]}}});

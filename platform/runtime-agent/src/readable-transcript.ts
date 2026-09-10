@@ -8,10 +8,28 @@ export async function writeReadableTranscript(params: {
   publisher?: SessionPublisher;
   sessionState?: "starting" | "working" | "idle" | "failed" | "stopped";
 }): Promise<void> {
+  const entries = params.messages.flatMap(entriesForMessage);
+  if (params.sessionState === "idle" || params.sessionState === "stopped") {
+    const completed = new Set(
+      entries
+        .filter((entry) => entry.type === "tool_result")
+        .map((entry) => entry.toolCallId),
+    );
+    for (const entry of [...entries]) {
+      if (entry.type === "tool_call" && !completed.has(entry.toolCallId)) {
+        entries.push({
+          type: "tool_result",
+          toolCallId: entry.toolCallId,
+          text: "Tool did not complete.",
+          isError: true,
+        });
+      }
+    }
+  }
   const transcript = {
     version: 1,
     provider: "archestra-agent",
-    entries: params.messages.flatMap(entriesForMessage),
+    entries,
     ...(params.sessionState
       ? { session: { state: params.sessionState, requests: [] } }
       : {}),

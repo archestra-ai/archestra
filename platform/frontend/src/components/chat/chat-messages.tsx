@@ -141,6 +141,7 @@ import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
+  readOnlyHistory?: boolean;
   conversationId: string | undefined;
   agentId?: string;
   messages: UIMessage[];
@@ -242,6 +243,7 @@ export function ChatMessages({
   onMessagesUpdate,
   onMessageFeedback,
   feedbackDisabled = false,
+  readOnlyHistory = false,
   onRegenerateUserMessage,
   onProviderConnected,
   onChatErrorRetry,
@@ -992,6 +994,7 @@ export function ChatMessages({
                                           isLastParsedTextPart
                                         }
                                         editDisabled={isResponseInProgress}
+                                        readOnly={readOnlyHistory}
                                         onStartEdit={handleStartEdit}
                                         onCancelEdit={handleCancelEdit}
                                         onSave={handleSaveAssistantMessage}
@@ -1029,6 +1032,7 @@ export function ChatMessages({
                                   citationParts={citationParts}
                                   isStreaming={isStreamingThisPart}
                                   editDisabled={isResponseInProgress}
+                                  readOnly={readOnlyHistory}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveAssistantMessage}
@@ -1055,6 +1059,7 @@ export function ChatMessages({
                                   text={part.text}
                                   isEditing={editingPartKey === partKey}
                                   editDisabled={isResponseInProgress}
+                                  readOnly={readOnlyHistory}
                                   attachments={extractFileAttachments(
                                     message.parts,
                                   )}
@@ -1167,6 +1172,7 @@ export function ChatMessages({
                                   text=""
                                   isEditing={editingPartKey === partKey}
                                   editDisabled={isResponseInProgress}
+                                  readOnly={readOnlyHistory}
                                   attachments={extractFileAttachments(
                                     message.parts,
                                   )}

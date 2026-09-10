@@ -278,16 +278,7 @@ export async function buildAgentRunLaunchSpec(params: {
         }
       : {}),
     ARCHESTRA_AGENT_RUNTIME_MODE: params.runMode,
-    ARCHESTRA_AGENT_RUNTIME_INTERFACE: [
-      "archestra-runtime-agent",
-      "archestra-codex",
-      "archestra-claude-code",
-      "archestra-opencode",
-      "archestra-hermes",
-      "archestra-openclaw",
-    ].includes(params.runtime.command?.[0] ?? "archestra-runtime-agent")
-      ? "structured"
-      : "terminal",
+    ARCHESTRA_AGENT_RUNTIME_INTERFACE: "structured",
     ARCHESTRA_AGENT_RUNTIME_BANNER: runBanner(params.appName),
     ARCHESTRA_AGENT_RUNTIME_STEER_FIFO: AGENT_RUNTIME_STEER_FIFO,
     // The finish contract: a session that has done its work parks this long

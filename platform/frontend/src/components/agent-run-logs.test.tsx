@@ -1,8 +1,75 @@
 import type { ServerWebSocketMessage } from "@archestra/shared";
-import { act, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  act,
+  screen,
+  render as testingRender,
+  waitFor,
+} from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import type { ReactNode } from "react";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type { AgentRun } from "@/lib/agent-runtime.query";
+import { ChatProvider } from "@/lib/chat/global-chat.context";
+
+vi.mock("next/navigation");
+vi.mock("sonner");
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/organization.query");
+
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useConfig, usePublicConfig } from "@/lib/config/config.query";
+import {
+  useAppearanceSettings,
+  useIsGlobalAdmin,
+  useOrganization,
+} from "@/lib/organization.query";
+
+const server = setupServer(
+  ...[
+    "/api/agents/test-agent",
+    "/api/profiles/test-agent/tools",
+    "/api/internal-mcp-catalog",
+    "/api/llm-provider-api-keys",
+    "/api/llm-models/available",
+    "/api/skills",
+    "/api/agents",
+    "/api/chat/conversations",
+    "/api/chat/agents/test-agent/mcp-tools",
+  ].map((path) =>
+    http.get(`http://localhost:9000${path}`, () => HttpResponse.json([])),
+  ),
+);
+beforeAll(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  server.listen({ onUnhandledRequest: "error" });
+});
+afterAll(() => server.close());
+afterEach(() => server.resetHandlers());
+function render(ui: ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return testingRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>
+        <ChatProvider>{children}</ChatProvider>
+      </QueryClientProvider>
+    ),
+  });
+}
 
 const socket = vi.hoisted(() => {
   const handlers = new Map<string, (message: ServerWebSocketMessage) => void>();
@@ -32,6 +99,28 @@ import { AgentRunLogs } from "./agent-run-logs";
 
 describe("AgentRunLogs", () => {
   beforeEach(() => {
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useSession).mockReturnValue({ data: null } as ReturnType<
+      typeof useSession
+    >);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as ReturnType<typeof useOrganization>);
+    vi.mocked(useAppearanceSettings).mockReturnValue({
+      data: undefined,
+    } as ReturnType<typeof useAppearanceSettings>);
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: false,
+      isLoading: false,
+    });
+    vi.mocked(useConfig).mockReturnValue({ data: undefined } as ReturnType<
+      typeof useConfig
+    >);
+    vi.mocked(usePublicConfig).mockReturnValue({
+      data: undefined,
+    } as ReturnType<typeof usePublicConfig>);
     socket.handlers.clear();
     socket.connect.mockClear();
     socket.send.mockClear();
@@ -129,60 +218,28 @@ describe("AgentRunLogs", () => {
     expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
   });
 
-  it("defaults to responsive conversation and preserves an explicit recording selection", async () => {
+  it("renders native events with the shared chat renderer without switching to terminal output", () => {
     render(<AgentRunLogs run={completedRun} />);
-
     emit({
-      type: "agent_run_logs",
-      payload: { runId: "task-1", logs: "terminal frame\n" },
-    });
-    emit({
-      type: "agent_run_logs",
+      type: "agent_run_session",
       payload: {
         runId: "task-1",
-        channel: "readable",
-        logs: JSON.stringify({
+        transcript: {
           version: 1,
-          provider: "claude-code",
+          provider: "codex",
           entries: [
-            { type: "message", role: "user", text: "Start of the run" },
-            { type: "message", role: "assistant", text: "End of the run" },
+            { type: "message", role: "assistant", text: "Start of the run" },
           ],
-        }),
-      },
-    });
-    emit({
-      type: "agent_run_logs_ended",
-      payload: {
-        runId: "task-1",
-        source: "full",
-        truncated: false,
-        readable: {
-          provider: "claude-code",
-          version: 1,
-          totalBytes: 100,
         },
       },
     });
-
     expect(screen.getByText("Start of the run")).toBeInTheDocument();
-    expect(screen.getByText("End of the run")).toBeInTheDocument();
-    expect(screen.queryByTestId("terminal-playback")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Terminal" }));
-
-    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
-      "terminal frame",
-    );
-    expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
     emit({
       type: "agent_run_logs",
-      payload: { runId: "task-1", logs: "later output" },
+      payload: { runId: "task-1", logs: "diagnostic output" },
     });
-    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
-      "later output",
-    );
-    await userEvent.click(screen.getByRole("tab", { name: "Conversation" }));
-    expect(screen.getByText(/Start of the run/)).toBeInTheDocument();
+    expect(screen.getByText("Start of the run")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
   it("keeps replay usable until a chunked readable transcript is complete", async () => {
@@ -222,7 +279,6 @@ describe("AgentRunLogs", () => {
         logs: readable.slice(50),
       },
     });
-    await userEvent.click(screen.getByRole("tab", { name: "Conversation" }));
     expect(screen.getByText(/A full-width answer/)).toBeInTheDocument();
     rerender(<AgentRunLogs run={{ ...completedRun, taskId: "task-2" }} />);
     expect(screen.queryByText(/A full-width answer/)).not.toBeInTheDocument();

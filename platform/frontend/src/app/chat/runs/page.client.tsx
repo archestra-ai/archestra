@@ -48,8 +48,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [continueDialogOpen, setContinueDialogOpen] = useState(false);
-  const [reattachedTaskId, setReattachedTaskId] = useState<string | null>(null);
-  const reattached = reattachedTaskId === taskId;
+  const [shellOpen, setShellOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [connectionCommand, setConnectionCommand] = useState<string | null>(
@@ -86,9 +85,6 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     ? connectionCommand
     : run?.workspace?.connection?.shellCommand;
   const canReattach = Boolean(isOwner && run?.workspace?.terminalAvailable);
-  const showLiveTerminal =
-    (!run && query.isPending) ||
-    (isOwner && (live || (reattached && canReattach)));
   const canContinue =
     isOwner &&
     !live &&
@@ -131,27 +127,9 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {canContinue && !showLiveTerminal && (
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    canReattach
-                      ? setReattachedTaskId(taskId)
-                      : setContinueDialogOpen(true)
-                  }
-                >
-                  <span>
-                    {canReattach ? "Continue" : "Resume conversation"}
-                  </span>
-                </Button>
-              )}
-              {reattached && showLiveTerminal && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setReattachedTaskId(null)}
-                >
-                  <span>Detach</span>
+              {canContinue && (
+                <Button size="sm" onClick={() => setContinueDialogOpen(true)}>
+                  Resume conversation
                 </Button>
               )}
               {isOwner && live && (
@@ -177,6 +155,13 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={!live && !canReattach}
+                      onSelect={() => setShellOpen(true)}
+                    >
+                      <TerminalSquare className="size-4" />
+                      <span>Open workspace shell</span>
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
                       <Share2 className="size-4" />
                       <span>Share</span>
@@ -223,9 +208,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                 {run.workspace.state === "suspended"
                   ? "Workspace suspended; saved files are retained."
                   : run.workspace.state === "idle"
-                    ? canReattach
-                      ? "Session running; Continue reopens its terminal."
-                      : "Session ended; resume the saved conversation."
+                    ? "Session ended; resume the saved conversation."
                     : run.workspace.state === "deleted"
                       ? "Workspace removed. Run history remains available."
                       : "Workspace is in use or changing state."}
@@ -236,38 +219,32 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
             )}
           </output>
         )}
-        {showLiveTerminal ? (
+        {run ? (
+          <AgentRunLogs run={run} canControl={isOwner && live} />
+        ) : (
+          <ExecTerminalStatus
+            title="Starting agent"
+            detail="Preparing the conversation…"
+          />
+        )}
+      </section>
+      <StandardDialog
+        open={shellOpen}
+        onOpenChange={setShellOpen}
+        title="Workspace shell"
+        className="max-w-5xl"
+        bodyClassName="flex h-[70dvh] flex-col"
+      >
+        {shellOpen && (
           <AgentRunTerminal
             taskId={taskId}
             active
-            title={live ? "Live terminal" : "Output"}
+            title="Workspace shell"
             showManualCommand={false}
-            showDisconnectedStatus={false}
             onCommandChange={setConnectionCommand}
-            onError={() => {
-              setReattachedTaskId(null);
-              void query.refetch();
-            }}
-            onClosed={() => {
-              setReattachedTaskId(null);
-              void query.refetch();
-            }}
           />
-        ) : run ? (
-          <>
-            {live && (
-              <div className="shrink-0 overflow-hidden rounded-md border bg-slate-950">
-                <ExecTerminalStatus
-                  title="Read-only terminal"
-                  detail="Only the person who started this run can attach to it. You're viewing its terminal output in read-only mode."
-                  compact
-                />
-              </div>
-            )}
-            <AgentRunLogs run={run} />
-          </>
-        ) : null}
-      </section>
+        )}
+      </StandardDialog>
       <DeleteConfirmDialog
         open={stopDialogOpen}
         onOpenChange={setStopDialogOpen}

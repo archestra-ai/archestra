@@ -19,7 +19,9 @@ export class NativeSession {
   private requests = new Map<string, { message: RpcMessage; kind: string }>();
   private stopped = false;
   private initialTurn = true;
+  private pendingTools = new Set<string>();
   private interrupting = false;
+  private restarting = false;
   private ready = false;
   private restoring = false;
   private saveWork: Promise<void> = Promise.resolve();
@@ -40,14 +42,7 @@ export class NativeSession {
       entries: [],
       session: { state: "starting", requests: [] },
     };
-    this.rpc = new SessionRpc({
-      command: params.command,
-      onMessage: (message) => this.onMessage(message),
-      onExit: () =>
-        this.fail(
-          "The agent process disconnected. Resume the conversation to continue.",
-        ),
-    });
+    this.rpc = this.createRpc();
   }
 
   async start(text: string): Promise<void> {
@@ -122,12 +117,18 @@ export class NativeSession {
     }
     if (control.type === "interrupt") {
       this.interrupting = true;
-      if (this.params.provider === "codex") {
-        if (this.turnId)
-          await this.rpc.request("turn/interrupt", {
-            threadId: this.sessionId,
-            turnId: this.turnId,
-          });
+      if (["codex", "openclaw", "hermes"].includes(this.params.provider)) {
+        this.ready = false;
+        this.restarting = true;
+        this.snapshot.session = { state: "starting", requests: [] };
+        this.changed();
+        // Acknowledge acceptance promptly. Recovery can outlast the mailbox timeout.
+        void this.restartAfterInterrupt().catch(() => {
+          this.restarting = false;
+          this.fail(
+            "Could not reopen the interrupted agent session. Resume the conversation to continue.",
+          );
+        });
       } else if (this.params.provider === "claude-code") {
         this.rpc.send({
           type: "control_request",
@@ -190,7 +191,11 @@ export class NativeSession {
         .then((result) =>
           this.complete(string(result.stopReason) === "cancelled"),
         )
-        .catch(() => this.fail("The agent could not complete this turn."));
+        .catch(() => {
+          if (this.interrupting) {
+            if (this.params.provider !== "openclaw") this.complete(true);
+          } else this.fail("The agent could not complete this turn.");
+        });
     }
   }
 
@@ -202,6 +207,67 @@ export class NativeSession {
   async shutdown(): Promise<void> {
     this.close();
     if (this.ready) await this.save();
+  }
+
+  private async restartAfterInterrupt(): Promise<void> {
+    if (this.params.provider === "codex" && this.turnId)
+      await this.rpc.request("turn/interrupt", {
+        threadId: this.sessionId,
+        turnId: this.turnId,
+      });
+    // These providers can leave background tools alive after cancelling a turn.
+    // Restore their saved session after stopping the entire owned process tree.
+    await this.rpc.terminate();
+    this.rpc = this.createRpc();
+    if (this.params.provider === "codex") {
+      await this.rpc.request("initialize", {
+        clientInfo: { name: "archestra", version: "1.0.0" },
+        capabilities: { experimentalApi: true },
+      });
+      this.rpc.send({ method: "initialized", params: {} });
+      await this.rpc.request("thread/resume", {
+        threadId: this.sessionId,
+        cwd: process.cwd(),
+        model: process.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL,
+        modelProvider: "archestra",
+        approvalPolicy: "never",
+        sandbox: "danger-full-access",
+      });
+    } else {
+      await this.rpc.request("initialize", {
+        protocolVersion: 1,
+        clientInfo: { name: "archestra", version: "1.0.0" },
+        clientCapabilities: {
+          fs: { readTextFile: false, writeTextFile: false },
+          terminal: false,
+        },
+      });
+      this.restoring = true;
+      await this.rpc.request(
+        "session/load",
+        {
+          sessionId: this.sessionId,
+          cwd: process.cwd(),
+          mcpServers: [],
+        },
+        120_000,
+      );
+      this.restoring = false;
+    }
+    this.ready = true;
+    this.restarting = false;
+    this.complete(true);
+  }
+
+  private createRpc(): SessionRpc {
+    return new SessionRpc({
+      command: this.params.command,
+      onMessage: (message) => this.onMessage(message),
+      onExit: () =>
+        this.fail(
+          "The agent process disconnected. Resume the conversation to continue.",
+        ),
+    });
   }
 
   private get historyPath(): string {
@@ -226,6 +292,9 @@ export class NativeSession {
   }
 
   private upsert(entry: SessionEntry): void {
+    if (entry.type === "tool_call") this.pendingTools.add(entry.toolCallId);
+    if (entry.type === "tool_result")
+      this.pendingTools.delete(entry.toolCallId);
     const existing = this.snapshot.entries.findIndex(
       (value) => value.id === entry.id,
     );
@@ -244,7 +313,17 @@ export class NativeSession {
     });
   }
 
-  private complete(_cancelled = false): void {
+  private complete(cancelled = false): void {
+    if (this.restarting) return;
+    for (const id of this.pendingTools)
+      this.upsert({
+        id: `${id}:result`,
+        type: "tool_result",
+        toolCallId: id,
+        text: cancelled ? "Interrupted" : "",
+        isError: cancelled,
+      });
+
     this.interrupting = false;
     this.turnId = "";
     this.requests.clear();
@@ -429,11 +508,7 @@ export class NativeSession {
               : undefined
             : JSON.stringify(update.rawInput),
       });
-      if (
-        update.content ||
-        update.rawOutput !== undefined ||
-        update.status === "failed"
-      )
+      if (update.status === "completed" || update.status === "failed")
         this.upsert({
           id: `${id}:result`,
           type: "tool_result",

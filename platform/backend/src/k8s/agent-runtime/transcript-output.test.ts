@@ -171,25 +171,11 @@ test("retains access only for the same live CLI and revokes it on workspace clea
     data: {},
   });
   vi.spyOn(CoreV1Api.prototype, "deleteNamespacedSecret").mockResolvedValue({});
-  let pane = `0:${run.taskId}`;
-  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
-    args[4]?.write(pane);
-    setTimeout(() => args[8]?.({ status: "Success" }), 0);
-    return Object.assign(new EventEmitter(), {
-      close: vi.fn(),
-      terminate: vi.fn(),
-    }) as unknown as WebSocket;
-  });
   await expect(manager.hasRetainedTerminal(run)).resolves.toBe(true);
-  pane = `1:${run.taskId}`;
-  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
-  pane = `0:${randomUUID()}`;
-  await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
-  pane = `0:${run.taskId}`;
   await manager.releaseRun(run, { retainInteractiveSession: true });
-  expect((await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId).toBe(
-    key.virtualKey.id,
-  );
+  expect(
+    (await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId,
+  ).toBeNull();
   pods.mockResolvedValue({ items: [] });
   await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
   await manager.releaseRun(run, { retainInteractiveSession: true });

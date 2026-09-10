@@ -30,20 +30,18 @@ the future without changing Agents, delegation, or the Runs UI.
 
 Invocation is explicit and surface-specific:
 
-- **Archestra Chat uses run mode for an Agent with a dedicated runtime.** Selecting that Agent from the composer or choosing **Chat** on its detail page changes the composer into a run launcher. The first message starts the isolated runtime and opens its live terminal.
+- **Archestra Chat uses run mode for an Agent with a dedicated runtime.** Selecting that Agent from the composer or choosing **Chat** on its detail page changes the composer into a run launcher. The first message starts the isolated runtime and opens its conversation.
 - **Projects use the same run launcher.** Selecting an Agent with a dedicated runtime in a project's composer starts the run inside that project, where it stays grouped with the project's work.
 - **Ordinary messaging-channel messages stay in the foreground.** A channel Agent uses the normal Archestra Agent loop unless it delegates a durable task to an Agent with a dedicated runtime.
 - **A2A and email select the configured runtime.** An A2A `SendMessage` or incoming email addressed directly to an Agent with a dedicated runtime creates a durable task there. The same calls use the foreground loop when the Agent has no Agent Runtime configuration.
 - **Delegation selects the configured runtime.** When another Agent delegates to this Agent, Archestra starts a durable task in the Agent's dedicated runtime if Agent Runtime is configured. Without it, the delegation uses the foreground Agent loop.
 
-Agent Runtime runs have two launch modes. Chat starts the image in
-**interactive** mode and exposes its live terminal. Maintained Claude Code,
-Codex, OpenCode, Hermes, and OpenClaw images run their native TUIs in both
-interactive and delegated one-shot runs. Delegation from another Agent, A2A,
-incoming email, schedules, and task tools uses **one-shot** mode. The same
-image receives the task, exits when it is finished, and lets Archestra settle
-the durable task and deliver its result. This is selected by the invocation
-surface, not by a user-facing Agent setting.
+Agent Runtime runs have two launch modes.
+Chat uses **interactive** mode with streaming messages and follow-ups.
+Maintained images use native protocols without a terminal UI.
+Delegation, A2A, email, schedules, and task tools use **one-shot** mode.
+One-shot runs exit after completing the supplied task.
+The invocation surface selects the mode.
 
 Maintained runtime images report when their client needs input or permission.
 Archestra also marks a run as stalled when its terminal stops changing.
@@ -171,7 +169,7 @@ form used by **Start from scratch**.
 
 The image field starts with the installation's default Agent Runtime image. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
 
-Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Agent Runtime images must include a POSIX shell and `tmux` for terminal access.
+Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Agent Runtime images require a POSIX shell, tini, util-linux, and procps.
 
 The dedicated runtime uses the same Agent system prompt and tool access as the foreground Agent loop. Keep the Agent's instructions focused on the specialist role you want it to perform in either mode.
 
@@ -255,13 +253,13 @@ A custom image implements a small process contract. It does not implement task
 scheduling, identity, credential lookup, or Kubernetes lifecycle. Archestra
 resolves those concerns before the backend starts the image.
 
-### Image requirements
+### Image Requirements
 
 | Requirement | Contract |
 | --- | --- |
 | Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
-| Live terminal | `tmux` must be on `PATH`. Maintained images use a separate shell alongside the agent session. Legacy and custom terminal clients run inside tmux. |
-| Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
+| Process supervision | `/usr/bin/tini`, `setsid` (util-linux), and `pgrep` (procps) are required. Tini reaps orphaned children. |
+| Input attention | Publish `session.state: "input_required"` with the outstanding requests in the conversation snapshot. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the run log. Do not print credentials. |
@@ -275,13 +273,13 @@ client decides how to combine them. It should read
 `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its
 input loop and remain available for follow-ups, while `one_shot` means finish
 the supplied task and exit. Images that support only unattended work can ignore
-interactive mode, but they will not provide a useful Chat terminal.
+interactive mode, but they will not accept follow-up messages in Chat.
 
 ### Workspace Continuations
 
-A completed task can retain its interactive session. Reattaching preserves that
-process, terminal history, and conversation. When the process has ended, resuming
-creates a new run in the same workspace. The completed A2A task stays completed.
+Interactive runs keep their agent process available between messages.
+Resuming an ended run starts a new process in the same workspace.
+The adapter restores saved conversation history. The completed A2A task stays completed.
 Only the workspace's original actor can continue it, and only one turn can own it
 at a time.
 
@@ -290,8 +288,8 @@ timeout, Archestra suspends the Sandbox to release compute while retaining its
 PVC. The hard deadline removes the workspace, including its volume. Run history
 remains available after workspace removal.
 
-Terminal input and interactive shell commands refresh the workspace activity timer.
-Detached terminal sessions retain their last activity time. Background output does not reset idle retention.
+Chat messages and workspace shell input refresh the workspace activity timer.
+Background output does not reset idle retention.
 The hard deadline still applies during active development.
 
 Canceling a run stops its Agent process without deleting the workspace.
@@ -306,9 +304,8 @@ On a continuation, `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` asks the client to resto
 its prior session before handling the new `ARCHESTRA_AGENT_RUNTIME_TASK`.
 `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` stays stable across turns, while
 `ARCHESTRA_AGENT_RUNTIME_TASK_ID` identifies the current run. Re-read injected
-credentials on every invocation. A retained interactive CLI keeps its virtual key until
-suspension, replacement by another turn, or workspace deletion. Other completed
-processes release their virtual keys immediately.
+credentials on every invocation. Ending a run revokes its virtual key.
+Opening a workspace shell does not retain the agent credential.
 Archestra clears the initial Kubernetes credential Secret when a turn finishes,
 so replacement Pods do not inherit those earlier credential values.
 
@@ -348,9 +345,14 @@ Interrupt ends the current turn without ending the conversation.
 
 Codex uses its app-server protocol. Claude Code uses streaming JSON.
 OpenCode, Hermes, and OpenClaw use ACP. Archestra uses its built-in agent loop.
-Tmux provides a separate workspace shell for these sessions.
-Custom images must inherit an updated maintained image to use this interface.
-Existing images and retained terminal sessions keep their terminal behavior.
+These agents share the existing Chat message renderer and composer.
+A workspace shell is available from the run actions menu.
+The shell has its own process and does not control the agent.
+
+Rebuild custom images against an updated maintained image to inherit its adapter.
+Standalone custom clients must implement the conversation contract below.
+Terminal-only clients require migration; tmux sessions are no longer attached or resumed.
+Previously recorded output remains readable.
 
 The file must be a JSON object using version 1 of this contract:
 
@@ -419,12 +421,59 @@ tools. Kubernetes holds the Agent entrypoint until every file and the manifest
 have been written. If the control plane restarts during staging, reconciliation
 finishes the same durable inputs before releasing the command.
 
-For **Turn boundary** steering, read newline-delimited messages from the FIFO
-at `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` and consume them only
-between model turns. For **Terminal input**, Archestra sends keystrokes to the
-tmux session; the process must expose an interactive input loop. A custom
-client that supports neither mode can still run one-shot tasks, but cannot
-accept useful follow-up instructions.
+### Custom Conversation Integration
+
+The maintained base includes these JavaScript modules under `/opt/archestra/runtime-agent/dist/`:
+
+- `session-protocol.js` validates controls with `SessionControlSchema`.
+- `session-mailbox.js` exports `SessionMailbox` for receiving controls.
+- `session-publisher.js` exports `SessionPublisher` for publishing snapshots.
+
+Custom clients can import these modules from their entrypoint.
+Use `ARCHESTRA_AGENT_RUNTIME_TASK` as the initial prompt.
+Publish a version 1 snapshot with stable entry IDs and a `session` object:
+
+```json
+{
+  "state": "idle",
+  "requests": []
+}
+```
+
+Supported states are `starting`, `working`, `idle`, `input_required`, `failed`, and `stopped`.
+Publish changes during streaming, including transitions that contain no new text.
+The publisher writes the snapshot atomically and streams it through stdout.
+It preserves text without terminal wrapping or escape sequences.
+Do not write provider reasoning or credentials into snapshots.
+
+Create `SessionMailbox` with `runtimeDir`, `taskId`, and an asynchronous `control` callback.
+Start its polling loop before accepting follow-ups.
+The callback receives one of these controls:
+
+```json
+{"type":"message","text":"Read the updated configuration."}
+{"type":"interrupt"}
+{"type":"respond","requestId":"approval-1","optionId":"allow-once"}
+{"type":"respond","requestId":"question-1","answers":{"color":"Green"}}
+```
+
+Resolve the callback after accepting a command, without waiting for the entire model turn.
+Reject controls that are busy, stale, or unsupported.
+Interrupt the active turn while retaining the provider conversation.
+Match responses against outstanding request IDs and offered choices.
+The mailbox claims commands before execution and records acknowledgements.
+It never automatically replays a command after a crash.
+
+For approvals, publish a request containing `id`, `title`, and `options`.
+Each option contains `id` and `label`.
+Questions additionally contain `questions`, with `id`, `text`, and optional string `options`.
+Clear resolved requests and restore `working` or `idle`.
+Persist provider session IDs and display history under the runtime directory.
+Restore them when `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1`.
+
+Validate custom images with streaming, follow-ups, interruption, approvals, reload, and stop/resume.
+Also test a phone-width viewport followed by desktop viewing.
+A successful one-shot response alone does not verify the interactive contract.
 
 ### Runtime environment
 
@@ -436,7 +485,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Durable run identifier. |
 | `ARCHESTRA_AGENT_RUNTIME_DIR` | Runtime-owned control and artifact directory. Defaults to `/var/run/archestra`. |
 | `ARCHESTRA_AGENT_RUNTIME_MODE` | `interactive` for a live conversation; `one_shot` for unattended delegation that must exit when complete. |
-| `ARCHESTRA_AGENT_RUNTIME_INTERFACE` | Internal workspace interface: `structured` for maintained native sessions, or `terminal` for legacy and custom clients. |
+| `ARCHESTRA_AGENT_RUNTIME_INTERFACE` | Internal workspace interface, always `structured`. Custom clients implement the conversation contract. |
 | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`, `ARCHESTRA_AGENT_RUNTIME_CONTINUE` | Stable workspace identity and `1` when restoring a saved client session for a follow-up. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK`, `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` | Initial task and Agent instructions. |
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Parent directory containing each turn's attached files. |
@@ -477,7 +526,7 @@ See [Runtime Credentials](/docs/platform-runtime-credentials) for connection typ
 
 ### Run controls
 
-- **Steering** controls how follow-up instructions reach a live run. **Turn boundary** safely queues them between Agent turns. **Terminal input** types into an interactive CLI and is intended for custom images such as coding-agent CLIs.
+- Follow-up instructions use the native session control protocol.
 - **Idle timeout** stops a run after it finishes its current work and receives no follow-up instructions for the configured period.
 - **Maximum duration** is a hard wall-clock lifetime for each run. Kubernetes enforces the limit even when the process is still active.
 - **Metered LLM budget** creates a spend ceiling for the run's short-lived virtual API key. After the ceiling is reached, further metered model calls are blocked by the LLM proxy. Subscription-backed calls have no billed spend and do not count against this ceiling.
@@ -614,18 +663,13 @@ The **Runs** tab shows live and retained conversations.
 Messages and tool results remain readable after a run ends.
 Resume restores the saved conversation in its retained workspace.
 A suspended workspace starts a new agent process with its saved state.
-The terminal remains available for shell work and legacy clients.
+An independent workspace shell is available from the run actions menu.
+Direct Kubernetes access uses `/var/run/archestra/attach` or an ordinary exec shell.
+Closing the shell leaves the agent running.
 
-Agent Runtime workspaces provide `/var/run/archestra/attach` for direct Kubernetes access.
-Interactive `bash` and `sh` sessions opened through `kubectl exec` or k9s join
-the Agent session automatically. Press `Ctrl-b`, then `d`, to detach without
-stopping the run. For a raw diagnostic shell, set
-`ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH=0` on the exec command.
-
-After the pod is removed, Archestra retains the conversation and available terminal recording.
-Native TUI recordings preserve their original line breaks.
-Recordings shrink to fit narrow viewers without enlarging text by default.
-The conversation view rewraps text to the current width.
+Archestra retains conversation history after removing the pod.
+Messages rewrap to the current screen width.
+Older terminal recordings retain their original line breaks.
 The history follows the run's task retention
 period, which is 90 days by default. Set
 `ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES` to cap the

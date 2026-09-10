@@ -400,67 +400,8 @@ fi
 
 session_key="agent:main:${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}"
 
-if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
-  export OPENCLAW_GATEWAY_TOKEN="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
-  gateway_token_file="${runtime_dir}/openclaw-gateway-token"
-  printf '%s' "${OPENCLAW_GATEWAY_TOKEN}" > "${gateway_token_file}"
-  chmod 0600 "${gateway_token_file}"
-  openclaw gateway run --allow-unconfigured --bind loopback --auth token --port 18789 > "${runtime_dir}/openclaw-gateway.log" 2>&1 &
-  gateway_pid=$!
-  cleanup_gateway() {
-    kill "${gateway_pid}" 2>/dev/null || true
-    cleanup_bootstrap
-  }
-  trap cleanup_gateway EXIT
-  ready=false
-  for attempt in $(seq 1 60); do
-    if openclaw gateway health --url ws://127.0.0.1:18789 --token "${OPENCLAW_GATEWAY_TOKEN}" >/dev/null 2>&1; then ready=true; break; fi
-    kill -0 "${gateway_pid}" 2>/dev/null || break
-    sleep 1
-  done
-  if [[ "${ready}" != true ]]; then echo "The agent gateway could not start" >&2; exit 1; fi
-  archestra-agent-session openclaw openclaw acp --url ws://127.0.0.1:18789 --token-file "${gateway_token_file}" --session "${session_key}" --no-prefix-cwd
-  exit $?
-fi
-
-case "${runtime_mode}" in
-  interactive)
-    set +e
-    openclaw tui \
-      --local \
-      --session "${session_key}" \
-      --message "$(cat "${task_file}")"
-    status=$?
-    set -e
-    exit "${status}"
-    ;;
-  one_shot)
-    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then
-      set +e
-      openclaw agent \
-        --local \
-        --session-key "${session_key}" \
-        --model "archestra/${model}" \
-        --message-file "${task_file}" 2>&1 | tee "${runtime_dir}/openclaw-output.log"
-      status=${PIPESTATUS[0]}
-      set -e
-      if [[ ${status} -ne 0 ]] || grep -Eq "FailoverError:|LLM request failed|network connection error|empty response retries exhausted|Agent couldn't generate a response" "${runtime_dir}/openclaw-output.log"; then
-        exit 1
-      fi
-      exit 0
-    fi
-
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    "${script_dir}/archestra-tui-run" \
-      "${runtime_dir}/turn-complete" \
-      "${runtime_dir}/final-answer.txt" \
-      openclaw tui \
-        --local \
-        --session "${session_key}" \
-        --message "$(cat "${task_file}")"
-    ;;
-  *)
-    echo "archestra: unknown Agent Runtime mode" >&2
-    exit 78
-    ;;
-esac
+export OPENCLAW_GATEWAY_TOKEN="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+gateway_token_file="${runtime_dir}/openclaw-gateway-token"
+printf '%s' "${OPENCLAW_GATEWAY_TOKEN}" > "${gateway_token_file}"
+chmod 0600 "${gateway_token_file}"
+archestra-agent-session openclaw archestra-openclaw-session "${gateway_token_file}" "${session_key}"

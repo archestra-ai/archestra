@@ -63,8 +63,7 @@ if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
 fi
 
 # Claude Code knows when it is waiting for a person. Reflect its native hook
-# events in tmux rather than guessing from terminal contents. The platform's
-# tmux status-left format reads these user options for every attached client.
+# events through the platform status endpoint.
 attention_hook="${runtime_dir}/attention-hook.sh"
 settings_file="${runtime_dir}/claude-settings.json"
 cat > "${attention_hook}" <<'HOOK'
@@ -196,48 +195,4 @@ jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript
 args+=(--settings "${settings_file}")
 
 # Structured sessions preserve the maintained configuration/bootstrap contract.
-if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
   exec archestra-agent-session claude-code claude --print "${args[@]}" --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio
-fi
-
-case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
-  interactive)
-    # A Chat execution owns a real pty. Start Claude Code's native TUI with the
-    # first prompt already submitted, then leave the process alive for the
-    # person's follow-up turns.
-    exec claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
-    ;;
-  one_shot)
-    # Delegation has nobody attached to exit a TUI, which is why this mode
-    # exists — but `--print` draws NOTHING until the final answer, so the
-    # execution's live terminal sits blank for the whole run and a person who
-    # attaches cannot tell a working session from a wedged one.
-    #
-    # Run the real TUI instead, and give it the completion contract print mode
-    # provided for free: a Stop hook fires when the turn ends, writes the final
-    # assistant message out of the transcript, and drops a marker. A watchdog
-    # sees the marker, ends the session, and prints the answer behind the
-    # platform's fence — so the task still settles on one clean terminal
-    # result while the pane shows the native interface throughout.
-    #
-    # ARCHESTRA_AGENT_RUNTIME_PLAIN=1 forces the old print mode.
-    if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]] \
-      || ! command -v jq >/dev/null 2>&1; then
-      exec claude --print "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
-    fi
-
-    answer_file="${runtime_dir}/final-answer.txt"
-    done_marker="${runtime_dir}/turn-complete"
-    rm -f "${answer_file}" "${done_marker}"
-
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    exec "${script_dir}/archestra-tui-run" \
-      "${done_marker}" \
-      "${answer_file}" \
-      claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
-    ;;
-  *)
-    echo "archestra: unknown Agent Runtime mode" >&2
-    exit 78
-    ;;
-esac

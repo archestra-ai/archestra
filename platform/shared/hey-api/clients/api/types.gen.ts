@@ -18325,6 +18325,7 @@ export type StartAgentRunResponses = {
      * Default Response
      */
     200: {
+        sessionId?: string;
         taskId: string;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         agentId: string;
@@ -18440,6 +18441,7 @@ export type GetMyAgentRunsResponses = {
             stateChangedAt: string | null;
             hardDeadlineAt: string;
             lastModelActivityAt: string | null;
+            sessionId: string;
             prompt: string;
             agent: {
                 id: string;
@@ -18648,6 +18650,7 @@ export type GetMyAgentRunResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        sessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -18783,6 +18786,7 @@ export type UpdateAgentRunResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        sessionId: string;
         prompt: string;
         agent: {
             id: string;
@@ -18882,6 +18886,7 @@ export type ContinueAgentRunResponses = {
      * Default Response
      */
     200: {
+        sessionId?: string;
         taskId: string;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
         agentId: string;
@@ -89841,6 +89846,7 @@ export type GetProjectRunsResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        sessionId: string;
         prompt: string;
         agent: {
             id: string;

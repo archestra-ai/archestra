@@ -421,7 +421,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const task = await requireAccessibleTask(args.task_id, actor);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+          currentSession: true,
+        });
         if ("error" in task) return errorResult(task.error);
 
         const artifacts = await A2AArtifactModel.findByTaskId(task.row.id);
@@ -627,7 +631,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const task = await requireAccessibleTask(args.task_id, actor);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+          currentSession: true,
+        });
         if ("error" in task) return errorResult(task.error);
 
         const session = await AgentRunModel.findByTaskId(task.row.id);
@@ -649,6 +657,9 @@ const registry = defineArchestraTools([
           );
         }
 
+        const workspace = await AgentWorkspaceModel.findByWorkloadName(
+          session.workloadName,
+        );
         if (session.endedAt) {
           const continuation = await startDetachedAgentTask({
             actor,
@@ -665,6 +676,7 @@ const registry = defineArchestraTools([
               success: true,
               task_id: continuation.id,
               previous_task_id: session.taskId,
+              session_id: workspace?.id ?? session.taskId,
             },
             "Continuation started in the retained workspace using the same Agent.",
           );
@@ -676,7 +688,11 @@ const registry = defineArchestraTools([
           message: args.message,
         });
         return structuredSuccessResult(
-          { success: true, task_id: task.row.id },
+          {
+            success: true,
+            task_id: task.row.id,
+            session_id: workspace?.id ?? session.taskId,
+          },
           "Steer delivered. It lands at the loop's next turn boundary (pipe) or is typed into the session (tmux keys).",
         );
       } catch (error) {
@@ -696,7 +712,11 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const task = await requireAccessibleTask(args.task_id, actor);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+          currentSession: true,
+        });
         if ("error" in task) return errorResult(task.error);
         if (!task.row.agentId) {
           return errorResult("This run has no agent to cancel against.");
@@ -747,7 +767,10 @@ const registry = defineArchestraTools([
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
-        const task = await requireAccessibleTask(args.task_id, actor);
+        const task = await requireAccessibleTask({
+          taskId: args.task_id,
+          actor,
+        });
         if ("error" in task) return errorResult(task.error);
 
         const session = await AgentRunModel.findByTaskId(task.row.id);
@@ -818,7 +841,7 @@ function credentialsNeededResult(
   agentId: string,
   missing: Array<{ key: string; label: string; description?: string }>,
 ) {
-  const url = `${config.frontendBaseUrl}/agents/${agentId}?tab=overview#runtime-credentials`;
+  const url = `${config.frontendBaseUrl}/agents/${agentId}?section=advanced&setup=credentials`;
   return errorResult(
     `This Agent's Agent Runtime needs credentials you have not set up yet:\n${missing
       .map(
@@ -894,15 +917,28 @@ function requireActor(context: ArchestraContext): A2AActor {
  * hold agent:admin. Missing and inaccessible return the same message so run
  * ids cannot be probed.
  */
-async function requireAccessibleTask(
-  taskId: string,
-  actor: A2AActor,
-): Promise<
+async function requireAccessibleTask({
+  taskId,
+  actor,
+  currentSession = false,
+}: {
+  taskId: string;
+  actor: A2AActor;
+  currentSession?: boolean;
+}): Promise<
   | { row: Awaited<ReturnType<typeof A2ATaskModel.findById>> & object }
   | { error: string }
 > {
   const notFound = { error: "Run not found" };
-  const row = await A2ATaskModel.findById(taskId);
+  const current = currentSession
+    ? await AgentRunModel.findCurrentSessionForActor({
+        taskId,
+        actorUserId: actor.id,
+        organizationId: actor.organizationId,
+      })
+    : null;
+  const resolvedTaskId = current?.taskId ?? taskId;
+  const row = await A2ATaskModel.findById(resolvedTaskId);
   if (!row) return notFound;
 
   // Contexts carry no organization; the task's agent does. A task without an
@@ -914,7 +950,7 @@ async function requireAccessibleTask(
     }
   }
 
-  const context = await A2ATaskModel.findActorForTask(taskId);
+  const context = await A2ATaskModel.findActorForTask(resolvedTaskId);
   const isOwn =
     context !== null &&
     context.actorKind === actor.kind &&

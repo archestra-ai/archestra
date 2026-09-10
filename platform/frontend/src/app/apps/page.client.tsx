@@ -47,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  APPS_FIRST_PAGE,
   useAppLabelKeys,
   useAppLabelValues,
   useApps,
@@ -65,8 +66,6 @@ import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 import { AppsTable, getAppRowKey } from "./_parts/apps-table";
-
-const PAGE_SIZE = 100;
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
@@ -90,8 +89,7 @@ export default function AppsPage() {
 
   const { data, isPending, isFetching, isLoadingError, refetch } = useApps(
     {
-      limit: PAGE_SIZE,
-      offset: 0,
+      ...APPS_FIRST_PAGE,
       search: search || undefined,
       scope,
       authorIds,

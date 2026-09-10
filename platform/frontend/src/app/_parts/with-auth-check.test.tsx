@@ -63,11 +63,13 @@ const MockChild = () => (
 
 // Helper to set window.location for tests
 const setWindowLocation = (pathname: string, search = "") => {
+  const url = new URL(`http://localhost${pathname}${search}`);
   Object.defineProperty(window, "location", {
     value: {
-      pathname,
-      search,
-      href: `http://localhost${pathname}${search}`,
+      pathname: url.pathname,
+      search: url.search,
+      hash: url.hash,
+      href: url.href,
     },
     writable: true,
   });
@@ -136,6 +138,22 @@ describe("WithAuthCheck", () => {
 
       expect(mockRouterPush).toHaveBeenCalledWith(
         "/auth/sign-in?redirectTo=%2Fsearch%3Fq%3Dhello%26filter%3Dactive",
+      );
+    });
+
+    it("preserves a credential setup link through sign-in", () => {
+      vi.mocked(usePathname).mockReturnValue("/agents/example-agent");
+      setWindowLocation(
+        "/agents/example-agent",
+        "?tab=overview#runtime-credentials",
+      );
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fagents%2Fexample-agent%3Ftab%3Doverview%23runtime-credentials",
       );
     });
 

@@ -41,7 +41,7 @@ attention_plugin_dir="${runtime_dir}/openclaw-attention"
 attention_plugin="${attention_plugin_dir}/index.cjs"
 model="${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}"
 runtime_instructions="${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
-export OPENCLAW_STATE_DIR="${runtime_dir}/openclaw-state"
+export OPENCLAW_STATE_DIR="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/openclaw-state"
 export OPENCLAW_CONFIG_PATH="${config_file}"
 mkdir -p "${OPENCLAW_STATE_DIR}" "${attention_plugin_dir}"
 

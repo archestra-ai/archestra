@@ -22,11 +22,14 @@ describe("Codex image entrypoint", () => {
   test.each([
     "one_shot",
     "interactive",
+    "isolated",
   ] as const)("configures and starts %s run in the native TUI", async (mode) => {
     const root = await mkdtemp(path.join(tmpdir(), "archestra-codex-"));
     try {
       const bin = path.join(root, "bin");
       const runtime = path.join(root, "runtime");
+      const stateDir =
+        mode === "isolated" ? path.join(root, "separate-state") : runtime;
       const workspace = path.join(root, 'workspace "quoted" \\ folder');
       await Promise.all([
         mkdir(bin, { recursive: true }),
@@ -78,7 +81,9 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
         ARCHESTRA_AGENT_RUNTIME_TASK: "Run the task.",
         ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:
           "Follow the configured Agent instructions.",
-        ARCHESTRA_AGENT_RUNTIME_MODE: mode,
+        ARCHESTRA_AGENT_RUNTIME_MODE:
+          mode === "isolated" ? "interactive" : mode,
+        ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR: stateDir,
         ARCHESTRA_MCP_GATEWAY_URL: "http://localhost:9000/v1/mcp/test",
         ARCHESTRA_MCP_GATEWAY_TOKEN: "test-token",
         ARCHESTRA_AGENT_ATTENTION_COMMAND: attentionCommand,
@@ -92,7 +97,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       });
 
       const config = await readFile(
-        path.join(runtime, "codex", "config.toml"),
+        path.join(stateDir, "codex", "config.toml"),
         "utf8",
       );
       expect(config).toContain('wire_api = "responses"');
@@ -101,7 +106,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
           await execFileAsync("python3", [
             "-c",
             "import json, sys, tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], 'rb'))))",
-            path.join(runtime, "codex", "config.toml"),
+            path.join(stateDir, "codex", "config.toml"),
           ])
         ).stdout,
       );
@@ -118,7 +123,7 @@ printf '%s\n' "$*" >> "$ARCHESTRA_AGENT_RUNTIME_DIR/attention-calls"
       );
       expect(config.includes("notify = [")).toBe(mode === "one_shot");
       const hooks = JSON.parse(
-        await readFile(path.join(runtime, "codex", "hooks.json"), "utf8"),
+        await readFile(path.join(stateDir, "codex", "hooks.json"), "utf8"),
       );
       expect(hooks.hooks.PreToolUse[0].matcher).toBe("^request_user_input$");
 

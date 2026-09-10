@@ -135,7 +135,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       router.push(getValidatedRedirectPath(redirectTo));
     } else if (!isAuthPage && !isLoggedIn) {
       const queryString = searchParams.toString();
-      const fullPath = queryString ? `${pathname}?${queryString}` : pathname;
+      const fullPath = `${pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
       // Developer-only: mint a session server-side instead of showing the login
       // form. On any failure, fall back to the normal sign-in redirect.
       if (devAutoLoginEnabled && !devAutoLoginAttemptedRef.current) {

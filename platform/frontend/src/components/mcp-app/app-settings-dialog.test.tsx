@@ -125,12 +125,14 @@ describe("AppSettingsDialog", () => {
     expect(
       await screen.findByRole("status", { name: "Loading app settings…" }),
     ).toBeInTheDocument();
+    const pendingDialog = screen.getByRole("dialog");
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 
     await act(async () => releaseRequest());
     expect(
       await screen.findByRole("textbox", { name: "Name *" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBe(pendingDialog);
   });
 
   it("retries an initial query failure without showing Save", async () => {

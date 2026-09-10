@@ -98,11 +98,14 @@ export function AppSettingsForm({
   app,
   open,
   onOpenChange,
+  contentOnly = false,
 }: {
   app: App;
   open: boolean;
   /** Controls the host dialog; `false` closes it (Cancel and after a save). */
   onOpenChange: (open: boolean) => void;
+  /** Render inside AppSettingsDialog's existing modal content. */
+  contentOnly?: boolean;
 }) {
   const {
     canEdit,
@@ -447,6 +450,7 @@ export function AppSettingsForm({
     <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
+      contentOnly={contentOnly}
       title="App settings"
       description="Manage this app's details, tools, and who can use it."
       sidebarLabel={form.watch("name")?.trim() || app.name || "App"}

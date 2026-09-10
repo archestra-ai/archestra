@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-09-08
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -38,7 +38,9 @@ Sharing a chat does not share the apps it renders. Each viewer resolves an app a
 
 Disabling an app (in App settings) pulls it back without deleting it. It leaves everyone else's gallery, and its launch tool leaves every agent surface. To chat, a disabled app does not exist: it is not listed, and no conversation can read, edit, publish, or delete it — not even yours. You still see it in your own gallery, marked Disabled; enable it there to keep building.
 
-The `/apps` gallery lists everything the viewer can reach in two sections: apps you own, and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). Each `ui://` resource is its own card, titled by the server's display name (*Task Tracker*); when one server exposes several UIs, the title carries the tool — *Task Tracker / show_board*. A card opens the app in a new chat. That chat stays out of your conversation list until you write into it. An owned card carries **Open in new tab** and **Delete** in its overflow menu; an external card carries **Open in new tab** (the standalone runtime) and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
+The `/apps` gallery lists apps you own and apps exposed by installed [MCP servers](./platform-mcp). Each `ui://` resource has its own card. The card uses the server's display name, such as *Task Tracker*. When a server exposes several apps, the title also includes the tool name — *Task Tracker / show_board*.
+
+Click a card to open its app in a new conversation. That chat stays out of your conversation list until you write into it. Owned cards also offer quick access to **Settings**. Their overflow menu includes version history, standalone launch, pinning, and deletion. External cards link to the backing MCP server and offer standalone launch when the tool needs no input.
 
 While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `list_app_versions`, `restore_app_version`, `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 

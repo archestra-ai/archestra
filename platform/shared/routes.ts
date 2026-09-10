@@ -35,6 +35,7 @@ export const RouteId = {
   UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
   GetAgentKnowledgeSourceExclusions: "getAgentKnowledgeSourceExclusions",
   UpdateAgentKnowledgeSourceExclusions: "updateAgentKnowledgeSourceExclusions",
+  GetAgentActivationSkills: "getAgentActivationSkills",
   GetAgentSkills: "getAgentSkills",
   UpdateAgentSkills: "updateAgentSkills",
   GetAgentSkillExclusions: "getAgentSkillExclusions",

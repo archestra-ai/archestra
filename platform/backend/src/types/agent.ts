@@ -366,6 +366,14 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    */
   sandboxAvailable: z.boolean().optional(),
   /**
+   * Number of skills the requesting user can activate through this agent.
+   * Populated only on paginated agent-list reads that request
+   * `includeActivationSkillsCount=true`, for internal agents when the caller
+   * may read skills; absent on other reads, unauthorized reads, and non-agent
+   * rows.
+   */
+  activationSkillsCount: z.number().int().nonnegative().optional(),
+  /**
    * Timestamp of the most recent MCP request (any JSON-RPC method) routed
    * through this agent, from the mcp_tool_calls log. Null when nothing was
    * ever routed through it. Populated on paginated list reads; absent on

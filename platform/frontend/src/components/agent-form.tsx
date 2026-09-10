@@ -51,6 +51,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { AgentActivationSkillsTable } from "@/components/agent-activation-skills-table";
 import { AgentChatAppsEditor } from "@/components/agent-chat-apps";
 import {
   AgentHooksEditor,
@@ -1108,8 +1109,8 @@ export function AccessLevelSelector({
  * - `configuration`: identity (name, icon, description, environment), who can
  *   use it, and the instruction, suggested prompts and model of an internal
  *   agent.
- * - `tools`: everything the agent reaches — tools and knowledge sources,
- *   subagents, published skills, and hooks.
+ * - `tools`: everything the agent reaches — tools, activation skills,
+ *   knowledge sources, subagents, and hooks.
  * - `advanced`: Agent Runtime, security, passthrough headers, identity
  *   provider, and labels.
  */
@@ -1693,6 +1694,8 @@ export function AgentForm({
       ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
       : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
+  const showActivationSkills =
+    showToolsSections && isInternalAgent && !isBuiltIn && !!canReadSkills;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
   const runtimePreflight = useAgentRuntimePreflight(
@@ -1801,7 +1804,7 @@ export function AgentForm({
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
   // Skills moved to Advanced, so they no longer keep this panel alive: a record
-  // with only skills would otherwise mount an empty Tools & Knowledge tab.
+  // with only published skills would otherwise mount an empty tools tab.
   const toolsPanelHasContent = showTools || showsHooks;
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change
@@ -3788,6 +3791,18 @@ export function AgentForm({
                       toolConnectionsDocsUrl={toolConnectionsDocsUrl}
                     />
                   </div>
+                </SettingsSection>
+              )}
+
+              {showActivationSkills && (
+                <SettingsSection
+                  title="Skills"
+                  description="Skills available to you through this agent. Visibility shows how each skill is shared."
+                >
+                  <AgentActivationSkillsTable
+                    agentId={agent?.id}
+                    environmentId={environmentId}
+                  />
                 </SettingsSection>
               )}
 

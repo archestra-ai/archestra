@@ -821,7 +821,7 @@ function sectionLabel(
 const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
   settings: "Settings",
   general: "General",
-  tools: "Tools & Knowledge",
+  tools: "Tools, Skills & Knowledge",
   messaging: "Messaging Channels",
   advanced: "Advanced",
   connect: "Connect",

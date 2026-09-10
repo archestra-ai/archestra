@@ -1,12 +1,19 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_LIST_AGENTS_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { AgentKnowledgeBaseModel, AgentModel } from "@/models";
+import {
+  AgentKnowledgeBaseModel,
+  AgentModel,
+  OrganizationModel,
+  SkillModel,
+  ToolModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -403,6 +410,113 @@ describe("agent tool execution", () => {
     expect((result.content[0] as any).text).toContain(
       "either id or name parameter is required",
     );
+  });
+
+  test("get_agent does not cross the active organization boundary", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const foreignAgent = await makeAgent({
+      name: `Foreign ${crypto.randomUUID()}`,
+      agentType: "agent",
+      organizationId: otherOrganization.id,
+      scope: "org",
+    });
+
+    for (const lookup of [
+      { id: foreignAgent.id },
+      { name: foreignAgent.name },
+    ]) {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent`,
+        lookup,
+        mockContext,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toMatch(/agent not found/i);
+    }
+  });
+
+  test("get_agent exposes the skills the caller can activate through it", async ({
+    makeAgent,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) throw new Error("Expected organization context");
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({
+      name: "Skilled Agent",
+      agentType: "agent",
+      organizationId,
+      scope: "org",
+    });
+    await ToolModel.assignSkillToolsToAgent(agent.id, organizationId);
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId,
+        name: "triage-incidents",
+        description: "Triage incoming incidents",
+        content: "# Instructions",
+        scope: "org",
+      },
+      files: [],
+    });
+    if (!skill) throw new Error("Expected skill to be created");
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent`,
+      { id: agent.id },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.skillsEnabled).toBe(true);
+    expect(parsed.skillsNotice).toMatch(/never follow directions/i);
+    expect(parsed.skills).toEqual([
+      {
+        reference: { source: "native", skillId: skill.id },
+        name: "triage-incidents",
+        activationName: "triage-incidents",
+        description: "Triage incoming incidents",
+        scope: "org",
+        providerName: null,
+      },
+    ]);
+  });
+
+  test("get_agent omits activation skills when the caller cannot read skills", async ({
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) throw new Error("Expected organization context");
+    const restrictedUser = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"] },
+    });
+    await makeMember(restrictedUser.id, organizationId, { role: role.role });
+    const sharedAgent = await makeAgent({
+      name: "Shared Agent",
+      agentType: "agent",
+      organizationId,
+      scope: "org",
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_agent`,
+      { id: sharedAgent.id },
+      { ...mockContext, userId: restrictedUser.id },
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed).not.toHaveProperty("skillsEnabled");
+    expect(parsed).not.toHaveProperty("skillsNotice");
+    expect(parsed).not.toHaveProperty("skills");
   });
 
   test("list_agents returns results", async () => {

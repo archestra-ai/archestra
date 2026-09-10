@@ -40,6 +40,7 @@ const {
   useAgentSubagentExclusionsMock,
   useAgentKnowledgeSourceExclusionsMock,
   useUpdateAgentKnowledgeSourceExclusionsMock,
+  useAgentActivationSkillsMock,
   useAgentSkillsMock,
   useAgentSkillExclusionsMock,
   useUpdateAgentSkillsMock,
@@ -197,6 +198,11 @@ const {
     mutateAsync: vi.fn(),
     isPending: false,
   })),
+  useAgentActivationSkillsMock: vi.fn(() => ({
+    data: { enabled: true, skills: [] },
+    isPending: false,
+    isError: false,
+  })),
   useAgentSkillsMock: vi.fn(
     (): {
       data:
@@ -304,6 +310,7 @@ vi.mock("@/lib/agent-knowledge-source-exclusions.query", () => ({
 }));
 
 vi.mock("@/lib/agent-skills.query", () => ({
+  useAgentActivationSkills: useAgentActivationSkillsMock,
   useAgentSkills: useAgentSkillsMock,
   useAgentSkillExclusions: useAgentSkillExclusionsMock,
   useUpdateAgentSkills: useUpdateAgentSkillsMock,
@@ -1735,6 +1742,21 @@ describe("AgentForm knowledge in Auto mode", () => {
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
     vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(true);
+  });
+
+  it("shows the caller-visible activation skills in the tools step", async () => {
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const section = (
+      await screen.findByRole("heading", { name: "Skills" })
+    ).closest("section") as HTMLElement;
+    expect(within(section).getByRole("table")).toBeVisible();
+    expect(useAgentActivationSkillsMock).toHaveBeenCalledWith({
+      agentId: baseAgent.id,
+      environmentId: undefined,
+    });
   });
 
   it("says what the knowledge field leaves out rather than what it holds", async () => {

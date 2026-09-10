@@ -139,6 +139,21 @@ Required RBAC permission: `agent:read`
 | `suggestedPrompts` | `object[]` | Yes | Configured suggested prompts. |
 | `suggestedPrompts[].summaryTitle` | `string` | Yes | The short title shown in the chat UI. |
 | `suggestedPrompts[].prompt` | `string` | Yes | The suggested prompt text. |
+| `skillsEnabled` | `boolean` | No | Present for an internal agent when the current user has skill:read; whether load_skill is executable for it. |
+| `skillsNotice` | `string` | No | Trust boundary for the catalog-supplied skill names and descriptions in skills. |
+| `skills` | `object[]` | No | Present for an internal agent when the current user has skill:read; caller-relative skills it can activate. |
+| `skills[].reference` | `object` | Yes | Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath. |
+| `skills[].reference.source` | `"native" \| "external_mcp" \| "plugin"` | Yes | "native": A skill-library skill. "external_mcp": A skill from an MCP server. "plugin": A skill bundled in a plugin. |
+| `skills[].reference.skillId` | `string` | When `source="native"` | The skill-library skill ID. |
+| `skills[].reference.mcpServerId` | `string` | When `source="external_mcp"` | The MCP server installation ID. |
+| `skills[].reference.uri` | `string` | When `source="external_mcp"` | The skill resource URI. |
+| `skills[].reference.pluginId` | `string` | When `source="plugin"` | The plugin ID. |
+| `skills[].reference.skillPath` | `string` | When `source="plugin"` | The skill root inside the plugin. |
+| `skills[].name` | `string` | Yes | The declared, human-facing skill name. |
+| `skills[].activationName` | `string` | Yes | The exact name to pass to load_skill. |
+| `skills[].description` | `string` | Yes | The skill description. |
+| `skills[].scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope through which the skill is shared. |
+| `skills[].providerName` | `string \| null` | Yes | Plugin or MCP server name; null for a skill-library entry. |
 
 #### list_agents
 
@@ -316,7 +331,7 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes |  |
+| `success` | `true` | Yes |  |
 | `id` | `string` | Yes |  |
 
 ### MCP Gateways
@@ -832,7 +847,7 @@ Required RBAC permission: `team:delete`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes |  |
+| `success` | `true` | Yes |  |
 | `id` | `string` | Yes |  |
 
 #### list_team_members
@@ -934,7 +949,7 @@ Additional access requirement: Beyond `team:read`, the caller must be an organiz
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes |  |
+| `success` | `true` | Yes |  |
 | `teamId` | `string` | Yes |  |
 | `userId` | `string` | Yes |  |
 
@@ -995,7 +1010,7 @@ Required RBAC permission: `team:read`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes |  |
+| `success` | `true` | Yes |  |
 | `teamId` | `string` | Yes |  |
 
 ### Limits
@@ -1108,7 +1123,7 @@ Required RBAC permission: `llmLimit:delete`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes |  |
+| `success` | `true` | Yes |  |
 | `id` | `string` | Yes |  |
 
 #### get_agent_token_usage
@@ -1294,7 +1309,7 @@ Required RBAC permission: `toolPolicy:delete`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the delete succeeded. |
+| `success` | `true` | Yes | Whether the delete succeeded. |
 
 #### get_trusted_data_policies
 
@@ -1415,7 +1430,7 @@ Required RBAC permission: `toolPolicy:delete`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the delete succeeded. |
+| `success` | `true` | Yes | Whether the delete succeeded. |
 
 ### Tool Assignment
 
@@ -1879,7 +1894,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the write succeeded. |
+| `success` | `true` | Yes | Whether the write succeeded. |
 | `todoCount` | `integer` | Yes | How many todo items were written. |
 
 ### Projects
@@ -1913,7 +1928,7 @@ Required RBAC permission: `project:create`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the project was created. |
+| `success` | `true` | Yes | Whether the project was created. |
 | `project_id` | `string` | Yes | The new project's id. |
 | `project_name` | `string` | Yes | The new project's name. |
 | `project_slug` | `string` | Yes | The new project's slug. |
@@ -1937,7 +1952,7 @@ Additional access requirement: Beyond `project:update`, the caller must own the 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the sharing was updated. |
+| `success` | `true` | Yes | Whether the sharing was updated. |
 | `project_id` | `string` | Yes | The affected project's id. |
 | `project_name` | `string` | Yes | The affected project's name. |
 | `visibility` | `"organization" \| "team" \| "none"` | Yes | The project's sharing after the update. |
@@ -2538,10 +2553,15 @@ Required RBAC permission: `sandbox:execute`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | `string` | Yes | Destination path inside the container — absolute under /skills or /home/sandbox, or relative to the sandbox's working directory. |
-| `source` | `object \| object \| object \| object` | Yes | Where the file bytes come from. One of four shapes, each tagged by a `type`: a chat attachment (`{"type":"chat_attachment","attachmentId"\|"filename":...}`), inline base64 (`{"type":"base64","dataBase64":...}`), inline text (`{"type":"text","text":"print(1)"}`), or a file from the user's persistent files (`{"type":"my_file","filename":...}`, found via search_files). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead. |
-| `source.type` | `string` | Yes |  |
+| `source` | `object` | Yes | Where the file bytes come from. One of four shapes, each tagged by a `type`: a chat attachment (`{"type":"chat_attachment","attachmentId"\|"filename":...}`), inline base64 (`{"type":"base64","dataBase64":...}`), inline text (`{"type":"text","text":"print(1)"}`), or a file from the user's persistent files (`{"type":"my_file","filename":...}`, found via search_files). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead. |
+| `source.type` | `"chat_attachment" \| "base64" \| "text" \| "my_file"` | Yes | "chat_attachment": "base64": "text": "my_file": |
 | `source.attachmentId` | `string` | No | Id of an attachment in the current conversation. The bytes are copied directly and never enter your context. |
-| `source.filename` | `string` | No | Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins. |
+| `source.filename` | `string` | No | Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins. Exact filename of a persistent file (when you have no id). |
+| `source.dataBase64` | `string` | When `type="base64"` | Base64-encoded file bytes. |
+| `source.mimeType` | `string` | No |  |
+| `source.originalName` | `string` | No |  |
+| `source.text` | `string` | When `type="text"` | UTF-8 text content of the file. |
+| `source.id` | `string` | No | Id or ref of a persistent file, as returned by search_files (`id` for stored files, `ref` for hand-placed ones). |
 | `target` | `object` | No | Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass `{ "fresh": true }` for a new isolated sandbox, or `{ "id": "<uuid>" }` to target a specific one. |
 | `target.fresh` | `boolean` | No | Set true for a brand-new isolated sandbox; its id is returned. |
 | `target.id` | `string` | No | An existing sandbox id (UUID) returned by an earlier call. |
@@ -2688,7 +2708,7 @@ Required RBAC permission: `file:manage`
 |-------|------|----------|-------------|
 | `fileId` | `string` | Yes |  |
 | `filename` | `string` | Yes |  |
-| `deleted` | `boolean` | Yes |  |
+| `deleted` | `true` | Yes |  |
 
 #### copy_file
 
@@ -2698,10 +2718,11 @@ Required RBAC permission: `file:manage`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `from` | `object \| object \| object` | Yes | Where the bytes come from: {"type":"chat_file","id"\|"filename"} \| {"type":"chat_attachment","attachmentId"\|"filename"} \| {"type":"app_file","id"\|"filename"}. |
-| `from.type` | `string` | Yes |  |
-| `from.id` | `string` | No | File id from search_files. |
-| `from.filename` | `string` | No | Filename instead of `id`; ambiguous names rejected. |
+| `from` | `object` | Yes | Where the bytes come from: {"type":"chat_file","id"\|"filename"} \| {"type":"chat_attachment","attachmentId"\|"filename"} \| {"type":"app_file","id"\|"filename"}. |
+| `from.type` | `"chat_file" \| "chat_attachment" \| "app_file"` | Yes | "chat_file": "chat_attachment": "app_file": |
+| `from.id` | `string` | No | File id from search_files. File id in the app's store. |
+| `from.filename` | `string` | No | Filename instead of `id`; ambiguous names rejected. Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins. Filename instead of `id`. |
+| `from.attachmentId` | `string` | No | Id of an attachment uploaded to THIS conversation. |
 | `to` | `object` | Yes | Where the copy lands. |
 | `to.scope` | `"chat" \| "app"` | Yes | "app" = the open app's per-viewer store; "chat" = this chat's files (the project's files when this chat belongs to a project). |
 | `to.filename` | `string` | No | Destination filename; defaults to the source's name. Plain filename, no paths. |
@@ -2968,7 +2989,7 @@ Required RBAC permission: `app:update`
 | `imageReplacements[].before_str` | `string` | Yes | Exact short HTML ending with the opening quote immediately before the existing image URL or data URL (for example `<img src="`). It must occur exactly once; include nearby id/class context when needed to disambiguate. |
 | `imageReplacements[].after_str` | `string` | Yes | Exact short HTML starting with the matching closing quote immediately after the existing image URL or data URL (for example `" alt="Issue tracker"`). The text between before_str and after_str is replaced server-side. |
 | `imageReplacements[].source` | `object` | Yes | The most recently attached image in this conversation. Its bytes are read and encoded server-side; never read or base64-encode the attachment yourself. |
-| `imageReplacements[].source.type` | `string` | Yes |  |
+| `imageReplacements[].source.type` | `"chat_attachment"` | Yes |  |
 
 ##### Output
 

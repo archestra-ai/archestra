@@ -13956,6 +13956,10 @@ export type GetAgentsData = {
          * Filter by lifecycle status. Deleted rows require delete permission.
          */
         status?: 'active' | 'deleted';
+        /**
+         * Include the caller-relative activation skill count used by internal-agent cards. Omitted when the caller lacks skill:read.
+         */
+        includeActivationSkillsCount?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
@@ -14157,6 +14161,7 @@ export type GetAgentsResponses = {
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
+            activationSkillsCount?: number;
             lastUsedAt?: string | null;
         }>;
         pagination: {
@@ -14456,6 +14461,7 @@ export type CreateAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        activationSkillsCount?: number;
         lastUsedAt?: string | null;
     };
 };
@@ -14698,6 +14704,7 @@ export type GetAllAgentsResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        activationSkillsCount?: number;
         lastUsedAt?: string | null;
     }>;
 };
@@ -14991,6 +14998,7 @@ export type GetDefaultMcpGatewayResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        activationSkillsCount?: number;
         lastUsedAt?: string | null;
     };
 };
@@ -15276,6 +15284,7 @@ export type ImportAgentResponses = {
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
+            activationSkillsCount?: number;
             lastUsedAt?: string | null;
         };
         warnings: Array<{
@@ -15574,6 +15583,7 @@ export type GetAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        activationSkillsCount?: number;
         lastUsedAt?: string | null;
     };
 };
@@ -15866,6 +15876,7 @@ export type UpdateAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        activationSkillsCount?: number;
         lastUsedAt?: string | null;
     };
 };
@@ -16333,6 +16344,7 @@ export type RestoreAgentVersionResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        activationSkillsCount?: number;
         lastUsedAt?: string | null;
     };
 };
@@ -16549,6 +16561,7 @@ export type CloneAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        activationSkillsCount?: number;
         lastUsedAt?: string | null;
     };
 };
@@ -17259,6 +17272,162 @@ export type UpdateAgentKnowledgeSourceExclusionsResponses = {
 };
 
 export type UpdateAgentKnowledgeSourceExclusionsResponse = UpdateAgentKnowledgeSourceExclusionsResponses[keyof UpdateAgentKnowledgeSourceExclusionsResponses];
+
+export type GetAgentActivationSkillsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Existing internal agent to evaluate. Omit to preview a new agent.
+         */
+        agentId?: string;
+        /**
+         * Environment for a new-agent preview. Omit for the Default environment.
+         */
+        environmentId?: string;
+    };
+    url: '/api/agents/activation-skills';
+};
+
+export type GetAgentActivationSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentActivationSkillsError = GetAgentActivationSkillsErrors[keyof GetAgentActivationSkillsErrors];
+
+export type GetAgentActivationSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Whether load_skill is available for this agent or draft; when false, skills is empty.
+         */
+        enabled: boolean;
+        skills: Array<{
+            /**
+             * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
+             */
+            reference: {
+                /**
+                 * A skill-library skill.
+                 */
+                source: 'native';
+                /**
+                 * The skill-library skill ID.
+                 */
+                skillId: string;
+            } | {
+                /**
+                 * A skill from an MCP server.
+                 */
+                source: 'external_mcp';
+                /**
+                 * The MCP server installation ID.
+                 */
+                mcpServerId: string;
+                /**
+                 * The skill resource URI.
+                 */
+                uri: string;
+            } | {
+                /**
+                 * A skill bundled in a plugin.
+                 */
+                source: 'plugin';
+                /**
+                 * The plugin ID.
+                 */
+                pluginId: string;
+                /**
+                 * The skill root inside the plugin.
+                 */
+                skillPath: string;
+            };
+            /**
+             * The declared, human-facing skill name.
+             */
+            name: string;
+            /**
+             * The exact name to pass to load_skill.
+             */
+            activationName: string;
+            /**
+             * The skill description.
+             */
+            description: string;
+            /**
+             * The visibility scope through which the skill is shared.
+             */
+            scope: 'personal' | 'team' | 'org';
+            /**
+             * Plugin or MCP server name; null for a skill-library entry.
+             */
+            providerName: string | null;
+        }>;
+    };
+};
+
+export type GetAgentActivationSkillsResponse = GetAgentActivationSkillsResponses[keyof GetAgentActivationSkillsResponses];
 
 export type GetAgentSkillsData = {
     body?: never;
@@ -18092,6 +18261,7 @@ export type RestoreAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        activationSkillsCount?: number;
         lastUsedAt?: string | null;
     };
 };

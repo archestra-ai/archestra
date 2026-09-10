@@ -1334,6 +1334,7 @@ class AgentModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     filters?: {
+      organizationId?: string;
       name?: string;
       agentType?: AgentType;
       agentTypes?: AgentType[];
@@ -1357,6 +1358,12 @@ class AgentModel {
     const whereConditions: SQL[] = [
       getAgentStatusCondition(filters?.status ?? "active"),
     ];
+
+    if (filters?.organizationId) {
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, filters.organizationId),
+      );
+    }
 
     // Add name filter if provided
     if (filters?.name) {

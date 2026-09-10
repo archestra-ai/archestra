@@ -1,14 +1,27 @@
-import { ADMIN_ROLE_NAME, type RouteId } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  ARCHESTRA_MCP_CATALOG_ID,
+  type RouteId,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+} from "@archestra/shared";
 import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { and, eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getAgentTypePermissionChecker, hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { EnvironmentModel, SkillTeamModel } from "@/models";
+import {
+  AgentExcludedToolModel,
+  EnvironmentModel,
+  OrganizationModel,
+  SkillTeamModel,
+  ToolModel,
+} from "@/models";
 import SkillModel from "@/models/skill";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type InsertSkill, type Skill, type User } from "@/types";
 
@@ -108,6 +121,261 @@ describe("agent skills routes", () => {
         ),
       );
   }
+
+  test("GET activation-skills returns the caller-relative skill catalog for an internal agent", async ({
+    makeAgent,
+  }) => {
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({
+      agentType: "agent",
+      organizationId,
+      environmentId: null,
+    });
+    await ToolModel.assignSkillToolsToAgent(agent.id, organizationId);
+    const skill = await makeSkill({
+      name: "incident-response",
+      description: "Respond to incidents",
+      scope: "org",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/activation-skills?agentId=${agent.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      enabled: true,
+      skills: [
+        {
+          reference: { source: "native", skillId: skill.id },
+          name: "incident-response",
+          activationName: "incident-response",
+          description: "Respond to incidents",
+          scope: "org",
+          providerName: null,
+        },
+      ],
+    });
+    expect(response.body).not.toContain("# Instructions");
+  });
+
+  test("GET activation-skills previews the selected environment for a new agent", async () => {
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    const environment = await EnvironmentModel.create({
+      organizationId,
+      name: "Preview Environment",
+    });
+    const otherEnvironment = await EnvironmentModel.create({
+      organizationId,
+      name: "Other Environment",
+    });
+    const visible = await makeSkill({ name: "visible-here" }, [environment.id]);
+    await makeSkill({ name: "elsewhere" }, [otherEnvironment.id]);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/activation-skills?environmentId=${environment.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      skills: [
+        {
+          reference: { source: "native", skillId: visible.id },
+          name: "visible-here",
+          activationName: "visible-here",
+          scope: "org",
+        },
+      ],
+    });
+  });
+
+  test("GET activation-skills reports a disabled agent without exposing the catalog", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      agentType: "agent",
+      organizationId,
+    });
+    await makeSkill({ name: "not-reachable" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/activation-skills?agentId=${agent.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ enabled: false, skills: [] });
+  });
+
+  test("GET activation-skills follows Auto-mode dynamic load_skill availability", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      agentType: "agent",
+      organizationId,
+      accessAllTools: true,
+    });
+    await makeSkill({ name: "dynamically-reachable" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/activation-skills?agentId=${agent.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      skills: [{ name: "dynamically-reachable" }],
+    });
+  });
+
+  test("GET activation-skills honors an active load_skill exclusion", async ({
+    makeAgent,
+  }) => {
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({
+      agentType: "agent",
+      organizationId,
+      accessAllTools: true,
+    });
+    const loadSkill = await ToolModel.findByName(
+      archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME),
+    );
+    if (!loadSkill) throw new Error("Expected load_skill tool");
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: agent.id,
+      organizationId,
+      excludedToolIds: [loadSkill.id],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/activation-skills?agentId=${agent.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ enabled: false, skills: [] });
+  });
+
+  test("GET agents includes the caller-visible activation skill count on internal agents", async ({
+    makeAgent,
+  }) => {
+    await promoteCallerToSkillAdmin();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const enabledAgent = await makeAgent({
+      name: `Enabled ${suffix}`,
+      agentType: "agent",
+      organizationId,
+      environmentId: null,
+    });
+    await makeAgent({
+      name: `Disabled ${suffix}`,
+      agentType: "agent",
+      organizationId,
+      environmentId: null,
+    });
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    await ToolModel.assignSkillToolsToAgent(enabledAgent.id, organizationId);
+    await makeSkill({ name: `listed-${suffix}` });
+
+    const plainResponse = await app.inject({
+      method: "GET",
+      url: `/api/agents?agentTypes=agent&name=${suffix}&limit=10&offset=0`,
+    });
+    expect(plainResponse.statusCode).toBe(200);
+    expect(plainResponse.json().data[0]).not.toHaveProperty(
+      "activationSkillsCount",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents?agentTypes=agent&name=${suffix}&limit=10&offset=0&includeActivationSkillsCount=true`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const counts = new Map(
+      response
+        .json()
+        .data.map((agent: { name: string; activationSkillsCount: number }) => [
+          agent.name,
+          agent.activationSkillsCount,
+        ]),
+    );
+    expect(counts.get(`Enabled ${suffix}`)).toBe(1);
+    expect(counts.get(`Disabled ${suffix}`)).toBe(0);
+  });
+
+  test("GET agents counts dynamic skills and honors load_skill exclusions", async ({
+    makeAgent,
+  }) => {
+    await promoteCallerToSkillAdmin();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const loadSkillName = archestraMcpBranding.getToolName(
+      TOOL_LOAD_SKILL_SHORT_NAME,
+    );
+    const dynamicAgent = await makeAgent({
+      name: `Dynamic ${suffix}`,
+      agentType: "agent",
+      organizationId,
+      accessAllTools: true,
+    });
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: dynamicAgent.id,
+      organizationId,
+      excludedToolIds: [],
+    });
+    expect(
+      await ToolModel.findByNameForAgent(loadSkillName, dynamicAgent.id),
+    ).toBeNull();
+
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    const excludedAgent = await makeAgent({
+      name: `Excluded ${suffix}`,
+      agentType: "agent",
+      organizationId,
+      accessAllTools: true,
+    });
+    const loadSkill = await ToolModel.findByName(loadSkillName);
+    if (!loadSkill) throw new Error("Expected load_skill tool");
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: excludedAgent.id,
+      organizationId,
+      excludedToolIds: [loadSkill.id],
+    });
+    await makeSkill({ name: `counted-${suffix}` });
+
+    const batchExclusions = vi.spyOn(
+      AgentExcludedToolModel,
+      "findExcludedToolRowsByAgents",
+    );
+    const perAgentToolReads = vi.spyOn(ToolModel, "getMcpToolsByAgent");
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents?agentTypes=agent&name=${suffix}&limit=10&offset=0&includeActivationSkillsCount=true`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const counts = new Map(
+      response
+        .json()
+        .data.map((agent: { name: string; activationSkillsCount: number }) => [
+          agent.name,
+          agent.activationSkillsCount,
+        ]),
+    );
+    expect(counts.get(`Dynamic ${suffix}`)).toBe(1);
+    expect(counts.get(`Excluded ${suffix}`)).toBe(0);
+    expect(batchExclusions).toHaveBeenCalledTimes(1);
+    expect(perAgentToolReads).not.toHaveBeenCalled();
+  });
 
   test("GET returns the defaults and PUT round-trips a full replace", async ({
     makeAgent,

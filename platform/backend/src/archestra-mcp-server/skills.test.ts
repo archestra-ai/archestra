@@ -27,6 +27,7 @@ import {
   SkillModel,
   SkillVersionModel,
 } from "@/models";
+import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import { formatPluginSkillName } from "@/skills/plugin-skill-activation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
@@ -191,6 +192,88 @@ describe("skill tool execution", () => {
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain("<available_skills>");
     expect(textOf(result)).toContain("pdf-processing");
+  });
+
+  test("the structured catalog keeps only the native skill load_skill would choose", async () => {
+    await seedSkill({
+      skill: { name: "shared-name", description: "Organization version" },
+    });
+    const personal = await seedSkill({
+      skill: {
+        name: "shared-name",
+        description: "My version",
+        scope: "personal",
+        authorId: userId,
+      },
+    });
+    if (!personal) throw new Error("personal skill seed failed");
+
+    const catalog = await getAgentActivationSkills({
+      enabled: true,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
+
+    expect(
+      catalog.skills.filter((skill) => skill.name === "shared-name"),
+    ).toEqual([
+      expect.objectContaining({
+        reference: { source: "native", skillId: personal.id },
+        activationName: "shared-name",
+        description: "My version",
+      }),
+    ]);
+  });
+
+  test("the structured catalog and load_skill share the newest tie break", async ({
+    makeUser,
+  }) => {
+    const firstAuthor = await makeUser();
+    const secondAuthor = await makeUser();
+    await seedSkill({
+      skill: {
+        name: "admin-visible-copy",
+        description: "First copy",
+        content: "# First copy",
+        scope: "personal",
+        authorId: firstAuthor.id,
+      },
+    });
+    await seedSkill({
+      skill: {
+        name: "admin-visible-copy",
+        description: "Second copy",
+        content: "# Second copy",
+        scope: "personal",
+        authorId: secondAuthor.id,
+      },
+    });
+    const [winner] = await SkillModel.findAllByName(
+      organizationId,
+      "admin-visible-copy",
+    );
+    if (!winner) throw new Error("Expected a duplicate-name winner");
+
+    const catalog = await getAgentActivationSkills({
+      enabled: true,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
+    const activation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "admin-visible-copy" },
+      context,
+    );
+
+    expect(catalog.skills).toContainEqual(
+      expect.objectContaining({
+        reference: { source: "native", skillId: winner.id },
+        description: winner.description,
+      }),
+    );
+    expect(textOf(activation)).toContain(winner.content);
   });
 
   test("list_skills projects metadata from accessible MCP installations", async ({
@@ -623,6 +706,19 @@ describe("skill tool execution", () => {
       context,
     );
     expect(textOf(catalog)).toContain('name="release &amp; verify"');
+
+    const structuredCatalog = await getAgentActivationSkills({
+      enabled: true,
+      organizationId,
+      userId,
+      agentId: agent.id,
+    });
+    expect(structuredCatalog.skills).toContainEqual(
+      expect.objectContaining({
+        name: "release & verify",
+        activationName: "release &amp; verify",
+      }),
+    );
 
     const activation = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,

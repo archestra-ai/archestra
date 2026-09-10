@@ -28,6 +28,16 @@ describe("getAgentSetupSteps", () => {
     }
   });
 
+  it("names skills only on the internal-agent tools step", () => {
+    expect(
+      getAgentSetupSteps({ agentType: "agent", builtIn: false })[1]?.title,
+    ).toBe("Tools, Skills & Knowledge");
+    expect(
+      getAgentSetupSteps({ agentType: "mcp_gateway", builtIn: false })[1]
+        ?.title,
+    ).toBe("Tools & Knowledge");
+  });
+
   it("leaves a built-in agent with configuration only — it has no advanced step", () => {
     expect(
       getAgentSetupSteps({ agentType: "agent", builtIn: true }).map(

@@ -15,12 +15,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
-import { ToolModel } from "@/models";
-import {
-  type AgentToolExclusionSets,
-  agentToolExclusionsService,
-  isToolRowExcluded,
-} from "@/services/agent-tool-exclusions";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import {
@@ -36,7 +31,7 @@ import { captureToolAuditBefore, recordToolAudit } from "./audit";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
-import { isDynamicallyAvailableArchestraTool } from "./dynamic-tools";
+import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
   type ArchestraRuntimeToolEntry,
   errorResult,
@@ -443,36 +438,6 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
   TOOL_CANCEL_RUN_SHORT_NAME,
 ]);
 
-async function checkToolAssignedToAgent(
-  toolName: string,
-  context: ArchestraContext,
-  exclusionSets: AgentToolExclusionSets,
-): Promise<CallToolResult | null> {
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
-  if (!context.agentId || !shortName) return null;
-  if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
-
-  const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
-  // Per-agent exclusions (Auto-tool mode): an assigned-but-excluded built-in
-  // is treated as unavailable — the sets are empty unless the agent's
-  // accessAllTools setting is on, so Custom mode is unchanged.
-  const isAssigned = assignedTools.some(
-    (tool) =>
-      archestraMcpBranding.getToolShortName(tool.name) === shortName &&
-      !isToolRowExcluded(tool, exclusionSets),
-  );
-  if (isAssigned) return null;
-  return structuredToolErrorResult({
-    error: {
-      type: "tool_state",
-      code: "tool_not_assigned",
-      message: `Tool "${toolName}" is not assigned to this agent. ${toolDiscoverySteer()}`,
-      toolName,
-    },
-  });
-}
-
 // Assignment gate with the dynamic-access relaxation: an unassigned built-in
 // executes anyway when the agent's "access all tools" setting allows it and
 // isDynamicallyAvailableArchestraTool passes (feature gates, per-agent
@@ -497,21 +462,22 @@ async function resolveToolAssignment(
   const exclusionSets = await agentToolExclusionsService.getActiveExclusionSets(
     context.agentId,
   );
-  const notAssigned = await checkToolAssignedToAgent(
-    toolName,
-    context,
-    exclusionSets,
-  );
-  if (!notAssigned) return null;
-
-  const dynamicallyAvailable = await isDynamicallyAvailableArchestraTool({
+  const available = await isArchestraToolAvailableToAgent({
     toolName,
     agentId: context.agentId,
     userId: context.userId,
     organizationId: context.organizationId,
     exclusionSets,
   });
-  return dynamicallyAvailable ? null : notAssigned;
+  if (available) return null;
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "tool_not_assigned",
+      message: `Tool "${toolName}" is not assigned to this agent. ${toolDiscoverySteer()}`,
+      toolName,
+    },
+  });
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

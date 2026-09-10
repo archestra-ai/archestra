@@ -664,7 +664,7 @@ class SkillModel {
           notDeleted(schema.skillsTable),
         ),
       )
-      .orderBy(desc(schema.skillsTable.createdAt));
+      .orderBy(desc(schema.skillsTable.createdAt), desc(schema.skillsTable.id));
   }
 
   /**

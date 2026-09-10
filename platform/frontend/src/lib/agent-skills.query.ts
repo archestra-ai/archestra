@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
+  getAgentActivationSkills: getAgentActivationSkillsApi,
   getAgentSkills,
   updateAgentSkills,
   getAgentSkillExclusions,
@@ -12,6 +13,8 @@ const {
 type AgentSkillAssignments = archestraApiTypes.GetAgentSkillsResponses["200"];
 type AgentSkillExclusions =
   archestraApiTypes.GetAgentSkillExclusionsResponses["200"];
+export type AgentActivationSkills =
+  archestraApiTypes.GetAgentActivationSkillsResponses["200"];
 
 /**
  * The PUT bodies carry ids only; the GET responses additionally carry the rows
@@ -20,6 +23,33 @@ type AgentSkillExclusions =
  */
 type AgentSkillAssignmentsInput = Omit<AgentSkillAssignments, "skills">;
 type AgentSkillExclusionsInput = Omit<AgentSkillExclusions, "skills">;
+
+export function useAgentActivationSkills(params: {
+  agentId?: string;
+  environmentId?: string | null;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: [
+      "agents",
+      params.agentId ?? "draft",
+      "activation-skills",
+      params.environmentId ?? "default",
+    ],
+    enabled: params.enabled ?? true,
+    queryFn: async (): Promise<AgentActivationSkills> => {
+      const query = params.agentId
+        ? { agentId: params.agentId }
+        : params.environmentId
+          ? { environmentId: params.environmentId }
+          : {};
+      const { data, error } = await getAgentActivationSkillsApi({ query });
+      throwOnApiError(error, { toastOnError: false });
+      if (!data) throw new Error("Activation skills response carried no body");
+      return data;
+    },
+  });
+}
 
 /**
  * Fails loud on purpose. The caller seeds an editor from this and saves that

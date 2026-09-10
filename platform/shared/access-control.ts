@@ -796,6 +796,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // the same disclosure the connector list endpoint gates on that permission.
   [RouteId.GetAgentKnowledgeSourceExclusions]: { knowledgeSource: ["read"] },
   [RouteId.UpdateAgentKnowledgeSourceExclusions]: { knowledgeSource: ["read"] },
+  // Caller-relative skills an internal agent can activate. The agent/create
+  // permission and environment checks are conditional and stay in the route.
+  [RouteId.GetAgentActivationSkills]: { skill: ["read"] },
   // Skill assignments/exclusions (what the gateway publishes over skill://):
   // agent-type read/update permission checked dynamically in handler, on top
   // of this floor. `skill:read` is the floor rather than `{}` because these

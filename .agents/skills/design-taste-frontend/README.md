@@ -37,7 +37,7 @@ surfaces — greenfield work where visual direction is the point.
 
 The skill recommends installing official design-system packages (`@fluentui/*`, `@atlaskit/*`,
 `@material/web`, …). Any such install is subject to this repo's dependency policy — `pnpm` with
-`ignoreScripts: true` and a 7-day `minimumReleaseAge` (see `platform/CLAUDE.md`). Do not add a
+`ignoreScripts: true` and a 7-day `minimumReleaseAge` (see `platform/AGENTS.md`). Do not add a
 dependency just to satisfy a design suggestion; the platform frontend already has its own
 component stack.
 

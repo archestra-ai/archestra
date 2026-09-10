@@ -1359,26 +1359,13 @@ async function validateResolvedTeamToken(params: {
   token: SelectTeamToken;
   agentAccessContext?: AgentAccessContext | null;
 }): Promise<TokenAuthResult | null> {
-  const { profileId, token, agentAccessContext } = params;
-
-  // Check if profile is accessible via this token
-  if (!token.isOrganizationToken) {
-    // Team token: profile must be assigned to this team, or be teamless (org-wide)
-    const hasAccess = await AgentTeamModel.teamHasAgentAccess(
-      profileId,
-      token.teamId,
-      agentAccessContext,
-    );
-    if (!hasAccess) {
-      logger.warn(
-        { profileId, tokenTeamId: token.teamId },
-        "Profile not accessible via team token",
-      );
-      return null;
-    }
-  }
-  // Org token: any profile in the organization is accessible
-  // (organization membership is verified in the route handler)
+  const { profileId, token } = params;
+  const hasAccess = await AgentTeamModel.credentialHasAgentAccess({
+    organizationId: token.organizationId,
+    agentId: profileId,
+    teamId: token.isOrganizationToken ? null : token.teamId,
+  });
+  if (!hasAccess) return null;
 
   return {
     tokenId: token.id,
@@ -1435,29 +1422,19 @@ async function validateResolvedUserToken(params: {
     "admin",
   );
 
-  if (isGatewayAdmin) {
-    return {
-      tokenId: token.id,
-      teamId: null, // User tokens aren't scoped to a single team
-      isOrganizationToken: false,
-      organizationId: token.organizationId,
-      isUserToken: true,
-      userId: token.userId,
-    };
-  }
-
   // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
   if (
-    !(await AgentTeamModel.userHasAgentAccess(
-      token.userId,
-      profileId,
-      false,
-      agentAccessContext,
-    ))
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId: token.userId,
+      agentId: profileId,
+      isAgentAdmin: isGatewayAdmin,
+      agentAccessContext: agentAccessContext,
+      action: "use",
+    }))
   ) {
     logger.warn(
       { profileId, userId: token.userId },
-      "Profile not accessible via user token (no shared teams)",
+      "Profile not accessible via user token (missing use permission)",
     );
     return null;
   }
@@ -1606,29 +1583,19 @@ async function validateOAuthTokenByHash(params: {
       "admin",
     );
 
-    if (isGatewayAdmin) {
-      return {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId,
-        isUserToken: true,
-        userId,
-      };
-    }
-
     // Non-admin access has two additive sources:
     //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
     //   2. an admin-controlled grant on the authorization_code MCP OAuth client
     //      that minted this token — its allowedGatewayIds may grant access to
     //      gateways the user could not otherwise reach (e.g. a gateway reachable
     //      only through a specific pre-registered app).
-    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
-      userId,
-      params.profileId,
-      false,
-      agent,
-    );
+    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess({
+      userId: userId,
+      agentId: params.profileId,
+      isAgentAdmin: isGatewayAdmin,
+      agentAccessContext: agent,
+      action: "use",
+    });
     const hasClientGrant =
       hasRbacAccess || !accessToken.clientId
         ? false
@@ -2067,15 +2034,18 @@ async function authenticateExternalIdpToken(
       rawToken: tokenValue,
     };
 
-    if (isAdmin) {
-      return { result: authenticated, reason: null };
-    }
-
     // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
+    if (
+      !(await AgentTeamModel.userHasAgentAccess({
+        userId: user.id,
+        agentId: profileId,
+        isAgentAdmin: isAdmin,
+        action: "use",
+      }))
+    ) {
       logger.warn(
         { profileId, userId: user.id },
-        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
+        "validateExternalIdpToken: profile not accessible via external IdP (missing use permission)",
       );
       return { result: null, reason: "no_gateway_access" };
     }
@@ -2138,6 +2108,9 @@ function cacheTokenAuthResult(
   cacheKey: string,
   result: TokenAuthResult | null,
 ): void {
+  // Identity lookup may be cached separately, but a user's authorization must
+  // reflect resource grants and team/role membership on every request.
+  if (result?.userId) return;
   // Negative results are intentionally NOT cached. Caching auth failures
   // creates a "cache treadmill" where every retry refreshes the negative
   // entry: a transient race during agent/IdP creation fails the first

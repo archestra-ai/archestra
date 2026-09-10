@@ -35,7 +35,7 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
   // Toggles the answer to the mcpRegistry:deploy-to-restricted probe.
   let canDeployToRestricted: boolean;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     canDeployToRestricted = false;
     mockHasPermission.mockImplementation(async (permissions: Permissions) => {
@@ -51,6 +51,7 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

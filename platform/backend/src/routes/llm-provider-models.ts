@@ -1,5 +1,6 @@
 import {
   EmbeddingDimensionsSchema,
+  hasScopedPermission,
   isFreeModel,
   isProviderApiKeyOptional,
   LAZY_MODEL_SYNC_STATUS_HEADER,
@@ -38,6 +39,7 @@ import {
   modelSyncService,
   withDistinctDisplayNames,
 } from "@/services/model-sync";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { systemKeyManager } from "@/services/system-key-manager";
 import {
   ApiError,
@@ -290,9 +292,31 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
           modelIds: models.map((model) => model.dbId),
           principalTeamIds: userTeamIds,
+          grantContext: { organizationId, userId: user.id, action: "read" },
         });
         visibleModels = models.filter((model) =>
           allowedModelIds.has(model.dbId),
+        );
+      }
+
+      if (
+        !(await userHasPermission(user.id, organizationId, "llmModel", "read"))
+      ) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const grants = await ResourcePermissions.resolveAll({
+          organizationId,
+          userId: user.id,
+        });
+        // SPDX-SnippetEnd
+        visibleModels = visibleModels.filter((model) =>
+          grants.some(
+            (grant) =>
+              grant.resource === "llmModel" &&
+              grant.action === "read" &&
+              (grant.scope === "*" || grant.scope === model.dbId),
+          ),
         );
       }
 
@@ -425,7 +449,26 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Returning models with API keys",
       );
 
-      return reply.send(response);
+      if (await userHasPermission(user.id, organizationId, "llmModel", "read"))
+        return reply.send(response);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const grants = await ResourcePermissions.resolveAll({
+        organizationId,
+        userId: user.id,
+      });
+      // SPDX-SnippetEnd
+      return reply.send(
+        response.filter((model) =>
+          grants.some(
+            (grant) =>
+              grant.resource === "llmModel" &&
+              grant.action === "read" &&
+              (grant.scope === "*" || grant.scope === model.id),
+          ),
+        ),
+      );
     },
   );
 
@@ -451,6 +494,20 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { ignored } = request.body;
+      const permissionContext = {
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "llmModel" as const,
+      };
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const [objectGrants, wildcard] = await Promise.all([
+        ResourcePermissions.resolveAll(permissionContext),
+        ResourcePermissions.getEffective({ ...permissionContext, scope: "*" }),
+      ]);
+      // SPDX-SnippetEnd
+      const grants = [...objectGrants, ...wildcard.grants];
 
       const outcome = await runBulk({
         ids: request.body.ids,
@@ -461,6 +518,22 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           new Map(
             (await ModelModel.findByIds(ids)).map((model) => [model.id, model]),
           ),
+        authorize: async (model) => {
+          if (
+            !hasScopedPermission({
+              grants,
+              required: {
+                ...permissionContext,
+                scope: model.id,
+                action: "update",
+              },
+            })
+          )
+            throw new ApiError(
+              403,
+              "You do not have permission to modify this model",
+            );
+        },
         // The row's own name, as the pickers show it.
         describe: (model) => model.modelId,
         applyEach: async (model, id) => {
@@ -494,7 +567,72 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectModelSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId,
+        userId: user.id,
+        resource: "llmModel",
+        scope: id,
+        action: "update",
+      });
+      // SPDX-SnippetEnd
+      const existingTeams =
+        body.teamIds !== undefined
+          ? ((await ModelTeamModel.getTeamIdsForModels([id])).get(id) ?? [])
+          : [];
+      const existingUsers =
+        body.userIds !== undefined
+          ? ((await ModelUserModel.getUserDetailsForModels([id]))
+              .get(id)
+              ?.map((user) => user.id) ?? [])
+          : [];
+      const sharingChanged =
+        (body.teamIds !== undefined &&
+          !sameRecipientIds(body.teamIds, existingTeams)) ||
+        (body.userIds !== undefined &&
+          !sameRecipientIds(body.userIds, existingUsers));
+      if (sharingChanged) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.rejectLegacySharing({
+          organizationId,
+          resource: "llmModel",
+          scope: id,
+        });
+        // SPDX-SnippetEnd
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId,
+          userId: user.id,
+          resource: "llmModel",
+          scope: id,
+          action: "manage-permissions",
+        });
+        // SPDX-SnippetEnd
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateRecipients({
+          organizationId,
+          grants: [
+            ...(body.teamIds ?? []).map((teamId) => ({
+              subject: { type: "team" as const, id: teamId },
+              actions: ["read" as const],
+            })),
+            ...(body.userIds ?? []).map((userId) => ({
+              subject: { type: "user" as const, id: userId },
+              actions: ["read" as const],
+            })),
+          ],
+        });
+        // SPDX-SnippetEnd
+      }
       const existing = await ModelModel.findById(id);
       if (!existing) {
         throw new ApiError(404, "Model not found");
@@ -992,4 +1130,11 @@ function embeddingClientImageCapable(model: Model): boolean | null {
     model.modelId,
   );
   return clientModalities === null ? null : clientModalities.includes("image");
+}
+
+function sameRecipientIds(next: string[], current: string[]): boolean {
+  return (
+    new Set(next).size === new Set(current).size &&
+    next.every((id) => current.includes(id))
+  );
 }

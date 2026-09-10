@@ -323,11 +323,12 @@ export async function validatePassthroughVirtualKey(params: {
     "agent",
     "admin",
   );
-  const hasProxyAccess = await AgentTeamModel.userHasAgentAccess(
-    virtualKey.authorId,
-    agent.id,
-    ownerIsAgentAdmin,
-  );
+  const hasProxyAccess = await AgentTeamModel.userHasAgentAccess({
+    userId: virtualKey.authorId,
+    agentId: agent.id,
+    isAgentAdmin: ownerIsAgentAdmin,
+    action: "use",
+  });
   if (!hasProxyAccess) {
     throw noAccessError;
   }
@@ -1011,11 +1012,12 @@ async function validateUserLlmOAuthAccessToken(params: {
     throw new ApiError(401, "OAuth user is no longer available.");
   }
 
-  const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
-    params.userId,
-    params.agent.id,
-    false,
-  );
+  const hasAgentAccess = await AgentTeamModel.userHasAgentAccess({
+    userId: params.userId,
+    agentId: params.agent.id,
+    isAgentAdmin: false,
+    action: "use",
+  });
   if (!hasAgentAccess) {
     throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
   }

@@ -18,12 +18,22 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { InteractionModel } from "@/models";
-import { afterEach, describe, expect, test } from "@/test";
+import { InteractionModel, ModelModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockProxyRoutes from "./bedrock";
 
 const MODEL_ID = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0";
+
+beforeEach(async () => {
+  await ModelModel.create({
+    externalId: `bedrock/${MODEL_ID}`,
+    provider: "bedrock",
+    modelId: MODEL_ID,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+});
 
 const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
 

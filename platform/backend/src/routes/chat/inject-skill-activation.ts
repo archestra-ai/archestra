@@ -23,6 +23,7 @@ import { reportSkillActivation } from "@/observability/metrics/skill";
 import { getPluginSkill } from "@/plugins/plugin-skills";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { getExternalMcpSkill } from "@/services/external-mcp-skills";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { formatExternalSkillActivation } from "@/skills/external-skill-activation";
 import { formatPluginSkillActivation } from "@/skills/plugin-skill-activation";
 import {
@@ -111,7 +112,22 @@ export async function injectSkillActivation({
     skill,
     isSkillAdmin: checker.isAdmin,
   });
-  if (!hasAccess) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const effective = await ResourcePermissions.getEffective({
+    organizationId,
+    userId,
+    resource: "skill",
+    scope: skill.id,
+  });
+  // SPDX-SnippetEnd
+  const canUse = effective.grants.some(
+    (grant) =>
+      grant.action === "use" &&
+      (grant.scope === "*" || grant.scope === skill.id),
+  );
+  if (!hasAccess || !canUse) {
     logger.warn(
       { organizationId, userId, skillId: skill.id },
       "[Skills] User lacks access to slash-command skill; sending message unchanged",

@@ -584,8 +584,12 @@ describe("executeA2AMessage current turn assembly", () => {
   test("appends exactly one current user turn to the provided history", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -602,7 +606,7 @@ describe("executeA2AMessage current turn assembly", () => {
       message: "current question",
       messages: history,
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 
@@ -617,8 +621,12 @@ describe("executeA2AMessage current turn assembly", () => {
   test("uses history as-is when the current turn has no text or attachments", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -632,7 +640,7 @@ describe("executeA2AMessage current turn assembly", () => {
       message: "",
       messages: history,
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 
@@ -643,8 +651,12 @@ describe("executeA2AMessage current turn assembly", () => {
   test("stops the run once the model repeatedly calls a tool outside the tool list", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -656,7 +668,7 @@ describe("executeA2AMessage current turn assembly", () => {
       agentId: agent.id,
       message: "do the thing",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 
@@ -703,8 +715,12 @@ describe("executeA2AMessage current turn assembly", () => {
   test("caps output tokens at the model's real ceiling, clamped by the operator ceiling", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -730,7 +746,7 @@ describe("executeA2AMessage current turn assembly", () => {
       agentId: agent.id,
       message: "current question",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 
@@ -741,8 +757,12 @@ describe("executeA2AMessage current turn assembly", () => {
   test("falls back to the unknown-model output budget when no model row exists", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -754,7 +774,7 @@ describe("executeA2AMessage current turn assembly", () => {
       agentId: agent.id,
       message: "current question",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 
@@ -901,8 +921,12 @@ describe("executeA2AMessage isolation scope", () => {
   test("headless executions never fabricate a conversation id for tools", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -913,7 +937,7 @@ describe("executeA2AMessage isolation scope", () => {
       agentId: agent.id,
       message: "Handle this",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
     });
 
     const wiring = toolWiring();
@@ -926,8 +950,12 @@ describe("executeA2AMessage isolation scope", () => {
   test("chat-delegated executions scope isolation by the real conversation id", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -938,7 +966,7 @@ describe("executeA2AMessage isolation scope", () => {
       agentId: agent.id,
       message: "Handle this",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 
@@ -950,8 +978,12 @@ describe("executeA2AMessage isolation scope", () => {
   test("headless delegation inherits the parent's isolation key", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -962,7 +994,7 @@ describe("executeA2AMessage isolation scope", () => {
       agentId: agent.id,
       message: "Handle this",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       isolationKey: "parent-execution-key",
     });
 
@@ -976,8 +1008,12 @@ describe("executeA2AMessage unavailable tool errors", () => {
   test("recovers unavailable-tool stream errors instead of failing the run", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -1030,7 +1066,7 @@ describe("executeA2AMessage unavailable tool errors", () => {
       agentId: agent.id,
       message: "Handle this",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 
@@ -1104,8 +1140,12 @@ describe("executeA2AMessage skill catalog", () => {
   test("appends the skill catalog to the system prompt when the agent can load skills", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -1122,13 +1162,13 @@ describe("executeA2AMessage skill catalog", () => {
       agentId: agent.id,
       message: "do it",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 
     expect(mockBuildSkillCatalogPrompt).toHaveBeenCalledWith({
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       agentId: agent.id,
     });
     const system = mockStreamText.mock.calls[0]?.[0].system;
@@ -1139,8 +1179,12 @@ describe("executeA2AMessage skill catalog", () => {
   test("omits the skill catalog but keeps the shared tool instructions when no skill tools are available", async ({
     makeOrganization,
     makeAgent,
+    makeUser,
+    makeMember,
   }) => {
     const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -1153,7 +1197,7 @@ describe("executeA2AMessage skill catalog", () => {
       agentId: agent.id,
       message: "do it",
       organizationId: org.id,
-      userId: "user-1",
+      userId: actor.id,
       conversationId: "conv-1",
     });
 

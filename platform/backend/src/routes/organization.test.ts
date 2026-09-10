@@ -507,6 +507,7 @@ describe("organization routes", () => {
       });
 
       test("403s without an enterprise licence", async () => {
+        config.enterpriseFeatures.core = false;
         enterpriseTier.setUserCountForTesting(9999); // over the free threshold
 
         const response = await app.inject({
@@ -525,6 +526,7 @@ describe("organization routes", () => {
       test("403s on an unlicensed attempt to turn it OFF too", async () => {
         // Refusing only the "on" direction would let an unlicensed deployment
         // believe it had disabled a feature it never had.
+        config.enterpriseFeatures.core = false;
         enterpriseTier.setUserCountForTesting(9999);
 
         const response = await app.inject({
@@ -537,6 +539,7 @@ describe("organization routes", () => {
       });
 
       test("leaves the licensed catalog toggle alone when hibernation is absent", async () => {
+        config.enterpriseFeatures.core = false;
         enterpriseTier.setUserCountForTesting(9999);
 
         const response = await app.inject({

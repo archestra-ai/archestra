@@ -14,12 +14,10 @@ import {
   Globe,
   IdCard,
   KeyRound,
-  Lock,
   Plus,
   Server,
   Sparkles,
   Trash2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -44,6 +42,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
 import { IdentityFields } from "@/components/identity-fields";
+import { InitialResourcePermissions } from "@/components/initial-resource-permissions";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,10 +75,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
@@ -92,7 +87,6 @@ import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
-import { useAssignableTeams } from "@/lib/teams/team.query";
 import {
   type CascadeSnapshot,
   computeCascadeOutcome,
@@ -267,37 +261,40 @@ export function McpCatalogForm({
   const form = useForm<McpCatalogFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: Version mismatch between @hookform/resolvers and Zod
     resolver: zodResolver(formSchema as any),
-    defaultValues: initialValues
-      ? transformCatalogItemToFormValues(initialValues, undefined)
-      : (formValues ?? {
-          name: "",
-          description: "",
-          icon: null,
-          serverType: "remote",
-          multitenant: false,
-          serverUrl: "",
-          authMethod: "none",
-          includeBearerPrefix: true,
-          authHeaderName: "",
-          additionalHeaders: [],
-          enterpriseManagedConfig: null,
-          oauthConfig: emptyOauthFormConfig(),
-          localConfig: {
-            command: "",
-            arguments: "",
-            environment: [],
-            envFrom: [],
-            dockerImage: "",
-            transportType: "streamable-http",
-            httpPort: "",
-            httpPath: "/mcp",
-            serviceAccount: "",
-            imagePullSecrets: [],
-          },
-          scope: "personal",
-          teams: [],
-          environmentId: null,
-        }),
+    defaultValues: withCreationAccess(
+      initialValues
+        ? transformCatalogItemToFormValues(initialValues, undefined)
+        : (formValues ?? {
+            name: "",
+            description: "",
+            icon: null,
+            serverType: "remote",
+            multitenant: false,
+            serverUrl: "",
+            authMethod: "none",
+            includeBearerPrefix: true,
+            authHeaderName: "",
+            additionalHeaders: [],
+            enterpriseManagedConfig: null,
+            oauthConfig: emptyOauthFormConfig(),
+            localConfig: {
+              command: "",
+              arguments: "",
+              environment: [],
+              envFrom: [],
+              dockerImage: "",
+              transportType: "streamable-http",
+              httpPort: "",
+              httpPath: "/mcp",
+              serviceAccount: "",
+              imagePullSecrets: [],
+            },
+            scope: "personal",
+            teams: [],
+            environmentId: null,
+          }),
+      mode,
+    ),
   });
 
   // Expose imperative submit to parent
@@ -576,20 +573,6 @@ export function McpCatalogForm({
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
 
-  // Check admin status for scope options
-  const { data: isAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  // All teams for a full admin, otherwise only the user's own teams (the only
-  // ones the backend lets a non-admin assign).
-  const { data: teams } = useAssignableTeams({
-    isResourceAdmin: !!isAdmin,
-    enabled: !!canReadTeams,
-  });
-  // Sharing with a team requires administering it (admins bypass), matching the
-  // backend gate. `myRole` is populated only on the caller's own teams.
-  const administersATeam = (teams ?? []).some((t) => t.myRole === "admin");
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
   const defaultEnvironment = useDefaultEnvironment();
@@ -662,25 +645,6 @@ export function McpCatalogForm({
     }
   }
   const hasEnvRuleViolations = envRuleViolations.length > 0;
-  const currentScope = form.watch("scope");
-  const selectedTeams = form.watch("teams") ?? [];
-  // A team-scoped item may be shared with teams the editor doesn't belong to,
-  // which the assignable-teams picker never lists — take their names from the
-  // item so the access rows never fall back to a raw id.
-  const teamNameById = useMemo(
-    () =>
-      new Map([
-        ...(initialValues?.teams ?? []).map(
-          (t) => [t.id, t.name] as [string, string],
-        ),
-        ...(teams ?? []).map((t) => [t.id, t.name] as [string, string]),
-      ]),
-    [initialValues, teams],
-  );
-  const canShareWithTeams = (isAdmin ?? false) || administersATeam;
-  // Shared items are one-way: an item that is already team/org-scoped cannot be
-  // demoted back to personal (mirrors the agent dialog).
-  const initialScope = initialValues?.scope;
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
       ? "Available with the Enterprise Core license."
@@ -705,43 +669,6 @@ export function McpCatalogForm({
     ) : null;
   const enterpriseAuthDisabled =
     enterpriseAuthDisabledReason != null || enterpriseAuthDisabledBadge != null;
-  const visibilityOptions = useMemo<
-    Array<VisibilityOption<"personal" | "team" | "org">>
-  >(
-    () => [
-      {
-        value: "personal",
-        label: "Personal",
-        description: "Only you can access this MCP server.",
-        icon: Lock,
-        disabled: initialScope != null && initialScope !== "personal",
-        disabledReason: "Shared MCP servers cannot be made personal.",
-      },
-      {
-        value: "team",
-        label: "Teams",
-        description: "Share this MCP server with selected teams.",
-        icon: Users,
-        disabled: !canShareWithTeams || !canReadTeams || !teams?.length,
-        disabledReason: !canReadTeams
-          ? "Team sharing is unavailable without team:read permission."
-          : !canShareWithTeams
-            ? "You need to be an admin of a team to share with it."
-            : "Create a team first to share this MCP server.",
-      },
-      {
-        value: "org",
-        label: "Organization",
-        description:
-          "Everyone in your organization can use this MCP server. Only admins can modify it.",
-        icon: Globe,
-        disabled: !isAdmin,
-        disabledReason: "Only admins can make MCP servers organization-wide.",
-      },
-    ],
-    [isAdmin, canShareWithTeams, canReadTeams, teams, initialScope],
-  );
-
   // Check if BYOS feature is available (enterprise license)
   const showByosOption = useFeature("byosEnabled");
 
@@ -838,12 +765,12 @@ export function McpCatalogForm({
   // Reset form when formValues change (catalog pre-fill in create mode)
   useEffect(() => {
     if (formValues && !initialValues) {
-      form.reset(formValues);
+      form.reset(withCreationAccess(formValues, mode));
       setLabels(
         formValues.labels?.map((l) => ({ key: l.key, value: l.value })) ?? [],
       );
     }
-  }, [formValues, initialValues, form]);
+  }, [formValues, initialValues, form, mode]);
 
   // Reset form when initial values change (for edit mode)
   // Also reset when localConfigSecret loads (if it exists)
@@ -853,7 +780,7 @@ export function McpCatalogForm({
         initialValues,
         localConfigSecret ?? undefined,
       );
-      form.reset(transformedValues);
+      form.reset(withCreationAccess(transformedValues, mode));
       // Reset labels state
       const resetLabels =
         initialValues.labels?.map((l) => ({ key: l.key, value: l.value })) ??
@@ -870,7 +797,7 @@ export function McpCatalogForm({
         transformedValues.oauthClientSecretVaultKey || null,
       );
     }
-  }, [initialValues, localConfigSecret, form]);
+  }, [mode, initialValues, localConfigSecret, form]);
 
   // The bar's mode is captured at submit-time so the bar stays consistent
   // even if the form state drifts during the confirm step. `null` means
@@ -1039,150 +966,19 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="scope"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <VisibilitySelector
-                        label="Access"
-                        value={
-                          (field.value ?? "personal") as
-                            | "personal"
-                            | "team"
-                            | "org"
-                        }
-                        options={visibilityOptions}
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          if (value !== "team") {
-                            form.setValue("teams", [], { shouldDirty: true });
-                          }
-                        }}
-                      >
-                        {currentScope === "team" && (
-                          <div className="space-y-6">
-                            <div className="space-y-2">
-                              <Label>Add Team</Label>
-                              <SearchableSelect
-                                value=""
-                                onValueChange={(teamId) =>
-                                  form.setValue(
-                                    "teams",
-                                    [
-                                      ...selectedTeams,
-                                      { id: teamId, level: "use" },
-                                    ],
-                                    { shouldDirty: true },
-                                  )
-                                }
-                                items={(teams ?? []).map((t) => ({
-                                  value: t.id,
-                                  label: t.name,
-                                  disabled: selectedTeams.some(
-                                    (s) => s.id === t.id,
-                                  ),
-                                }))}
-                                placeholder="Select a team"
-                                searchPlaceholder="Search teams by name"
-                                emptyMessage="No matching teams found."
-                                className="w-full"
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label>Teams ({selectedTeams.length})</Label>
-                              {selectedTeams.length > 0 && (
-                                <FormDescription>
-                                  <strong>Use</strong> — members can find this
-                                  MCP server, install it for themselves, and use
-                                  shared connections. <strong>Manage</strong>{" "}
-                                  additionally lets the team&apos;s admins edit
-                                  it, change its environment, and manage
-                                  sharing.
-                                </FormDescription>
-                              )}
-                              {selectedTeams.length === 0 ? (
-                                <div className="rounded-lg border border-dashed p-4 text-center">
-                                  <p className="text-sm text-muted-foreground">
-                                    No teams added yet
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {selectedTeams.map((selected) => (
-                                    <div
-                                      key={selected.id}
-                                      className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
-                                    >
-                                      <p className="truncate text-sm font-medium">
-                                        {teamNameById.get(selected.id) ??
-                                          selected.id}
-                                      </p>
-                                      <Select
-                                        value={selected.level}
-                                        onValueChange={(level) =>
-                                          form.setValue(
-                                            "teams",
-                                            selectedTeams.map((t) =>
-                                              t.id === selected.id
-                                                ? {
-                                                    ...t,
-                                                    level: level as
-                                                      | "use"
-                                                      | "write",
-                                                  }
-                                                : t,
-                                            ),
-                                            { shouldDirty: true },
-                                          )
-                                        }
-                                      >
-                                        <SelectTrigger className="w-full">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="use">
-                                            Use
-                                          </SelectItem>
-                                          <SelectItem value="write">
-                                            Manage
-                                          </SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() =>
-                                          form.setValue(
-                                            "teams",
-                                            selectedTeams.filter(
-                                              (t) => t.id !== selected.id,
-                                            ),
-                                            { shouldDirty: true },
-                                          )
-                                        }
-                                      >
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                        <span className="sr-only">
-                                          Remove team
-                                        </span>
-                                      </Button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </VisibilitySelector>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {mode === "create" && (
+                <FormField
+                  control={form.control}
+                  name="initialGrants"
+                  render={({ field }) => (
+                    <InitialResourcePermissions
+                      resource="mcpRegistry"
+                      grants={field.value ?? []}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              )}
               <FormField
                 control={form.control}
                 name="environmentId"
@@ -3054,4 +2850,20 @@ function formatRegistryServers(registryServers: string[]): string {
   }
 
   return `${firstRegistry} +${remainingRegistries.length} more`;
+}
+
+function withCreationAccess(
+  values: McpCatalogFormValues,
+  mode: "create" | "edit",
+): McpCatalogFormValues {
+  // A copied configuration must not silently copy its old visibility. New
+  // sharing is explicit in the Permissions fields and saved atomically.
+  return mode === "create"
+    ? {
+        ...values,
+        scope: "personal",
+        teams: [],
+        initialGrants: values.initialGrants ?? [],
+      }
+    : values;
 }

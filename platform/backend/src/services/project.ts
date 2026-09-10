@@ -25,6 +25,8 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
@@ -471,6 +473,7 @@ class ProjectService {
       defaultAgent &&
       (await this.agentReachesAudience({
         agent: defaultAgent,
+        organizationId: project.organizationId,
         ownerUserId: project.userId,
         share: {
           visibility: share?.visibility ?? null,
@@ -1149,6 +1152,7 @@ class ProjectService {
     if (!agent) return false;
     return this.agentReachesAudience({
       agent,
+      organizationId: params.organizationId,
       ownerUserId: params.ownerUserId,
       share: params.share,
     });
@@ -1156,10 +1160,76 @@ class ProjectService {
 
   private async agentReachesAudience(params: {
     agent: { id: string; scope: AgentScope };
+    organizationId: string;
     ownerUserId: string;
     share: ProjectShareAudience;
   }): Promise<boolean> {
     const { agent } = params;
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const policies = await ResourcePermissionPolicyModel.findApplicable({
+      organizationId: params.organizationId,
+      resource: "agent",
+      scope: agent.id,
+    });
+    // SPDX-SnippetEnd
+    if (policies.some((policy) => policy.legacySharingMigrated)) {
+      const grants = policies
+        .filter((policy) => policy.scope === "*" || policy.scope === agent.id)
+        .flatMap((policy) => policy.grants);
+      const covers = (teamIds: Set<string>) =>
+        ["read", "use"].every((action) =>
+          grants.some(
+            (grant) =>
+              (grant.subject.type === "organization" ||
+                (grant.subject.type === "team" &&
+                  teamIds.has(grant.subject.id))) &&
+              grant.actions.some((candidate) => candidate === action),
+          ),
+        );
+      if (covers(new Set())) return true;
+      if (params.share.visibility === "organization") return false;
+      if (params.share.visibility === "team") {
+        const teams = await TeamModel.findByOrganization(params.organizationId);
+        const byId = new Map(teams.map((team) => [team.id, team]));
+        for (const sharedTeam of params.share.teamIds) {
+          const ids = new Set<string>();
+          let id: string | null = sharedTeam;
+          while (id && !ids.has(id)) {
+            ids.add(id);
+            id = byId.get(id)?.parentId ?? null;
+          }
+          if (!covers(ids)) return false;
+        }
+      }
+      const users =
+        params.share.visibility === "user"
+          ? [params.ownerUserId, ...params.share.userIds]
+          : [params.ownerUserId];
+      const checks = await Promise.all(
+        [...new Set(users)].map(async (userId) => {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          const effective = await ResourcePermissions.getEffective({
+            organizationId: params.organizationId,
+            userId,
+            resource: "agent",
+            scope: agent.id,
+          });
+          // SPDX-SnippetEnd
+          return ["read", "use"].every((action) =>
+            effective.grants.some(
+              (grant) =>
+                grant.action === action &&
+                (grant.scope === "*" || grant.scope === agent.id),
+            ),
+          );
+        }),
+      );
+      return checks.every(Boolean);
+    }
     if (agent.scope === "org") return true;
 
     switch (params.share.visibility) {
@@ -1199,7 +1269,11 @@ class ProjectService {
   ): Promise<boolean> {
     const checks = await Promise.all(
       [...new Set(userIds)].map((userId) =>
-        AgentTeamModel.userHasAgentAccess(userId, agentId, false),
+        AgentTeamModel.userHasAgentAccess({
+          userId: userId,
+          agentId: agentId,
+          isAgentAdmin: false,
+        }),
       ),
     );
     return checks.every(Boolean);

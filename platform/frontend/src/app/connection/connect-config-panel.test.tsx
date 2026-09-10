@@ -1,7 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import {
   useCreateConnectionPassthroughKey,
   useCreateConnectionVirtualKey,
@@ -116,6 +119,15 @@ function renderPanel({
 
 /** All queried permissions resolve true. */
 function grantAllPermissions() {
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: ["read", "use", "manage-permissions"].map((action) => ({
+      resource: "skill",
+      scope: "*",
+      action,
+    })),
+    isPending: false,
+    isLoading: false,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
@@ -246,7 +258,12 @@ describe("ConnectConfigPanel — shared skills marketplace", () => {
     } as ReturnType<typeof useAvailableLlmProviderApiKeys>);
   });
 
-  it("hides the skills row when the caller isn't a skill admin", () => {
+  it("hides the skills row without global permission management", () => {
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+      isPending: false,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useHasPermissions).mockImplementation((perms) => {
       const isSkillAdmin =
         JSON.stringify(perms) === JSON.stringify({ skill: ["admin"] });

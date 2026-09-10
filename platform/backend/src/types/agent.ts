@@ -9,6 +9,7 @@ import {
   MAX_DOMAIN_LENGTH,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPTS,
+  ResourcePermissionGrantSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import {
@@ -460,6 +461,7 @@ export const UpdateAgentSchema = UpdateAgentSchemaBase.superRefine(
 );
 
 export const CloneAgentBodySchema = z.object({
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   scope: AgentScopeSchema.optional().describe(
     "Visibility of the clone. Defaults to the source agent's scope.",
   ),

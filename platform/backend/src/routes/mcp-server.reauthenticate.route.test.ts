@@ -131,6 +131,34 @@ describe("PATCH /api/mcp_server/:id/reauthenticate", () => {
     expect(row?.oauthRefreshFailedAt).toBeNull();
   });
 
+  test("team administration does not authorize changing a connection's credentials", async ({
+    makeTeam,
+    makeTeamMember,
+    makeMcpServer,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id, { role: "admin" });
+    const server = await makeMcpServer({ scope: "team", teamId: team.id });
+    const replacement = await secretManager().createSecret(
+      { token: "replacement" },
+      "team-reauth-denied",
+    );
+    userHasPermissionMock.mockResolvedValue(false);
+    hasPermissionMock.mockImplementation(async (permissions) => ({
+      success: permissions.mcpServerInstallation?.includes("create") ?? false,
+      error: null,
+    }));
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/mcp_server/${server.id}/reauthenticate`,
+      payload: { secretId: replacement.id },
+    });
+    expect(response.statusCode, response.body).toBe(403);
+    expect((await McpServerModel.findById(server.id))?.secretId).toBe(
+      server.secretId,
+    );
+  });
+
   test("rejects re-auth before swapping the secret when the image is untrusted", async ({
     makeInternalMcpCatalog,
     makeMcpServer,

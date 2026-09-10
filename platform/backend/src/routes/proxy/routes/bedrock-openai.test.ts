@@ -5,9 +5,20 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { afterEach, describe, expect, test } from "@/test";
+import { ModelModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
 import bedrockOpenaiProxyRoutes from "./bedrock-openai";
+
+beforeEach(async () => {
+  await ModelModel.create({
+    externalId: "bedrock/zai.glm-4.7",
+    provider: "bedrock",
+    modelId: "zai.glm-4.7",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+});
 
 async function* asyncIterable<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) yield item;

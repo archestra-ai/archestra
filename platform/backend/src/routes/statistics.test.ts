@@ -6,6 +6,7 @@ import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { SkillModel } from "@/models";
+import MemberModel from "@/models/member";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -28,10 +29,11 @@ describe("GET /api/statistics/users", () => {
     } as Awaited<ReturnType<typeof hasPermission>>);
   };
 
-  beforeEach(async ({ makeAdmin, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeOrganization, makeMember }) => {
     currentUser = await makeAdmin();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
 
     setCanReadAllUsers(true);
 
@@ -374,10 +376,11 @@ describe("GET /api/statistics/apps", () => {
   let currentUser: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeAdmin, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeOrganization, makeMember }) => {
     currentUser = await makeAdmin();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
 
     vi.mocked(hasPermission).mockResolvedValue({ success: true } as Awaited<
       ReturnType<typeof hasPermission>
@@ -446,9 +449,13 @@ describe("GET /api/statistics/apps", () => {
     expect(body).toHaveProperty("chatBaselineSessions");
   });
 
-  test("omits apps the caller cannot see", async ({ makeApp, makeUser }) => {
-    // No app:admin, so only the caller's own personal app is in scope.
-    vi.mocked(userHasPermission).mockResolvedValue(false);
+  test("omits apps the caller cannot see", async ({
+    makeApp,
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await MemberModel.updateRole(currentUser.id, organizationId, role.role);
     const someoneElse = await makeUser();
     const mine = await makeApp({
       organizationId,
@@ -482,10 +489,11 @@ describe("GET /api/statistics/skills", () => {
   let currentUser: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeAdmin, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeOrganization, makeMember }) => {
     currentUser = await makeAdmin();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
 
     vi.mocked(hasPermission).mockResolvedValue({ success: true } as Awaited<
       ReturnType<typeof hasPermission>
@@ -572,10 +580,11 @@ describe("GET /api/statistics/me", () => {
   let currentUser: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeUser, makeOrganization }) => {
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
     currentUser = await makeUser({ email: "me@test.com" });
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
 
     // The caller is deliberately given nothing: this endpoint is the one
     // statistics view that must work without cost or roster permissions.
@@ -788,10 +797,11 @@ describe("GET /api/statistics/me/breakdown", () => {
   let currentUser: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeUser, makeOrganization }) => {
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
     currentUser = await makeUser({ email: "breakdown-me@test.com" });
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
 
     // Same deliberate absence of permissions as the sibling endpoint: this cut
     // reports only the caller's own activity, so it must work with none.

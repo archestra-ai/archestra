@@ -9,11 +9,7 @@ import { ApiError } from "@/types";
 import {
   assertMcpCatalogTeams,
   authorizeMcpCatalogScope,
-  type CatalogTeamAccess,
-  getCatalogWriteMembershipTeamIds,
   getMcpCatalogPermissionChecker,
-  requireMcpCatalogDeletePermission,
-  requireMcpCatalogModifyPermission,
 } from "./mcp-catalog-permissions";
 
 describe("mcp-catalog-permissions", () => {
@@ -69,231 +65,11 @@ describe("mcp-catalog-permissions", () => {
     });
   });
 
-  describe("getCatalogWriteMembershipTeamIds", () => {
-    test("returns only the teams the user administers", async ({
-      makeUser,
-      makeTeam,
-      makeTeamMember,
-    }) => {
-      const user = await makeUser();
-      const adminTeam = await makeTeam(organizationId, user.id);
-      const memberTeam = await makeTeam(organizationId, user.id);
-      await makeTeamMember(adminTeam.id, user.id, { role: ADMIN_ROLE_NAME });
-      await makeTeamMember(memberTeam.id, user.id, { role: MEMBER_ROLE_NAME });
-
-      const writeTeamIds = await getCatalogWriteMembershipTeamIds(user.id);
-
-      expect(writeTeamIds).toEqual([adminTeam.id]);
-    });
-  });
-
-  describe("requireMcpCatalogModifyPermission", () => {
-    const admin = { isAdmin: true };
-    const nonAdmin = { isAdmin: false };
-    const writeTeam: CatalogTeamAccess[] = [{ id: "t1", level: "write" }];
-    const useTeam: CatalogTeamAccess[] = [{ id: "t1", level: "use" }];
-
-    test("an admin of a write-level team may modify", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "team",
-          authorId: "author",
-          catalogTeams: writeTeam,
-          writeMembershipTeamIds: ["t1"],
-          userId: "team-admin",
-        }),
-      ).not.toThrow();
-    });
-
-    test("an admin of a use-level team may not modify", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "team",
-          authorId: "author",
-          catalogTeams: useTeam,
-          writeMembershipTeamIds: ["t1"],
-          userId: "team-admin",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("a member (not admin) of a write-level team may not modify", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "team",
-          authorId: "author",
-          catalogTeams: writeTeam,
-          // membership alone yields no write teams
-          writeMembershipTeamIds: [],
-          userId: "plain-member",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("write on one team suffices when another team is use-level", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "team",
-          authorId: "author",
-          catalogTeams: [
-            { id: "t1", level: "use" },
-            { id: "t2", level: "write" },
-          ],
-          writeMembershipTeamIds: ["t2"],
-          userId: "team-admin",
-        }),
-      ).not.toThrow();
-    });
-
-    test("authorship confers no write over a team-scoped item", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "team",
-          authorId: "author",
-          catalogTeams: useTeam,
-          writeMembershipTeamIds: [],
-          userId: "author",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("authorship confers no write over an org-scoped item", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "org",
-          authorId: "author",
-          catalogTeams: [],
-          writeMembershipTeamIds: [],
-          userId: "author",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("the author may modify their own personal item", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "personal",
-          authorId: "author",
-          catalogTeams: [],
-          writeMembershipTeamIds: [],
-          userId: "author",
-        }),
-      ).not.toThrow();
-    });
-
-    test("a non-author may not modify a personal item", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "personal",
-          authorId: "author",
-          catalogTeams: [],
-          writeMembershipTeamIds: [],
-          userId: "someone-else",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("a non-admin may not modify an org item", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "org",
-          authorId: "author",
-          catalogTeams: [],
-          writeMembershipTeamIds: ["t1"],
-          userId: "team-admin",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("an admin bypasses every scope", () => {
-      for (const scope of ["personal", "team", "org"] as const) {
-        expect(() =>
-          requireMcpCatalogModifyPermission({
-            checker: admin,
-            scope,
-            authorId: "someone-else",
-            catalogTeams: useTeam,
-            writeMembershipTeamIds: [],
-            userId: "admin",
-          }),
-        ).not.toThrow();
-      }
-    });
-
-    test("an unknown scope is denied", () => {
-      expect(() =>
-        requireMcpCatalogModifyPermission({
-          checker: nonAdmin,
-          scope: "galaxy" as "team",
-          authorId: "author",
-          catalogTeams: [],
-          writeMembershipTeamIds: [],
-          userId: "someone-else",
-        }),
-      ).toThrow(ApiError);
-    });
-  });
-
-  describe("requireMcpCatalogDeletePermission", () => {
-    test("an admin of a write-level team may not delete", () => {
-      expect(() =>
-        requireMcpCatalogDeletePermission({
-          checker: { isAdmin: false },
-          scope: "team",
-          authorId: "author",
-          userId: "team-admin",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("the author of a personal item may delete it", () => {
-      expect(() =>
-        requireMcpCatalogDeletePermission({
-          checker: { isAdmin: false },
-          scope: "personal",
-          authorId: "author",
-          userId: "author",
-        }),
-      ).not.toThrow();
-    });
-
-    test("the author of a team item may not delete it", () => {
-      expect(() =>
-        requireMcpCatalogDeletePermission({
-          checker: { isAdmin: false },
-          scope: "team",
-          authorId: "author",
-          userId: "author",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("an admin may delete any item", () => {
-      expect(() =>
-        requireMcpCatalogDeletePermission({
-          checker: { isAdmin: true },
-          scope: "org",
-          authorId: "someone-else",
-          userId: "admin",
-        }),
-      ).not.toThrow();
-    });
-  });
-
   describe("authorizeMcpCatalogScope", () => {
     const nonAdmin = { isAdmin: false };
     const admin = { isAdmin: true };
 
-    test("a team admin may share with a team they belong to", () => {
+    test("a member may share with a team they belong to", () => {
       expect(() =>
         authorizeMcpCatalogScope({
           checker: nonAdmin,
@@ -301,13 +77,13 @@ describe("mcp-catalog-permissions", () => {
           authorId: "author",
           requestedTeamIds: ["t1"],
           userTeamIds: ["t1"],
-          writeMembershipTeamIds: ["t1"],
+
           userId: "author",
         }),
       ).not.toThrow();
     });
 
-    test("a team admin cannot share with a team they are not in", () => {
+    test("a member cannot share with a team they are not in", () => {
       expect(() =>
         authorizeMcpCatalogScope({
           checker: nonAdmin,
@@ -315,38 +91,10 @@ describe("mcp-catalog-permissions", () => {
           authorId: "author",
           requestedTeamIds: ["t1", "t2"],
           userTeamIds: ["t1"],
-          writeMembershipTeamIds: ["t1"],
+
           userId: "author",
         }),
       ).toThrow(/member of/i);
-    });
-
-    test("a plain member cannot share with their team", () => {
-      expect(() =>
-        authorizeMcpCatalogScope({
-          checker: nonAdmin,
-          scope: "team",
-          authorId: "author",
-          requestedTeamIds: ["t1"],
-          userTeamIds: ["t1"],
-          writeMembershipTeamIds: [],
-          userId: "author",
-        }),
-      ).toThrow(ApiError);
-    });
-
-    test("authorship does not let a plain member publish to a team", () => {
-      expect(() =>
-        authorizeMcpCatalogScope({
-          checker: nonAdmin,
-          scope: "team",
-          authorId: "author",
-          requestedTeamIds: ["t1"],
-          userTeamIds: ["t1"],
-          writeMembershipTeamIds: [],
-          userId: "author",
-        }),
-      ).toThrow(ApiError);
     });
 
     test("a non-admin cannot use org scope", () => {
@@ -357,7 +105,7 @@ describe("mcp-catalog-permissions", () => {
           authorId: "author",
           requestedTeamIds: [],
           userTeamIds: [],
-          writeMembershipTeamIds: ["t1"],
+
           userId: "author",
         }),
       ).toThrow(ApiError);
@@ -371,7 +119,7 @@ describe("mcp-catalog-permissions", () => {
           authorId: "author",
           requestedTeamIds: [],
           userTeamIds: [],
-          writeMembershipTeamIds: [],
+
           userId: "author",
         }),
       ).not.toThrow();
@@ -387,7 +135,7 @@ describe("mcp-catalog-permissions", () => {
           authorId: "author",
           requestedTeamIds: [],
           userTeamIds: ["t1"],
-          writeMembershipTeamIds: [],
+
           userId: "author",
         }),
       ).not.toThrow();
@@ -401,7 +149,7 @@ describe("mcp-catalog-permissions", () => {
           authorId: "someone-else",
           requestedTeamIds: ["t1", "t2"],
           userTeamIds: [],
-          writeMembershipTeamIds: [],
+
           userId: "admin",
         }),
       ).not.toThrow();

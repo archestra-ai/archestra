@@ -2,12 +2,12 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { PluginModel, SkillModel, SkillShareLinkModel } from "@/models";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { isReservedMarketplaceName } from "@/skills/marketplace/manifest";
 import {
@@ -112,7 +112,10 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query, organizationId, user }, reply) => {
-      await requireSkillAdmin({ userId: user.id, organizationId });
+      await requireSkillMarketplaceManagement({
+        userId: user.id,
+        organizationId,
+      });
 
       const links = await SkillShareLinkModel.listByOrganization({
         organizationId,
@@ -139,7 +142,10 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { body, organizationId, user } = request;
-      await requireSkillAdmin({ userId: user.id, organizationId });
+      await requireSkillMarketplaceManagement({
+        userId: user.id,
+        organizationId,
+      });
       const skillIds = body.skillIds ?? [];
       const pluginIds = body.pluginIds ?? [];
       const pluginPlatform = body.pluginPlatform ?? null;
@@ -227,7 +233,10 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { body, params, organizationId, user } = request;
-      await requireSkillAdmin({ userId: user.id, organizationId });
+      await requireSkillMarketplaceManagement({
+        userId: user.id,
+        organizationId,
+      });
 
       const existing = await SkillShareLinkModel.findByIdWithResources({
         id: params.id,
@@ -369,7 +378,10 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      await requireSkillAdmin({ userId: user.id, organizationId });
+      await requireSkillMarketplaceManagement({
+        userId: user.id,
+        organizationId,
+      });
 
       const existing = await SkillShareLinkModel.findById(id);
       if (!existing || existing.organizationId !== organizationId) {
@@ -404,16 +416,21 @@ export default skillShareRoutes;
 
 // ===== Internal helpers =====
 
-async function requireSkillAdmin(params: {
+async function requireSkillMarketplaceManagement(params: {
   userId: string;
   organizationId: string;
 }): Promise<void> {
-  const checker = await getSkillPermissionChecker(params);
-  if (!checker.isAdmin) {
-    throw new ApiError(
-      403,
-      "Only users with skill:admin can manage skill share links",
-    );
+  for (const action of ["read", "use", "manage-permissions"] as const) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissions.require({
+      ...params,
+      resource: "skill",
+      scope: "*",
+      action,
+    });
+    // SPDX-SnippetEnd
   }
 }
 

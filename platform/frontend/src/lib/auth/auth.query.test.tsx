@@ -22,6 +22,7 @@ vi.mock("@archestra/shared", async () => {
     archestraApiSdk: {
       getDefaultCredentialsStatus: vi.fn(),
       getUserPermissions: vi.fn(),
+      getScopedCapabilities: vi.fn(),
     },
   };
 });
@@ -41,6 +42,12 @@ const createWrapper = () => {
 // Clear mocks before each test
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(archestraApiSdk.getScopedCapabilities).mockResolvedValue({
+    data: [],
+    error: undefined,
+    request: new Request("http://localhost"),
+    response: new Response(),
+  } as Awaited<ReturnType<typeof archestraApiSdk.getScopedCapabilities>>);
 
   vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
@@ -300,37 +307,40 @@ describe("useHasPermissions", () => {
 });
 
 describe("usePermissionMap", () => {
-  it("delegates each permission set to hasPermissions", async () => {
-    const hasPermissionsSpy = vi.spyOn(authUtils, "hasPermissions");
-    const userPermissions: Permissions = {
-      organization: ["read"],
-      agent: ["read"],
-    };
-
+  it("allows discovery through an object grant without widening mutation permissions", async () => {
     vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
-      data: userPermissions,
+      data: { organization: ["read"] },
+      error: undefined,
+      request: new Request("http://localhost"),
+      response: new Response(),
     } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
-
-    const permissionMap: Record<string, Permissions> = {
-      canReadOrg: { organization: ["read"] },
-      canReadAgent: { agent: ["read"] },
-    };
-
-    const { result } = renderHook(() => usePermissionMap(permissionMap), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current?.canReadOrg).toBe(true);
-    });
-
-    expect(hasPermissionsSpy).toHaveBeenCalledWith(
-      userPermissions,
-      permissionMap.canReadOrg,
+    vi.mocked(archestraApiSdk.getScopedCapabilities).mockResolvedValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "agent",
+          scope: "00000000-0000-4000-8000-000000000001",
+          action: "read",
+        },
+      ],
+    } as Awaited<ReturnType<typeof archestraApiSdk.getScopedCapabilities>>);
+    const { result } = renderHook(
+      () =>
+        usePermissionMap({
+          canReadOrg: { organization: ["read"] },
+          canReadAgent: { agent: ["read"] },
+          canEditAgent: { agent: ["update"] },
+          canReadSkill: { skill: ["read"] },
+        }),
+      { wrapper: createWrapper() },
     );
-    expect(hasPermissionsSpy).toHaveBeenCalledWith(
-      userPermissions,
-      permissionMap.canReadAgent,
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        canReadOrg: true,
+        canReadAgent: true,
+        canEditAgent: false,
+        canReadSkill: false,
+      }),
     );
   });
 

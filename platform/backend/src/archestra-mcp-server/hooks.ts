@@ -8,6 +8,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import logger from "@/logging";
 import { AgentModel, HookFileModel } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { UuidIdSchema } from "@/types";
 import type { HookFile } from "@/types/hook";
 import {
@@ -183,21 +184,35 @@ export const tools = registry.tools;
 
 // === Internal helpers ===
 
-/**
- * Agent-in-org guard mirroring the REST routes' `requireAgentInOrg`: a hook
- * can only be attached to (or listed for) an agent in the caller's org, and
- * cross-org agents read as not found.
- */
-async function assertAgentInOrg(
-  agentId: string,
-  organizationId: string,
-): Promise<CallToolResult | null> {
-  const agentOrgId = await AgentModel.findOrganizationId(agentId);
-  if (agentOrgId !== organizationId) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function assertAgentAccess(params: {
+  agentId: string;
+  context: ArchestraContext;
+  action: "read" | "update";
+}): Promise<CallToolResult | null> {
+  const { context, agentId, action } = params;
+  if (!context.userId || !context.organizationId)
+    return errorResult("User context not available.");
+  const agent = await AgentModel.findById(agentId);
+  if (!agent || agent.organizationId !== context.organizationId)
     return errorResult(`Agent with ID ${agentId} not found.`);
-  }
+  if (
+    !(await ResourcePermissions.allows({
+      userId: context.userId,
+      organizationId: context.organizationId,
+      resource: agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+      scope: agentId,
+      action,
+    }))
+  )
+    return errorResult(
+      "You do not have permission to access this agent's hooks.",
+    );
   return null;
 }
+// SPDX-SnippetEnd
 
 function serializeHook(hook: HookFile) {
   return {
@@ -224,10 +239,11 @@ async function handleListHooks(params: {
   }
 
   try {
-    const denied = await assertAgentInOrg(
-      args.agent_id,
-      context.organizationId,
-    );
+    const denied = await assertAgentAccess({
+      agentId: args.agent_id,
+      context,
+      action: "read",
+    });
     if (denied) {
       return denied;
     }
@@ -257,10 +273,11 @@ async function handleCreateHook(params: {
   }
 
   try {
-    const denied = await assertAgentInOrg(
-      args.agent_id,
-      context.organizationId,
-    );
+    const denied = await assertAgentAccess({
+      agentId: args.agent_id,
+      context,
+      action: "update",
+    });
     if (denied) {
       return denied;
     }
@@ -295,6 +312,17 @@ async function handleUpdateHook(params: {
   }
 
   try {
+    const existing = await HookFileModel.findById(
+      args.id,
+      context.organizationId,
+    );
+    if (!existing) return errorResult(`Hook with ID ${args.id} not found.`);
+    const denied = await assertAgentAccess({
+      agentId: existing.agentId,
+      context,
+      action: "update",
+    });
+    if (denied) return denied;
     const hook = await HookFileModel.update({
       id: args.id,
       organizationId: context.organizationId,
@@ -332,6 +360,17 @@ async function handleDeleteHook(params: {
   }
 
   try {
+    const existing = await HookFileModel.findById(
+      args.id,
+      context.organizationId,
+    );
+    if (!existing) return errorResult(`Hook with ID ${args.id} not found.`);
+    const denied = await assertAgentAccess({
+      agentId: existing.agentId,
+      context,
+      action: "update",
+    });
+    if (denied) return denied;
     const deleted = await HookFileModel.delete(args.id, context.organizationId);
     if (!deleted) {
       return errorResult(`Hook with ID ${args.id} not found.`);

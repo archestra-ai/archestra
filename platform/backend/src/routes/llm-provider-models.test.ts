@@ -8,9 +8,11 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ModelTeamModel from "@/models/model-team";
 import OrganizationModel from "@/models/organization";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -84,7 +86,7 @@ describe("chat model routes", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
-    await makeMember(user.id, organizationId);
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -1362,10 +1364,29 @@ describe("chat model routes", () => {
       });
 
       const devTeam = await makeTeam(organizationId, user.id);
-      await ModelTeamModel.syncModelTeams(frontierModel.id, [devTeam.id]);
+      await MemberModel.updateRole(user.id, organizationId, "member");
+      const key = {
+        organizationId,
+        resource: "llmModel" as const,
+        scope: frontierModel.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "team", id: devTeam.id },
+            actions: ["read", "use"],
+          },
+        ],
+      });
 
       // The caller is a plain member, not a catalog manager — no bypass.
-      mockUserHasPermission.mockResolvedValue(false);
+      mockUserHasPermission.mockImplementation(
+        async (_userId, _organizationId, resource, action) =>
+          !(resource === "llmModel" && action === "update"),
+      );
 
       const before = await app.inject({
         method: "GET",
@@ -1454,7 +1475,7 @@ describe("chat model routes", () => {
       expect(unrestricted.teams).toEqual([]);
     });
 
-    test("PATCH /api/llm-models/:id sets and clears team restrictions", async ({
+    test("PATCH /api/llm-models/:id rejects retired team restriction writes", async ({
       makeSecret,
       makeLlmProviderApiKey,
       makeTeam,
@@ -1474,10 +1495,10 @@ describe("chat model routes", () => {
         url: `/api/llm-models/${frontierModel.id}`,
         body: { teamIds: [devTeam.id] },
       });
-      expect(restrict.statusCode).toBe(200);
-      expect(
-        await ModelTeamModel.getTeamIdsForModels([frontierModel.id]),
-      ).toEqual(new Map([[frontierModel.id, [devTeam.id]]]));
+      expect(restrict.statusCode).toBe(400);
+      expect(restrict.json().error.message).toContain(
+        "resource permissions API",
+      );
 
       const clear = await app.inject({
         method: "PATCH",

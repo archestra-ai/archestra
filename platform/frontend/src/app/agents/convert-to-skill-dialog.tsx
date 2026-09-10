@@ -3,8 +3,12 @@ import {
   TOOL_LOAD_SKILL_FULL_NAME,
 } from "@archestra/shared";
 import { Loader2, Sparkles } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -52,6 +56,7 @@ export function ConvertToSkillDialog({
   onOpenChange,
 }: ConvertToSkillDialogProps) {
   const convertToSkill = useConvertAgentToSkill();
+  const [grants, setGrants] = useState<InitialPermissionGrant[]>([]);
   const suggestDescription = useSuggestSkillDescription();
 
   const {
@@ -95,6 +100,7 @@ export function ConvertToSkillDialog({
   useEffect(() => {
     suggestionToken.current += 1;
     if (agent) {
+      setGrants([]);
       reset({ description: agent.description ?? "", deleteAgent: false });
     }
   }, [agent, reset]);
@@ -121,7 +127,15 @@ export function ConvertToSkillDialog({
   const onSubmit = handleSubmit(({ description, deleteAgent }) => {
     if (!agent) return;
     convertToSkill.mutate(
-      { id: agent.id, description: description.trim(), deleteAgent },
+      {
+        id: agent.id,
+        description: description.trim(),
+        deleteAgent,
+        initialGrants: grants.map(({ subject, actions }) => ({
+          subject,
+          actions,
+        })),
+      },
       { onSuccess: () => onOpenChange(false) },
     );
   });
@@ -133,7 +147,7 @@ export function ConvertToSkillDialog({
           <DialogTitle>Convert to skill</DialogTitle>
           <DialogDescription>
             {agent
-              ? `Create a skill from "${agent.name}". It inherits the agent's visibility.`
+              ? `Create a skill from "${agent.name}". Choose who can access the new skill.`
               : null}
           </DialogDescription>
         </DialogHeader>
@@ -144,6 +158,11 @@ export function ConvertToSkillDialog({
             className="flex min-h-0 flex-1 flex-col"
           >
             <DialogBody className="space-y-4">
+              <InitialResourcePermissions
+                resource="skill"
+                grants={grants}
+                onChange={setGrants}
+              />
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="skill-description">Description</Label>

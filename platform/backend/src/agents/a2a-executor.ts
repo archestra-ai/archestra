@@ -57,6 +57,7 @@ import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
 import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
@@ -285,6 +286,17 @@ export async function executeA2AMessage(
   // runs carry the "system" sentinel rather than a real user and have no
   // personal connections to check, so they are left alone.
   if (userId && userId !== "system") {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissions.require({
+      organizationId: agent.organizationId,
+      userId,
+      resource: "agent",
+      scope: agentId,
+      action: "use",
+    });
+    // SPDX-SnippetEnd
     await assertCallerMayStartTurn({ agentId, userId });
   }
 

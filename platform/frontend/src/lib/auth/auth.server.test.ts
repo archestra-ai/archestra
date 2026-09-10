@@ -2,8 +2,13 @@ import type { Permissions } from "@archestra/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { serverCanAccessPage, serverHasPermissions } from "./auth.server";
 
-const { getUserPermissionsMock, getServerApiHeadersMock } = vi.hoisted(() => ({
+const {
+  getUserPermissionsMock,
+  getServerApiHeadersMock,
+  getScopedCapabilitiesMock,
+} = vi.hoisted(() => ({
   getUserPermissionsMock: vi.fn(),
+  getScopedCapabilitiesMock: vi.fn(),
   getServerApiHeadersMock: vi.fn(),
 }));
 
@@ -14,6 +19,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     archestraApiSdk: {
       ...actual.archestraApiSdk,
       getUserPermissions: getUserPermissionsMock,
+      getScopedCapabilities: getScopedCapabilitiesMock,
     },
   };
 });
@@ -122,4 +128,23 @@ describe("serverCanAccessPage", () => {
 
     await expect(serverCanAccessPage("/unknown-page")).resolves.toBe(true);
   });
+});
+
+it("allows discovery of an object-only gateway grant but leaves global mutation checks unchanged", async () => {
+  getServerApiHeadersMock.mockResolvedValue({ Cookie: "session=abc" });
+  getUserPermissionsMock.mockResolvedValue({ data: {} });
+  getScopedCapabilitiesMock.mockResolvedValue({
+    data: [
+      {
+        organizationId: "org-1",
+        resource: "mcpGateway",
+        action: "read",
+        scope: "00000000-0000-4000-8000-000000000001",
+      },
+    ],
+  });
+  await expect(serverCanAccessPage("/mcp/gateways")).resolves.toBe(true);
+  await expect(serverHasPermissions({ mcpGateway: ["update"] })).resolves.toBe(
+    false,
+  );
 });

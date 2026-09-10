@@ -171,16 +171,15 @@ describe("ExternalAppCard", () => {
     openExternalMutate.mockReset();
   });
 
-  it("titles the card '<server> / <tool>' (not a slug) with the tool description and scope", () => {
+  it("titles the card '<server> / <tool>' (not a slug) with the tool description", () => {
     render(<AppCard app={externalApp} />);
 
     expect(screen.getByText("Archestra PM / show_board")).toBeInTheDocument();
     expect(screen.getByText("Shows the project board")).toBeInTheDocument();
     expect(screen.queryByText(/archestra_pm/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("MCP server app")).toBeInTheDocument();
-    // Per-install card carries an icon-only scope pill (label in aria/tooltip)
-    // to disambiguate sibling installs.
-    expect(screen.getByLabelText("Organization")).toBeInTheDocument();
+    // Access is explained through grants, not a single visibility category.
+    expect(screen.queryByLabelText("Organization")).not.toBeInTheDocument();
   });
 
   it("opens the install in chat and navigates to the seeded conversation", async () => {
@@ -347,7 +346,7 @@ describe("OwnedAppCard", () => {
     expect(screen.queryByTestId("delete-dialog")).not.toBeInTheDocument();
   });
 
-  it("folds team names into the scope pill's label", () => {
+  it("does not present a team grant as the resource’s only audience", () => {
     render(
       <AppCard
         app={{
@@ -358,12 +357,11 @@ describe("OwnedAppCard", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Team: London HQ")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Team: London HQ")).not.toBeInTheDocument();
   });
 
-  it("shows the personal pill (no owner badge) for the viewer's own personal app", () => {
-    // viewerRole "owner" means it's theirs: the scope pill shows, but there is
-    // no "Owned by" attribution.
+  it("omits visibility and redundant ownership badges on the viewer’s own app", () => {
+    // The creator does not need redundant ownership attribution.
     render(
       <AppCard
         app={{
@@ -376,7 +374,7 @@ describe("OwnedAppCard", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Personal")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Personal")).not.toBeInTheDocument();
     expect(screen.queryByText(/owned by/i)).not.toBeInTheDocument();
   });
 
@@ -397,7 +395,7 @@ describe("OwnedAppCard", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Personal")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Personal")).not.toBeInTheDocument();
     expect(screen.getByText("Owned by Grace Hopper")).toBeInTheDocument();
   });
 

@@ -50,6 +50,7 @@ import {
   OrganizationModel,
   ToolModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -274,7 +275,7 @@ describe("app tool execution", () => {
     expect(after?.localConfig).toBeFalsy();
   });
 
-  test("a plain member cannot create or mutate org-scoped apps", async ({
+  test("a creator can share a new app but cannot mutate someone else’s app", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -297,7 +298,7 @@ describe("app tool execution", () => {
       { name: "Shared", scope: "org" },
       memberCtx,
     );
-    expect(orgCreate.isError).toBe(true);
+    expect(orgCreate.isError).toBe(false);
 
     // An org app scaffolded by an admin (the suite context) cannot be deleted
     // by a plain member, even though it is visible to them.
@@ -3727,10 +3728,22 @@ describe("publish_app", () => {
     expect((result.content[0] as any).text).toContain(
       `[${app.name}](/a/${app.slug})`,
     );
-    expect((await AppModel.findById(app.id))?.scope).toBe("org");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId: agent.organizationId,
+          resource: "app",
+          scope: app.id,
+        })
+      )?.grants,
+    ).toContainEqual({
+      subject: { type: "organization", id: "*" },
+      actions: ["read", "use"],
+    });
   });
 
-  test("a non-admin author cannot publish their personal app to the org", async ({
+  test("a creator with full access can publish their app to the organization", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -3751,7 +3764,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish({ appId: app.id, scope: "org" }, context);
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
     // scope is unchanged — the gate rejected the promotion
     expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
@@ -3811,7 +3824,18 @@ describe("publish_app", () => {
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
-    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId: agent.organizationId,
+          resource: "app",
+          scope: app.id,
+        })
+      )?.grants,
+    ).toContainEqual({
+      subject: { type: "team", id: team.id },
+      actions: ["read", "use"],
+    });
   });
 
   test("an admin publishes to a team by its name instead of its id", async ({
@@ -3844,7 +3868,18 @@ describe("publish_app", () => {
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
-    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId: agent.organizationId,
+          resource: "app",
+          scope: app.id,
+        })
+      )?.grants,
+    ).toContainEqual({
+      subject: { type: "team", id: team.id },
+      actions: ["read", "use"],
+    });
   });
 
   test("team names match case-insensitively when unambiguous", async ({
@@ -3876,7 +3911,18 @@ describe("publish_app", () => {
       context,
     );
     expect(result.isError).toBe(false);
-    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId: agent.organizationId,
+          resource: "app",
+          scope: app.id,
+        })
+      )?.grants,
+    ).toContainEqual({
+      subject: { type: "team", id: team.id },
+      actions: ["read", "use"],
+    });
   });
 
   test("a name and the id of the same team dedupe to one assignment", async ({
@@ -3908,7 +3954,18 @@ describe("publish_app", () => {
       context,
     );
     expect(result.isError).toBe(false);
-    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+    expect(
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId: agent.organizationId,
+          resource: "app",
+          scope: app.id,
+        })
+      )?.grants,
+    ).toContainEqual({
+      subject: { type: "team", id: team.id },
+      actions: ["read", "use"],
+    });
   });
 
   test("an ambiguous case-insensitive team name is rejected", async ({

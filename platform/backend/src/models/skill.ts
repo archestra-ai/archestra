@@ -1,6 +1,7 @@
 import {
   MAX_SKILL_COMPATIBILITY_LENGTH,
   MAX_SKILL_DESCRIPTION_LENGTH,
+  type ResourcePermissionGrant,
 } from "@archestra/shared";
 import {
   and,
@@ -51,6 +52,7 @@ import type {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import SkillUserModel from "./skill-user";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
@@ -421,13 +423,22 @@ class SkillModel {
     afterId?: string;
     limit: number;
   }): Promise<PublishableSkill[]> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     return await db
       .select(publishableSkillColumns())
       .from(schema.skillsTable)
       .where(
         and(
           eq(schema.skillsTable.organizationId, params.organizationId),
-          eq(schema.skillsTable.scope, "org"),
+          ResourcePermissionPolicyModel.organizationAccessCondition({
+            organizationId: params.organizationId,
+            resource: "skill",
+            scopeColumn: schema.skillsTable.id,
+            action: "use",
+            legacyCondition: eq(schema.skillsTable.scope, "org"),
+          }),
           skillInEnvironmentPredicate(params.environmentId),
           notDeleted(schema.skillsTable),
           notExcludedByAgentPredicate(params.excludedForAgentId),
@@ -437,6 +448,7 @@ class SkillModel {
       )
       .orderBy(asc(schema.skillsTable.id))
       .limit(params.limit);
+    // SPDX-SnippetEnd
   }
 
   /**
@@ -453,13 +465,22 @@ class SkillModel {
     name: string;
     authorId: string | null;
   }): Promise<PublishableSkill | null> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const [skill] = await db
       .select(publishableSkillColumns())
       .from(schema.skillsTable)
       .where(
         and(
           eq(schema.skillsTable.organizationId, params.organizationId),
-          eq(schema.skillsTable.scope, "org"),
+          ResourcePermissionPolicyModel.organizationAccessCondition({
+            organizationId: params.organizationId,
+            resource: "skill",
+            scopeColumn: schema.skillsTable.id,
+            action: "use",
+            legacyCondition: eq(schema.skillsTable.scope, "org"),
+          }),
           skillUriKeyPredicate(params),
           skillInEnvironmentPredicate(params.environmentId),
           notDeleted(schema.skillsTable),
@@ -467,6 +488,7 @@ class SkillModel {
         ),
       )
       .limit(1);
+    // SPDX-SnippetEnd
 
     return skill ?? null;
   }
@@ -719,9 +741,12 @@ class SkillModel {
    */
   static async createWithFiles(
     params: {
+      id?: string;
       skill: InsertSkill;
+      initialPermissionGrants?: ResourcePermissionGrant[];
       files: Omit<InsertSkillFile, "skillId">[];
       teamIds?: string[];
+      userIds?: string[];
       /** Environments the skill is restricted to; empty/omitted = every environment. */
       environmentIds?: string[];
       /**
@@ -737,6 +762,7 @@ class SkillModel {
         .insert(schema.skillsTable)
         .values({
           ...params.skill,
+          id: params.id,
           latestVersion: 1,
           // Publication artifacts are derived from the columns written in this
           // same statement, so a skill is publishable from the moment it exists.
@@ -746,6 +772,21 @@ class SkillModel {
         .returning();
 
       if (!skill) return null;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: skill.organizationId,
+        resource: "skill",
+        scope: skill.id,
+        grants: params.initialPermissionGrants,
+        authorId: skill.authorId,
+        visibility: skill.scope,
+        teams: params.teamIds?.map((id) => ({ id })),
+        users: params.userIds,
+      });
+      // SPDX-SnippetEnd
 
       if (params.files.length > 0) {
         // Digest written with the bytes it covers; the application is the
@@ -1346,6 +1387,15 @@ class SkillModel {
         schema.skillsTable,
         eq(schema.skillsTable.id, params.id),
       );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["skill"],
+        scope: params.id,
+      });
+      // SPDX-SnippetEnd
       return true;
     });
   }
@@ -1515,10 +1565,22 @@ class SkillModel {
       })
       .from(schema.skillEnvironmentsTable)
       .where(eq(schema.skillEnvironmentsTable.skillId, id));
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     return {
       ...row,
       environmentIds: environmentIds.map((r) => r.environmentId).sort(),
+      resourcePermissions:
+        (
+          await ResourcePermissionPolicyModel.find({
+            organizationId,
+            resource: "skill",
+            scope: id,
+          })
+        )?.grants ?? [],
     };
+    // SPDX-SnippetEnd
   }
 }
 

@@ -1,6 +1,5 @@
 "use client";
 
-import type { ResourceVisibilityScope } from "@archestra/shared";
 import type { RowSelectionState } from "@tanstack/react-table";
 import {
   AlertTriangle,
@@ -18,6 +17,10 @@ import {
   GithubAuthConfigFields,
   type GithubAuthMethod,
 } from "@/components/github-auth-config-fields";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -63,7 +66,6 @@ import {
 } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import { SkillPreviewDialog } from "./skill-preview-dialog";
-import { SkillScopeSelector } from "./skill-scope-selector";
 
 /**
  * Skill metadata already held from the local skill index — enough to render the
@@ -128,11 +130,9 @@ export function ImportSkillsDialog({
   const [search, setSearch] = useState("");
   const [previewSkillPath, setPreviewSkillPath] = useState<string | null>(null);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
-  // scope applies to every skill selected in this import
-  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  // people every skill in this import is shared with by name
-  const [userIds, setUserIds] = useState<string[]>([]);
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   // pull schedule for every skill selected in this import: imports are
   // always synced from the repo and read-only here until disconnected.
   const [syncInterval, setSyncInterval] = useState<"15m" | "1h" | "1d">("1d");
@@ -180,8 +180,7 @@ export function ImportSkillsDialog({
     setSearch("");
     setPreviewSkillPath(null);
     setDiscoverError(null);
-    setScope("personal");
-    setTeamIds([]);
+    setInitialGrants([]);
     setSyncInterval("1d");
     setNewTokenName("");
     setAdvancedOpen(false);
@@ -270,9 +269,10 @@ export function ImportSkillsDialog({
           ? { githubPatId: patId }
           : {}),
       skillPaths: [...selected],
-      scope,
-      teamIds: scope === "team" ? teamIds : [],
-      userIds: scope === "personal" ? userIds : [],
+      initialGrants: initialGrants.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
       sync: { interval: syncInterval },
     });
     // only navigate away when something was actually created; if every selected
@@ -735,13 +735,10 @@ export function ImportSkillsDialog({
               </SelectContent>
             </Select>
           </div>
-          <SkillScopeSelector
-            scope={scope}
-            onScopeChange={setScope}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
-            userIds={userIds}
-            onUserIdsChange={setUserIds}
+          <InitialResourcePermissions
+            resource="skill"
+            grants={initialGrants}
+            onChange={setInitialGrants}
           />
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
             <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">

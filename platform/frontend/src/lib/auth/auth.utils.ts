@@ -4,6 +4,7 @@ import {
   type Permissions,
   type Resource,
   resourceLabels,
+  type ScopedPermission,
 } from "@archestra/shared";
 
 /**
@@ -62,6 +63,24 @@ export function hasPermissions(
   }
 
   return true;
+}
+
+/** A page may discover a granted object; mutations still use exact target checks. */
+export function hasPagePermissions(params: {
+  userPermissions: Permissions | undefined;
+  required: Permissions;
+  capabilities: readonly ScopedPermission[];
+}): boolean {
+  return Object.entries(params.required).every(([resource, actions]) =>
+    actions.every(
+      (action) =>
+        hasPermissions(params.userPermissions, { [resource]: [action] }) ||
+        (action === "read" &&
+          params.capabilities.some(
+            (grant) => grant.resource === resource && grant.action === "read",
+          )),
+    ),
+  );
 }
 
 /** One "Label (action, action)" entry per resource, in declaration order. */

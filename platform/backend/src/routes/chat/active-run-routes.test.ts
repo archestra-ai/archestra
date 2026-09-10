@@ -17,10 +17,17 @@ describe("chat active-run routes", () => {
   let conversationId: string;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       user = await makeUser();
       const organization = await makeOrganization();
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
       const agent = await makeAgent({ organizationId });
       const conversation = await makeConversation(agent.id, {
         userId: user.id,

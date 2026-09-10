@@ -34,6 +34,22 @@ import anthropicProxyRoutes from "./anthropic";
 
 vi.mock("@/logging");
 
+beforeEach(async () => {
+  for (const modelId of [
+    "claude-opus-4-20250514",
+    "claude-3-5-sonnet-20241022",
+    "kimi-k2",
+  ]) {
+    await ModelModel.create({
+      externalId: `anthropic/${modelId}`,
+      provider: "anthropic",
+      modelId,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+  }
+});
+
 function findAnthropicRequestLog(message: string) {
   return vi
     .mocked(logger.info)

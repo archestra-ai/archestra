@@ -8,16 +8,18 @@ export const SKILL_DESCRIPTION_FALLBACK =
  * page — the same form the create wizard fills — and is the page's default,
  * so it carries no `?section=`. Usage is the view onto a skill already in use.
  */
-export type SkillDetailSection = "settings" | "usage";
+export type SkillDetailSection = "settings" | "usage" | "permissions";
 
 export const SKILL_DETAIL_SECTIONS: readonly SkillDetailSection[] = [
   "settings",
   "usage",
+  "permissions",
 ];
 
 export const SKILL_SECTION_LABELS: Record<SkillDetailSection, string> = {
   settings: "Settings",
   usage: "Usage",
+  permissions: "Permissions",
 };
 
 export function skillDetailHref(id: string, section?: SkillDetailSection) {

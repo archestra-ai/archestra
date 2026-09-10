@@ -5,6 +5,7 @@ import {
   MAX_BULK_IDS,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourcePermissionGrantSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -43,7 +44,9 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
   builtInSkillShippedWrite,
@@ -158,6 +161,7 @@ const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 
 /** A skill row plus its resource-file count, team assignments, and author. */
 const SkillListItemSchema = SkillResponseSchema.extend({
+  canPublish: z.boolean().optional(),
   /** The author, in the shape shared by every major object. */
   createdBy: CreatedByNullableSchema,
   fileCount: z.number(),
@@ -231,6 +235,7 @@ const ConvertAgentToSkillResponseSchema = z.object({
  * source agent once the skill exists.
  */
 const ConvertAgentToSkillInputSchema = z.object({
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
   description: z.string().trim().min(1).max(1024).optional(),
   deleteAgent: z.boolean().optional(),
 });
@@ -275,9 +280,9 @@ const SkillManifestFieldsSchema = z.object({
     ),
 });
 
-const SkillManifestInputSchema = SkillManifestFieldsSchema.superRefine(
-  (data, ctx) => refineUniqueFilePaths(data.files, ctx),
-);
+const SkillManifestInputSchema = SkillManifestFieldsSchema.extend({
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
+}).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 /**
  * Update payload: the manifest fields plus `baseVersion`, the compare-and-set
@@ -441,7 +446,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Viewing the trash is an admin/team-admin surface. Skills have no
       // checker-level delete capability (delete is authorized per-skill), so
       // this gates on the broader manage roles rather than a `skill:delete`.
-      if (status === "deleted" && !(checker.isAdmin || checker.isTeamAdmin)) {
+      if (
+        status === "deleted" &&
+        (!checker.canRead || !(checker.isAdmin || checker.isTeamAdmin))
+      ) {
         throw new ApiError(403, "Forbidden");
       }
 
@@ -456,12 +464,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId = agent.environmentId ?? null;
       }
       // Non-admins see only skills within their scope; admins see all.
-      const accessibleSkillIds = checker.isAdmin
-        ? undefined
-        : await SkillTeamModel.getUserAccessibleSkillIds({
-            organizationId,
-            userId: user.id,
-          });
+      const accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds(
+        {
+          organizationId,
+          userId: user.id,
+          onlyExplicitGrants: !checker.canRead,
+          isSkillAdmin: checker.isAdmin && checker.canRead,
+        },
+      );
 
       // Author filters are an admin oversight surface (mirrors the agents
       // list); non-admins are already restricted to their own scope.
@@ -523,6 +533,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         creators,
         usageUserCounts,
         labelsBySkill,
+        publicationPermissions,
       ] = await Promise.all([
         SkillFileModel.countBySkillIds(skillIds),
         SkillTeamModel.getTeamDetailsForSkills(skillIds),
@@ -532,11 +543,17 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         CreatedByModel.resolve(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
         SkillLabelModel.getLabelsForMany(skillIds),
+        agentSkillAssignmentService.getPublicationPermissions({
+          organizationId,
+          userId: user.id,
+          skillIds,
+        }),
       ]);
 
       return reply.send({
         data: skills.map((skill) => ({
           ...skill,
+          canPublish: publicationPermissions.get(skill.id),
           // skill_files holds only bundled resources; +1 for the mandatory
           // SKILL.md (stored in the skills row) so the count matches the catalog.
           fileCount: (fileCounts.get(skill.id) ?? 0) + 1,
@@ -573,6 +590,23 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Sharing with named people keeps the skill personal, so grants only
       // apply to that scope; a team/org skill is already reachable more widely.
       const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateRecipients({
+        organizationId,
+        grants: [
+          ...userIds.map((id) => ({
+            subject: { type: "user" as const, id },
+            actions: ["read" as const, "use" as const],
+          })),
+          ...teamIds.map((id) => ({
+            subject: { type: "team" as const, id },
+            actions: ["read" as const, "use" as const],
+          })),
+        ],
+      });
+      // SPDX-SnippetEnd
 
       const environmentIds = dedupe(body.environmentIds ?? []);
 
@@ -592,8 +626,32 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentIds,
       });
 
+      const resourceId = crypto.randomUUID();
+      if (body.initialGrants?.length) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.validateInitialGrants({
+          organizationId,
+          userId: user.id,
+          resource: "skill",
+          grants: body.initialGrants,
+          target: {
+            id: resourceId,
+            name: parsed.name,
+            authorId: user.id,
+            scope,
+            teams: teamIds.map((id) => ({ id })),
+            users: userIds.map((id) => ({ id })),
+          },
+        });
+        // SPDX-SnippetEnd
+      }
+
       const skill = await withTeamFkErrorMapped(() =>
         SkillModel.createWithFiles({
+          id: resourceId,
+          initialPermissionGrants: body.initialGrants,
           skill: {
             ...toSkillInsertFields(parsed),
             organizationId,
@@ -604,6 +662,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           files: toSkillFiles(body.files ?? []),
           teamIds,
+          userIds,
           environmentIds,
         }),
       );
@@ -652,7 +711,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // orphan skill behind. Mirrors the agent DELETE route's authorization.
       if (body.deleteAgent) {
         try {
-          agentChecker.require(agent.agentType, "delete");
+          agentChecker.require(agent.agentType, {
+            action: "delete",
+            scope: agent.id,
+          });
         } catch {
           throw new ApiError(
             403,
@@ -663,6 +725,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? []
           : await TeamModel.getUserTeamIds(user.id);
         requireAgentModifyPermission({
+          agentId: agent.id,
+          action: "update",
           checker: agentChecker,
           agentType: agent.agentType,
           agentScope: agent.scope,
@@ -673,7 +737,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const { draft, teamIds, report } = agentToSkill(agent, {
+      const { draft, report } = agentToSkill(agent, {
         description: body.description,
       });
 
@@ -688,13 +752,31 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // ...and be allowed to create a skill in the scope inherited from the agent.
       await authorizeSkillCreate({
         userId: user.id,
         organizationId,
-        scope: draft.scope,
-        teamIds,
+        scope: "personal",
+        teamIds: [],
       });
+      const resourceId = crypto.randomUUID();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
+        organizationId,
+        userId: user.id,
+        resource: "skill",
+        grants: body.initialGrants ?? [],
+        target: {
+          id: resourceId,
+          name: draft.name,
+          authorId: user.id,
+          scope: "personal",
+          teams: [],
+          users: [],
+        },
+      });
+      // SPDX-SnippetEnd
 
       // Create the skill and (optionally) delete the source agent in one
       // transaction so convert+delete is all-or-nothing: a failed delete rolls
@@ -704,15 +786,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         withDbTransaction(async (tx) => {
           const created = await SkillModel.createWithFiles(
             {
+              id: resourceId,
               skill: {
                 ...toSkillInsertFields(draft),
                 organizationId,
                 authorId: user.id,
                 sourceType: "manual",
-                scope: draft.scope,
+                scope: "personal",
               },
               files: [],
-              teamIds,
+              initialPermissionGrants: body.initialGrants,
               // inherit the source agent's environment (if any) so the
               // converted skill stays visible where the agent lived; a
               // Default-environment agent yields an unrestricted skill.
@@ -738,9 +821,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       );
 
-      // this surface persists the agent's scope (and teams) verbatim, so report
-      // it carried. The MCP draft path can't and reports it annotated instead.
-      report.carried.push({ field: SCOPE_FIELD, detail: draft.scope });
+      report.annotated.push({
+        field: SCOPE_FIELD,
+        detail:
+          "New skill permissions are chosen independently of the source agent.",
+      });
 
       logger.info(
         { agentId: agent.id, skillId: skill.id, organizationId, deletedAgent },
@@ -985,6 +1070,28 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const newUserIds =
         newScope === "personal" ? dedupe(body.userIds ?? existingUserIds) : [];
       const usersChanged = !sameIdSet(newUserIds, existingUserIds);
+      if (scopeChanged || teamsChanged || usersChanged) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.rejectLegacySharing({
+          organizationId,
+          resource: "skill",
+          scope: existing.id,
+        });
+        // SPDX-SnippetEnd
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId,
+          userId: user.id,
+          resource: "skill",
+          scope: existing.id,
+          action: "manage-permissions",
+        });
+        // SPDX-SnippetEnd
+      }
 
       // Changing a skill's environment assignments is gated like assigning
       // them: every environment in the new set must be assignable by this user.
@@ -1138,6 +1245,15 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Two checks, as on the single-skill update: the caller must be
           // allowed to modify the skill where it is now, and to place it where
           // it is going.
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await ResourcePermissions.rejectLegacySharing({
+            organizationId,
+            resource: "skill",
+            scope: skill.id,
+          });
+          // SPDX-SnippetEnd
           requireSkillModifyPermission({
             checker: context.checker,
             scope: skill.scope,
@@ -1245,12 +1361,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const accessibleSkillIds = checker.isAdmin
-        ? undefined
-        : await SkillTeamModel.getUserAccessibleSkillIds({
-            organizationId,
-            userId: user.id,
-          });
+      const accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds(
+        {
+          organizationId,
+          userId: user.id,
+          isSkillAdmin: checker.isAdmin,
+        },
+      );
 
       const repos = await SkillModel.findDistinctSourceRepos({
         organizationId,
@@ -1274,7 +1391,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, organizationId, user }, reply) => {
       const skill = await findSkillOrThrow(id, organizationId);
 
-      await authorizeSkillModify({ skill, userId: user.id, organizationId });
+      await authorizeSkillModify({
+        skill,
+        userId: user.id,
+        organizationId,
+        action: "delete",
+      });
 
       const success = await SkillModel.delete(id);
       if (!success) {
@@ -1319,13 +1441,19 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       for (const id of skillIds) {
         const skill = context.skillsById.get(id);
-        if (!skill || !context.isVisible(skill)) {
+        if (
+          !skill ||
+          (!context.isVisible(skill) &&
+            !context.checker.allowsScoped?.(id, "delete"))
+        ) {
           failed.push({ id, name: null, error: "Skill not found" });
           continue;
         }
         try {
           requireSkillModifyPermission({
             checker: context.checker,
+            skillId: id,
+            action: "delete",
             scope: skill.scope,
             authorId: skill.authorId,
             skillTeamIds: context.teamIdsBySkill.get(id) ?? [],
@@ -1375,7 +1503,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
 
-      await authorizeSkillModify({ skill, userId: user.id, organizationId });
+      await authorizeSkillModify({
+        skill,
+        userId: user.id,
+        organizationId,
+        action: "delete",
+      });
 
       const conflictMessage = await SkillModel.getRestoreConflictMessage(skill);
       if (conflictMessage) {
@@ -1833,6 +1966,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             ...githubSkillSourceShape,
             skillPaths: z.array(z.string()).min(1),
+            initialGrants: z
+              .array(ResourcePermissionGrantSchema)
+              .max(200)
+              .optional(),
             scope: ResourceVisibilityScopeSchema.optional(),
             teamIds: z.array(z.string()).optional(),
             /** Only meaningful for `scope = 'personal'`. */
@@ -1892,6 +2029,41 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds,
       });
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateRecipients({
+        organizationId,
+        grants: [
+          ...userIds.map((id) => ({
+            subject: { type: "user" as const, id },
+            actions: ["read" as const, "use" as const],
+          })),
+          ...teamIds.map((id) => ({
+            subject: { type: "team" as const, id },
+            actions: ["read" as const, "use" as const],
+          })),
+        ],
+      });
+      // SPDX-SnippetEnd
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
+        organizationId,
+        userId: user.id,
+        resource: "skill",
+        grants: body.initialGrants ?? [],
+        target: {
+          id: crypto.randomUUID(),
+          name: "Imported skill",
+          authorId: user.id,
+          scope,
+          teams: teamIds.map((id) => ({ id })),
+          users: userIds.map((id) => ({ id })),
+        },
+      });
+      // SPDX-SnippetEnd
       const githubToken = await resolveGithubImportToken({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
@@ -1932,6 +2104,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             files: item.files,
             teamIds,
+            userIds,
+            initialPermissionGrants: body.initialGrants,
             // version 1 is exactly what the repo held at this commit.
             versionSourceCommit: item.sourceCommit,
           }),
@@ -1939,9 +2113,6 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!skill) {
           skipped.push(item.parsed.name);
           continue;
-        }
-        if (userIds.length > 0) {
-          await SkillUserModel.syncSkillUsers(skill.id, userIds);
         }
         created.push(skill);
         if (item.skippedFiles.length > 0) {
@@ -2147,19 +2318,18 @@ async function requireReadableSkill(params: {
   organizationId: string;
 }): Promise<Skill> {
   const skill = await findSkillOrThrow(params.id, params.organizationId);
-  const checker = await getSkillPermissionChecker({
-    userId: params.userId,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const effective = await ResourcePermissions.getEffective({
     organizationId: params.organizationId,
-  });
-  const hasAccess = await SkillTeamModel.userHasSkillAccess({
-    organizationId: params.organizationId,
     userId: params.userId,
-    skill,
-    isSkillAdmin: checker.isAdmin,
+    resource: "skill",
+    scope: params.id,
   });
-  if (!hasAccess) {
+  // SPDX-SnippetEnd
+  if (!effective.grants.some((grant) => grant.action === "read"))
     throw new ApiError(404, "Skill not found");
-  }
   return skill;
 }
 
@@ -2224,11 +2394,11 @@ async function loadBulkSkillContext(params: {
     checker.isAdmin
       ? Promise.resolve<string[]>([])
       : TeamModel.getUserTeamIds(userId),
-    // Admins see every skill in the org, so the (unbounded) accessible-id scan
-    // is skipped for them entirely — as the list route does.
-    checker.isAdmin
-      ? Promise.resolve<string[] | null>(null)
-      : SkillTeamModel.getUserAccessibleSkillIds({ organizationId, userId }),
+    SkillTeamModel.getUserAccessibleSkillIds({
+      organizationId,
+      userId,
+      isSkillAdmin: checker.isAdmin,
+    }),
   ]);
 
   const skillsById = new Map(
@@ -2410,14 +2580,15 @@ async function authorizeSkillCreate(params: {
   const userTeamIds = checker.isAdmin
     ? []
     : await TeamModel.getUserTeamIds(params.userId);
-  authorizeSkillScope({
-    checker,
-    scope: params.scope,
-    authorId: params.userId,
-    requestedTeamIds: params.teamIds,
-    userTeamIds,
-    userId: params.userId,
-  });
+  if (!checker.isMigrated)
+    authorizeSkillScope({
+      checker,
+      scope: params.scope,
+      authorId: params.userId,
+      requestedTeamIds: params.teamIds,
+      userTeamIds,
+      userId: params.userId,
+    });
   await assertSkillTeams({
     scope: params.scope,
     teamIds: params.teamIds,
@@ -2456,7 +2627,7 @@ async function authorizeInternalAgentForSkillConversion(params: {
     organizationId,
   });
   try {
-    agentChecker.require(agent.agentType, "read");
+    agentChecker.require(agent.agentType, { action: "read", scope: agent.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -2487,6 +2658,7 @@ async function authorizeSkillModify(params: {
   skill: Skill;
   userId: string;
   organizationId: string;
+  action?: "update" | "delete";
 }): Promise<{
   checker: SkillPermissionChecker;
   userTeamIds: string[];
@@ -2500,23 +2672,57 @@ async function authorizeSkillModify(params: {
     : await TeamModel.getUserTeamIds(userId);
   const skillTeamIds = await SkillTeamModel.getTeamsForSkill(skill.id);
 
-  const hasAccess = await SkillTeamModel.userHasSkillAccess({
-    organizationId,
-    userId,
-    skill,
-    isSkillAdmin: checker.isAdmin,
-  });
-  if (!hasAccess) {
-    throw new ApiError(404, "Skill not found");
+  if (!skill.deletedAt) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const effective = await ResourcePermissions.getEffective({
+      organizationId,
+      userId,
+      resource: "skill",
+      scope: skill.id,
+    });
+    // SPDX-SnippetEnd
+    if (
+      !effective.grants.some(
+        (grant) =>
+          grant.action === "read" ||
+          grant.action === (params.action ?? "update"),
+      )
+    )
+      throw new ApiError(404, "Skill not found");
+    if (
+      !effective.grants.some(
+        (grant) => grant.action === (params.action ?? "update"),
+      )
+    )
+      throw new ApiError(
+        403,
+        "You do not have permission to modify this skill",
+      );
+  } else {
+    const visible = await SkillTeamModel.userHasSkillAccess({
+      organizationId,
+      userId,
+      skill,
+      isSkillAdmin: checker.isAdmin,
+    });
+    if (
+      !visible &&
+      !checker.allowsScoped?.(skill.id, params.action ?? "update")
+    )
+      throw new ApiError(404, "Skill not found");
+    requireSkillModifyPermission({
+      checker,
+      skillId: skill.id,
+      action: params.action,
+      scope: skill.scope,
+      authorId: skill.authorId,
+      skillTeamIds,
+      userTeamIds,
+      userId,
+    });
   }
-  requireSkillModifyPermission({
-    checker,
-    scope: skill.scope,
-    authorId: skill.authorId,
-    skillTeamIds,
-    userTeamIds,
-    userId,
-  });
 
   return { checker, userTeamIds, skillTeamIds };
 }

@@ -1,7 +1,9 @@
-import { eq, inArray } from "drizzle-orm";
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import ModelUserModel from "./model-user";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 interface ModelTeamDetail {
   id: string;
@@ -115,6 +117,11 @@ class ModelTeamModel {
      * than per model.
      */
     userId?: string;
+    grantContext?: {
+      organizationId: string;
+      userId: string;
+      action: "read" | "use";
+    };
   }): Promise<Set<string>> {
     const { modelIds, principalTeamIds, userId } = params;
     const restrictions = await ModelTeamModel.getTeamIdsForModels(modelIds);
@@ -123,13 +130,51 @@ class ModelTeamModel {
       ? await ModelUserModel.filterGrantedIds(modelIds, userId)
       : new Set<string>();
 
+    const scopedIds =
+      params.grantContext && modelIds.length > 0
+        ? new Set(
+            (
+              await db
+                .select({ id: schema.modelsTable.id })
+                .from(schema.modelsTable)
+                .where(
+                  and(
+                    inArray(schema.modelsTable.id, modelIds),
+                    ResourcePermissionPolicyModel.grantCondition({
+                      ...params.grantContext,
+                      resource: "llmModel",
+                      scopeColumn: schema.modelsTable.id,
+                    }),
+                  ),
+                )
+            ).map((row) => row.id),
+          )
+        : new Set<string>();
+    const migratedIds = new Set(
+      params.grantContext
+        ? (
+            await ResourcePermissionPolicyModel.findApplicableBatch({
+              organizationId: params.grantContext.organizationId,
+              resource: "llmModel",
+              scopes: modelIds,
+            })
+          )
+            .filter((policy) => policy.legacySharingMigrated)
+            .map((policy) => policy.scope)
+        : [],
+    );
     const allowed = new Set<string>();
     for (const modelId of modelIds) {
+      if (migratedIds.has("*") || migratedIds.has(modelId)) {
+        if (scopedIds.has(modelId)) allowed.add(modelId);
+        continue;
+      }
       const restrictedTo = restrictions.get(modelId);
       if (
         !restrictedTo ||
         restrictedTo.some((teamId) => principalTeams.has(teamId)) ||
-        grantedIds.has(modelId)
+        grantedIds.has(modelId) ||
+        scopedIds.has(modelId)
       ) {
         allowed.add(modelId);
       }

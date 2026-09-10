@@ -3,7 +3,10 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { CONNECT_CLIENTS } from "./clients";
@@ -122,6 +125,11 @@ const CREATE_RESPONSE = {
 
 /** Grants `skill:read` but not `skill:admin` — the member's view. */
 function permissionsForMember() {
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: [],
+    isPending: false,
+    isLoading: false,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
   vi.mocked(useHasPermissions).mockImplementation(
     (permissions) =>
       ({
@@ -141,6 +149,15 @@ describe("SkillsMarketplaceStep", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useFeature).mockReturnValue(true);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: ["read", "use", "manage-permissions"].map((action) => ({
+        resource: "skill",
+        scope: "*",
+        action,
+      })),
+      isPending: false,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,

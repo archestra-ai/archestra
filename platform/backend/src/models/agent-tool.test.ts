@@ -99,7 +99,7 @@ describe("AgentToolModel delegation queries", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const organization = await makeOrganization();
+    const organization = await makeOrganization({ legacyPermissions: true });
     const activeSource = await makeAgent({
       organizationId: organization.id,
       agentType: "agent",
@@ -852,7 +852,7 @@ describe("AgentToolModel.findAll", () => {
       makeTool,
       makeUser,
     }) => {
-      const organization = await makeOrganization();
+      const organization = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       await makeMember(user.id, organization.id);
 
@@ -974,6 +974,7 @@ describe("AgentToolModel.findAll", () => {
       makeUser,
       makeAdmin,
       makeOrganization,
+      makeMember,
       makeTeam,
       makeTeamMember,
       makeAgent,
@@ -982,16 +983,20 @@ describe("AgentToolModel.findAll", () => {
     }) => {
       const user = await makeUser();
       const admin = await makeAdmin();
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await makeMember(user.id, org.id);
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
 
       const agent1 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 1",
         teams: [team1.id],
         scope: "team",
       });
       const agent2 = await makeAgent({
+        organizationId: org.id,
         name: "Agent 2",
         teams: [team2.id],
         scope: "team",
@@ -1018,12 +1023,14 @@ describe("AgentToolModel.findAll", () => {
 
     test("member with no team access sees org-wide agent tools", async ({
       makeUser,
+      makeMember,
       makeAgent,
       makeTool,
       makeAgentTool,
     }) => {
       const user = await makeUser();
       const agent = await makeAgent(); // agent with no teams is org-wide
+      await makeMember(user.id, agent.organizationId);
       const tool = await makeTool();
 
       await makeAgentTool(agent.id, tool.id);

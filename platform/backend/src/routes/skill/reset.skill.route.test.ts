@@ -6,16 +6,10 @@ import {
   BUILT_IN_SKILLS,
   builtInSkillSourceRef,
 } from "@/skills/built-in-skills";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import skillRoutes from "./skill.routes";
+import { useSkillRouteTestApp } from "./skill.test-helpers";
 
 const [BASE_SKILL] = BUILT_IN_SKILLS;
 
@@ -132,7 +126,7 @@ describe("POST /api/skills/:id/reset", () => {
 });
 
 describe("POST /api/skills/:id/reset — scope visibility", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("a skill the caller cannot see returns 404, not a 400 that leaks its type", async ({
     makeUser,

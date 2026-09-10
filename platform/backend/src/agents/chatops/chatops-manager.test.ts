@@ -235,16 +235,20 @@ describe("ChatOpsManager security validation", () => {
 
   test("auto-assigns the sole agent when a channel has no agent yet", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     mockA2AExecutor();
     const org = await makeOrganization();
+    const sender = await makeUser({ email: "channel-member@example.com" });
+    await makeMember(sender.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     await unboundChannelBinding(org.id);
 
     const provider = createMockProvider();
     await makeManagerWith(provider).processMessage({
-      message: createMockMessage(),
+      message: createMockMessage({ senderEmail: sender.email }),
       provider,
     });
 
@@ -276,9 +280,13 @@ describe("ChatOpsManager security validation", () => {
 
   test("prompts with the picker (no auto-assign) when multiple agents and no default", async ({
     makeOrganization,
+    makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
+    const sender = await makeUser({ email: "channel-member@example.com" });
+    await makeMember(sender.id, org.id);
     await makeInternalAgent({ organizationId: org.id });
     await makeInternalAgent({ organizationId: org.id });
     await unboundChannelBinding(org.id);
@@ -288,7 +296,7 @@ describe("ChatOpsManager security validation", () => {
     provider.sendAgentSelectionCard = cardSpy;
 
     const result = await makeManagerWith(provider).processMessage({
-      message: createMockMessage(),
+      message: createMockMessage({ senderEmail: sender.email }),
       provider,
     });
 
@@ -2102,6 +2110,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
       organizationId: org.id,
       name: "Accessible Agent",
       scope: "team",
+      teams: [team.id],
     });
     await AgentTeamModel.assignTeamsToAgent(accessibleAgent.id, [team.id]);
 
@@ -2112,6 +2121,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
       organizationId: org.id,
       name: "Inaccessible Agent",
       scope: "team",
+      teams: [otherTeam.id],
     });
     await AgentTeamModel.assignTeamsToAgent(inaccessibleAgent.id, [
       otherTeam.id,
@@ -2128,14 +2138,16 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     expect(agents[0].name).toBe("Accessible Agent");
   });
 
-  test("returns all agents when senderEmail is not provided", async ({
+  test("returns organization-shared agents for an organization member", async ({
     makeUser,
+    makeMember,
     makeOrganization,
     makeTeam,
     makeInternalAgent,
   }) => {
     const user = await makeUser({ email: "admin@example.com" });
     const org = await makeOrganization();
+    await makeMember(user.id, org.id);
     const team = await makeTeam(org.id, user.id);
 
     const agent = await makeInternalAgent({
@@ -2154,7 +2166,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
     expect(agents.some((a) => a.id === agent.id)).toBe(true);
   });
 
-  test("returns all agents when senderEmail does not match any user", async ({
+  test("returns no agents when senderEmail does not match any user", async ({
     makeUser,
     makeOrganization,
     makeTeam,
@@ -2176,9 +2188,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
       isDm: false,
     });
 
-    // Falls back to all agents when user can't be resolved
-    expect(agents.length).toBeGreaterThanOrEqual(1);
-    expect(agents.some((a) => a.id === agent.id)).toBe(true);
+    expect(agents).toEqual([]);
   });
 
   test("admin user sees all agents regardless of team membership", async ({
@@ -2215,7 +2225,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents", () => {
 });
 
 describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", () => {
-  test("excludes personal agents from channel (non-DM) context", async ({
+  test("includes agents with use grants regardless of legacy personal visibility", async ({
     makeUser,
     makeOrganization,
     makeInternalAgent,
@@ -2244,7 +2254,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     });
 
     expect(agents.some((a) => a.id === orgAgent.id)).toBe(true);
-    expect(agents.some((a) => a.id === personalAgent.id)).toBe(false);
+    expect(agents.some((a) => a.id === personalAgent.id)).toBe(true);
   });
 
   test("includes user's own personal agents in DM context", async ({
@@ -2288,7 +2298,7 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     const user = await makeUser({ email: "dmuser2@example.com" });
     const otherUser = await makeUser({ email: "otherauthor@example.com" });
     const org = await makeOrganization();
-    await makeMember(user.id, org.id, { role: "admin" });
+    await makeMember(user.id, org.id, { role: "member" });
 
     const otherPersonalAgent = await makeInternalAgent({
       organizationId: org.id,

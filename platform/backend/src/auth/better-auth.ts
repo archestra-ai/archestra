@@ -51,6 +51,7 @@ import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
 import { cleanupAfterMembershipRemoval } from "@/services/member-removal";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type { AuditEventName } from "@/types/audit-log";
 import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
@@ -990,6 +991,23 @@ async function assertCallerCanGrantMemberRole(
     userRecord.organizationId,
   );
   if (!targetRole) return;
+
+  try {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissions.validateSubjectAssignment({
+      organizationId: userRecord.organizationId,
+      userId: user.id,
+      subjects: [{ type: "role", id: targetRole.id }],
+    });
+    // SPDX-SnippetEnd
+  } catch {
+    throw new APIError("FORBIDDEN", {
+      message:
+        "You cannot assign a role whose scoped permissions you cannot grant",
+    });
+  }
 
   const callerPermissions = await UserModel.getUserPermissions(
     user.id,

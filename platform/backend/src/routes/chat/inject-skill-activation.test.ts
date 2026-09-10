@@ -2,6 +2,7 @@ import type { ChatMessage } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { EnvironmentModel, SkillModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { expect, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { injectSkillActivation } from "./inject-skill-activation";
@@ -136,7 +137,7 @@ test("ignores a skill the user cannot access under its scope", async ({
   expect(result[0].parts?.[0]?.text).toBe("hello");
 });
 
-test("ignores a slash-command skill when the user lacks skill:read", async ({
+test("ignores a slash-command skill without a use grant", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -151,6 +152,18 @@ test("ignores a slash-command skill when the user lacks skill:read", async ({
   await makeMember(user.id, org.id, { role: role.role });
   // an org-scoped skill is in-scope for everyone, so only the read gate stops it
   const skill = await seedSkill(org.id, "Research");
+  const key = {
+    organizationId: org.id,
+    resource: "skill" as const,
+    scope: skill.id,
+  };
+  const policy = await ResourcePermissionPolicyModel.find(key);
+  if (!policy) throw new Error("Expected persisted resource policy");
+  await ResourcePermissionPolicyModel.replace({
+    ...key,
+    revision: policy.revision,
+    grants: [{ subject: { type: "user", id: user.id }, actions: ["read"] }],
+  });
 
   const messages: ChatMessage[] = [
     {

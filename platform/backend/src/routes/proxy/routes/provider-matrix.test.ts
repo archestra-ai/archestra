@@ -2134,6 +2134,13 @@ describe("LLM proxy provider matrix", () => {
         _agent: Agent,
         harnessOptions: HarnessOptions = {},
       ) {
+        await ModelModel.upsert({
+          externalId: `${config.provider}/${config.model}`,
+          provider: config.provider,
+          modelId: config.model,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+        });
         app = createFastifyApp();
         if (config.provider === "vllm") {
           appConfig.llm.vllm.enabled = true;

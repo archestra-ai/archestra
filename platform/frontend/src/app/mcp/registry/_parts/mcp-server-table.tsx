@@ -28,7 +28,6 @@ import { useRouter } from "next/navigation";
 import { memo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
   type TableRowAction,
   TableRowActions,
@@ -137,7 +136,7 @@ export function McpServerTable({
 }: McpServerTableProps) {
   const router = useRouter();
   const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
+  const _currentUserId = session?.user?.id;
   const canSelect = (item: CatalogItem) =>
     !isPlaywrightCatalogItem(item.id) &&
     (!!attention || !!getServerInfo(item).installedServer) &&
@@ -196,23 +195,7 @@ export function McpServerTable({
         </div>
       ),
     },
-    {
-      id: "author",
-      // Visibility badges cap their label at 180px. Include the cell padding
-      // so the full badge fits without donating extra space to this column.
-      size: 212,
-      header: "Accessible to",
-      cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.scope}
-          teams={row.original.teams}
-          authorId={row.original.authorId}
-          authorName={row.original.authorName}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
-      ),
-    },
+
     {
       id: "status",
       // The table is a scanning surface: the status label is enough here.

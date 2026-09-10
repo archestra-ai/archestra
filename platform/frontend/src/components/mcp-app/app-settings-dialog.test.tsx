@@ -288,6 +288,17 @@ function createQueryClient(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
   });
+  queryClient.setQueryData(
+    ["scoped-capabilities"],
+    permissions === teamViewerPermissions
+      ? []
+      : ["read", "update", "delete"].map((action) => ({
+          organizationId: "org-1",
+          resource: "app",
+          scope: APP_ID,
+          action,
+        })),
+  );
   queryClient.setQueryData(authQueryKeys.session(), sessionSeed);
   queryClient.setQueryData(authQueryKeys.userPermissions(), permissions);
   return queryClient;

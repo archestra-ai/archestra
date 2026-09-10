@@ -254,10 +254,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("collects text, finishReason, and the response message from a real stream", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     primeAgent(modelEmitting(textChunks("Hello from A2A")));
 
@@ -279,10 +281,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("sends Anthropic cache control through the real A2A stream boundary", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     let modelPrompt: unknown;
     primePromptCacheAgent({
@@ -309,10 +313,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("sends supported Bedrock cache control through the real A2A stream boundary", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     let modelPrompt: unknown;
     primePromptCacheAgent({
@@ -339,10 +345,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("forwards each incremental text delta to onTextDelta while still returning the buffered result", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     primeAgent(modelEmitting(multiTextChunks("Hello ", "from ", "A2A")));
 
@@ -364,10 +372,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("a throwing onTextDelta callback does not abort the buffered run", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     primeAgent(modelEmitting(textChunks("Resilient answer")));
 
@@ -390,10 +400,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("strips inline <thinking> blocks from the text and the response message", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     primeAgent(
       modelEmitting(
@@ -419,10 +431,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("strips Qwen-style <think> blocks so reasoning does not leak into the A2A reply", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     primeAgent(
       modelEmitting(
@@ -449,10 +463,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("substitutes a notice when a thinking-only turn strips to nothing", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     // The pre-strip stream is non-empty, so the empty-response recovery does not
     // re-trigger; stripping leaves no visible answer, so the notice stands in —
@@ -479,10 +495,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("surfaces the captured provider cause, not a generic NoOutputGeneratedError", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     // A provider failure (e.g. billing) makes streamText produce zero output and
     // throw NoOutputGeneratedError; the real cause is only available via the
@@ -511,10 +529,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("preserves the subagent origin on a captured provider error", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     const providerError = new ProviderError({
       code: ChatErrorCode.RateLimit,
@@ -548,10 +568,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("maps an exhausted empty response to a ProviderError EmptyResponse", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     // every attempt is content-free, so the recovery loop exhausts and throws
     // EmptyModelResponseError, which a2a maps to the EmptyResponse card.
@@ -576,10 +598,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("trims and retries a context-length rejection on the A2A messages path", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     const messages: ModelMessage[] = [
       { role: "user", content: "a".repeat(400) },
@@ -612,10 +636,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("requests OpenAI reasoning summaries on a Responses-routed a2a turn", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     const model = modelEmitting(textChunks("Summarized answer"));
     primeOpenAiAgent(model);
@@ -639,10 +665,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("omits reasoningSummary on an a2a turn while the credential is negative-cached", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     const model = modelEmitting(textChunks("Plain answer"));
     primeOpenAiAgent(model);
@@ -666,10 +694,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("negative-caches the resolved credential and retries without summaries on the verification 400", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     const model = modelEmitting(
       reasoningSummaryVerificationErrorChunks(),
@@ -702,10 +732,12 @@ describe("executeA2AMessage real stream boundary", () => {
   test("stops via the repeat-call ceiling and surfaces a termination notice as text", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeInternalAgent,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
+    await makeMember(user.id, org.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
     // The model repeats the same tool call every step (unique call ids, identical
     // name+args), so the run's tracker streak climbs to the ceiling.

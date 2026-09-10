@@ -97,13 +97,13 @@ export async function listAccessibleCatalogSkills(
     userId !== undefined
       ? await getSkillPermissionChecker({ userId, organizationId })
       : null;
-  const isSkillAdmin = checker?.isAdmin ?? false;
-  const accessibleSkillIds = isSkillAdmin
-    ? undefined
-    : await SkillTeamModel.getUserAccessibleSkillIds({
-        organizationId,
-        userId,
-      });
+  const isSkillAdmin = !!checker?.isAdmin && !!checker.canRead;
+  const accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds({
+    organizationId,
+    userId,
+    isSkillAdmin,
+    onlyExplicitGrants: checker?.canRead === false,
+  });
 
   // Skills are environment-scoped like tools and connectors: the catalog only
   // shows skills in the agent's environment (null = Default; built-ins exempt).

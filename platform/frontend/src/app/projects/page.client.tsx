@@ -32,14 +32,11 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
-import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ResourceDeletedStatusFilter,
-  ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ScopeBadge } from "@/components/scope-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import {
@@ -285,20 +282,13 @@ function ProjectsList() {
               {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
               {!isDeletedView && (
-                <>
-                  <ResourceScopeFilter
-                    ownerLabelPlural="projects"
-                    allLabel="All projects"
-                    adminPermission={{ project: ["admin"] }}
-                  />
-                  <EntityLabelFilter
-                    useLabelKeys={useProjectLabelKeys}
-                    useLabelValues={useProjectLabelValues}
-                    className={filterControlClass({
-                      active: Boolean(labelsFilter),
-                    })}
-                  />
-                </>
+                <EntityLabelFilter
+                  useLabelKeys={useProjectLabelKeys}
+                  useLabelValues={useProjectLabelValues}
+                  className={filterControlClass({
+                    active: Boolean(labelsFilter),
+                  })}
+                />
               )}
               {/* Gated on `project:admin`, matching the slice the backend serves:
               anyone else switching to Deleted would get an empty table. */}
@@ -681,11 +671,7 @@ function ProjectCard({
               added only on another member's PERSONAL project (admin oversight),
               where the personal pill alone can't say whose it is — for team/org
               the scope pill already conveys the sharing. */}
-            <ScopeBadge
-              scope={projectVisibilityToScope(project.visibility)}
-              teamNames={project.shareTeamNames}
-              userNames={project.shareUserNames}
-            />
+
             {project.viewerRole === "admin" && project.visibility === null && (
               <Badge variant="secondary">
                 {project.ownerName

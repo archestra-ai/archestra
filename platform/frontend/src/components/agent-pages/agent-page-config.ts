@@ -108,6 +108,7 @@ export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
  * `general` is the page's default and carries no `?section=`.
  */
 export type AgentDetailSection =
+  | "permissions"
   | "general"
   | "tools"
   | "messaging"

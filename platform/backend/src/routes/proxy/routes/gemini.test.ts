@@ -27,6 +27,18 @@ import { createGeminiTestClient } from "@/test/llm-provider-stubs";
 import { geminiAdapterFactory } from "../adapters/gemini";
 import geminiProxyRoutes from "./gemini";
 
+beforeEach(async () => {
+  for (const modelId of ["gemini-2.5-pro", "gemini-3.7-flash"]) {
+    await ModelModel.create({
+      externalId: `gemini/${modelId}`,
+      provider: "gemini",
+      modelId,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+  }
+});
+
 describe("Gemini streaming format", () => {
   beforeEach(() => {
     vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(

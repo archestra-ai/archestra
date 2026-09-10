@@ -26,6 +26,25 @@ function publishability(
 }
 
 describe("getSkillPublishability", () => {
+  it("uses scoped sharing authority independently of authorship", () => {
+    expect(
+      publishability({
+        name: "granted-skill",
+        scope: "personal",
+        authorId: "other",
+        canPublish: true,
+      }).publishable,
+    ).toBe(true);
+    expect(
+      publishability({
+        name: "revoked-skill",
+        scope: "personal",
+        authorId: currentUserId,
+        canPublish: false,
+      }).publishable,
+    ).toBe(false);
+  });
+
   it("allows an ordinary org skill", () => {
     expect(publishability(orgSkill)).toEqual({
       publishable: true,

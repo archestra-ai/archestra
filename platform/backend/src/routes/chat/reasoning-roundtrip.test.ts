@@ -213,12 +213,19 @@ describe.each(
   }>;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       upstreamRequests = [];
 
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
 
       const agent = await makeAgent({
         organizationId,

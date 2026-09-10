@@ -133,6 +133,7 @@ vi.mock("../_parts/mcp-server-agent-usage", () => ({
 
 const localItem = {
   id: "cat-1",
+  effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
   name: "internal-tools",
   description: "Team utilities",
   serverType: "local",

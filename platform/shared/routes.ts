@@ -157,6 +157,11 @@ export const RouteId = {
   GetTeamVaultSecretKeys: "getTeamVaultSecretKeys",
 
   // Role Routes
+  SearchInitialPermissionSubjects: "searchInitialPermissionSubjects",
+  GetScopedCapabilities: "getScopedCapabilities",
+  GetResourcePermissions: "getResourcePermissions",
+  SearchResourcePermissionSubjects: "searchResourcePermissionSubjects",
+  UpdateResourcePermissions: "updateResourcePermissions",
   GetRoles: "getRoles",
   CreateRole: "createRole",
   GetRole: "getRole",

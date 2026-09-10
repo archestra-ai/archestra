@@ -147,7 +147,7 @@ describe("POST /api/apps", () => {
     expect(clean.json().warnings).toBeUndefined();
   });
 
-  test("a plain member may create a personal app but not an org-scoped one", async ({
+  test("a creator may grant organization access to a new app", async ({
     makeUser,
     makeMember,
   }) => {
@@ -168,7 +168,7 @@ describe("POST /api/apps", () => {
       url: "/api/apps",
       payload: { name: "Shared", html: "<p/>", scope: "org" },
     });
-    expect(orgApp.statusCode).toBe(403);
+    expect(orgApp.statusCode).toBe(200);
   });
 
   test("ignores a stray uiCsp body key (apps carry no author CSP)", async () => {

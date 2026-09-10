@@ -20,6 +20,7 @@ import logger from "@/logging";
 import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
 import {
   validateInheritedTeamRoles,
+  validateNewTeamMembership,
   validateTeamRoles,
 } from "@/services/role-assignment";
 import {
@@ -1016,7 +1017,7 @@ async function handleAddTeamMember(params: {
     }
 
     if (!context.userId) return errorResult("User context not available.");
-    await validateInheritedTeamRoles({
+    await validateNewTeamMembership({
       teamId: args.team_id,
       organizationId: context.organizationId,
       userId: context.userId,

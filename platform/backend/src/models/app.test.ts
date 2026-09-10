@@ -298,27 +298,27 @@ describe("AppAccessModel accessibility", () => {
     });
     expect(outsiderIds).toEqual([orgApp.id]);
 
-    // An app admin bypasses scope: they see every non-deleted app in the org,
-    // including other users' personal apps and teams they don't belong to.
+    // A legacy admin hint cannot expand scoped access.
     const adminIds = await AppAccessModel.getUserAccessibleAppIds({
       organizationId: org.id,
       userId: outsider.id,
       isAppAdmin: true,
     });
-    expect(new Set(adminIds)).toEqual(
-      new Set([orgApp.id, personalApp.id, teamApp.id]),
-    );
+    expect(adminIds).toEqual([orgApp.id]);
     expect(adminIds).not.toContain(deletedApp.id);
   });
 
-  test("userHasAppAccess honors scope and admin bypass", async ({
+  test("userHasAppAccess honors grants and ignores legacy admin hints", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeApp,
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
     const other = await makeUser();
+    await makeMember(author.id, org.id);
+    await makeMember(other.id, org.id);
     const personalApp = await makeApp({
       organizationId: org.id,
       scope: "personal",
@@ -348,7 +348,7 @@ describe("AppAccessModel accessibility", () => {
         app: personalApp,
         isAppAdmin: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

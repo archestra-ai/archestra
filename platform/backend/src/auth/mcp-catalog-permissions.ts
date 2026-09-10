@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { TeamModel } from "@/models";
 import { ApiError } from "@/types";
 import type { CatalogTeamAccessLevel } from "@/types/catalog-team-level";
@@ -12,8 +13,8 @@ import { getPermissionsForUserContext } from "./utils";
  * installs) or `write` (`use` plus modifying the definition).
  *
  * The catalog's full-admin bypass lives on `mcpServerInstallation:admin`.
- * A `write` team's modify capability is exercised by that team's admins —
- * membership in a `write` team confers `use` only.
+ * A `write` team grants modification to its members. Team membership roles
+ * govern team administration, not access to the resources shared with it.
  */
 interface McpCatalogPermissionChecker {
   /** Holds `mcpServerInstallation:admin` — bypasses scope restrictions. */
@@ -41,83 +42,11 @@ export async function getMcpCatalogPermissionChecker(params: {
 }
 
 /**
- * Teams whose `write` level this user may exercise: the teams they administer.
- */
-export async function getCatalogWriteMembershipTeamIds(
-  userId: string,
-): Promise<string[]> {
-  return TeamModel.getUserAdminTeamIds(userId);
-}
-
-function writeLevelTeamIds(catalogTeams: CatalogTeamAccess[]): string[] {
-  return catalogTeams
-    .filter((team) => team.level === "write")
-    .map((team) => team.id);
-}
-
-function intersects(a: string[], b: string[]): boolean {
-  const set = new Set(b);
-  return a.some((id) => set.has(id));
-}
-
-/**
- * Enforces write authorization for editing an existing catalog item
- * (update/reinstall/refresh). Throws ApiError(403) if the user lacks it.
- *
- * Admins bypass; a team-scoped item is writable by an admin of one of its
- * `write`-level teams; a personal item by its author. Authorship confers
- * nothing once an item is shared — an org-scoped item an admin promoted stays
- * admin-only, whoever wrote it.
- */
-export function requireMcpCatalogModifyPermission(params: {
-  checker: McpCatalogPermissionChecker;
-  scope: ResourceVisibilityScope;
-  authorId: string | null;
-  catalogTeams: CatalogTeamAccess[];
-  writeMembershipTeamIds: string[];
-  userId: string;
-}): void {
-  if (params.checker.isAdmin) return;
-
-  switch (params.scope) {
-    case "org":
-      throw new ApiError(
-        403,
-        "Only admins can manage org-scoped catalog items",
-      );
-
-    case "team": {
-      const writableTeamIds = writeLevelTeamIds(params.catalogTeams);
-      if (!intersects(writableTeamIds, params.writeMembershipTeamIds)) {
-        throw new ApiError(
-          403,
-          "You need to be an admin of a team with write access to manage this catalog item",
-        );
-      }
-      return;
-    }
-
-    case "personal":
-      if (params.authorId !== params.userId) {
-        throw new ApiError(
-          403,
-          "You can only manage your own personal catalog items",
-        );
-      }
-      return;
-
-    // Fail closed: an out-of-union scope (data corruption, manual write, or a
-    // future scope shipped before this code is updated) must be denied.
-    default:
-      throw new ApiError(403, "Unknown catalog item scope");
-  }
-}
-
-/**
  * Authorize creating a catalog item at, or moving one to, the given scope and
- * teams. Unlike {@link requireMcpCatalogModifyPermission}, authorship grants
+ * teams. Unlike object modification authorization, authorship grants
  * nothing beyond `personal` scope: publishing to a team or the organization is
- * a sharing act, gated by team administration and `admin` respectively.
+ * a sharing act. Object-level sharing authority is checked by the caller;
+ * organization-wide publication additionally requires `admin`.
  *
  * Non-admins may only assign teams they belong to.
  */
@@ -127,7 +56,6 @@ export function authorizeMcpCatalogScope(params: {
   authorId: string | null;
   requestedTeamIds: string[];
   userTeamIds: string[];
-  writeMembershipTeamIds: string[];
   userId: string;
 }): void {
   if (params.checker.isAdmin) return;
@@ -152,12 +80,6 @@ export function authorizeMcpCatalogScope(params: {
           "You can only assign catalog items to teams you are a member of",
         );
       }
-      if (!intersects(requestedTeamIds, params.writeMembershipTeamIds)) {
-        throw new ApiError(
-          403,
-          "You need to be a team-admin of one of the selected teams to share a catalog item with them",
-        );
-      }
       return;
     }
 
@@ -173,26 +95,6 @@ export function authorizeMcpCatalogScope(params: {
     default:
       throw new ApiError(403, "Unknown catalog item scope");
   }
-}
-
-/**
- * Deleting a catalog item destroys every install and secret bag it owns, so it
- * stays reserved for admins and, for a personal item, its author — a `write`
- * team level does not confer it.
- */
-export function requireMcpCatalogDeletePermission(params: {
-  checker: McpCatalogPermissionChecker;
-  scope: ResourceVisibilityScope;
-  authorId: string | null;
-  userId: string;
-}): void {
-  if (params.checker.isAdmin) return;
-  if (params.scope === "personal" && params.authorId === params.userId) return;
-
-  throw new ApiError(
-    403,
-    "You can only delete your own personal catalog items",
-  );
 }
 
 /**

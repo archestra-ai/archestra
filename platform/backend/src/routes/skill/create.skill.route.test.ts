@@ -4,13 +4,18 @@ import {
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
+import MemberModel from "@/models/member";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
-import { MANIFEST, manifestNamed } from "./skill.test-helpers";
+import {
+  MANIFEST,
+  manifestNamed,
+  useSkillRouteTestApp,
+} from "./skill.test-helpers";
 
 describe("POST /api/skills", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("creates a skill from a SKILL.md manifest", async () => {
     const response = await ctx.app.inject({
@@ -68,9 +73,7 @@ describe("POST /api/skills", () => {
     expect(response.json().environments).toEqual([]);
   });
 
-  test("assigning a restricted environment requires skill:deploy-to-restricted", async ({
-    makeMember,
-  }) => {
+  test("assigning a restricted environment requires skill:deploy-to-restricted", async () => {
     const open = await EnvironmentModel.create({
       organizationId: ctx.organizationId,
       name: "Open",
@@ -81,9 +84,11 @@ describe("POST /api/skills", () => {
       restricted: true,
     });
     // members hold skill:create but not skill:deploy-to-restricted
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: MEMBER_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      MEMBER_ROLE_NAME,
+    );
 
     // one restricted environment anywhere in the set rejects the whole create
     const denied = await ctx.app.inject({
@@ -331,20 +336,22 @@ describe("POST /api/skills", () => {
       expect(body.teams).toEqual([]);
     });
 
-    test("non-admins cannot create an org-scoped skill", async () => {
+    test("creators can share a new skill with the organization", async () => {
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: { content: MANIFEST, scope: "org" },
       });
 
-      expect(response.statusCode).toBe(403);
+      expect(response.statusCode).toBe(200);
     });
 
-    test("admins can create an org-scoped skill", async ({ makeMember }) => {
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: ADMIN_ROLE_NAME,
-      });
+    test("admins can create an org-scoped skill", async () => {
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        ADMIN_ROLE_NAME,
+      );
 
       const response = await ctx.app.inject({
         method: "POST",
@@ -356,14 +363,15 @@ describe("POST /api/skills", () => {
       expect(response.json().scope).toBe("org");
     });
 
-    test("team-admins can only assign teams they belong to", async ({
-      makeMember,
+    test("creators can share a new skill with any existing team in the organization", async ({
       makeTeam,
       makeTeamMember,
     }) => {
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: EDITOR_ROLE_NAME,
-      });
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        EDITOR_ROLE_NAME,
+      );
       const ownTeam = await makeTeam(ctx.organizationId, ctx.user.id);
       await makeTeamMember(ownTeam.id, ctx.user.id);
       const foreignTeam = await makeTeam(ctx.organizationId, ctx.user.id);
@@ -380,7 +388,7 @@ describe("POST /api/skills", () => {
       expect(ok.statusCode).toBe(200);
       expect(ok.json().teams).toHaveLength(1);
 
-      const denied = await ctx.app.inject({
+      const shared = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: {
@@ -389,17 +397,17 @@ describe("POST /api/skills", () => {
           teamIds: [foreignTeam.id],
         },
       });
-      expect(denied.statusCode).toBe(403);
+      expect(shared.statusCode).toBe(200);
     });
 
-    test("rejects a team-scoped skill with an unknown team id without orphaning it", async ({
-      makeMember,
-    }) => {
+    test("rejects a team-scoped skill with an unknown team id without orphaning it", async () => {
       // admins bypass the team-membership check, so an unknown id reaches the
       // existence validation rather than 403-ing first.
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: ADMIN_ROLE_NAME,
-      });
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        ADMIN_ROLE_NAME,
+      );
 
       const response = await ctx.app.inject({
         method: "POST",
@@ -419,13 +427,14 @@ describe("POST /api/skills", () => {
     });
 
     test("persists team assignments atomically with the skill", async ({
-      makeMember,
       makeTeam,
       makeTeamMember,
     }) => {
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: EDITOR_ROLE_NAME,
-      });
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        EDITOR_ROLE_NAME,
+      );
       const team = await makeTeam(ctx.organizationId, ctx.user.id);
       await makeTeamMember(team.id, ctx.user.id);
 
@@ -446,14 +455,14 @@ describe("POST /api/skills", () => {
       ]);
     });
 
-    test("rejects a team-scoped skill created with no teams", async ({
-      makeMember,
-    }) => {
+    test("rejects a team-scoped skill created with no teams", async () => {
       // admins bypass the team-membership check, so an empty team list is not
       // caught there — the explicit team validation must reject it.
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: ADMIN_ROLE_NAME,
-      });
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        ADMIN_ROLE_NAME,
+      );
 
       const response = await ctx.app.inject({
         method: "POST",

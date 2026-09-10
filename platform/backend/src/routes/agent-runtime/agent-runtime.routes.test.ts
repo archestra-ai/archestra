@@ -15,6 +15,8 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
+import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
@@ -125,6 +127,28 @@ describe("Agent Runtime routes", () => {
     );
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("read-only agent access cannot start a runtime or reach credential preflight", async ({
+    makeCustomRole,
+  }) => {
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    const key = { organizationId, resource: "agent" as const, scope: agent.id };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [{ subject: { type: "user", id: user.id }, actions: ["read"] }],
+    });
+    vi.mocked(startDetachedAgentTask).mockClear();
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/runs`,
+      payload: { message: "Start" },
+    });
+    expect(response.statusCode, response.body).toBe(403);
+    expect(startDetachedAgentTask).not.toHaveBeenCalled();
   });
 
   test("lists only runs belonging to the selected Agent with their task outcome", async ({

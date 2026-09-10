@@ -122,7 +122,10 @@ describe("agent subagent-exclusions routes", () => {
       url: `/api/agents/${agent.id}/subagent-exclusions`,
     });
     expect(getResponse.statusCode).toBe(404);
-    expect(requireMock).toHaveBeenCalledWith(agent.agentType, "read");
+    expect(requireMock).toHaveBeenCalledWith(agent.agentType, {
+      action: "read",
+      scope: agent.id,
+    });
 
     const putResponse = await app.inject({
       method: "PUT",
@@ -130,7 +133,10 @@ describe("agent subagent-exclusions routes", () => {
       payload: { excludedSubagentIds: [] },
     });
     expect(putResponse.statusCode).toBe(404);
-    expect(requireMock).toHaveBeenCalledWith(agent.agentType, "update");
+    expect(requireMock).toHaveBeenCalledWith(agent.agentType, {
+      action: "update",
+      scope: agent.id,
+    });
   });
 
   test("PUT drops ids that are not same-org agents and the agent's own id", async ({

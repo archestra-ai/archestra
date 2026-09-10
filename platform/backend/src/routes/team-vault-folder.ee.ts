@@ -398,24 +398,14 @@ async function assertCanManageTeamVaultFolder(params: {
   userId: string;
   headers: Parameters<typeof hasPermission>[1];
 }) {
-  const { success: canManageAllTeams } = await hasPermission(
-    { team: ["create"] },
+  const { success } = await hasPermission(
+    { secret: ["update"] },
     params.headers,
   );
-
-  if (canManageAllTeams) {
-    return;
-  }
-
-  const isTeamAdmin = await TeamModel.isUserTeamAdmin(
-    params.teamId,
-    params.userId,
-  );
-
-  if (!isTeamAdmin) {
+  if (!success) {
     throw new ApiError(
       403,
-      "You must be a team admin to manage this team's Vault folder",
+      "You need permission to manage secrets to access this team's Vault folder",
     );
   }
 }

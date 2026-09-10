@@ -52,6 +52,7 @@ export * from "./playwright-browser";
 export * from "./plugin-marketplaces";
 export * from "./policy-conditions";
 export * from "./provider-billing-copy";
+export * from "./resource-permissions";
 export * from "./roles";
 export * from "./routes";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed taxonomy; inert without the feature

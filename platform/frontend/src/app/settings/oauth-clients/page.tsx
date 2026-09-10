@@ -29,7 +29,6 @@ import {
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -113,7 +112,7 @@ function OauthClientsTable() {
   const providerApiKeyId = searchParams.get("providerApiKeyId") || undefined;
 
   const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
+  const _currentUserId = session?.user?.id;
   const providerCatalog = useModelProviderCatalog();
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   const { data: resources = [] } = useProfiles({
@@ -294,21 +293,7 @@ function OauthClientsTable() {
         </Badge>
       ),
     },
-    {
-      id: "accessibleTo",
-      header: "Accessible to",
-      size: 110,
-      cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.client.scope}
-          teams={row.original.client.teams}
-          authorId={row.original.client.authorId}
-          authorName={row.original.client.authorName}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
-      ),
-    },
+
     {
       id: "actions",
       header: "Actions",

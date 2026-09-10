@@ -1243,7 +1243,7 @@ describe("skill tool execution", () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("org-scoped");
+    expect(textOf(result)).toContain("permission");
   });
 
   test("update_skill lets the author edit their own personal skill", async ({

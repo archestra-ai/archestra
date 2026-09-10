@@ -835,11 +835,11 @@ class InteractionModel {
       if (!interaction.profileId) {
         return null;
       }
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        interaction.profileId,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: interaction.profileId,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }

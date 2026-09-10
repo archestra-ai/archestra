@@ -19,6 +19,7 @@ import {
   AppVersionModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
+  MemberModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   SecretModel,
@@ -29,6 +30,7 @@ import {
   TrustedDataPolicyModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
   Agent,
@@ -201,8 +203,9 @@ async function makeOrganization(
       | "mcpIdleHibernationEnabled"
       // SPDX-SnippetEnd
     >
-  > = {},
+  > & { legacyPermissions?: boolean } = {},
 ) {
+  const { legacyPermissions = false, ...organizationOverrides } = overrides;
   const orgId = crypto.randomUUID();
   const [org] = await db
     .insert(schema.organizationsTable)
@@ -213,9 +216,21 @@ async function makeOrganization(
       createdAt: new Date(),
       theme: "cosmic-night",
       customFont: "lato",
-      ...overrides,
+      ...organizationOverrides,
     })
     .returning();
+  if (!legacyPermissions) {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await db.transaction((tx) =>
+      ResourcePermissionPolicyModel.initializeOrganization({
+        tx,
+        organizationId: org.id,
+      }),
+    );
+    // SPDX-SnippetEnd
+  }
   return org;
 }
 
@@ -255,6 +270,13 @@ async function makeTeamMember(
   userId: string,
   overrides: { role?: "admin" | "member"; syncedFromSso?: boolean } = {},
 ): Promise<TeamMember> {
+  // Team members are organization members in the product. Keep fixtures valid
+  // now that grant resolution enforces that boundary for every principal.
+  const team = await TeamModel.findById(teamId);
+  if (!team) throw new Error("Team fixture does not exist");
+  if (!(await MemberModel.getByUserId(userId, team.organizationId))) {
+    await makeMember(userId, team.organizationId);
+  }
   return await TeamModel.addMember(
     teamId,
     userId,
@@ -471,6 +493,7 @@ async function makeApp(
     appOverrides.name ?? `Test App ${crypto.randomUUID().substring(0, 8)}`;
 
   const created = await AppModel.create({
+    initialVisibility: { scope, teamIds: teamIds ?? [] },
     app: {
       // Derived like the real create paths, so fixtures carry the slug a
       // production app has; a test that pins one overrides it below.

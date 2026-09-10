@@ -15,6 +15,7 @@ import { AgentBadge } from "@/components/agent-badge";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { PageLayout } from "@/components/page-layout";
+import { ResourcePermissions } from "@/components/resource-permissions";
 import { FloatingActionBar } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -82,6 +83,7 @@ const SECTION_DESCRIPTIONS: Record<SkillDetailSection, string> = {
   // instead; this stands in only when the skill has none.
   settings: SKILL_DESCRIPTION_FALLBACK,
   usage: "Who has run this skill, and when.",
+  permissions: "Who can view, use, and manage this skill.",
 };
 
 /**
@@ -201,7 +203,8 @@ function SkillDetailView({
     version: skill.latestVersion,
   });
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const isDirty = isSkillDraftDirty(draft, base.draft);
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  const isDirty = isSkillDraftDirty(draft, base.draft) || permissionsDirty;
 
   // Adopt a read only when there is nothing to lose and it is not older than
   // what this page has already written. Both guards earn their keep:
@@ -410,7 +413,13 @@ function SkillDetailView({
         </div>
       }
     >
-      {section === "usage" ? (
+      {section === "permissions" ? (
+        <ResourcePermissions
+          resource="skill"
+          scope={skill.id}
+          onDirtyChange={setPermissionsDirty}
+        />
+      ) : section === "usage" ? (
         <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
       ) : (
         <div className="flex flex-col gap-4">
@@ -462,6 +471,7 @@ function SkillDetailView({
             <FloatingActionBar>
               <PermissionButton
                 permissions={{ skill: ["update"] }}
+                permissionScope={skill.id}
                 disabled={!isDirty || !contentComplete || isGone || isSaving}
                 onClick={handleSave}
               >

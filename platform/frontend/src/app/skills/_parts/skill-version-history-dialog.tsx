@@ -224,6 +224,7 @@ function VersionHistory({
           {isBuiltIn ? (
             <PermissionButton
               permissions={{ skill: ["update"] }}
+              permissionScope={skillId ?? undefined}
               variant="ghost"
               size="sm"
               className="text-muted-foreground"
@@ -244,6 +245,7 @@ function VersionHistory({
             </Button>
             <PermissionButton
               permissions={{ skill: ["update"] }}
+              permissionScope={skillId ?? undefined}
               disabled={!canRestore || restoreVersion.isPending}
               onClick={() => setConfirmingRestore(true)}
               tooltip={restoreTooltip({ isSynced, isHead, appName })}

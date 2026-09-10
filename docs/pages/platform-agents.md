@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,7 @@ An agent can include:
 
 ## Creating and Editing an Agent
 
-**Create Agent** opens a setup wizard with three steps. **Configuration** asks for the name, visibility, instructions, and model. **Tools & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step — the agent then opens on its page's **Connect** tab, which shows how to reach it.
+**Create Agent** opens a setup wizard with three steps. **Configuration** asks for the name, permissions, instructions, and model. **Tools & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step — the agent then opens on its page's **Connect** tab, which shows how to reach it.
 
 Every agent has its own page, and that page is where you change it. The same three groups are its tabs, edited in place: **Configuration**, **Tools & Knowledge**, and **Advanced**. **Save changes** writes the tab you are on and leaves you there, so a rename is one save rather than a walk through the rest. **Connect** holds the endpoint, authentication options, and examples.
 
@@ -150,7 +150,7 @@ For durable work, an Agent can optionally use [Agent Runtime](/docs/platform-age
 
 An agent can be converted into an [Agent Skill](/docs/platform-agent-skills) — a reusable `SKILL.md` instruction set that any agent can activate from chat. Use this when the agent's value is mostly in its instructions and you want them available as a `/slash-command` rather than as a separate agent to switch to.
 
-The **Convert to skill** action on the agents page opens a confirmation dialog where you set the skill's description and choose whether to remove the source agent once the skill is created. The skill inherits the agent's scope. Conversion is lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is either carried over or annotated:
+The **Convert to skill** action on the agents page opens a confirmation dialog where you set the skill's description and choose whether to remove the source agent once the skill is created. Choose permissions for the new skill separately. Existing skill-wide grants also apply. Conversion is lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is either carried over or annotated:
 
 - the system prompt becomes the skill body, and the scope carries over directly; the name is normalized into a slug (for example `Support Helper` → `support-helper`) so it works as a `/slash-command`
 - the description is required — the agent's own is prefilled, and you must supply one when the agent has none (an activating agent uses it to decide when to run the skill); **Generate** drafts one from the agent's prompt, tools, and example prompts via a single LLM call when you need a starting point
@@ -256,3 +256,7 @@ You are a helpful assistant for
 Prefix an expression with a backslash to keep it as text: `\{{user.name}}` renders as `{{user.name}}`. This is useful when a prompt documents its own variables.
 
 An expression Handlebars cannot read is left as written, and the rest of the prompt still renders. The agent editor flags those expressions as you type, so you can see which ones reach the model as literal text.
+
+### Messaging Channel Assignment
+
+Assigning an agent to your own direct message requires its `use` grant. Assigning it to a shared channel or another person’s direct message also requires `manage-permissions` on the agent. Channel management permissions still apply. Each sender must have `use` permission when a message executes; assigning an agent does not grant access to everyone in the channel.

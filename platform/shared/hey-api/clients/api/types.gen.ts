@@ -13170,6 +13170,25 @@ export type CreateAgentData = {
             summaryTitle: string;
             prompt: string;
         }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -15246,6 +15265,25 @@ export type RestoreAgentVersionResponse = RestoreAgentVersionResponses[keyof Res
 
 export type CloneAgentData = {
     body: {
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         /**
          * Visibility of the clone. Defaults to the source agent's scope.
          */
@@ -22112,6 +22150,25 @@ export type GetAppsResponse = GetAppsResponses[keyof GetAppsResponses];
 
 export type CreateAppData = {
     body: {
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         name: string;
         slug?: string;
         description?: string;
@@ -25478,7 +25535,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -25582,7 +25639,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -25701,7 +25758,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -57973,6 +58030,7 @@ export type GetInternalMcpCatalogResponses = {
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
     }>;
 };
 
@@ -58100,6 +58158,25 @@ export type CreateInternalMcpCatalogItemData = {
         teams?: Array<string | {
             id: string;
             level?: 'use' | 'write';
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
@@ -94460,6 +94537,7 @@ export type GetSkillsResponses = {
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
+            canPublish?: boolean;
             createdBy: {
                 id: string;
                 name: string | null;
@@ -94537,6 +94615,25 @@ export type CreateSkillData = {
             value: string;
             keyId?: string;
             valueId?: string;
+        }>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
         }>;
     };
     path?: never;
@@ -94686,6 +94783,25 @@ export type CreateSkillResponse = CreateSkillResponses[keyof CreateSkillResponse
 
 export type ConvertAgentToSkillData = {
     body: {
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         description?: string;
         deleteAgent?: boolean;
     };
@@ -96884,6 +97000,25 @@ export type ImportGithubSkillsData = {
         githubAppConfigId?: string;
         githubPatId?: string;
         skillPaths: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
         userIds?: Array<string>;
@@ -105625,6 +105760,622 @@ export type UpdateIdentityProviderResponses = {
 };
 
 export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[keyof UpdateIdentityProviderResponses];
+
+export type SearchInitialPermissionSubjectsData = {
+    body?: never;
+    path: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel';
+    };
+    query?: {
+        query?: string;
+    };
+    url: '/api/resource-permissions/{resource}/creation-subjects';
+};
+
+export type SearchInitialPermissionSubjectsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SearchInitialPermissionSubjectsError = SearchInitialPermissionSubjectsErrors[keyof SearchInitialPermissionSubjectsErrors];
+
+export type SearchInitialPermissionSubjectsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        subject: {
+            type: 'user';
+            id: string;
+        } | {
+            type: 'team';
+            id: string;
+        } | {
+            type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'role';
+            id: string;
+        } | {
+            type: 'organization';
+            id: '*';
+        };
+        name: string;
+    }>;
+};
+
+export type SearchInitialPermissionSubjectsResponse = SearchInitialPermissionSubjectsResponses[keyof SearchInitialPermissionSubjectsResponses];
+
+export type GetScopedCapabilitiesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/resource-permissions';
+};
+
+export type GetScopedCapabilitiesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetScopedCapabilitiesError = GetScopedCapabilitiesErrors[keyof GetScopedCapabilitiesErrors];
+
+export type GetScopedCapabilitiesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        organizationId: string;
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel';
+        scope: '*' | 'teams:*' | string;
+        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions';
+    }>;
+};
+
+export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof GetScopedCapabilitiesResponses];
+
+export type SearchResourcePermissionSubjectsData = {
+    body?: never;
+    path: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel';
+        scope: '*' | 'teams:*' | string;
+    };
+    query?: {
+        query?: string;
+    };
+    url: '/api/resource-permissions/{resource}/{scope}/subjects';
+};
+
+export type SearchResourcePermissionSubjectsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SearchResourcePermissionSubjectsError = SearchResourcePermissionSubjectsErrors[keyof SearchResourcePermissionSubjectsErrors];
+
+export type SearchResourcePermissionSubjectsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        subject: {
+            type: 'user';
+            id: string;
+        } | {
+            type: 'team';
+            id: string;
+        } | {
+            type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'role';
+            id: string;
+        } | {
+            type: 'organization';
+            id: '*';
+        };
+        name: string;
+    }>;
+};
+
+export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionSubjectsResponses[keyof SearchResourcePermissionSubjectsResponses];
+
+export type GetResourcePermissionsData = {
+    body?: never;
+    path: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel';
+        scope: '*' | 'teams:*' | string;
+    };
+    query?: never;
+    url: '/api/resource-permissions/{resource}/{scope}';
+};
+
+export type GetResourcePermissionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetResourcePermissionsError = GetResourcePermissionsErrors[keyof GetResourcePermissionsErrors];
+
+export type GetResourcePermissionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel';
+        scope: '*' | 'teams:*' | string;
+        name: string;
+        revision: number;
+        grants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+        }>;
+        inheritedGrants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+            sourceScope?: '*' | 'teams:*' | string;
+        }>;
+        legacyAccess: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+        }>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+    };
+};
+
+export type GetResourcePermissionsResponse = GetResourcePermissionsResponses[keyof GetResourcePermissionsResponses];
+
+export type UpdateResourcePermissionsData = {
+    body: {
+        revision: number;
+        grants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        }>;
+    };
+    path: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel';
+        scope: '*' | 'teams:*' | string;
+    };
+    query?: never;
+    url: '/api/resource-permissions/{resource}/{scope}';
+};
+
+export type UpdateResourcePermissionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateResourcePermissionsError = UpdateResourcePermissionsErrors[keyof UpdateResourcePermissionsErrors];
+
+export type UpdateResourcePermissionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel';
+        scope: '*' | 'teams:*' | string;
+        name: string;
+        revision: number;
+        grants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+        }>;
+        inheritedGrants: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+            sourceScope?: '*' | 'teams:*' | string;
+        }>;
+        legacyAccess: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            name: string;
+        }>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+    };
+};
+
+export type UpdateResourcePermissionsResponse = UpdateResourcePermissionsResponses[keyof UpdateResourcePermissionsResponses];
 
 export type IngestRumEventsData = {
     body: {

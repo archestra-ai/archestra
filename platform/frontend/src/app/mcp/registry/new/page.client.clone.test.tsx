@@ -20,6 +20,10 @@ import {
 } from "@/lib/teams/team.query";
 import NewMcpCatalogItemPage from "./page.client";
 
+vi.mock("@/components/initial-resource-permissions", () => ({
+  InitialResourcePermissions: () => null,
+}));
+
 vi.mock("next/navigation");
 
 vi.mock("@/lib/config/config.query");

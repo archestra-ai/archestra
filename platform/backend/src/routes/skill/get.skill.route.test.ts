@@ -1,10 +1,10 @@
 import { SkillModel } from "@/models";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { describe, expect, test } from "@/test";
 import skillRoutes from "./skill.routes";
-import { seedImportedSkill } from "./skill.test-helpers";
+import { seedImportedSkill, useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("GET /api/skills/:id", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   test("a personal skill is hidden from non-authors", async ({ makeUser }) => {
     const author = await makeUser();

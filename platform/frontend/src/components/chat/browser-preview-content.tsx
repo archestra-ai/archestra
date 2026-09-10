@@ -77,11 +77,13 @@ export function BrowserPreviewContent({
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: BrowserPreviewContentProps) {
-  const { data: canUpdateAgent } = useHasPermissions({ agent: ["team-admin"] });
-
   // Resolve agentId: prefer conversation's agentId, fall back to prop
   const { data: conversation } = useConversation(conversationId);
   const resolvedAgentId = conversation?.agentId ?? agentIdProp;
+  const { data: canUpdateAgent } = useHasPermissions(
+    { agent: ["update"] },
+    resolvedAgentId ?? "",
+  );
 
   const { data: agent } = useProfile(resolvedAgentId);
   const isSharedAgent = agent?.scope !== "personal";

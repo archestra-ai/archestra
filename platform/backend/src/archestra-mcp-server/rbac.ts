@@ -1,7 +1,13 @@
-import type { ArchestraToolShortName, Permission } from "@archestra/shared";
-import { userHasPermission } from "@/auth/utils";
+import type {
+  ArchestraToolShortName,
+  Permission,
+  ResourcePermissionAction,
+  ScopedResource,
+} from "@archestra/shared";
+import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { UserModel } from "@/models";
+import ResourcePermissionTargetModel from "@/models/resource-permission-target";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { archestraMcpBranding } from "./branding";
 import { errorResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -16,7 +22,9 @@ import type { ArchestraContext } from "./types";
  */
 export const TOOL_PERMISSIONS: Record<
   ArchestraToolShortName,
-  Permission | null
+  | Permission
+  | { resource: ScopedResource; action: ResourcePermissionAction }
+  | null
 > = {
   // Identity — available to all
   whoami: null,
@@ -228,9 +236,9 @@ export const TOOL_PERMISSIONS: Record<
   set_app_lock: { resource: "app", action: "update" },
   // validate_app only reads the head html and reports static findings.
   validate_app: { resource: "app", action: "read" },
-  // publish_app changes the app's visibility scope; the scope-promotion gate
-  // (assertCallerMayModifyApp) is the real authority, app:update is the floor.
-  publish_app: { resource: "app", action: "update" },
+  // publish_app delegates read/use access through the resource permission policy; the handler
+  // checks the target and prevents delegating actions the caller does not hold.
+  publish_app: { resource: "app", action: "manage-permissions" },
   delete_app: { resource: "app", action: "delete" },
   // Authoring intent: the preview is exercised while building/fixing an app.
   preview_app_tool: { resource: "app", action: "update" },
@@ -288,12 +296,47 @@ export async function checkToolPermission(
     );
   }
 
-  const allowed = await userHasPermission(
-    context.userId,
-    context.organizationId,
-    perm.resource,
-    perm.action,
-  );
+  const allowed =
+    perm.action === "manage-permissions" || perm.action === "use"
+      ? false
+      : await userHasPermission(
+          context.userId,
+          context.organizationId,
+          perm.resource,
+          perm.action,
+        );
+
+  const scopedAction = SCOPED_CATALOG_TOOLS[typedShortName];
+  if (
+    !allowed &&
+    scopedAction &&
+    (await ResourcePermissionTargetModel.hasAnyCatalogGrant({
+      userId: context.userId,
+      organizationId: context.organizationId,
+      action: scopedAction,
+    }))
+  )
+    return null;
+
+  const scoped = SCOPED_RESOURCE_TOOLS[typedShortName];
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (
+    !allowed &&
+    scoped &&
+    (
+      await ResourcePermissions.resolveAll({
+        userId: context.userId,
+        organizationId: context.organizationId,
+      })
+    ).some(
+      (grant) =>
+        grant.resource === scoped.resource && grant.action === scoped.action,
+    )
+  )
+    return null;
+  // SPDX-SnippetEnd
 
   if (!allowed) {
     logger.warn(
@@ -339,9 +382,34 @@ export async function filterToolNamesByPermission(
     );
   }
 
-  const permissions = await UserModel.getUserPermissions(
+  const permissions = await getPermissionsForUserContext({
     userId,
     organizationId,
+  });
+  const scopedActions = new Set<ResourcePermissionAction>();
+  const neededScopedActions = new Set(
+    toolNames
+      .map(
+        (name) =>
+          SCOPED_CATALOG_TOOLS[
+            archestraMcpBranding.getToolShortName(
+              name,
+            ) as ArchestraToolShortName
+          ],
+      )
+      .filter((action): action is ResourcePermissionAction => !!action),
+  );
+  await Promise.all(
+    [...neededScopedActions].map(async (action) => {
+      if (
+        await ResourcePermissionTargetModel.hasAnyCatalogGrant({
+          userId,
+          organizationId,
+          action,
+        })
+      )
+        scopedActions.add(action);
+    }),
   );
 
   // Collect unique permissions we need to check
@@ -355,11 +423,26 @@ export async function filterToolNamesByPermission(
       if (!permResults.has(key)) {
         permResults.set(
           key,
-          permissions[perm.resource]?.includes(perm.action) ?? false,
+          perm.action === "manage-permissions" || perm.action === "use"
+            ? false
+            : (permissions[perm.resource]?.includes(perm.action) ?? false),
         );
       }
     }
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const resourceGrants = toolNames.some(
+    (name) =>
+      SCOPED_RESOURCE_TOOLS[
+        archestraMcpBranding.getToolShortName(name) as ArchestraToolShortName
+      ],
+  )
+    ? await ResourcePermissions.resolveAll({ userId, organizationId })
+    : [];
+  // SPDX-SnippetEnd
 
   // Filter tools
   const allowed = new Set<string>();
@@ -374,10 +457,83 @@ export async function filterToolNamesByPermission(
       allowed.add(name); // No permission required
       continue;
     }
-    if (permResults.get(`${perm.resource}:${perm.action}`)) {
+    const scopedAction =
+      SCOPED_CATALOG_TOOLS[shortName as ArchestraToolShortName];
+    if (
+      permResults.get(`${perm.resource}:${perm.action}`) ||
+      (scopedAction && scopedActions.has(scopedAction)) ||
+      resourceGrants.some(
+        (grant) =>
+          grant.resource ===
+            SCOPED_RESOURCE_TOOLS[shortName as ArchestraToolShortName]
+              ?.resource &&
+          grant.action ===
+            SCOPED_RESOURCE_TOOLS[shortName as ArchestraToolShortName]?.action,
+      )
+    ) {
       allowed.add(name);
     }
   }
 
   return allowed;
 }
+
+// Only handlers that enforce the exact object action or filter their list in
+// SQL may bypass the organization-level permission gate through this map.
+const SCOPED_CATALOG_TOOLS: Partial<
+  Record<ArchestraToolShortName, ResourcePermissionAction>
+> = {
+  edit_mcp_description: "update",
+  edit_mcp_config: "update",
+  deploy_mcp_server: "use",
+  search_private_mcp_registry: "read",
+  get_mcp_servers: "read",
+  get_mcp_server_tools: "read",
+};
+
+const SCOPED_RESOURCE_TOOLS: Partial<
+  Record<
+    ArchestraToolShortName,
+    { resource: ScopedResource; action: ResourcePermissionAction }
+  >
+> = {
+  list_hooks: { resource: "agent", action: "read" },
+  create_hook: { resource: "agent", action: "update" },
+  update_hook: { resource: "agent", action: "update" },
+  delete_hook: { resource: "agent", action: "update" },
+  app_data_get: { resource: "app", action: "use" },
+  app_data_set: { resource: "app", action: "use" },
+  app_data_list: { resource: "app", action: "use" },
+  app_data_delete: { resource: "app", action: "use" },
+  llm_complete: { resource: "app", action: "use" },
+  list_apps: { resource: "app", action: "read" },
+  read_app: { resource: "app", action: "read" },
+  list_app_versions: { resource: "app", action: "read" },
+  render_app: { resource: "app", action: "use" },
+  edit_app: { resource: "app", action: "update" },
+  refine_app: { resource: "app", action: "update" },
+  set_app_tools: { resource: "app", action: "update" },
+  set_app_labels: { resource: "app", action: "update" },
+  publish_app: { resource: "app", action: "manage-permissions" },
+  restore_app_version: { resource: "app", action: "update" },
+  set_app_lock: { resource: "app", action: "update" },
+  validate_app: { resource: "app", action: "read" },
+  get_app_diagnostics: { resource: "app", action: "read" },
+  preview_app_tool: { resource: "app", action: "update" },
+  delete_app: { resource: "app", action: "delete" },
+  list_skills: { resource: "skill", action: "read" },
+  load_skill: { resource: "skill", action: "use" },
+  update_skill: { resource: "skill", action: "update" },
+  edit_skill: { resource: "skill", action: "update" },
+  bulk_assign_tools_to_agents: { resource: "agent", action: "update" },
+  bulk_remove_tools_from_agents: { resource: "agent", action: "update" },
+  bulk_assign_tools_to_mcp_gateways: {
+    resource: "mcpGateway",
+    action: "update",
+  },
+  get_agent: { resource: "agent", action: "read" },
+  list_agents: { resource: "agent", action: "read" },
+  edit_agent: { resource: "agent", action: "update" },
+  get_mcp_gateway: { resource: "mcpGateway", action: "read" },
+  edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
+};

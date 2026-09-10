@@ -71,9 +71,7 @@ export function A2AConnectionInstructions({
     profileId: agent.id,
   });
   const { data: userToken } = useUserToken();
-  const { data: hasAdminPermission } = useHasPermissions({
-    agent: ["admin"],
-  });
+  const { data: hasAdminPermission } = useHasPermissions({ ac: ["update"] });
 
   const tokens = tokensData?.tokens;
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);

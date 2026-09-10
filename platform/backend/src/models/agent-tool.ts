@@ -1459,11 +1459,12 @@ class AgentToolModel {
 
     for (const agentId of agentIds) {
       // Check if user still has access to this agent through other teams
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
         userId,
         agentId,
         isAgentAdmin,
-      );
+        action: "use",
+      });
 
       // If user no longer has access, clean up their personal tokens
       if (!hasAccess) {

@@ -1,3 +1,4 @@
+// Compatibility coverage for legacy sharing before migration; scoped grants are covered by the backfill and scoped route tests.
 import { expect } from "vitest";
 import { test } from "@/test";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
@@ -9,7 +10,7 @@ test("getUserAccessibleCatalogIds returns org-scoped items for any user", async 
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
 
   const orgCatalog = await makeInternalMcpCatalog({
     scope: "org",
@@ -30,7 +31,7 @@ test("getUserAccessibleCatalogIds returns global org-scoped items for any user",
   makeOrganization,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
 
   const globalCatalog = await InternalMcpCatalogModel.create({
     name: "global-catalog",
@@ -53,8 +54,8 @@ test("getUserAccessibleCatalogIds scopes org items to the active organization", 
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
-  const otherOrg = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
+  const otherOrg = await makeOrganization({ legacyPermissions: true });
 
   const orgCatalog = await makeInternalMcpCatalog({
     scope: "org",
@@ -82,7 +83,7 @@ test("getUserAccessibleCatalogIds returns personal items only to author", async 
 }) => {
   const author = await makeUser();
   const otherUser = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
 
   const personalCatalog = await makeInternalMcpCatalog({
     scope: "personal",
@@ -114,7 +115,7 @@ test("getUserAccessibleCatalogIds returns team items to team members", async ({
 }) => {
   const member = await makeUser();
   const nonMember = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, member.id);
   await makeTeamMember(team.id, member.id);
 
@@ -146,7 +147,7 @@ test("getUserAccessibleCatalogIds returns all items for admin", async ({
 }) => {
   const admin = await makeUser();
   const author = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
 
   const personalCatalog = await makeInternalMcpCatalog({
     scope: "personal",
@@ -167,7 +168,7 @@ test("getUserAccessibleCatalogIds returns global items for admin", async ({
   makeOrganization,
 }) => {
   const admin = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
 
   const globalCatalog = await InternalMcpCatalogModel.create({
     name: "global-admin-catalog",
@@ -194,7 +195,7 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
   const author = await makeUser();
   const teamMember = await makeUser();
   const otherUser = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, author.id);
   await makeTeamMember(team.id, teamMember.id);
 
@@ -215,58 +216,58 @@ test("userHasCatalogAccess checks access correctly for all scope types", async (
 
   // Org scope: everyone has access
   expect(
-    await McpCatalogTeamModel.userHasCatalogAccess(
-      otherUser.id,
-      orgCatalog.id,
-      false,
-      org.id,
-    ),
+    await McpCatalogTeamModel.userHasCatalogAccess({
+      userId: otherUser.id,
+      catalogId: orgCatalog.id,
+      isAdmin: false,
+      organizationId: org.id,
+    }),
   ).toBe(true);
 
   // Personal scope: only author
   expect(
-    await McpCatalogTeamModel.userHasCatalogAccess(
-      author.id,
-      personalCatalog.id,
-      false,
-      org.id,
-    ),
+    await McpCatalogTeamModel.userHasCatalogAccess({
+      userId: author.id,
+      catalogId: personalCatalog.id,
+      isAdmin: false,
+      organizationId: org.id,
+    }),
   ).toBe(true);
   expect(
-    await McpCatalogTeamModel.userHasCatalogAccess(
-      otherUser.id,
-      personalCatalog.id,
-      false,
-      org.id,
-    ),
+    await McpCatalogTeamModel.userHasCatalogAccess({
+      userId: otherUser.id,
+      catalogId: personalCatalog.id,
+      isAdmin: false,
+      organizationId: org.id,
+    }),
   ).toBe(false);
 
   // Team scope: only team members
   expect(
-    await McpCatalogTeamModel.userHasCatalogAccess(
-      teamMember.id,
-      teamCatalog.id,
-      false,
-      org.id,
-    ),
+    await McpCatalogTeamModel.userHasCatalogAccess({
+      userId: teamMember.id,
+      catalogId: teamCatalog.id,
+      isAdmin: false,
+      organizationId: org.id,
+    }),
   ).toBe(true);
   expect(
-    await McpCatalogTeamModel.userHasCatalogAccess(
-      otherUser.id,
-      teamCatalog.id,
-      false,
-      org.id,
-    ),
+    await McpCatalogTeamModel.userHasCatalogAccess({
+      userId: otherUser.id,
+      catalogId: teamCatalog.id,
+      isAdmin: false,
+      organizationId: org.id,
+    }),
   ).toBe(false);
 
   // Admin: always has access
   expect(
-    await McpCatalogTeamModel.userHasCatalogAccess(
-      otherUser.id,
-      personalCatalog.id,
-      true,
-      org.id,
-    ),
+    await McpCatalogTeamModel.userHasCatalogAccess({
+      userId: otherUser.id,
+      catalogId: personalCatalog.id,
+      isAdmin: true,
+      organizationId: org.id,
+    }),
   ).toBe(true);
 });
 
@@ -276,20 +277,20 @@ test("userHasCatalogAccess denies org-scoped catalog items from other organizati
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
-  const otherOrg = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
+  const otherOrg = await makeOrganization({ legacyPermissions: true });
   const otherOrgCatalog = await makeInternalMcpCatalog({
     scope: "org",
     organizationId: otherOrg.id,
   });
 
   await expect(
-    McpCatalogTeamModel.userHasCatalogAccess(
-      user.id,
-      otherOrgCatalog.id,
-      true,
-      org.id,
-    ),
+    McpCatalogTeamModel.userHasCatalogAccess({
+      userId: user.id,
+      catalogId: otherOrgCatalog.id,
+      isAdmin: true,
+      organizationId: org.id,
+    }),
   ).resolves.toBe(false);
 });
 
@@ -298,7 +299,7 @@ test("userHasCatalogAccess allows global org-scoped catalog items", async ({
   makeOrganization,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const globalCatalog = await InternalMcpCatalogModel.create({
     name: "global-access-catalog",
     serverType: "builtin",
@@ -306,12 +307,12 @@ test("userHasCatalogAccess allows global org-scoped catalog items", async ({
   });
 
   await expect(
-    McpCatalogTeamModel.userHasCatalogAccess(
-      user.id,
-      globalCatalog.id,
-      false,
-      org.id,
-    ),
+    McpCatalogTeamModel.userHasCatalogAccess({
+      userId: user.id,
+      catalogId: globalCatalog.id,
+      isAdmin: false,
+      organizationId: org.id,
+    }),
   ).resolves.toBe(true);
 });
 
@@ -322,7 +323,7 @@ test("syncCatalogTeams replaces team assignments", async ({
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const team1 = await makeTeam(org.id, user.id);
   const team2 = await makeTeam(org.id, user.id);
 
@@ -355,7 +356,7 @@ test("syncCatalogTeams stores an explicit level and reads it back", async ({
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, user.id);
   const catalog = await makeInternalMcpCatalog({
     scope: "team",
@@ -380,7 +381,7 @@ test("a team assigned with a bare id defaults to write", async ({
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, user.id);
   // A bare id carries no level, so it takes the column default.
   const catalog = await makeInternalMcpCatalog({
@@ -402,7 +403,7 @@ test("syncCatalogTeams preserves a stored level when re-synced with a bare id", 
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, user.id);
   const catalog = await makeInternalMcpCatalog({
     scope: "team",
@@ -426,7 +427,7 @@ test("syncCatalogTeams applies an explicit level over the stored one", async ({
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, user.id);
   const catalog = await makeInternalMcpCatalog({
     scope: "team",
@@ -451,7 +452,7 @@ test("syncCatalogTeams honors a mixed list, preserving each team's stored level"
   makeInternalMcpCatalog,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const keep = await makeTeam(org.id, user.id);
   const added = await makeTeam(org.id, user.id);
   const catalog = await makeInternalMcpCatalog({
@@ -483,7 +484,7 @@ test("findAll with scope filtering returns correct items", async ({
 }) => {
   const author = await makeUser();
   const otherUser = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const team = await makeTeam(org.id, author.id);
   await makeTeamMember(team.id, author.id);
 
@@ -535,7 +536,7 @@ test("findAll with scope filtering includes global org-scoped items", async ({
   makeOrganization,
 }) => {
   const user = await makeUser();
-  const org = await makeOrganization();
+  const org = await makeOrganization({ legacyPermissions: true });
   const globalCatalog = await InternalMcpCatalogModel.create({
     name: "scope-test-global",
     serverType: "builtin",

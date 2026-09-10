@@ -23,15 +23,18 @@ vi.mock("../_parts/delete-skill-dialog", () => ({
   DeleteSkillDialog: () => null,
 }));
 // Pulls its options over the network; the test drives it through a stub that
-// flips the scope, which is all a save cares about.
+// changes environment restrictions independently of sharing grants.
 vi.mock("../_parts/skill-access-fields", () => ({
   SkillAccessFields: ({
     onChange,
   }: {
-    onChange: (patch: { scope: string }) => void;
+    onChange: (patch: { environmentIds: string[] }) => void;
   }) => (
-    <button type="button" onClick={() => onChange({ scope: "org" })}>
-      Share with organization
+    <button
+      type="button"
+      onClick={() => onChange({ environmentIds: ["environment-1"] })}
+    >
+      Restrict environment
     </button>
   ),
 }));
@@ -44,6 +47,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useHasPermissions,
   useMissingPermissions,
+  useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -113,6 +117,15 @@ const save = async () => {
 describe("SkillDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: ["read", "update", "delete"].map((action) => ({
+        organizationId: "org-1",
+        resource: "skill",
+        scope: "skill-1",
+        action,
+      })),
+      isPending: false,
+    } as ReturnType<typeof useScopedCapabilities>);
     updateMutateAsync.mockResolvedValue({ id: "skill-1", latestVersion: 8 });
     vi.mocked(useRouter).mockReturnValue({
       push,
@@ -157,7 +170,7 @@ describe("SkillDetailPage", () => {
 
     // Who can use it is the end of the same page, not a second route.
     expect(
-      screen.getByRole("button", { name: "Share with organization" }),
+      screen.getByRole("button", { name: "Restrict environment" }),
     ).toBeInTheDocument();
 
     // Nothing sends the reader anywhere to edit: this is where editing happens.
@@ -210,17 +223,17 @@ describe("SkillDetailPage", () => {
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 
-  it("saves a visibility change made at the bottom of the same page", async () => {
+  it("saves environment restrictions without rewriting sharing permissions", async () => {
     renderPage();
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: "Share with organization" }),
+      screen.getByRole("button", { name: "Restrict environment" }),
     );
     await save();
 
     expect(updateMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: expect.objectContaining({ scope: "org" }),
+        body: expect.objectContaining({ environmentIds: ["environment-1"] }),
       }),
     );
   });
@@ -312,15 +325,18 @@ describe("SkillDetailPage", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: "Share with organization" }),
+      screen.getByRole("button", { name: "Restrict environment" }),
     );
     await save();
 
     // The save carries no files and the backend refuses any content change, so
     // there is nothing to bury — anchoring would only let the sync worker
-    // reject an unrelated scope edit.
+    // reject an unrelated environment edit.
     const body = updateMutateAsync.mock.calls[0][0].body;
-    expect(body).toMatchObject({ scope: "org" });
+    expect(body).toMatchObject({ environmentIds: ["environment-1"] });
+    expect(body).not.toHaveProperty("scope");
+    expect(body).not.toHaveProperty("teamIds");
+    expect(body).not.toHaveProperty("userIds");
     expect(body).not.toHaveProperty("baseVersion");
     expect(body).not.toHaveProperty("files");
   });
@@ -330,6 +346,10 @@ describe("SkillDetailPage", () => {
       data: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
     } as any);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+      isPending: false,
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
     renderPage();
 
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();

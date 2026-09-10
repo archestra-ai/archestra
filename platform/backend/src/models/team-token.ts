@@ -152,7 +152,9 @@ class TeamTokenModel {
   /**
    * Find all tokens with team details
    */
-  static async findAllWithTeam(): Promise<TeamTokenWithTeam[]> {
+  static async findAllWithTeam(
+    organizationId?: string,
+  ): Promise<TeamTokenWithTeam[]> {
     const result = await db
       .select({
         token: schema.teamTokensTable,
@@ -165,6 +167,11 @@ class TeamTokenModel {
       .leftJoin(
         schema.teamsTable,
         eq(schema.teamTokensTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        organizationId
+          ? eq(schema.teamTokensTable.organizationId, organizationId)
+          : undefined,
       )
       .orderBy(
         desc(schema.teamTokensTable.isOrganizationToken),

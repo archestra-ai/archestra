@@ -147,8 +147,8 @@ describe("MCP Gateway (stateless mode)", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
 
     // Create an org token for authentication
     const token = await TeamTokenModel.create({
@@ -256,8 +256,8 @@ describe("MCP Gateway (stateless mode)", () => {
     // exactly the window where falling through would let an upstream server
     // answer for the platform's own prefix. A parseable skill URI must come
     // back not-found — never be proxied upstream.
-    const agent = await makeAgent();
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",
@@ -443,8 +443,8 @@ describe("MCP Gateway (stateless mode)", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
 
     const token = await TeamTokenModel.create({
       organizationId: org.id,
@@ -1227,8 +1227,8 @@ describe("MCP Gateway (stateless mode)", () => {
     makeAgent,
     makeOrganization,
   }) => {
-    const agent = await makeAgent();
     const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
 
     const token = await TeamTokenModel.create({
       organizationId: org.id,
@@ -1641,9 +1641,9 @@ describe("MCP Gateway (stateless mode)", () => {
 
     const { value: token } = await TeamTokenModel.create({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
+      name: "Team Token",
+      teamId: team.id,
+      isOrganizationToken: false,
     });
     await initializeMcpSession({ app, agentId: agent.id, token });
 

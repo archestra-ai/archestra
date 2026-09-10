@@ -1,3 +1,4 @@
+// These junction-table tests exercise pre-migration compatibility. Scoped grants and revocation are covered by the migration and scoped route suites.
 import { describe, expect, test } from "@/test";
 import AgentTeamModel from "./agent-team";
 import TeamLabelModel from "./team-label";
@@ -10,7 +11,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id, { name: "Platform" });
       const team2 = await makeTeam(org.id, user.id, { name: "Security" });
@@ -49,7 +50,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id);
       const team2 = await makeTeam(org.id, user.id);
@@ -80,7 +81,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id);
       const team2 = await makeTeam(org.id, user.id);
@@ -129,7 +130,7 @@ describe("AgentTeamModel", () => {
       makeUser,
       makeTeamMember,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
       await makeTeamMember(team.id, user.id);
@@ -164,7 +165,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const orgAgent = await makeAgent({
@@ -187,7 +188,7 @@ describe("AgentTeamModel", () => {
       makeUser,
       makeTeamMember,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const memberTeam = await makeTeam(org.id, user.id);
       const otherTeam = await makeTeam(org.id, user.id);
@@ -219,7 +220,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const author = await makeUser();
       const otherUser = await makeUser();
 
@@ -254,7 +255,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
 
       const orgAgent = await makeAgent({
@@ -262,11 +263,11 @@ describe("AgentTeamModel", () => {
         scope: "org",
       });
 
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        user.id,
-        orgAgent.id,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: user.id,
+        agentId: orgAgent.id,
+        isAgentAdmin: false,
+      });
 
       expect(hasAccess).toBe(true);
     });
@@ -277,7 +278,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({
@@ -287,11 +288,11 @@ describe("AgentTeamModel", () => {
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
       // User is NOT a member of the team
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        user.id,
-        agent.id,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: user.id,
+        agentId: agent.id,
+        isAgentAdmin: false,
+      });
 
       expect(hasAccess).toBe(false);
     });
@@ -302,28 +303,28 @@ describe("AgentTeamModel", () => {
       const author = await makeUser();
       const otherUser = await makeUser();
 
-      const authorHasAccess = await AgentTeamModel.userHasAgentAccess(
-        author.id,
-        crypto.randomUUID(),
-        false,
-        {
+      const authorHasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: author.id,
+        agentId: crypto.randomUUID(),
+        isAgentAdmin: false,
+        agentAccessContext: {
           id: crypto.randomUUID(),
           organizationId: crypto.randomUUID(),
           scope: "personal",
           authorId: author.id,
         },
-      );
-      const otherUserHasAccess = await AgentTeamModel.userHasAgentAccess(
-        otherUser.id,
-        crypto.randomUUID(),
-        false,
-        {
+      });
+      const otherUserHasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: otherUser.id,
+        agentId: crypto.randomUUID(),
+        isAgentAdmin: false,
+        agentAccessContext: {
           id: crypto.randomUUID(),
           organizationId: crypto.randomUUID(),
           scope: "personal",
           authorId: author.id,
         },
-      );
+      });
 
       expect(authorHasAccess).toBe(true);
       expect(otherUserHasAccess).toBe(false);
@@ -334,17 +335,17 @@ describe("AgentTeamModel", () => {
     }) => {
       const user = await makeUser();
 
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        user.id,
-        crypto.randomUUID(),
-        false,
-        {
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: user.id,
+        agentId: crypto.randomUUID(),
+        isAgentAdmin: false,
+        agentAccessContext: {
           id: crypto.randomUUID(),
           organizationId: crypto.randomUUID(),
           scope: "org",
           authorId: null,
         },
-      );
+      });
 
       expect(hasAccess).toBe(true);
     });
@@ -357,7 +358,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({
@@ -377,7 +378,7 @@ describe("AgentTeamModel", () => {
       makeAgent,
       makeOrganization,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const agent = await makeAgent({
         organizationId: org.id,
         scope: "org",
@@ -394,7 +395,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({
@@ -417,7 +418,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({
@@ -437,7 +438,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const assignedTeam = await makeTeam(org.id, user.id);
       const otherTeam = await makeTeam(org.id, user.id);
@@ -460,7 +461,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
 
@@ -484,7 +485,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({
@@ -515,7 +516,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id);
       const team2 = await makeTeam(org.id, user.id);
@@ -540,7 +541,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id);
       const team2 = await makeTeam(org.id, user.id);
@@ -563,7 +564,7 @@ describe("AgentTeamModel", () => {
       makeOrganization,
       makeUser,
     }) => {
-      const org = await makeOrganization();
+      const org = await makeOrganization({ legacyPermissions: true });
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id);
       const agent = await makeAgent();

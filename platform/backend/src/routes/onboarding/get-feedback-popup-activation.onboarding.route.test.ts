@@ -11,6 +11,7 @@ describe("GET /api/onboarding/feedback-popup-activation", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
+    config.enterpriseFeatures.core = false;
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();

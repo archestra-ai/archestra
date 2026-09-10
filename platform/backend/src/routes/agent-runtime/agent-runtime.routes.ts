@@ -40,6 +40,7 @@ import {
 } from "@/services/agent-runtime/start-task";
 import { accessAgentWorkspaceFile } from "@/services/agent-runtime/workspace-files";
 import { deleteAgentWorkspace } from "@/services/agent-runtime/workspace-lifecycle";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
   type AgentRunSession,
@@ -370,6 +371,17 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agent, runtime } = await requireReadableAgentRuntime(request);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "agent",
+        scope: agent.id,
+        action: "use",
+      });
+      // SPDX-SnippetEnd
       if (request.body.projectId) {
         await requireReadableProject({
           projectId: request.body.projectId,
@@ -560,6 +572,17 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const run = await requireOwnedRun(request);
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "agent",
+        scope: run.agentId,
+        action: "use",
+      });
+      // SPDX-SnippetEnd
       const workspace = await AgentWorkspaceModel.findByWorkloadName(
         run.workloadName,
       );
@@ -1012,7 +1035,7 @@ async function requireReadableAgent(request: AgentRequest): Promise<Agent> {
     organizationId: request.organizationId,
   });
   try {
-    checker.require("agent", "read");
+    checker.require("agent", { action: "read", scope: candidate.id });
   } catch {
     throw new ApiError(404, "Agent not found");
   }
@@ -1035,11 +1058,13 @@ async function requireWritableAgent(params: {
     userId: params.request.user.id,
     organizationId: params.request.organizationId,
   });
-  checker.require("agent", "update");
+  checker.require("agent", { action: "update", scope: params.agent.id });
   const userTeamIds = checker.isAdmin("agent")
     ? []
     : await TeamModel.getUserTeamIds(params.request.user.id);
   requireAgentModifyPermission({
+    agentId: params.agent.id,
+    action: "update",
     checker,
     agentType: "agent",
     agentScope: params.agent.scope,

@@ -131,12 +131,16 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
     expect(response.json().error.message).toBe("Catalog item not found");
   });
 
-  test("DELETE lets a non-admin author remove their own personal item", async ({
+  test("DELETE lets an author with delete permission remove their own personal item", async ({
     makeUser,
     makeMember,
+    makeCustomRole,
   }) => {
     const member = await makeUser();
-    await makeMember(member.id, organizationId, { role: "member" });
+    const role = await makeCustomRole(organizationId, {
+      permission: { mcpRegistry: ["read", "delete"] },
+    });
+    await makeMember(member.id, organizationId, { role: role.role });
     const personal = await InternalMcpCatalogModel.create(
       {
         name: "members-personal-server",
@@ -187,7 +191,7 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.message).toBe(
-      "You can only delete your own personal catalog items",
+      "You do not have permission to perform this action on this resource",
     );
     await expect(
       InternalMcpCatalogModel.findById(orgItem.id),
@@ -240,7 +244,7 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
     });
     expect(del.statusCode).toBe(403);
     expect(del.json().error.message).toBe(
-      "You can only delete your own personal catalog items",
+      "You do not have permission to perform this action on this resource",
     );
     await expect(
       InternalMcpCatalogModel.findById(teamItem.id),
@@ -273,7 +277,7 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.message).toBe(
-      "You can only delete your own personal catalog items",
+      "You do not have permission to perform this action on this resource",
     );
   });
 });

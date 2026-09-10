@@ -28,7 +28,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { WizardStep } from "@/components/wizard-step";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
 import {
   useCreateConnectionPassthroughKey,
   useCreateConnectionVirtualKey,
@@ -131,7 +134,15 @@ export function ConnectConfigPanel({
       (llmProxyId !== null &&
         profileAvailability.canCreateVirtualKey === true &&
         profileAvailability.anthropicHasKey));
-  const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
+  const { data: skillGrants } = useScopedCapabilities();
+  const canAdminSkills = ["read", "use", "manage-permissions"].every((action) =>
+    skillGrants?.some(
+      (grant) =>
+        grant.resource === "skill" &&
+        grant.scope === "*" &&
+        grant.action === action,
+    ),
+  );
   const {
     data: allSkills,
     isError: skillsLoadError,

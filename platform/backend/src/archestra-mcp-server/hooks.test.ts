@@ -3,7 +3,8 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
-import { HookFileModel } from "@/models";
+import { HookFileModel, MemberModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -22,6 +23,7 @@ describe("hook tool execution", () => {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     testAgent = await makeAgent({
+      agentType: "agent",
       name: "Test Agent",
       organizationId: org.id,
     });
@@ -44,6 +46,70 @@ describe("hook tool execution", () => {
       },
       mockContext,
     );
+
+  test("a scoped hook editor cannot mutate another agent's hooks or retain writes after revocation", async ({
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    if (!mockContext.userId) throw new Error("Missing test actor");
+    await MemberModel.updateRole(mockContext.userId, organizationId, role.role);
+    const key = {
+      organizationId,
+      resource: "agent" as const,
+      scope: testAgent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "user", id: mockContext.userId },
+          actions: ["read", "update"],
+        },
+      ],
+    });
+    const own = await createHook();
+    expect(own.isError).toBe(false);
+    const other = await makeAgent({ organizationId, agentType: "agent" });
+    const foreignHook = await HookFileModel.create({
+      organizationId,
+      agentId: other.id,
+      event: "pre_tool_use",
+      fileName: "other.py",
+      requirements: [],
+      content: "print('original')",
+    });
+    for (const shortName of ["update_hook", "delete_hook"]) {
+      const result = await executeArchestraTool(
+        toolName(shortName),
+        {
+          id: foreignHook.id,
+          ...(shortName === "update_hook"
+            ? { content: "print('changed')" }
+            : {}),
+        },
+        mockContext,
+      );
+      expect(result.isError).toBe(true);
+    }
+    expect(
+      (await HookFileModel.findById(foreignHook.id, organizationId))?.content,
+    ).toBe("print('original')");
+    const current = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: current?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "user", id: mockContext.userId },
+          actions: ["read"],
+        },
+      ],
+    });
+    expect((await createHook({ file_name: "revoked.py" })).isError).toBe(true);
+  });
 
   // === create_hook ===
 

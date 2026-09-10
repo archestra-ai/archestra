@@ -1541,7 +1541,7 @@ describe("agent routes", () => {
       expect(result.data[0].name).toContain("Zulu Personal");
     });
 
-    test("excludeOtherPersonalAgents hides other users' personal agents for admin", async ({
+    test("legacy personal filters do not hide resources covered by wildcard read grants", async ({
       makeAgent,
       makeUser,
       makeMember,
@@ -1578,7 +1578,7 @@ describe("agent routes", () => {
       const names = response.json().data.map((a: { name: string }) => a.name);
       expect(names).toContain(`Own Personal ${suffix}`);
       expect(names).toContain(`Org Agent ${suffix}`);
-      expect(names).not.toContain(`Other Personal ${suffix}`);
+      expect(names).toContain(`Other Personal ${suffix}`);
     });
 
     test("hides the default knowledge query tool when an agent has no knowledge sources", async ({

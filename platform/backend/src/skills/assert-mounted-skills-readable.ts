@@ -1,5 +1,7 @@
+import { hasScopedPermission } from "@archestra/shared";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { SkillModel, SkillSandboxModel, SkillTeamModel } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 
 /** Stable reason code for the revocation gate (for logs/metrics, never prose). */
 type MountReadabilityFailureCode =
@@ -35,7 +37,17 @@ export async function assertMountedSkillsReadable(params: {
     userId: params.userId,
     organizationId: params.organizationId,
   });
-  if (!checker.canRead) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const explicit = await ResourcePermissions.resolveAll(params);
+  // SPDX-SnippetEnd
+  if (
+    !checker.canRead &&
+    !explicit.some(
+      (grant) => grant.resource === "skill" && grant.action === "use",
+    )
+  ) {
     return {
       ok: false,
       code: "skill_read_revoked",
@@ -54,12 +66,25 @@ export async function assertMountedSkillsReadable(params: {
           "a skill mounted in this sandbox no longer exists; start a fresh sandbox to continue",
       };
     }
-    const hasAccess = await SkillTeamModel.userHasSkillAccess({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      skill,
-      isSkillAdmin: checker.isAdmin,
+    const hasExplicitUse = hasScopedPermission({
+      grants: explicit,
+      required: {
+        organizationId: params.organizationId,
+        resource: "skill",
+        scope: skillId,
+        action: "use",
+      },
     });
+    const hasAccess =
+      hasExplicitUse ||
+      (checker.canRead &&
+        (await SkillTeamModel.userHasSkillAccess({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          skill,
+          isSkillAdmin: checker.isAdmin,
+          action: "use",
+        })));
     if (!hasAccess) {
       return {
         ok: false,

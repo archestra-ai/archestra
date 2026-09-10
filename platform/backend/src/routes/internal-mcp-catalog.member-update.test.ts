@@ -83,8 +83,11 @@ describe("member catalog update is limited to own personal items", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("member CANNOT update an org-scoped catalog item", async () => {
-    const catalog = await makeRemoteCatalog("org", member.id);
+  test("member cannot update another creator’s organization-shared catalog item", async ({
+    makeUser,
+  }) => {
+    const author = await makeUser();
+    const catalog = await makeRemoteCatalog("org", author.id);
     const response = await app.inject({
       method: "PUT",
       url: `/api/internal_mcp_catalog/${catalog.id}`,

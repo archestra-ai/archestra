@@ -52,8 +52,9 @@ import {
   redactAppBuiltinAuditResult,
 } from "@/services/apps/app-tool-runtime-gate";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type { CommonToolCall } from "@/types";
-import { appOwner } from "@/types";
+import { ApiError, appOwner } from "@/types";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway/protocol";
@@ -238,6 +239,20 @@ export async function buildAppUiResource(
   uri: string,
   tokenAuth: TokenAuthContext,
 ): Promise<{ contents: ReadResourceResult["contents"] }> {
+  if (!tokenAuth.userId || !tokenAuth.organizationId) {
+    throw new ApiError(403, "App execution requires an authenticated viewer");
+  }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.require({
+    organizationId: tokenAuth.organizationId,
+    userId: tokenAuth.userId,
+    resource: "app",
+    scope: appId,
+    action: "use",
+  });
+  // SPDX-SnippetEnd
   const current = await AppModel.findById(appId);
   const head = current
     ? await AppVersionModel.findByAppAndVersion(appId, current.latestVersion)

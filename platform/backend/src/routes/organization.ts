@@ -48,6 +48,7 @@ import {
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { removeMemberTarget } from "@/services/member-removal";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -1469,6 +1470,15 @@ async function assertCallerCanGrantRole(params: {
   userId: string;
   organizationId: string;
 }) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.validateSubjectAssignment({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    subjects: [{ type: "role", id: params.role.id }],
+  });
+  // SPDX-SnippetEnd
   const callerPermissions = await getPermissionsForUserContext({
     userId: params.userId,
     organizationId: params.organizationId,

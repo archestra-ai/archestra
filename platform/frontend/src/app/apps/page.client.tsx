@@ -4,7 +4,6 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { AppWindow, Plus, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -22,13 +21,9 @@ import {
 } from "@/components/label-select";
 import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
-import { AppTeamAccessWarning } from "@/components/mcp-app/app-team-access-warning";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
-import {
-  ResourceScopeFilter,
-  useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCardGrid,
@@ -51,7 +46,6 @@ import {
   useAppLabelValues,
   useApps,
   useBulkDeleteApps,
-  useBulkUpdateAppVisibility,
 } from "@/lib/app.query";
 import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
 import {
@@ -220,12 +214,7 @@ export default function AppsPage() {
                 <SelectItem value="external">MCP Server Apps</SelectItem>
               </SelectContent>
             </Select>
-            <ResourceScopeFilter
-              ownerLabelPlural="apps"
-              allLabel="All apps"
-              adminPermission={{ app: ["admin"] }}
-              showTeamSelect={false}
-            />
+
             <LabelSelect
               labelKeys={labelKeys}
               LabelKeyRowComponent={AppLabelKeyRow}
@@ -340,9 +329,7 @@ export function AppSection({
   onOpenSettings: (app: { id: string }) => void;
 }) {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const bulkDelete = useBulkDeleteApps();
-  const bulkVisibility = useBulkUpdateAppVisibility();
   const accessContext = useAppAccessContext();
   const canSelect = useCallback(
     (app: AppListItem) =>
@@ -394,14 +381,6 @@ export function AppSection({
         busy={bulkDelete.isPending}
         selectAllMatching={selectAllMatching}
       >
-        <PermissionButton
-          permissions={{ app: ["update"] }}
-          variant="outline"
-          size="sm"
-          onClick={() => setBulkVisibilityOpen(true)}
-        >
-          <span>Edit visibility</span>
-        </PermissionButton>
         <PermissionButton
           permissions={{ app: ["delete"] }}
           variant="destructive"
@@ -467,49 +446,6 @@ export function AppSection({
           }}
           confirmLabel="Delete apps"
           pendingLabel="Deleting..."
-        />
-      )}
-
-      {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          open={bulkVisibilityOpen}
-          onOpenChange={setBulkVisibilityOpen}
-          noun="app"
-          isPending={bulkVisibility.isPending}
-          items={selectedOwnedApps.map((app) => ({
-            id: app.id,
-            scope: app.scope,
-            teams: app.teams,
-            users: app.users,
-          }))}
-          renderTeamSelectionNotice={(teamIds) => (
-            <AppTeamAccessWarning
-              scope="team"
-              selectedTeamIds={teamIds}
-              isAppAdmin={accessContext.isAdmin}
-              userTeamIds={accessContext.userTeamIds}
-              subject={
-                selectedOwnedApps.length === 1 ? "this app" : "these apps"
-              }
-            />
-          )}
-          onApply={async (change) => {
-            const outcome = await bulkVisibility.mutateAsync({
-              apps: selectedApps,
-              scope: change.scope,
-              teamIds: change.teamIds,
-              userIds: change.userIds,
-            });
-            reportBulkOutcome({
-              outcome,
-              verb: "Updated",
-              failureVerb: "update",
-              noun: "app",
-            });
-            if (outcome.succeeded.length === 0) return false;
-            if (outcome.failed.length === 0) clearSelection();
-            return true;
-          }}
         />
       )}
     </section>

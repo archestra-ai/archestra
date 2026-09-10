@@ -21,7 +21,6 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import { LabelTags } from "@/components/label-tags";
 import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-history-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ScopeBadge } from "@/components/scope-badge";
 import { useNavigableCard } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -122,7 +121,7 @@ function CardSelectionCheckbox({
   );
 }
 
-// Shared card chrome: the scope pill / owner badge / overflow menu cluster that
+// Shared card chrome: the owner badge / overflow menu cluster that
 // sits at the right of the card's header row (mirroring the project card).
 function CardOverflowMenu({
   leading,
@@ -290,7 +289,7 @@ function OwnedAppCard({
         {isOpening ? <CardOpeningOverlay /> : null}
 
         {/* Header row mirrors the project card: icon + title on one line at the
-            left, the scope pill / owner badge / overflow menu at the right. */}
+            left, the owner badge / overflow menu at the right. */}
         <div className="mb-1 flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-start gap-3">
             {selection ? (
@@ -321,18 +320,14 @@ function OwnedAppCard({
             leading={
               <>
                 <LabelTags labels={app.labels} />
-                <ScopeBadge
-                  scope={app.scope}
-                  teamNames={app.teams?.map((team) => team.name)}
-                  userNames={app.users?.map((user) => user.name)}
-                />
+
                 {/* A disabled app is author-only, so this badge only ever
                     shows on the author's own card. */}
                 {!app.enabled ? (
                   <Badge variant="outline">Disabled</Badge>
                 ) : null}
                 {app.locked ? <Badge variant="outline">Locked</Badge> : null}
-                {/* Between the scope pill and the overflow menu, exactly as the
+                {/* Beside the overflow menu, exactly as the
                     project card places its owner badge. */}
                 {isForeignPersonalApp ? (
                   <Badge variant="secondary">
@@ -482,7 +477,7 @@ function ExternalAppCard({
       {isOpening ? <CardOpeningOverlay /> : null}
 
       {/* Header row mirrors the project card: icon + title on one line at the
-          left, the scope pill / overflow menu at the right. */}
+          left, the overflow menu at the right. */}
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-3">
           {showDisabledSelection ? (
@@ -499,14 +494,7 @@ function ExternalAppCard({
             <CardTitle className="truncate leading-snug">{app.name}</CardTitle>
           </button>
         </div>
-        <CardOverflowMenu
-          leading={
-            <>
-              <LabelTags labels={app.labels} />
-              <ScopeBadge scope={app.scope} />
-            </>
-          }
-        >
+        <CardOverflowMenu leading={<LabelTags labels={app.labels} />}>
           <PinMenuItem
             pinned={!!app.pinnedAt}
             target={{

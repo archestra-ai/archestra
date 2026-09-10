@@ -53,6 +53,12 @@ export function transformFormToApiData(
   values: McpCatalogFormValues,
 ): McpCatalogApiData {
   const data: McpCatalogApiData = {
+    ...(values.initialGrants !== undefined && {
+      initialGrants: values.initialGrants.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
+    }),
     name: values.name,
     description: values.description || null,
     serverType: values.serverType,
@@ -266,16 +272,6 @@ export function transformFormToApiData(
     data.labels = values.labels;
   } else {
     data.labels = [];
-  }
-
-  // Handle scope
-  if (values.scope) {
-    data.scope = values.scope;
-  }
-
-  // Handle teams for team scope
-  if (values.scope === "team" && values.teams) {
-    data.teams = values.teams;
   }
 
   // Deployment environment assignment (null = the default environment)

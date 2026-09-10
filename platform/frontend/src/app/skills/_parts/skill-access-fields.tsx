@@ -6,30 +6,30 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { EnvironmentMultiSelector } from "@/components/environment-multi-selector";
+import { InitialResourcePermissions } from "@/components/initial-resource-permissions";
 import type { SkillDraft } from "./skill-draft";
-import { SkillScopeSelector } from "./skill-scope-selector";
 
 /**
- * The access half of a skill: who can see it (scope, teams, people) and which
+ * The access half of a skill: initial grants and which
  * environments' agents may use it. Controlled by the caller's draft.
  */
 export const SkillAccessFields = forwardRef<
   ProfileLabelsRef,
   {
     draft: SkillDraft;
+    creating?: boolean;
     onChange: (patch: Partial<SkillDraft>) => void;
   }
->(function SkillAccessFields({ draft, onChange }, ref) {
+>(function SkillAccessFields({ draft, onChange, creating = false }, ref) {
   return (
     <div className="flex flex-col gap-4">
-      <SkillScopeSelector
-        scope={draft.scope}
-        onScopeChange={(scope) => onChange({ scope })}
-        teamIds={draft.teamIds}
-        onTeamIdsChange={(teamIds) => onChange({ teamIds })}
-        userIds={draft.userIds}
-        onUserIdsChange={(userIds) => onChange({ userIds })}
-      />
+      {creating && (
+        <InitialResourcePermissions
+          resource="skill"
+          grants={draft.initialGrants ?? []}
+          onChange={(initialGrants) => onChange({ initialGrants })}
+        />
+      )}
       <EnvironmentMultiSelector
         value={draft.environmentIds}
         onChange={(environmentIds) => onChange({ environmentIds })}

@@ -322,7 +322,7 @@ describe("MCP backing for apps", () => {
     await catalogApp.close();
   });
 
-  test("editing an app catalog's scope propagates to the app and backing server", async () => {
+  test("retired catalog sharing edits leave the app and backing server unchanged", async () => {
     const appId = await createApp("personal");
     const created = mustExist(await AppModel.findById(appId));
     const server = mustExist(
@@ -345,15 +345,15 @@ describe("MCP backing for apps", () => {
       url: `/api/internal_mcp_catalog/${catalogId}`,
       payload: { serverType: "app", scope: "org" },
     });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(400);
 
-    expect((await McpServerModel.findById(server.id))?.scope).toBe("org");
-    expect((await AppModel.findById(appId))?.scope).toBe("org");
+    expect((await McpServerModel.findById(server.id))?.scope).toBe("personal");
+    expect((await AppModel.findById(appId))?.scope).toBe("personal");
 
     await catalogApp.close();
   });
 
-  test("editing an app via REST PATCH propagates name + scope to the backing catalog", async () => {
+  test("editing an app via REST PATCH propagates its name to the backing catalog", async () => {
     const appId = await createApp("personal");
     const created = mustExist(await AppModel.findById(appId));
     const mcpServerId = mustExist(created.mcpServerId);
@@ -365,15 +365,15 @@ describe("MCP backing for apps", () => {
     const res = await app.inject({
       method: "PATCH",
       url: `/api/apps/${appId}`,
-      payload: { name: "Renamed Dashboard", scope: "org" },
+      payload: { name: "Renamed Dashboard" },
     });
     expect(res.statusCode).toBe(200);
 
     const catalog = await InternalMcpCatalogModel.findById(catalogId);
     expect(catalog?.name).toBe("Renamed Dashboard");
-    expect(catalog?.scope).toBe("org");
+    expect(catalog?.scope).toBe("personal");
     const renamedServer = await McpServerModel.findById(mcpServerId);
-    expect(renamedServer?.scope).toBe("org");
+    expect(renamedServer?.scope).toBe("personal");
     expect(renamedServer?.name).toBe("Renamed Dashboard");
     // The launch tool name is id-suffixed (stable + globally unique), so a
     // rename does NOT re-slugify it — that can't reintroduce a dedupe collision.

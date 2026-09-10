@@ -15,7 +15,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { useSession } from "@/lib/auth/auth.query";
+import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
 import { ChannelsSection } from "./channels-section";
 import type { ProviderConfig } from "./types";
 
@@ -49,6 +49,18 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: [
+      { organizationId: "org-1", resource: "agent", scope: "*", action: "use" },
+      {
+        organizationId: "org-1",
+        resource: "agent",
+        scope: "22222222-2222-4222-8222-222222222222",
+        action: "manage-permissions",
+      },
+    ],
+    isPending: false,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -241,7 +253,7 @@ describe("channels table - assignments", () => {
     expect(bulkRequests).toEqual([]);
   });
 
-  it("shows personal agents as disabled options for channels", async () => {
+  it("requires permission management to assign an agent to a channel", async () => {
     const user = userEvent.setup();
     renderTable();
 
@@ -255,7 +267,7 @@ describe("channels table - assignments", () => {
     });
     expect(personalOption).toHaveAttribute("data-disabled", "true");
     expect(personalOption).toHaveTextContent(
-      "Personal agents can only receive direct messages.",
+      "Requires permission to manage this agent’s permissions.",
     );
   });
 
@@ -353,7 +365,7 @@ describe("channels table - assignments", () => {
     });
     expect(personalOption).toHaveAttribute("data-disabled", "true");
     expect(personalOption).toHaveTextContent(
-      "Personal agents can only be assigned to your own direct messages.",
+      "Requires permission to manage this agent’s permissions.",
     );
   });
 });

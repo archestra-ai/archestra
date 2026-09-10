@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-09-03
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Filter the list by visibility — personal, team, or organization — or by source repository. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
+Skills live under **Studio** in the sidebar. The page lists skills you can read, with their source repository, file count, and use count. Filter by source repository. [Permission grants](/docs/platform-access-control#resource-permission-grants) control who can read, use, edit, delete, and share each skill. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
 
 Click a skill's use count (or its chart action) to open usage analytics. It shows the last 30 days of activations as a daily chart, broken down by who ran the skill.
 
@@ -88,13 +88,13 @@ For anything bigger than a small repo, narrow the scan with the `path` field and
 
 Every directory with a `SKILL.md` shows up in the result; pick which ones to import — it is not all-or-nothing. Importing many skills at once, or skills with many resource files, can take a while: each file is fetched sequentially.
 
-The visibility **scope** chosen in the dialog applies to every skill in the batch; it defaults to **personal**, so an import is never silently published org-wide.
+The permissions chosen during import apply to every skill in the batch. You receive full access. Existing resource-wide grants also apply.
 
 Each import records the source (`owner/repo@ref:path`) and the resolved commit SHA, so you can later filter the catalog by repo and see exactly which revision landed.
 
 ### Sync
 
-Every import stays synced with the repository. **Keep in sync** in the dialog picks the schedule for the batch — every 15 minutes, every hour, or once a day (the default). Synced skills carry a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Visibility scope, teams, and environments stay editable. A failed pull keeps the last good content and shows the error in the editor.
+Every import stays synced with the repository. **Keep in sync** in the dialog picks the schedule for the batch — every 15 minutes, every hour, or once a day (the default). Synced skills carry a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Permissions and environments stay editable. A failed pull keeps the last good content and shows the error in the editor.
 
 **Stop syncing** in the skill editor breaks the link: the skill keeps its current content, becomes editable, and stops updating. **Sync now** pulls immediately instead of waiting for the schedule.
 
@@ -131,19 +131,13 @@ Plugin Skills are read-only and remain managed by their source plugin. Archestra
 
 `list_skills` keeps each source Skill's name when it is unique. Name collisions add `-from-mcp` or `-from-plugin`; pass the returned name to `load_skill`.
 
-## Permissions and scope
+## Permissions
 
-Skills are a first-class RBAC resource — the `skill` resource, with `read`, `create`, `update`, `delete`, `team-admin`, and `admin` actions. They are not tied to the `agent` resource: a role can be granted skill access without agent access, and vice versa.
+Skills use [resource permission grants](/docs/platform-access-control#resource-permission-grants). Read access supports discovery. Use access permits loading or activating a skill. Update, delete, and managing permissions are separate actions.
 
-Every skill carries a visibility **scope**, set in the skill editor or the GitHub import dialog, exactly like agents:
+You can grant access to users, teams, service accounts, roles, or everyone. Creating a skill requires `skill:create`. Creators receive full access to the new skill. Existing resource-wide grants also apply.
 
-- **Personal** — only the author can see, use, or manage the skill.
-- **Team** — members of the assigned teams can see and use it; `skill:team-admin` (in one of those teams) or `skill:admin` can manage it.
-- **Organization** — everyone in the org can see and use it; only `skill:admin` can manage it.
-
-`skill:read` governs *using* a skill — listing it, loading it, or invoking its slash command in chat. A user only ever sees skills inside their scope (org-wide skills, their own personal skills, and skills in their teams); `list_skills`, `load_skill`, and the `/skill-name` slash commands are all filtered the same way. `skill:admin` bypasses scope and sees every skill.
-
-Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skill requires `skill:team-admin` and membership in the teams it is assigned to. By default the predefined roles grant: **admin** — full control; **editor** — create/update/delete plus team sharing; **member** — create and manage their own personal skills, and read everything in scope.
+Automatic gateway publication includes skills with organization-wide use access. Manual publication requires permission to manage the skill’s access, or organization-wide use access. Published skills are available to everyone using that gateway. Removing an assignment stops manual publication.
 
 ## Deleting and Restoring Skills
 
@@ -173,7 +167,7 @@ A version pulled from GitHub links out to that skill's directory at the commit i
 
 A restore replaces the skill's instructions and its resource files. Files the skill has today that the restored version lacks are removed — the confirmation tells you how many. A later restore brings them back.
 
-Nothing else changes. The name, description, and other frontmatter fields are not versioned. Neither are scope, teams, or environments, so a restore will not undo a rename.
+Nothing else changes. The name, description, and other frontmatter fields are not versioned. Neither are permissions or environments, so a restore will not undo a rename.
 
 A GitHub-synced skill cannot be restored, since its content comes from the repository. Stop the sync in the skill editor to make the skill editable again.
 
@@ -185,7 +179,7 @@ The skill editor anchors each save to the version it loaded. If someone changes 
 
 `PUT /api/skills/:id` takes `baseVersion` — the skill's `latestVersion` when you composed the edit. The request fails with 409 if the skill has moved past it. Omit `baseVersion` and the save is not guarded. The `edit_skill` tool takes the same field.
 
-Only content is versioned. A change to the name, scope, teams, or environments is not caught.
+Only content is versioned. A change to the name, permissions, or environments is not caught.
 
 ## Environments
 

@@ -110,7 +110,7 @@ describe("PluginsPage", () => {
   it("groups related facts into a compact table", async () => {
     render(<PluginsPage />);
 
-    for (const name of ["Plugin", "Details", "Visibility", "Actions"]) {
+    for (const name of ["Plugin", "Details", "Actions"]) {
       expect(screen.getByRole("columnheader", { name })).toBeInTheDocument();
     }
     for (const removed of [

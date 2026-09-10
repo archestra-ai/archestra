@@ -226,8 +226,6 @@ async function resolveCredential(
 async function resolveAccessibleSkillIds(
   viewer: MarketplaceViewer,
 ): Promise<string[] | undefined> {
-  if (viewer.isSkillAdmin) return undefined;
-
   return SkillTeamModel.getUserAccessibleSkillIds({
     organizationId: viewer.organizationId,
     userId: viewer.userId ?? undefined,

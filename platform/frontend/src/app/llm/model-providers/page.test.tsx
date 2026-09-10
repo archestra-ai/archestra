@@ -268,7 +268,7 @@ vi.mock("@/components/ui/select", () => ({
 vi.mock("@/lib/entity-labels.query");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import ApiKeysPage from "./page";
@@ -594,52 +594,6 @@ describe("ApiKeysPage", () => {
     await waitFor(() => {
       expect(formProps.form.getValues("authMethod")).toBe("subscription");
     });
-  });
-
-  it("names who each scoped credential is accessible to", () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: true,
-      isPending: false,
-    } as unknown as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "user-me" } },
-    } as ReturnType<typeof useSession>);
-    mockUseLlmProviderApiKeys.mockReturnValue({
-      data: [
-        {
-          id: "k1",
-          name: "My key",
-          provider: "anthropic",
-          scope: "personal",
-          userId: "user-me",
-          userName: "My Name",
-        },
-        {
-          id: "k2",
-          name: "Colleague key",
-          provider: "anthropic",
-          scope: "personal",
-          userId: "user-other",
-          userName: "Dana",
-        },
-        {
-          id: "k3",
-          name: "Shared key",
-          provider: "anthropic",
-          scope: "org",
-          userId: null,
-        },
-      ],
-      isPending: false,
-    });
-
-    render(<ApiKeysPage />);
-
-    // The owner is the point: the backend already joins userName, and before
-    // this column showed only a generic scope word for every personal key.
-    expect(screen.getAllByText("Me")).toHaveLength(1);
-    expect(screen.getByText("Dana")).toBeInTheDocument();
-    expect(screen.getByText("Organization")).toBeInTheDocument();
   });
 
   it("points both 'View all' links at the credentials of the key being deleted", async () => {

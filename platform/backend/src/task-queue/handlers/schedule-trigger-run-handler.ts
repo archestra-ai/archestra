@@ -82,11 +82,12 @@ export async function handleScheduleTriggerRunExecution(
       organizationId: trigger.organizationId,
     });
 
-    const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
-      actor.id,
-      trigger.agentId,
-      userIsAgentAdmin,
-    );
+    const hasAgentAccess = await AgentTeamModel.userHasAgentAccess({
+      userId: actor.id,
+      agentId: trigger.agentId,
+      isAgentAdmin: userIsAgentAdmin,
+      action: "use",
+    });
     if (!hasAgentAccess) {
       throw new Error(
         "Scheduled trigger actor no longer has access to the target agent",

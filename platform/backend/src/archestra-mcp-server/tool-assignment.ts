@@ -295,8 +295,13 @@ async function handleBulkAssignTool(params: {
             `${bulkAssignType === "agent" ? "Agent" : "MCP gateway"} ${targetId} is in a different environment; you can only assign tools within your own environment.`,
           );
         }
-        checker.require(target.agentType, "update");
+        checker.require(target.agentType, {
+          action: "update",
+          scope: targetId,
+        });
         requireAgentModifyPermission({
+          agentId: targetId,
+          action: "update",
           checker,
           agentType: target.agentType,
           agentScope: target.scope,
@@ -420,8 +425,13 @@ async function handleBulkRemoveTool(params: {
             `Agent ${removal.agentId} is in a different environment; you can only remove tools within your own environment.`,
           );
         }
-        checker.require(target.agentType, "update");
+        checker.require(target.agentType, {
+          action: "update",
+          scope: removal.agentId,
+        });
         requireAgentModifyPermission({
+          agentId: removal.agentId,
+          action: "update",
           checker,
           agentType: target.agentType,
           agentScope: target.scope,

@@ -26,34 +26,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
-  skill: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
+  agent: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  skill: ["read", "create", "update", "delete", "deploy-to-restricted"],
   plugin: ["read", "create", "update", "delete", "admin"],
-  app: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
+  app: ["read", "create", "update", "delete", "deploy-to-restricted"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
@@ -74,15 +50,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
+  mcpGateway: ["read", "create", "update", "delete", "deploy-to-restricted"],
   mcpOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: [
@@ -91,7 +59,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "update",
     "delete",
     "manage-deleted",
-    "team-admin",
     "deploy-to-restricted",
   ],
   mcpServerInstallation: [
@@ -163,31 +130,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
-  agent: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
-  skill: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  agent: ["read", "create", "update", "delete", "deploy-to-restricted"],
+  skill: ["read", "create", "update", "delete", "deploy-to-restricted"],
   plugin: ["read", "create", "update", "delete"],
-  app: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  app: ["read", "create", "update", "delete", "deploy-to-restricted"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -202,24 +148,10 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  mcpGateway: ["read", "create", "update", "delete", "deploy-to-restricted"],
   mcpOauthClient: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  mcpRegistry: ["read", "create", "update", "delete", "deploy-to-restricted"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
@@ -431,19 +363,12 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:create": "Create new agents",
   "agent:update": "Modify agent configuration and settings",
   "agent:delete": "Delete agents",
-  "agent:team-admin": "Manage team assignments for agents",
-  "agent:admin":
-    "Full administrative control over all agents, bypassing team restrictions",
   "agent:deploy-to-restricted":
     "Assign agents to restricted deployment environments",
-  "skill:read":
-    "View and use agent skills within your scope (org, your teams, your own)",
+  "skill:read": "View agent skills allowed by your resource grants",
   "skill:create": "Create new agent skills",
-  "skill:update": "Modify agent skills and their team assignments",
+  "skill:update": "Modify agent skill content allowed by your resource grants",
   "skill:delete": "Delete agent skills",
-  "skill:team-admin": "Manage team assignments for agent skills",
-  "skill:admin":
-    "Full administrative control over all agent skills, bypassing team restrictions",
   "skill:deploy-to-restricted":
     "Assign agent skills to restricted deployment environments",
   "plugin:read": "View plugins and their file metadata",
@@ -451,16 +376,11 @@ export const permissionDescriptions: Record<string, string> = {
   "plugin:update": "Modify plugin metadata and files",
   "plugin:delete": "Delete plugins",
   "plugin:admin": "Publish executable plugins through connection marketplaces",
-  "app:read":
-    "View and run MCP Apps within your scope (org, your teams, your own)",
+  "app:read": "View MCP Apps allowed by your resource grants",
   "app:create": "Create new MCP Apps",
   "app:update":
-    "Modify MCP Apps and their tools within your scope (your own apps; team apps with app:team-admin; org apps with app:admin)",
+    "Modify MCP Apps and their tools allowed by your resource grants",
   "app:delete": "Delete MCP Apps",
-  "app:team-admin":
-    "Manage team-scoped MCP Apps, including their team assignments, in teams you belong to",
-  "app:admin":
-    "Full administrative control over all MCP Apps, bypassing team restrictions",
   "app:deploy-to-restricted":
     "Assign MCP Apps to restricted deployment environments",
   "sandbox:execute":
@@ -482,7 +402,6 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpGateway:create": "Create new MCP gateways",
   "mcpGateway:update": "Modify MCP gateway configuration",
   "mcpGateway:delete": "Delete MCP gateways",
-  "mcpGateway:team-admin": "Manage team assignments for MCP gateways",
   "mcpOauthClient:read": "View MCP OAuth client registrations",
   "mcpOauthClient:create": "Create MCP OAuth client registrations",
   "mcpOauthClient:update": "Modify MCP OAuth client registrations",
@@ -491,8 +410,6 @@ export const permissionDescriptions: Record<string, string> = {
     "Manage team assignments for MCP OAuth client registrations",
   "mcpOauthClient:admin":
     "Manage all MCP OAuth client registrations, bypassing team restrictions",
-  "mcpGateway:admin":
-    "Full administrative control over all MCP gateways, bypassing team restrictions",
   "mcpGateway:deploy-to-restricted":
     "Assign MCP gateways to restricted deployment environments",
   "toolPolicy:read":
@@ -507,7 +424,6 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:delete": "Remove servers from the MCP registry",
   "mcpRegistry:manage-deleted":
     "View and restore soft-deleted MCP registry entries",
-  "mcpRegistry:team-admin": "Manage team assignments for MCP registry entries",
   "mcpRegistry:deploy-to-restricted":
     "Deploy MCP servers (catalog items) to restricted environments",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
@@ -683,36 +599,36 @@ export const requiredEndpointPermissionsMap: Partial<
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes
   // additionally enforce Agent update + scope ownership inside the route.
-  [RouteId.GetAgentRuntimePreflight]: { agent: ["read"] },
-  [RouteId.SetAgentRuntimeCredential]: { agent: ["read"] },
-  [RouteId.DeleteAgentRuntimeCredential]: { agent: ["read"] },
-  [RouteId.ListRuntimeCredentials]: { agent: ["read"] },
+  [RouteId.GetAgentRuntimePreflight]: {},
+  [RouteId.SetAgentRuntimeCredential]: {},
+  [RouteId.DeleteAgentRuntimeCredential]: {},
+  [RouteId.ListRuntimeCredentials]: {},
   [RouteId.CreateRuntimeCredential]: { agentSettings: ["update"] },
   [RouteId.GetRuntimeCredentialUsage]: { agentSettings: ["update"] },
   [RouteId.UpdateRuntimeCredential]: { agentSettings: ["update"] },
   [RouteId.DeleteRuntimeCredential]: { agentSettings: ["update"] },
-  [RouteId.SetPersonalRuntimeCredentialConnection]: { agent: ["read"] },
-  [RouteId.DeletePersonalRuntimeCredentialConnection]: { agent: ["read"] },
+  [RouteId.SetPersonalRuntimeCredentialConnection]: {},
+  [RouteId.DeletePersonalRuntimeCredentialConnection]: {},
   [RouteId.SetOrganizationRuntimeCredentialConnection]: {
     agentSettings: ["update"],
   },
   [RouteId.DeleteOrganizationRuntimeCredentialConnection]: {
     agentSettings: ["update"],
   },
-  [RouteId.GetAgentRuns]: { agent: ["read"] },
-  [RouteId.StartAgentRun]: { agent: ["read"] },
-  [RouteId.GetMyAgentRuns]: { agent: ["read"] },
-  [RouteId.GetMyAgentRun]: { agent: ["read"] },
-  [RouteId.UpdateAgentRun]: { agent: ["read"] },
-  [RouteId.CancelAgentRun]: { agent: ["read"] },
-  [RouteId.ContinueAgentRun]: { agent: ["read"] },
-  [RouteId.DeleteAgentWorkspace]: { agent: ["read"] },
-  [RouteId.ReadAgentWorkspaceFile]: { agent: ["read"] },
-  [RouteId.WriteAgentWorkspaceFile]: { agent: ["read"] },
-  [RouteId.DeleteAgentRun]: { agent: ["read"] },
-  [RouteId.GetAgentRunShare]: { agent: ["read"] },
-  [RouteId.ShareAgentRun]: { agent: ["read"] },
-  [RouteId.UnshareAgentRun]: { agent: ["read"] },
+  [RouteId.GetAgentRuns]: {},
+  [RouteId.StartAgentRun]: {},
+  [RouteId.GetMyAgentRuns]: {},
+  [RouteId.GetMyAgentRun]: {},
+  [RouteId.UpdateAgentRun]: {},
+  [RouteId.CancelAgentRun]: {},
+  [RouteId.ContinueAgentRun]: {},
+  [RouteId.DeleteAgentWorkspace]: {},
+  [RouteId.ReadAgentWorkspaceFile]: {},
+  [RouteId.WriteAgentWorkspaceFile]: {},
+  [RouteId.DeleteAgentRun]: {},
+  [RouteId.GetAgentRunShare]: {},
+  [RouteId.ShareAgentRun]: {},
+  [RouteId.UnshareAgentRun]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -907,36 +823,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkUpsertDefaultResultPolicy]: {
     toolPolicy: ["update"],
   },
-  [RouteId.GetInternalMcpCatalog]: {
-    mcpRegistry: ["read"],
-  },
+  [RouteId.GetInternalMcpCatalog]: {},
   [RouteId.CreateInternalMcpCatalogItem]: {
     mcpRegistry: ["create"],
   },
-  [RouteId.GetInternalMcpCatalogItem]: {
-    mcpRegistry: ["read"],
-  },
-  [RouteId.GetInternalMcpCatalogTools]: {
-    mcpRegistry: ["read"],
-  },
-  [RouteId.GetInternalMcpCatalogToolsBatch]: {
-    mcpRegistry: ["read"],
-  },
-  [RouteId.UpdateInternalMcpCatalogItem]: {
-    mcpRegistry: ["update"],
-  },
-  [RouteId.ReinstallInternalMcpCatalogItem]: {
-    mcpRegistry: ["update"],
-  },
-  [RouteId.RefreshInternalMcpCatalogImage]: {
-    mcpRegistry: ["update"],
-  },
-  [RouteId.DeleteInternalMcpCatalogItem]: {
-    mcpRegistry: ["delete"],
-  },
-  [RouteId.DeleteInternalMcpCatalogItemByName]: {
-    mcpRegistry: ["delete"],
-  },
+  [RouteId.GetInternalMcpCatalogItem]: {},
+  [RouteId.GetInternalMcpCatalogTools]: {},
+  [RouteId.GetInternalMcpCatalogToolsBatch]: {},
+  // These handlers authorize the action against the resolved catalog object.
+  // A global action gate would incorrectly reject object-specific grants.
+  [RouteId.UpdateInternalMcpCatalogItem]: {},
+  [RouteId.ReinstallInternalMcpCatalogItem]: {},
+  [RouteId.RefreshInternalMcpCatalogImage]: {},
+  [RouteId.DeleteInternalMcpCatalogItem]: {},
+  [RouteId.DeleteInternalMcpCatalogItemByName]: {},
   // Deleted-resource lifecycle is its own capability, granted by default to
   // admins only — delete does not imply the ability to see or revive tombstones.
   [RouteId.RestoreInternalMcpCatalogItem]: {
@@ -1053,9 +953,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateTeam]: {
     team: ["create"],
   },
-  [RouteId.UpdateTeam]: {
-    team: ["read"],
-  },
+  // The handler accepts organization team managers or this team's own admins.
+  [RouteId.UpdateTeam]: {},
   [RouteId.BulkDeleteTeams]: { team: ["delete"] },
   [RouteId.DeleteTeam]: {
     team: ["delete"],
@@ -1108,6 +1007,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetTeamVaultSecretKeys]: {
     team: ["read"],
   },
+  // Resource actions and delegation authority are checked against the target.
+  [RouteId.SearchInitialPermissionSubjects]: {},
+  [RouteId.GetScopedCapabilities]: {},
+  [RouteId.GetResourcePermissions]: {},
+  [RouteId.SearchResourcePermissionSubjects]: {},
+  [RouteId.UpdateResourcePermissions]: {},
   [RouteId.GetRoles]: {
     ac: ["read"],
   },
@@ -1166,9 +1071,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteChatAttachment]: {
     chat: ["update"],
   },
-  [RouteId.GetChatAgentMcpTools]: {
-    agent: ["read"],
-  },
+  [RouteId.GetChatAgentMcpTools]: {},
   [RouteId.CreateChatConversation]: {
     chat: ["create"],
   },
@@ -1209,9 +1112,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatMcpTools]: {
     chat: ["read"],
   },
-  [RouteId.GetLlmModels]: {
-    llmModel: ["read"],
-  },
+  [RouteId.GetLlmModels]: {},
   [RouteId.GetLlmProviderModelLabelKeys]: { llmModel: ["read"] },
   [RouteId.GetLlmProviderModelLabelValues]: { llmModel: ["read"] },
   [RouteId.SyncLlmModels]: {
@@ -1398,13 +1299,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpOauthClient]: {
     mcpOauthClient: ["delete"],
   },
-  [RouteId.GetModelsWithApiKeys]: {
-    llmModel: ["read"],
-  },
-  [RouteId.BulkUpdateModels]: { llmModel: ["update"] },
-  [RouteId.UpdateModel]: {
-    llmModel: ["update"],
-  },
+  [RouteId.GetModelsWithApiKeys]: {},
+  [RouteId.BulkUpdateModels]: {},
+  [RouteId.UpdateModel]: {},
   // Delegation routes: agent-type permission checked dynamically in handler
   [RouteId.GetAgentDelegations]: {},
   [RouteId.SyncAgentDelegations]: {},
@@ -1858,7 +1755,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CancelConnectorRun]: { knowledgeSource: ["update"] },
 
   // Agent Skill Routes - per-instance scope is enforced in the handlers
-  [RouteId.GetSkills]: { skill: ["read"] },
+  [RouteId.GetSkills]: {},
   [RouteId.GetSkillLabelKeys]: { skill: ["read"] },
   [RouteId.GetSkillLabelValues]: { skill: ["read"] },
   [RouteId.GetExternalMcpSkills]: {
@@ -1874,7 +1771,7 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["read"],
   },
   [RouteId.CreateSkill]: { skill: ["create"] },
-  [RouteId.ConvertAgentToSkill]: { skill: ["create"], agent: ["read"] },
+  [RouteId.ConvertAgentToSkill]: { skill: ["create"] },
   // chat:read gates spending the agent's configured LLM key — the same gate
   // every other resolveAgentLlmOrDefault path (chat, compaction) sits behind.
   [RouteId.SuggestSkillDescription]: {
@@ -1882,18 +1779,18 @@ export const requiredEndpointPermissionsMap: Partial<
     agent: ["read"],
     chat: ["read"],
   },
-  [RouteId.GetSkill]: { skill: ["read"] },
-  [RouteId.UpdateSkill]: { skill: ["update"] },
+  [RouteId.GetSkill]: {},
+  [RouteId.UpdateSkill]: {},
   [RouteId.BulkUpdateSkillsVisibility]: { skill: ["update"] },
-  [RouteId.DeleteSkill]: { skill: ["delete"] },
-  [RouteId.BulkDeleteSkills]: { skill: ["delete"] },
-  [RouteId.RestoreSkill]: { skill: ["delete"] },
+  [RouteId.DeleteSkill]: {},
+  [RouteId.BulkDeleteSkills]: {},
+  [RouteId.RestoreSkill]: {},
   // Permanent deletion is irreversible, so the handler narrows this further to
   // a built-in admin ROLE — no skill permission, `skill:admin` included, gets
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
-  [RouteId.ResetSkill]: { skill: ["update"] },
-  [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
+  [RouteId.ResetSkill]: {},
+  [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
   [RouteId.GetPluginLabelValues]: { plugin: ["read"] },
@@ -1927,10 +1824,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
-  [RouteId.GetSkillUsageStatistics]: { skill: ["read"] },
-  [RouteId.GetSkillVersions]: { skill: ["read"] },
-  [RouteId.GetSkillVersion]: { skill: ["read"] },
-  [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
+  [RouteId.GetSkillUsageStatistics]: {},
+  [RouteId.GetSkillVersions]: {},
+  [RouteId.GetSkillVersion]: {},
+  [RouteId.EnableSkillToolDefaults]: { organizationSettings: ["update"] },
   // matches the `download_file` tool (sandbox:execute) that hands out this
   // URL, so a role allowed to produce an artifact can also fetch it.
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
@@ -1995,52 +1892,52 @@ export const requiredEndpointPermissionsMap: Partial<
   // install the skills they can already read. Gated on the same permission as
   // listing skills, not on skill:admin.
   [RouteId.GetSkillMarketplace]: { skill: ["read"] },
-  [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
-  [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
-  [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
-  [RouteId.RotateSkillShareLink]: { skill: ["admin"] },
+  [RouteId.GetSkillShareLinks]: {},
+  [RouteId.CreateSkillShareLink]: {},
+  [RouteId.RevokeSkillShareLink]: {},
+  [RouteId.RotateSkillShareLink]: {},
 
   // MCP App Routes - per-instance scope is enforced in the handlers
-  [RouteId.GetApps]: { app: ["read"] },
+  [RouteId.GetApps]: {},
   [RouteId.GetExternalApp]: { app: ["read"] },
   [RouteId.CreateApp]: { app: ["create"] },
-  [RouteId.GetApp]: { app: ["read"] },
-  [RouteId.UpdateApp]: { app: ["update"] },
+  [RouteId.GetApp]: {},
+  [RouteId.UpdateApp]: {},
   // Enable/disable is a lifecycle transition, not a metadata edit; gated like
   // an update (the handler further requires scope-modify at the app's scope).
-  [RouteId.EnableApp]: { app: ["update"] },
-  [RouteId.DisableApp]: { app: ["update"] },
-  [RouteId.LockApp]: { app: ["update"] },
-  [RouteId.UnlockApp]: { app: ["update"] },
-  [RouteId.BulkUpdateApps]: { app: ["update"] },
-  [RouteId.BulkDeleteApps]: { app: ["delete"] },
-  [RouteId.DeleteApp]: { app: ["delete"] },
-  [RouteId.GetAppVersions]: { app: ["read"] },
-  [RouteId.GetAppVersionSummaries]: { app: ["read"] },
-  [RouteId.GetAppVersion]: { app: ["read"] },
-  [RouteId.RestoreAppVersion]: { app: ["update"] },
-  [RouteId.GetAppTools]: { app: ["read"] },
-  [RouteId.AssignToolToApp]: { app: ["update"] },
-  [RouteId.UnassignToolFromApp]: { app: ["update"] },
+  [RouteId.EnableApp]: {},
+  [RouteId.DisableApp]: {},
+  [RouteId.LockApp]: {},
+  [RouteId.UnlockApp]: {},
+  [RouteId.BulkUpdateApps]: {},
+  [RouteId.BulkDeleteApps]: {},
+  [RouteId.DeleteApp]: {},
+  [RouteId.GetAppVersions]: {},
+  [RouteId.GetAppVersionSummaries]: {},
+  [RouteId.GetAppVersion]: {},
+  [RouteId.RestoreAppVersion]: {},
+  [RouteId.GetAppTools]: {},
+  [RouteId.AssignToolToApp]: {},
+  [RouteId.UnassignToolFromApp]: {},
   [RouteId.GetAppTemplates]: { app: ["read"] },
   [RouteId.GetAppLabelKeys]: { app: ["read"] },
   [RouteId.GetAppLabelValues]: { app: ["read"] },
   // Opens an app in chat: reads the app and creates a seeded conversation.
-  [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
+  [RouteId.OpenAppInChat]: { chat: ["create"] },
   [RouteId.OpenExternalAppInChat]: { app: ["read"], chat: ["create"] },
   // Per-user app pins (mirrors PinProject/UnpinProject): any viewer may pin —
   // the handlers gate per-instance visibility; unpin is intentionally
   // unchecked there so stale pins can always be cleared.
-  [RouteId.PinApp]: { app: ["read"] },
-  [RouteId.UnpinApp]: { app: ["read"] },
+  [RouteId.PinApp]: {},
+  [RouteId.UnpinApp]: {},
   [RouteId.PinExternalApp]: { app: ["read"] },
   [RouteId.UnpinExternalApp]: { app: ["read"] },
   // The trusted host page reports a viewer's render diagnostics; the handler
   // re-checks app-visibility, so app:read is the right coarse gate.
-  [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },
+  [RouteId.PostAppRenderDiagnostics]: {},
   // Same trust model as diagnostics: the host page posts the viewer's render
   // screenshot, the handler re-checks app-visibility.
-  [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
+  [RouteId.PostAppRenderScreenshot]: {},
   // App session recordings live client-side (IndexedDB); sharing forwards a
   // client-assembled plugin to the public demo catalog. Any viewer of an app
   // they can see may share their own recording; the handler re-checks app
@@ -2073,18 +1970,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteSiteNotification]: { siteNotification: ["delete"] },
 
   // Hook File Routes
-  [RouteId.GetHooks]: {
-    agent: ["read"],
-  },
-  [RouteId.CreateHook]: {
-    agent: ["update"],
-  },
-  [RouteId.UpdateHook]: {
-    agent: ["update"],
-  },
-  [RouteId.DeleteHook]: {
-    agent: ["update"],
-  },
+  [RouteId.GetHooks]: {},
+  [RouteId.CreateHook]: {},
+  [RouteId.UpdateHook]: {},
+  [RouteId.DeleteHook]: {},
 
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint

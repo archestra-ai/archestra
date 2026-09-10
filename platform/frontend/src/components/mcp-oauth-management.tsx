@@ -15,10 +15,9 @@ import {
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   useCreateMcpOauthClient,
@@ -42,7 +41,6 @@ export function isMcpOauthClientApplicable(
 
 export function McpOauthManagement({
   resourceId,
-  resourceKind,
   heading,
 }: {
   resourceId: string;
@@ -52,8 +50,6 @@ export function McpOauthManagement({
     description: string;
   };
 }) {
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
   const { data: canRead } = useHasPermissions({ mcpOauthClient: ["read"] });
   const { data: canCreate } = useHasPermissions({ mcpOauthClient: ["create"] });
   const { data: canUpdate } = useHasPermissions({ mcpOauthClient: ["update"] });
@@ -127,7 +123,6 @@ export function McpOauthManagement({
               <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                 <th className="py-1.5 pr-3 font-medium">Name</th>
                 <th className="py-1.5 pr-3 font-medium">Client ID</th>
-                <th className="py-1.5 pr-3 font-medium">Accessible to</th>
                 <th className="w-24 py-1.5" />
               </tr>
             </thead>
@@ -158,16 +153,6 @@ export function McpOauthManagement({
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
                     </span>
-                  </td>
-                  <td className="max-w-[180px] py-1.5 pr-3">
-                    <ResourceVisibilityBadge
-                      scope={client.scope}
-                      teams={client.teams}
-                      authorId={client.authorId}
-                      authorName={client.authorName}
-                      currentUserId={currentUserId}
-                      showSelfAsMe
-                    />
                   </td>
                   <td className="py-1.5">
                     <div className="flex">

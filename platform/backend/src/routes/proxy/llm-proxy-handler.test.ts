@@ -1,3 +1,4 @@
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 /**
  * LLM Proxy Handler Tests
  *
@@ -33,7 +34,6 @@ import {
   InteractionModel,
   LlmProviderApiKeyModel,
   ModelModel,
-  ModelTeamModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -380,6 +380,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
 
     test("personal standard virtual key attributes the interaction to its owner", async ({
       makeUser,
+      makeMember,
       makeSecret,
       makeLlmProviderApiKey,
     }) => {
@@ -389,6 +390,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       // must attribute the request even though no X-Archestra-User-Id header or
       // passthrough key is present.
       const owner = await makeUser();
+      await makeMember(owner.id, testAgent.organizationId);
       const secret = await makeSecret({ secret: { apiKey: "sk-owned-key" } });
       const providerKey = await makeLlmProviderApiKey(
         testAgent.organizationId,
@@ -2594,7 +2596,19 @@ describe("LLM Proxy Handler — team-restricted models", () => {
 
     const devTeam = await makeTeam(testAgent.organizationId, insider.id);
     await makeTeamMember(devTeam.id, insider.id);
-    await ModelTeamModel.syncModelTeams(model.id, [devTeam.id]);
+    const key = {
+      organizationId: testAgent.organizationId,
+      resource: "llmModel" as const,
+      scope: model.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "team", id: devTeam.id }, actions: ["read", "use"] },
+      ],
+    });
 
     const { value: outsiderToken } = await VirtualApiKeyModel.create({
       organizationId: testAgent.organizationId,

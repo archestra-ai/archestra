@@ -15,7 +15,11 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { ChannelsSection } from "./channels-section";
 import type { ProviderConfig } from "./types";
 
@@ -71,6 +75,18 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: [
+      { organizationId: "org-1", resource: "agent", scope: "*", action: "use" },
+      {
+        organizationId: "org-1",
+        resource: "agent",
+        scope: "22222222-2222-4222-8222-222222222222",
+        action: "manage-permissions",
+      },
+    ],
+    isPending: false,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);

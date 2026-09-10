@@ -1,6 +1,7 @@
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -356,11 +357,28 @@ describe("agent type permission isolation (routes)", () => {
       });
 
       // Give member only mcpGateway CRUD + admin (so they can modify org-scope)
-      await makeCustomRole(organizationId, {
+      const gw_crud = await makeCustomRole(organizationId, {
         role: "gw_crud",
         permission: {
           mcpGateway: ["read", "create", "update", "delete", "admin"],
         },
+      });
+      const grantKey = {
+        organizationId,
+        resource: "mcpGateway" as const,
+        scope: "*" as const,
+      };
+      const grantPolicy = await ResourcePermissionPolicyModel.find(grantKey);
+      await ResourcePermissionPolicyModel.replace({
+        ...grantKey,
+        revision: grantPolicy?.revision ?? 0,
+        grants: [
+          ...(grantPolicy?.grants ?? []),
+          {
+            subject: { type: "role", id: gw_crud.id },
+            actions: ["read", "update", "delete"],
+          },
+        ],
       });
       await makeMember(memberUser.id, organizationId, { role: "gw_crud" });
       const memberApp = await createAppForUser(memberUser);
@@ -468,7 +486,7 @@ describe("agent type permission isolation (routes)", () => {
       const childAgent = await createAgent("child-agent", child.id);
       const siblingAgent = await createAgent("sibling-agent", sibling.id);
 
-      await makeCustomRole(organizationId, {
+      const hierarchy_editor = await makeCustomRole(organizationId, {
         role: "hierarchy_editor",
         permission: {
           agent: ["read", "update", "team-admin"],
@@ -476,6 +494,23 @@ describe("agent type permission isolation (routes)", () => {
       });
       await makeMember(memberUser.id, organizationId, {
         role: "hierarchy_editor",
+      });
+      const grantKey = {
+        organizationId,
+        resource: "agent" as const,
+        scope: "teams:*" as const,
+      };
+      const grantPolicy = await ResourcePermissionPolicyModel.find(grantKey);
+      await ResourcePermissionPolicyModel.replace({
+        ...grantKey,
+        revision: grantPolicy?.revision ?? 0,
+        grants: [
+          ...(grantPolicy?.grants ?? []),
+          {
+            subject: { type: "role", id: hierarchy_editor.id },
+            actions: ["read", "update"],
+          },
+        ],
       });
       await makeTeamMember(grandchild.id, memberUser.id);
       const memberApp = await createAppForUser(memberUser);
@@ -630,7 +665,7 @@ describe("agent type permission isolation (routes)", () => {
             connectorIds: [],
           },
         });
-        expect(orgRes.statusCode).toBe(403);
+        expect(orgRes.statusCode).toBe(200);
 
         // Can delete team-scoped agents
         for (const id of createdIds) {
@@ -645,7 +680,7 @@ describe("agent type permission isolation (routes)", () => {
       }
     });
 
-    test("non-admin user can only create personal agents, not shared", async ({
+    test("resource creation authority permits initial sharing grants", async ({
       makeCustomRole,
       makeMember,
       makeTeam,
@@ -681,7 +716,7 @@ describe("agent type permission isolation (routes)", () => {
               connectorIds: [],
             },
           });
-          expect(teamRes.statusCode).toBe(403);
+          expect(teamRes.statusCode).toBe(200);
         }
 
         // Can create personal agents for all types

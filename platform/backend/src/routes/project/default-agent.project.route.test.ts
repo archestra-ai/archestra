@@ -1,5 +1,6 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { AgentModel, ProjectModel, ProjectShareModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
@@ -11,9 +12,10 @@ describe("project default agent", () => {
   let organizationId: string;
   let owner: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;
     owner = await makeUser();
+    await makeMember(owner.id, organizationId);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -497,7 +499,14 @@ describe("project default agent", () => {
       defaultAgentId: agent.id,
     });
 
-    await AgentModel.update(agent.id, { scope: "team" });
+    const key = { organizationId, resource: "agent" as const, scope: agent.id };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    if (!policy) throw new Error("Expected persisted resource policy");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision,
+      grants: [],
+    });
 
     // An unrelated edit — the caller never mentions the default agent.
     const renamed = await app.inject({
@@ -510,7 +519,11 @@ describe("project default agent", () => {
       (await ProjectModel.findById(project.id))?.defaultAgentId,
     ).toBeNull();
 
-    await AgentModel.update(agent.id, { scope: "org" });
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision + 1,
+      grants: policy.grants,
+    });
 
     const detail = await app.inject({
       method: "GET",
@@ -541,7 +554,7 @@ describe("project default agent", () => {
     );
   });
 
-  test("stops reporting a pin whose agent was rescoped away from the org", async ({
+  test("stops reporting a pin after the actor’s read grant is revoked", async ({
     makeInternalAgent,
   }) => {
     const project = await seedProject("rescoped");
@@ -553,7 +566,14 @@ describe("project default agent", () => {
       defaultAgentId: agent.id,
     });
 
-    await AgentModel.update(agent.id, { scope: "team" });
+    const key = { organizationId, resource: "agent" as const, scope: agent.id };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    if (!policy) throw new Error("Expected persisted resource policy");
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy.revision,
+      grants: [],
+    });
 
     const detail = await app.inject({
       method: "GET",

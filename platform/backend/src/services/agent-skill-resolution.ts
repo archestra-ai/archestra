@@ -218,6 +218,8 @@ export function explainAssignmentRejection(params: {
   agent: SkillGatewayAgent;
   /** The caller assigning, who must be a personal skill's author to publish it. */
   userId: string;
+  /** Scoped permission to publish, resolved before this content validation. */
+  canPublish?: boolean;
   /** The skill's environment assignments, for `skillVisibleInEnvironment`. */
   skillEnvironmentIds: string[];
 }): string | null {
@@ -227,7 +229,9 @@ export function explainAssignmentRejection(params: {
   if (params.skill.agentName) {
     return `Skill "${params.skill.name}" delegates to agent "${params.skill.agentName}", which has no equivalent over MCP.`;
   }
-  // Personal skills are publishable only by their own author. The access check
+  if (params.canPublish === false)
+    return `Permission to manage permissions for skill "${params.skill.name}" is required to publish it through a gateway.`;
+  // Before migration, personal skills are publishable only by their author. The access check
   // upstream (`requireSkillsAccessible`) already limits ordinary members to
   // skills they can read; this branch closes the two paths that widen reading
   // beyond the author — `skill:admin` and per-user grants — so being shown a
@@ -235,6 +239,7 @@ export function explainAssignmentRejection(params: {
   // the author's call: it hands the body to every holder of the gateway's
   // token, and at serve time there is no caller to check against.
   if (
+    params.canPublish === undefined &&
     params.skill.scope === "personal" &&
     params.skill.authorId !== params.userId
   ) {

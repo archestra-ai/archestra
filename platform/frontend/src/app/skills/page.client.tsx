@@ -43,10 +43,8 @@ import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import {
   ActiveFilterBadges,
   ResourceDeletedStatusFilter,
-  ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -74,7 +72,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import {
@@ -102,7 +104,6 @@ import { useMyTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { PluginSourceIcon } from "../plugins/_parts/plugin-source-icon";
-import { BulkVisibilityDialog } from "./_parts/bulk-visibility-dialog";
 import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
 import {
   getSkillActionModel,
@@ -192,6 +193,7 @@ function SkillsList() {
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
   const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const pluginsEnabled = useFeature("plugins") === true;
+  const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
   const pluginSkillsEnabled = pluginsEnabled && canReadPlugins === true;
   const kindParam = searchParams.get("kind");
@@ -362,7 +364,6 @@ function SkillsList() {
   }, [editId, router]);
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
-  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
     useState<SkillItem | null>(null);
@@ -375,10 +376,11 @@ function SkillsList() {
   const currentUserId = session?.user?.id;
   // Resolved once for the whole table, then applied per row: the scope check
   // is a pure function precisely so a table cell does not have to call hooks.
-  const { data: isSkillAdmin } = useHasPermissions({ skill: ["admin"] });
-  const { data: isSkillTeamAdmin } = useHasPermissions({
-    skill: ["team-admin"],
-  });
+  const { data: isSkillAdmin } = useHasPermissions({ skill: ["update"] }, "*");
+  const { data: isSkillTeamAdmin } = useHasPermissions(
+    { skill: ["update"] },
+    "teams:*",
+  );
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
   const userTeamIdSet = new Set((userTeams ?? []).map((team) => team.id));
@@ -537,6 +539,7 @@ function SkillsList() {
     const historyAction = skillAction(actionModel, "history");
     const deleteAction = skillAction(actionModel, "delete");
     const canModify = computeCanModifySkill({
+      scopedGrants: scopedCapabilities.data ?? [],
       skill,
       isAdmin: !!isSkillAdmin,
       isTeamAdmin: !!isSkillTeamAdmin,
@@ -610,6 +613,7 @@ function SkillsList() {
         ];
     return (
       <TableRowActions
+        permissionScope={"id" in skill ? skill.id : undefined}
         actions={actions}
         dropdownActions={dropdownActions}
         itemName={skill.name}
@@ -675,7 +679,13 @@ function SkillsList() {
             },
           ];
 
-    return <TableRowActions actions={actions} itemName={skill.name} />;
+    return (
+      <TableRowActions
+        permissionScope={"id" in skill ? skill.id : undefined}
+        actions={actions}
+        itemName={skill.name}
+      />
+    );
   };
 
   const columns: ColumnDef<ListedSkill>[] = [
@@ -702,26 +712,7 @@ function SkillsList() {
         />
       ),
     },
-    {
-      id: "visibility",
-      size: 130,
-      header: "Visibility",
-      cell: ({ row }) => {
-        const item = row.original;
-        const standalone = item.source === "standalone" ? item.skill : null;
-        return (
-          <ResourceVisibilityBadge
-            scope={item.skill.scope}
-            teams={standalone?.teams}
-            users={standalone?.users}
-            authorId={standalone?.authorId ?? currentUserId}
-            authorName={standalone?.authorName ?? session?.user?.name}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
-        );
-      },
-    },
+
     {
       id: "files",
       size: 90,
@@ -877,15 +868,12 @@ function SkillsList() {
                         </SelectContent>
                       </Select>
                     )}
-                  <ResourceScopeFilter
-                    ownerLabelPlural="skills"
-                    adminPermission={{ skill: ["admin"] }}
-                  />
+
                   {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
                     checker has no `skill:delete` boolean, so this shows the
                     trash toggle to skill admins to avoid a control that 403s. */}
                   <ResourceDeletedStatusFilter
-                    deletePermission={{ skill: ["admin"] }}
+                    deletePermission={{ skill: ["delete"] }}
                   />
                   {/* Only imported skills have a repository, so the filter would
                     be a single inert "All repositories" entry until at least
@@ -943,7 +931,7 @@ function SkillsList() {
                     })}
                   />
                 </FilterBar>
-                <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
+                <ActiveFilterBadges />
               </CollectionFilters>
 
               <section className="space-y-3" aria-label="Skills">
@@ -954,15 +942,6 @@ function SkillsList() {
                   onClear={clearSelection}
                   selectAllMatching={selection.selectAllMatching}
                 >
-                  <PermissionButton
-                    permissions={{ skill: ["update"] }}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setBulkVisibilityOpen(true)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    <span>Edit visibility</span>
-                  </PermissionButton>
                   <PermissionButton
                     permissions={{ skill: ["delete"] }}
                     variant="destructive"
@@ -1029,17 +1008,6 @@ function SkillsList() {
                         }
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <ResourceVisibilityBadge
-                            scope={item.skill.scope}
-                            teams={standalone?.teams}
-                            users={standalone?.users}
-                            authorId={standalone?.authorId ?? currentUserId}
-                            authorName={
-                              standalone?.authorName ?? session?.user?.name
-                            }
-                            currentUserId={currentUserId}
-                            showSelfAsMe
-                          />
                           {standalone?.templated ? (
                             <Badge variant="outline">
                               <Braces className="mr-1 h-3 w-3" />
@@ -1091,15 +1059,6 @@ function SkillsList() {
           )}
         </TableCardView>
       </PageLayout>
-
-      {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          skills={selectedSkills}
-          open={bulkVisibilityOpen}
-          onOpenChange={setBulkVisibilityOpen}
-          onApplied={clearSelection}
-        />
-      )}
 
       {bulkDeleteOpen && (
         <DeleteConfirmDialog

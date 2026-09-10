@@ -11,7 +11,7 @@ import {
 } from "@archestra/shared";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
@@ -20,6 +20,7 @@ import type {
   Organization,
   OrganizationAnalyticsState,
 } from "@/types";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /** @public — the shape {@link OrganizationModel.getIntegrationOverrides} resolves */
 export type IntegrationOverrideColumns = {
@@ -153,15 +154,26 @@ class OrganizationModel {
     logger.debug(
       "OrganizationModel.getOrCreateDefaultOrganization: creating default organization",
     );
-    const [createdOrg] = await db
-      .insert(schema.organizationsTable)
-      .values({
-        id: "default-org",
-        name: "Default Organization",
-        slug: "default",
-        createdAt: new Date(),
-      })
-      .returning();
+    const createdOrg = await withDbTransaction(async (tx) => {
+      const [organization] = await tx
+        .insert(schema.organizationsTable)
+        .values({
+          id: "default-org",
+          name: "Default Organization",
+          slug: "default",
+          createdAt: new Date(),
+        })
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.initializeOrganization({
+        tx,
+        organizationId: organization.id,
+      });
+      // SPDX-SnippetEnd
+      return organization;
+    });
 
     logger.debug(
       { organizationId: createdOrg.id },

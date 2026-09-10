@@ -3,7 +3,8 @@ import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { SkillModel } from "@/models";
+import { MemberModel, SkillModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -49,6 +50,68 @@ describe("POST /api/skills/bulk-delete", () => {
       url: "/api/skills/bulk-delete",
       payload: { skillIds },
     });
+
+  test("an exact delete grant controls bulk deletion and restoration independently of content editing", async ({
+    makeCustomRole,
+  }) => {
+    const allowed = await createSkill("scoped-bulk-delete");
+    const denied = await createSkill("scoped-update-only");
+    const role = await makeCustomRole(organizationId, { permission: {} });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    for (const [skill, actions] of [
+      [allowed, ["delete"]],
+      [denied, ["read", "update"]],
+    ] as const) {
+      const key = {
+        organizationId,
+        resource: "skill" as const,
+        scope: skill.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [
+          { subject: { type: "user", id: user.id }, actions: [...actions] },
+        ],
+      });
+    }
+    const response = await bulkDelete([allowed.id, denied.id]);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      response.json().succeeded.map((entry: { id: string }) => entry.id),
+    ).toEqual([allowed.id]);
+    expect(
+      response.json().failed.map((entry: { id: string }) => entry.id),
+    ).toEqual([denied.id]);
+    const restored = await app.inject({
+      method: "POST",
+      url: `/api/skills/${allowed.id}/restore`,
+    });
+    expect(restored.statusCode, restored.body).toBe(200);
+    await bulkDelete([allowed.id]);
+    const key = {
+      organizationId,
+      resource: "skill" as const,
+      scope: allowed.id,
+    };
+    const current = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: current?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: user.id }, actions: ["read", "update"] },
+      ],
+    });
+    const revoked = await app.inject({
+      method: "POST",
+      url: `/api/skills/${allowed.id}/restore`,
+    });
+    expect(revoked.statusCode).toBe(403);
+    expect(
+      await SkillModel.findDeletedById(allowed.id, organizationId),
+    ).not.toBeNull();
+  });
 
   test("soft-deletes every named skill and hides them from the list", async () => {
     const first = await createSkill("bulk-del-a");
@@ -193,7 +256,7 @@ describe("POST /api/skills/bulk-delete authorization", () => {
       id: orgWide.id,
       name: "bulk-del-org-wide",
     });
-    expect(body.failed[0].error).toContain("Only admins");
+    expect(body.failed[0].error).toContain("permission");
 
     expect(await SkillModel.findById(orgWide.id)).toBeTruthy();
     expect(await SkillModel.findById(mine.id)).toBeNull();

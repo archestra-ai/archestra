@@ -157,6 +157,18 @@ function createOpenAiRouteTestApp() {
   return app;
 }
 
+beforeEach(async () => {
+  for (const modelId of ["gpt-4o", "gpt-4o-mini"]) {
+    await ModelModel.create({
+      externalId: `openai/${modelId}`,
+      provider: "openai",
+      modelId,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+  }
+});
+
 describe("OpenAI proxy streaming", () => {
   let openAiStubOptions: { interruptAtChunk?: number };
 

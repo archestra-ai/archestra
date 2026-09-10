@@ -994,13 +994,9 @@ describe("handleBeforeHook", () => {
       await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
         body: {
           message: expect.stringContaining(
-            "would grant permissions you don't have yourself",
+            "scoped permissions you cannot grant",
           ),
         },
-      });
-      // The rejection names exactly what the caller's role withholds.
-      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
-        body: { message: expect.stringContaining("log:read") },
       });
     });
 

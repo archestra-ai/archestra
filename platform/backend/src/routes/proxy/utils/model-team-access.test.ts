@@ -1,5 +1,8 @@
+// Compatibility coverage for legacy sharing before migration; scoped grants are covered by the backfill and scoped route tests.
 import ModelModel from "@/models/model";
 import ModelTeamModel from "@/models/model-team";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ServiceAccountModel from "@/models/service-account";
 import { describe, expect, test } from "@/test";
 import { checkModelTeamAccess } from "./model-team-access";
 
@@ -21,10 +24,67 @@ async function createModel(modelId: string) {
 }
 
 describe("checkModelTeamAccess", () => {
+  test("service-account model use grants are exact, distinct from read, and revoked immediately", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization({ legacyPermissions: true });
+    const owner = await makeUser();
+    const team = await makeTeam(org.id, owner.id);
+    const model = await createModel("restricted-scoped-model");
+    const other = await createModel("other-restricted-model");
+    await ModelTeamModel.syncModelTeams(model.id, [team.id]);
+    await ModelTeamModel.syncModelTeams(other.id, [team.id]);
+    const role = await makeCustomRole(org.id, { permission: {} });
+    const account = await ServiceAccountModel.create({
+      organizationId: org.id,
+      name: "Model automation",
+      role: role.role,
+      createdBy: owner.id,
+    });
+    const key = {
+      organizationId: org.id,
+      resource: "llmModel" as const,
+      scope: model.id,
+    };
+    const subject = { type: "serviceAccount" as const, id: account.id };
+    const context = {
+      organizationId: org.id,
+      provider: "anthropic" as const,
+      modelId: model.modelId,
+      authenticatedUserId: `service-account:${account.id}`,
+      userTeamIds: [],
+    };
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: 0,
+      grants: [{ subject, actions: ["read"] }],
+    });
+    expect((await checkModelTeamAccess(context)).allowed).toBe(false);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: 1,
+      grants: [{ subject, actions: ["use"] }],
+    });
+    expect((await checkModelTeamAccess(context)).allowed).toBe(true);
+    expect(
+      (await checkModelTeamAccess({ ...context, modelId: other.modelId }))
+        .allowed,
+    ).toBe(false);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: 2,
+      grants: [],
+    });
+    expect((await checkModelTeamAccess(context)).allowed).toBe(false);
+  });
+
   test("allows unrestricted and unknown models for anyone", async ({
     makeOrganization,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     await createModel("claude-open");
 
     for (const modelId of ["claude-open", "totally-unknown-model"]) {
@@ -46,7 +106,7 @@ describe("checkModelTeamAccess", () => {
     makeTeam,
     makeTeamMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const model = await createModel("claude-frontier");
 
     const insider = await makeUser();
@@ -93,7 +153,7 @@ describe("checkModelTeamAccess", () => {
     makeTeam,
     makeTeamMember,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const model = await createModel("claude-frontier");
 
     const insider = await makeUser();
@@ -122,7 +182,7 @@ describe("checkModelTeamAccess", () => {
     makeUser,
     makeTeam,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const model = await createModel("claude-frontier");
 
     const teamOwner = await makeUser();

@@ -63,6 +63,7 @@ export function McpGatewayActions({
   if (agent.deletedAt) {
     return (
       <TableRowActions
+        permissionScope={agent.id}
         itemName={agent.name}
         actions={[
           {
@@ -151,6 +152,7 @@ export function McpGatewayActions({
 
   return (
     <TableRowActions
+      permissionScope={agent.id}
       itemName={agent.name}
       actions={primaryActions}
       dropdownActions={dropdownActions}

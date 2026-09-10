@@ -29,7 +29,7 @@ describe("SkillUserModel", () => {
     makeUser,
     makeOrganization,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const author = await makeUser();
     const colleague = await makeUser();
     const skill = await seedPersonalSkill({
@@ -58,7 +58,7 @@ describe("SkillUserModel", () => {
     makeUser,
     makeOrganization,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const author = await makeUser();
     const colleague = await makeUser();
     const skill = await seedPersonalSkill({
@@ -83,7 +83,7 @@ describe("SkillUserModel", () => {
     makeUser,
     makeOrganization,
   }) => {
-    const org = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
     const author = await makeUser();
     const colleague = await makeUser();
     const skill = await seedPersonalSkill({
@@ -108,8 +108,8 @@ describe("SkillUserModel", () => {
     makeUser,
     makeOrganization,
   }) => {
-    const org = await makeOrganization();
-    const otherOrg = await makeOrganization();
+    const org = await makeOrganization({ legacyPermissions: true });
+    const otherOrg = await makeOrganization({ legacyPermissions: true });
     const colleague = await makeUser();
     const skill = await seedPersonalSkill({ organizationId: org.id });
 

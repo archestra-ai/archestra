@@ -824,6 +824,15 @@ async function listModels(params: { auth: ModelRouterAuth }) {
   // so restricted models are omitted entirely.
   const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
     modelIds: candidateModels.map((model) => model.id),
+    ...(params.auth.authMethod === "oauth_user"
+      ? {
+          grantContext: {
+            organizationId: params.auth.organizationId,
+            userId: params.auth.userId,
+            action: "use" as const,
+          },
+        }
+      : {}),
     principalTeamIds:
       params.auth.authMethod === "oauth_user"
         ? await TeamModel.getUserTeamIds(params.auth.userId)

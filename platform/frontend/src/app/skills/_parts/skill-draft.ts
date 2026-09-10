@@ -3,6 +3,7 @@ import type {
   ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { ProfileLabel } from "@/components/agent-labels";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import type { SkillDetail } from "./github-sync-panel";
 
@@ -20,6 +21,7 @@ export interface ResourceFile {
  * down — never by the panes that edit it.
  */
 export interface SkillDraft {
+  initialGrants?: InitialPermissionGrant[];
   manifest: string;
   files: ResourceFile[];
   scope: ResourceVisibilityScope;
@@ -120,11 +122,19 @@ export function buildSkillSaveBody(
 ): archestraApiTypes.UpdateSkillData["body"] {
   const synced = isSyncedGithubSkill(skill);
   return {
+    ...(!skill
+      ? {
+          initialGrants: (draft.initialGrants ?? []).map(
+            ({ subject, actions }) => ({
+              subject,
+              actions,
+            }),
+          ),
+        }
+      : {}),
     content: draft.manifest,
     ...(synced ? {} : { files: draft.files }),
-    scope: draft.scope,
-    teamIds: draft.scope === "team" ? draft.teamIds : [],
-    userIds: draft.scope === "personal" ? draft.userIds : [],
+    ...(!skill ? { scope: "personal" as const } : {}),
     environmentIds: draft.environmentIds,
     labels: draft.labels,
     ...(skill && !synced && baseVersion !== undefined ? { baseVersion } : {}),
@@ -137,6 +147,8 @@ const sameIds = (a: string[], b: string[]) =>
 /** Whether the draft differs from the seed it was built from. */
 export function isSkillDraftDirty(draft: SkillDraft, seed: SkillDraft) {
   return (
+    JSON.stringify(draft.initialGrants ?? []) !==
+      JSON.stringify(seed.initialGrants ?? []) ||
     draft.manifest !== seed.manifest ||
     draft.scope !== seed.scope ||
     !sameIds(draft.teamIds, seed.teamIds) ||

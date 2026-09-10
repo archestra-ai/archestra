@@ -12,44 +12,15 @@ import {
 import {
   ApiError,
   constructResponseSchema,
-  type SelectTeamToken,
   type TeamTokenWithTeam,
   TeamTokenWithValueResponseSchema,
   TokensListResponseSchema,
 } from "@/types";
 
-/**
- * Check if user has access to a specific token based on permissions.
- * - Org tokens: require ac:update permission
- * - Team tokens: require organization-level team management OR team admin role
- */
-async function checkTokenAccess(
-  token: SelectTeamToken,
-  userId: string,
-  headers: IncomingHttpHeaders,
-): Promise<void> {
-  if (token.isOrganizationToken) {
-    // Org tokens require ac:update permission
-    const { success: hasAcUpdate } = await hasPermission(
-      { ac: ["update"] },
-      headers,
-    );
-    if (!hasAcUpdate) {
-      throw new ApiError(403, "Not authorized to access organization token");
-    }
-  } else if (token.teamId) {
-    const { success: canManageAllTeams } = await hasPermission(
-      { team: ["update"] },
-      headers,
-    );
-
-    if (!canManageAllTeams) {
-      const isTeamAdmin = await TeamModel.isUserTeamAdmin(token.teamId, userId);
-      if (!isTeamAdmin) {
-        throw new ApiError(403, "Not authorized to access this token");
-      }
-    }
-  }
+/** Shared bearer credentials require explicit access-control authority. */
+async function checkTokenAccess(headers: IncomingHttpHeaders): Promise<void> {
+  const { success } = await hasPermission({ ac: ["update"] }, headers);
+  if (!success) throw new ApiError(403, "Not authorized to access this token");
 }
 
 const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -59,7 +30,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * - team:update: can see all team tokens
    * - team membership (any role): can see their teams' tokens — listing
    *   only exposes metadata (name, tokenStart); the value endpoint below
-   *   stays gated behind team admin / org-level team management
+   *   stays gated behind access-control management
    *
    * When profileId is provided, tokens are annotated with worksWithProfile
    * (org-scoped agents accept any team token; team-scoped agents only their
@@ -101,22 +72,15 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { team: ["update"] },
         headers,
       );
-      const { success: hasMcpGatewayTeamAdmin } = await hasPermission(
-        { mcpGateway: ["team-admin"] },
-        headers,
-      );
-
-      const adminTeamIds = canManageAllTeams
-        ? []
-        : await TeamModel.getUserAdminTeamIds(user.id);
-      const canAccessTeamTokens =
-        canManageAllTeams || hasMcpGatewayTeamAdmin || adminTeamIds.length > 0;
+      const canAccessTeamTokens = canAccessOrgToken;
 
       // Ensure org token exists
       await TeamTokenModel.ensureOrganizationToken();
 
       // Get all tokens with team details
-      const allTokens = await TeamTokenModel.findAllWithTeam();
+      const allTokens = await TeamTokenModel.findAllWithTeam(
+        request.organizationId,
+      );
 
       // Filter tokens based on permissions
       let visibleTokens = allTokens;
@@ -130,7 +94,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Filter team tokens: users see tokens for teams they belong to (any
       // role). Listing only exposes metadata — the token value itself stays
-      // gated behind team admin / org-level team management, so members see
+      // gated behind access-control management, so members see
       // that a token exists and can ask an admin for it.
       if (!canManageAllTeams) {
         const userTeamIds = await TeamModel.getUserTeamIds(user.id);
@@ -202,7 +166,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { tokenId } = request.params;
-      const { organizationId, user, headers } = request;
+      const { organizationId, headers } = request;
 
       // Verify token exists and belongs to this organization
       const token = await TeamTokenModel.findById(tokenId);
@@ -211,7 +175,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check user has access to this token
-      await checkTokenAccess(token, user.id, headers);
+      await checkTokenAccess(headers);
 
       // Get the decrypted token value
       const tokenValue = await TeamTokenModel.getTokenValue(tokenId);
@@ -242,7 +206,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { tokenId } = request.params;
-      const { organizationId, user, headers } = request;
+      const { organizationId, headers } = request;
 
       // Verify token exists and belongs to this organization
       const existingToken = await TeamTokenModel.findById(tokenId);
@@ -251,7 +215,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check user has access to this token
-      await checkTokenAccess(existingToken, user.id, headers);
+      await checkTokenAccess(headers);
 
       // Rotate the token
       const result = await TeamTokenModel.rotate(tokenId);

@@ -72,12 +72,13 @@ export async function startDelegatedTask(params: {
       "admin",
     );
     if (
-      !(await AgentTeamModel.userHasAgentAccess(
-        actor.id,
-        agent.id,
-        isAgentAdmin,
-        agent,
-      ))
+      !(await AgentTeamModel.userHasAgentAccess({
+        userId: actor.id,
+        agentId: agent.id,
+        isAgentAdmin: isAgentAdmin,
+        agentAccessContext: agent,
+        action: "use",
+      }))
     ) {
       return errorResult("Agent not found");
     }

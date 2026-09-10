@@ -5,6 +5,8 @@ import {
   OrganizationModel,
   SkillModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ServiceAccountModel from "@/models/service-account";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
@@ -54,6 +56,48 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     await app.close();
   });
 
+  test("conversion uses explicit service-account grants without copying the source audience", async ({
+    makeInternalAgent,
+  }) => {
+    const source = await makeInternalAgent({
+      organizationId,
+      name: "Scoped conversion",
+      scope: "org",
+      authorId: user.id,
+      systemPrompt: "Provide a concise answer.",
+    });
+    const account = await ServiceAccountModel.create({
+      organizationId,
+      name: "Conversion automation",
+      role: "member",
+      createdBy: user.id,
+    });
+    const initialGrants = [
+      {
+        subject: { type: "serviceAccount" as const, id: account.id },
+        actions: ["read" as const, "use" as const],
+      },
+    ];
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${source.id}/convert-to-skill`,
+      payload: { description: "Conversion test", initialGrants },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const converted = response.json().skill;
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "skill",
+      scope: converted.id,
+    });
+    expect(policy?.grants).toContainEqual(initialGrants[0]);
+    expect(
+      policy?.grants.some((grant) => grant.subject.type === "organization"),
+    ).toBe(false);
+    expect(converted.scope).toBe("personal");
+    expect(await AgentModel.findById(source.id)).not.toBeNull();
+  });
+
   test("converts an agent into a skill with provenance metadata", async ({
     makeInternalAgent,
   }) => {
@@ -94,10 +138,10 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     expect(body.report.carried.map((field) => field.field)).toContain(
       "systemPrompt",
     );
-    // the REST path persists the agent's scope, so it reports it carried.
+    // The new resource has its own grants.
     expect(
-      body.report.carried.find((field) => field.field === "scope")?.detail,
-    ).toBe("personal");
+      body.report.annotated.find((field) => field.field === "scope")?.detail,
+    ).toContain("independently");
 
     // by default non-destructive: the skill persisted, the agent is untouched.
     const [stored] = await SkillModel.findAllByName(
@@ -405,7 +449,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
       organizationId,
       name: "Hidden Gateway",
       agentType: "mcp_gateway",
-      scope: "org",
+      scope: "personal",
       teams: [],
       labels: [],
       knowledgeBaseIds: [],

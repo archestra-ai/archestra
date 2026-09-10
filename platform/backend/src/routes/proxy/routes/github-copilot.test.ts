@@ -20,10 +20,21 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
-import { describe, expect, test } from "@/test";
+import { ModelModel } from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { ApiError, GithubCopilot } from "@/types";
 import githubCopilotProxyRoutes from "./github-copilot";
+
+beforeEach(async () => {
+  await ModelModel.create({
+    externalId: "github-copilot/gpt-4",
+    provider: "github-copilot",
+    modelId: "gpt-4",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+  });
+});
 
 const COPILOT_TOKEN_EXCHANGE_URL =
   "https://api.github.com/copilot_internal/v2/token";

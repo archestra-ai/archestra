@@ -167,6 +167,124 @@ exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
         "maxItems": 500,
         "type": "array",
       },
+      "initialGrants": {
+        "items": {
+          "properties": {
+            "actions": {
+              "items": {
+                "enum": [
+                  "read",
+                  "use",
+                  "update",
+                  "delete",
+                  "manage-permissions",
+                ],
+                "type": "string",
+              },
+              "maxItems": 5,
+              "minItems": 1,
+              "type": "array",
+            },
+            "subject": {
+              "oneOf": [
+                {
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "type": {
+                      "const": "user",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "type": {
+                      "const": "team",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string",
+                    },
+                    "type": {
+                      "const": "serviceAccount",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "type": {
+                      "const": "role",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "properties": {
+                    "id": {
+                      "const": "*",
+                      "type": "string",
+                    },
+                    "type": {
+                      "const": "organization",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                  ],
+                  "type": "object",
+                },
+              ],
+            },
+          },
+          "required": [
+            "subject",
+            "actions",
+          ],
+          "type": "object",
+        },
+        "maxItems": 200,
+        "type": "array",
+      },
     },
     "required": [
       "content",

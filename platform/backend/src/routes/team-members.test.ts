@@ -627,7 +627,7 @@ describe("team routes", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    test("team admin member cannot update team details without team:update", async ({
+    test("team admin member can update their team details without team:update", async ({
       makeTeam,
       makeUser,
       makeMember,
@@ -667,12 +667,9 @@ describe("team routes", () => {
         payload: { name: "Edited By Member" },
       });
 
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error.message).toBe(
-        "You are not authorized to update this team",
-      );
+      expect(response.statusCode, response.body).toBe(200);
       await expect(TeamModel.findById(team.id)).resolves.toMatchObject({
-        name: "Editable",
+        name: "Edited By Member",
       });
 
       await memberApp.close();

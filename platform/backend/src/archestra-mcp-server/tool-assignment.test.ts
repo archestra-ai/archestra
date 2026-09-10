@@ -188,7 +188,7 @@ describe("tool assignment tool execution", () => {
       {
         agentId: protectedAgent.id,
         toolId: tool.id,
-        error: "You can only manage your own personal agents",
+        error: "You do not have permission to modify this resource",
       },
     ]);
     expect(parsed.succeeded).toEqual([]);
@@ -435,7 +435,7 @@ describe("bulk_remove_tools_from_agents tool execution", () => {
       {
         agentId: protectedAgent.id,
         toolId: tool.id,
-        error: "You can only manage your own personal agents",
+        error: "You do not have permission to modify this resource",
       },
     ]);
     expect(parsed.succeeded).toEqual([]);

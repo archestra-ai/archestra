@@ -65,10 +65,7 @@ export function getAgentActionModel({
       id: "edit",
       label: ACTION_LABEL.edit,
       visible: true,
-      permissions: permission(
-        resource,
-        builtIn ? ["update", "admin"] : "update",
-      ),
+      permissions: permission(resource, "update"),
       href: agentConfigureHref(kind, agent.id),
     },
     {

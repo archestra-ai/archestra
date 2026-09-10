@@ -569,11 +569,12 @@ export async function processIncomingEmail(
       );
 
       // Check if user has access to the agent via team membership or admin permission
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        user.id,
-        agentId,
-        isAgentAdmin,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: user.id,
+        agentId: agentId,
+        isAgentAdmin: isAgentAdmin,
+        action: "use",
+      });
 
       if (!hasAccess) {
         logger.warn(

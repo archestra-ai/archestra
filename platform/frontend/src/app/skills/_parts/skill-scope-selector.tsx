@@ -50,10 +50,11 @@ export function SkillScopeSelector({
    */
   subject?: string;
 }) {
-  const { data: isSkillAdmin } = useHasPermissions({ skill: ["admin"] });
-  const { data: isSkillTeamAdmin } = useHasPermissions({
-    skill: ["team-admin"],
-  });
+  const { data: isSkillAdmin } = useHasPermissions({ skill: ["update"] }, "*");
+  const { data: isSkillTeamAdmin } = useHasPermissions(
+    { skill: ["update"] },
+    "teams:*",
+  );
   const { data: teams } = useAssignableTeams({
     isResourceAdmin: !!isSkillAdmin,
   });

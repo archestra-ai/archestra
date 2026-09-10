@@ -1,3 +1,4 @@
+// Pre-migration compatibility. Migrated resources use the scoped-grants route suites.
 import { type Mock, vi } from "vitest";
 import {
   getAgentTypePermissionChecker,
@@ -35,7 +36,7 @@ describe("PUT /api/agents/:id static connection pins", () => {
     vi.mocked(isAgentTypeAdmin).mockResolvedValue(true);
 
     user = await makeUser();
-    const organization = await makeOrganization();
+    const organization = await makeOrganization({ legacyPermissions: true });
     organizationId = organization.id;
     await makeMember(user.id, organizationId);
 

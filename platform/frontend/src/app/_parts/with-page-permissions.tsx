@@ -4,7 +4,7 @@ import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPagePermissions } from "@/lib/auth/auth.query";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
@@ -13,7 +13,7 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   // Get required permissions for current page
   const requiredPermissions = resolvePagePermissions(pathname);
-  const { data: hasRequiredPermissions, isPending } = useHasPermissions(
+  const { data: hasRequiredPermissions, isPending } = useHasPagePermissions(
     requiredPermissions || {},
   );
 

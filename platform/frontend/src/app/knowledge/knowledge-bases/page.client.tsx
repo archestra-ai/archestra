@@ -35,7 +35,6 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ResourceDeletedStatusFilter,
-  ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
@@ -97,7 +96,6 @@ import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
 import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
-import { KnowledgeBaseAccessBadge } from "./_parts/knowledge-base-access-badge";
 import { KnowledgeBaseCard } from "./_parts/knowledge-base-card";
 import { useChatWithKnowledgeBase } from "./_parts/use-chat-with-knowledge-base";
 
@@ -351,18 +349,7 @@ function KnowledgeBasesList() {
         );
       },
     },
-    {
-      id: "access",
-      header: "Access",
-      size: 180,
-      cell: ({ row }) => (
-        <KnowledgeBaseAccessBadge
-          visibility={row.original.visibility}
-          teamIds={row.original.teamIds}
-          createdBy={row.original.createdBy}
-        />
-      ),
-    },
+
     {
       id: "connectors",
       header: "Connectors",
@@ -509,10 +496,6 @@ function KnowledgeBasesList() {
                 />
               }
             >
-              <ResourceScopeFilter
-                adminPermission={{ knowledgeSource: ["admin"] }}
-                ownerLabelPlural="knowledge bases"
-              />
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />

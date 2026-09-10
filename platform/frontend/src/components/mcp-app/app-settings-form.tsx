@@ -1,18 +1,8 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
-import {
-  AlertTriangle,
-  AppWindow,
-  Globe,
-  User,
-  UserRound,
-  Users,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { archestraApiTypes } from "@archestra/shared";
+import { AlertTriangle, AppWindow } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
@@ -20,7 +10,7 @@ import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { IdentityFields } from "@/components/identity-fields";
-import { AppTeamAccessWarning } from "@/components/mcp-app/app-team-access-warning";
+import { ResourcePermissions } from "@/components/resource-permissions";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -35,12 +25,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import {
-  TeamVisibilityPicker,
-  type VisibilityOption,
-  VisibilitySelector,
-} from "@/components/visibility-selector";
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import {
   useAppTools,
   useAssignToolToApp,
@@ -51,8 +39,6 @@ import {
 } from "@/lib/app.query";
 import { useAppAccess } from "@/lib/apps/use-app-access";
 import { notYoursToChange } from "@/lib/design/resource-lexicon";
-import { useOrganizationMembers } from "@/lib/organization.query";
-import { useAssignableTeams } from "@/lib/teams/team.query";
 
 type App = archestraApiTypes.GetAppResponses["200"];
 
@@ -66,32 +52,26 @@ type FormValues = {
 
 // The sidebar sections the fields are grouped into, mirroring the Team and
 // identity-provider dialogs' left-nav layout.
-type AppSettingsSection = "general" | "tools" | "access";
+type AppSettingsSection = "general" | "tools" | "access" | "permissions";
 
 const NAV_ITEMS: Array<{ id: AppSettingsSection; label: string }> = [
   { id: "general", label: "General" },
   { id: "tools", label: "Tools" },
-  { id: "access", label: "Access" },
+  { id: "access", label: "Status" },
+  { id: "permissions", label: "Permissions" },
 ];
 
 // Mirrors the backend's AppSlugSchema so a malformed URL is caught before the
 // round-trip. Uniqueness is only knowable server-side and comes back as a 409.
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/**
- * What the visibility control offers. Wider than the stored scope: an app
- * shared with named people is persisted as `personal` plus grants, so "user"
- * exists only in this form, which maps it both ways.
- */
-type AppVisibilityChoice = ResourceVisibilityScope | "user";
-
 // The whole-app settings dialog, hosted by `AppSettingsDialog` (apps-page cards
 // and the side panel both open that dialog). It folds the previously separate
 // rename dialog, manage-tools dialog, and publish popover into one staged form
 // committed by a single Save: identity (name/description), the bound environment
-// + assigned tools, and visibility (scope + teams). It renders the shared
+// + assigned tools, with permission changes saved independently. It renders the shared
 // `TabbedDialogShell` — the same left-nav dialog as the identity-provider and
-// team dialogs — with the fields split across General/Tools/Access sections and
+// team dialogs — with the fields split across General/Tools/Status/Permissions sections and
 // a sticky Cancel/Save footer. Delete is intentionally NOT here — it's a
 // separate destructive action owned by each host.
 export function AppSettingsForm({
@@ -104,16 +84,7 @@ export function AppSettingsForm({
   /** Controls the host dialog; `false` closes it (Cancel and after a save). */
   onOpenChange: (open: boolean) => void;
 }) {
-  const {
-    canEdit,
-    isAdmin: isAppAdmin,
-    isTeamAdmin: isAppTeamAdmin,
-    currentUserId,
-    userTeamIds,
-    isPending: isAccessPending,
-  } = useAppAccess(app);
-  const { data: teams } = useAssignableTeams({ isResourceAdmin: !!isAppAdmin });
-  const { data: members = [] } = useOrganizationMembers();
+  const { canEdit, isPending: isAccessPending } = useAppAccess(app);
 
   const updateApp = useUpdateApp();
   const setEnabled = useSetAppEnabled();
@@ -125,6 +96,18 @@ export function AppSettingsForm({
 
   const [activeSection, setActiveSection] =
     useState<AppSettingsSection>("general");
+
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  const pendingSection = useRef<AppSettingsSection | null>(null);
+  const permissionsGuard = useUnsavedChangesGuard({
+    isDirty: permissionsDirty,
+    onOpenChange: (nextOpen) => {
+      const nextSection = pendingSection.current;
+      pendingSection.current = null;
+      if (!nextOpen && nextSection) setActiveSection(nextSection);
+      else onOpenChange(nextOpen);
+    },
+  });
 
   const form = useForm<FormValues>({
     defaultValues: {
@@ -147,14 +130,6 @@ export function AppSettingsForm({
   const [openMode, setOpenMode] = useState<"inline" | "fullscreen">(
     app.openInFullscreen ? "fullscreen" : "inline",
   );
-  // The form's fourth option. On the wire an app shared with named people stays
-  // `personal` and carries grants, so "user" is a UI-side reading of
-  // (scope, users) — see the save path below, which maps it back.
-  const [scope, setScope] = useState<AppVisibilityChoice>(
-    app.scope === "personal" && app.users.length > 0 ? "user" : app.scope,
-  );
-  const [teamIds, setTeamIds] = useState<string[]>(app.teams.map((t) => t.id));
-  const [userIds, setUserIds] = useState<string[]>(app.users.map((u) => u.id));
   const [labels, setLabels] = useState<ProfileLabel[]>(
     app.labels.map(({ key, value }) => ({ key, value })),
   );
@@ -178,23 +153,6 @@ export function AppSettingsForm({
     }
   }, [assignedTools, toolsSeeded]);
 
-  const canShareTeams = isAppAdmin || isAppTeamAdmin;
-  const hasNoTeams = (teams ?? []).length === 0;
-
-  // Everyone in the org but the author, who already reaches their own app —
-  // offering to "share" it with themselves would be a no-op that reads as a bug.
-  const memberOptions = useMemo(
-    () =>
-      members
-        .filter((member) => member.id !== currentUserId)
-        .map((member) => ({
-          userId: member.id,
-          name: member.name,
-          email: member.email,
-        })),
-    [members, currentUserId],
-  );
-
   const enabledOptions = [
     {
       value: "disabled" as const,
@@ -206,7 +164,7 @@ export function AppSettingsForm({
       value: "enabled" as const,
       label: "Enabled",
       description:
-        "Reachable from Agents and the MCP Gateway, for everyone in the scope above",
+        "Reachable from Agents and the MCP Gateway, for recipients with permission to use it",
     },
   ];
   const selectedEnabledDescription = enabledOptions.find(
@@ -248,55 +206,9 @@ export function AppSettingsForm({
     (option) => option.value === openMode,
   )?.description;
 
-  const options: VisibilityOption<AppVisibilityChoice>[] = [
-    {
-      value: "personal",
-      label: "Personal",
-      description: "Only you can use this app",
-      icon: User,
-    },
-    {
-      value: "user",
-      label: "Users",
-      description: "Share this app with selected people",
-      icon: UserRound,
-      disabled: scope !== "user" && memberOptions.length === 0,
-      disabledLabel:
-        memberOptions.length === 0 ? "No users available" : undefined,
-    },
-    {
-      value: "team",
-      label: "Teams",
-      description: "Share this app with selected teams",
-      icon: Users,
-      disabled: scope !== "team" && (!canShareTeams || hasNoTeams),
-      disabledReason: !canShareTeams
-        ? "You need app:team-admin permission to share with teams"
-        : hasNoTeams
-          ? "No teams are available to share with"
-          : undefined,
-    },
-    {
-      value: "org",
-      label: "Organization",
-      description: "Anyone in your org can use this app",
-      icon: Globe,
-      disabled: scope !== "org" && !isAppAdmin,
-      disabledLabel: !isAppAdmin ? "Requires permission" : undefined,
-      disabledReason: !isAppAdmin
-        ? "You need app:admin permission to make this available org-wide"
-        : undefined,
-    },
-  ];
-
-  const teamSelectionMissing = scope === "team" && teamIds.length === 0;
-  // Same guard as Teams: an empty Users selection would silently save as a
-  // plain personal app, quietly un-sharing it.
-  const userSelectionMissing = scope === "user" && userIds.length === 0;
-  const selectionMissing = teamSelectionMissing || userSelectionMissing;
   const readOnly = isAccessPending || !canEdit;
   // Save waits only while the assignments query is in flight. If it errors,
-  // Save re-enables: identity/visibility still save, and the tool diff is
+  // Save re-enables: configuration still saves, and the tool diff is
   // skipped below while the selection is unseeded (clearing it by accident is
   // the thing this guards against).
   const toolsLoading = appToolsQuery.isPending;
@@ -309,15 +221,15 @@ export function AppSettingsForm({
     unassignTool.isPending;
 
   // Save is blocked while access is resolving, for view-only users, mid-save,
-  // while tool assignments load, or when a shared scope has no recipients.
-  const saveDisabled = readOnly || saving || toolsLoading || selectionMissing;
+  // or while tool assignments load.
+  const saveDisabled = readOnly || saving || toolsLoading;
 
   // Serializes the handler itself: the state-based `saving` guard lags a
   // render, so a rapid resubmit could reread a stale tool-diff snapshot and
   // resend already-applied mutations.
   const submitInFlight = useRef(false);
 
-  const onBack = () => onOpenChange(false);
+  const onBack = () => permissionsGuard.requestClose();
 
   // Leaving General unmounts the labels editor, which holds any not-yet-added
   // label draft in its own state; flush a valid draft into committed labels
@@ -328,13 +240,16 @@ export function AppSettingsForm({
       const flushed = labelsRef.current?.saveUnsavedLabel();
       if (flushed) setLabels(flushed);
     }
-    setActiveSection(next);
+    if (permissionsDirty && next !== activeSection) {
+      pendingSection.current = next;
+      permissionsGuard.requestClose();
+    } else setActiveSection(next);
   };
 
   const onSubmit = form.handleSubmit(
     async (values) => {
       if (submitInFlight.current) return;
-      if (readOnly || saving || toolsLoading || selectionMissing) return;
+      if (readOnly || saving || toolsLoading) return;
       submitInFlight.current = true;
       try {
         await submitSettings(values);
@@ -369,15 +284,7 @@ export function AppSettingsForm({
       });
       if (!result) return;
     }
-    // "Shared with named people" is stored as a personal app plus grants, so the
-    // fourth option collapses back to `personal` here. Both lists are always
-    // sent: switching away from Teams or Users must revoke what it left behind,
-    // not strand it.
-    const body: archestraApiTypes.UpdateAppData["body"] = {
-      scope: scope === "user" ? "personal" : scope,
-      teamIds: scope === "team" ? teamIds : [],
-      userIds: scope === "user" ? userIds : [],
-    };
+    const body: archestraApiTypes.UpdateAppData["body"] = {};
     if (canEdit) {
       body.name = values.name.trim();
       body.description = values.description.trim() || null;
@@ -446,7 +353,7 @@ export function AppSettingsForm({
   return (
     <TabbedDialogShell
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={permissionsGuard.handleOpenChange}
       title="App settings"
       description="Manage this app's details, tools, and who can use it."
       sidebarLabel={form.watch("name")?.trim() || app.name || "App"}
@@ -472,7 +379,7 @@ export function AppSettingsForm({
           <Button type="button" variant="outline" onClick={onBack}>
             {!isAccessPending && !canEdit ? "Close" : "Cancel"}
           </Button>
-          {!isAccessPending && canEdit ? (
+          {!isAccessPending && canEdit && activeSection !== "permissions" ? (
             <Button type="submit" disabled={saveDisabled}>
               {saving ? "Saving…" : "Save"}
             </Button>
@@ -481,7 +388,7 @@ export function AppSettingsForm({
       }
     >
       <div className="space-y-4">
-        {!isAccessPending && !canEdit ? (
+        {!isAccessPending && !canEdit && activeSection !== "permissions" ? (
           <Alert variant="info">
             <AlertTriangle />
             <AlertTitle>View-only settings</AlertTitle>
@@ -491,6 +398,14 @@ export function AppSettingsForm({
           </Alert>
         ) : null}
 
+        {activeSection === "permissions" ? (
+          <ResourcePermissions
+            resource="app"
+            scope={app.id}
+            embedded
+            onDirtyChange={setPermissionsDirty}
+          />
+        ) : null}
         {activeSection === "general" ? (
           <div className="space-y-4">
             <IdentityFields
@@ -666,46 +581,7 @@ export function AppSettingsForm({
         ) : null}
 
         {activeSection === "access" ? (
-          <VisibilitySelector
-            heading="Who can use this app"
-            value={scope}
-            options={options}
-            onValueChange={setScope}
-            readOnly={readOnly}
-          >
-            {scope === "user" && (
-              <div className="space-y-2">
-                <Label>Users</Label>
-                <UserSearchableMultiSelect
-                  value={userIds}
-                  onValueChange={setUserIds}
-                  users={memberOptions}
-                  placeholder="Select users"
-                  searchPlaceholder="Search users..."
-                  emptyMessage="No users found."
-                  className="w-full"
-                  disabled={readOnly}
-                />
-              </div>
-            )}
-
-            {scope === "team" && (
-              <div className="space-y-2">
-                <TeamVisibilityPicker
-                  disabled={readOnly || !canShareTeams || hasNoTeams}
-                  teams={teams ?? []}
-                  value={teamIds}
-                  onChange={setTeamIds}
-                />
-                <AppTeamAccessWarning
-                  scope={scope}
-                  selectedTeamIds={teamIds}
-                  isAppAdmin={!!isAppAdmin}
-                  userTeamIds={userTeamIds}
-                />
-              </div>
-            )}
-
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label>App status</Label>
               {selectedEnabledDescription ? (
@@ -765,9 +641,17 @@ export function AppSettingsForm({
                 </SelectContent>
               </Select>
             </div>
-          </VisibilitySelector>
+          </div>
         ) : null}
       </div>
+      <UnsavedChangesDialog
+        open={permissionsGuard.confirmOpen}
+        onKeepEditing={() => {
+          pendingSection.current = null;
+          permissionsGuard.keepEditing();
+        }}
+        onDiscard={permissionsGuard.discardChanges}
+      />
     </TabbedDialogShell>
   );
 }

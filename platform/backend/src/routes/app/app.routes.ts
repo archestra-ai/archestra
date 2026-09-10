@@ -61,6 +61,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   type App,
@@ -202,7 +203,14 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // by their own model; we merge, sort, and paginate over the combined set.
       // Cardinality is small (tens), so fetching all-then-slicing is fine.
       const isAppAdmin = await callerIsAppAdmin(user.id, organizationId);
+      const hasBaseRead = await userHasPermission(
+        user.id,
+        organizationId,
+        "app",
+        "read",
+      );
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
+        onlyExplicitGrants: !hasBaseRead,
         organizationId,
         userId: user.id,
         isAppAdmin,
@@ -226,11 +234,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
       const [ownedCount, external] = await Promise.all([
         AppModel.countByOrganization(ownedFilters),
-        McpServerModel.findUiCapableForCaller({
-          userId: user.id,
-          organizationId,
-          ...(query.search ? { search: query.search } : {}),
-        }),
+        hasBaseRead
+          ? McpServerModel.findUiCapableForCaller({
+              userId: user.id,
+              organizationId,
+              ...(query.search ? { search: query.search } : {}),
+            })
+          : Promise.resolve([]),
       ]);
       const owned = await AppModel.findByOrganization({
         ...ownedFilters,
@@ -510,13 +520,24 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "A team-scoped app requires at least one teamId.",
         );
       }
-      await assertCallerMayModifyApp({
-        userId: user.id,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.validateInitialGrants({
         organizationId,
-        scope,
-        authorId: user.id,
-        resourceTeamIds: teamIds,
+        userId: user.id,
+        resource: "app",
+        grants: body.initialGrants ?? [],
+        target: {
+          id: crypto.randomUUID(),
+          name: body.name,
+          authorId: user.id,
+          scope,
+          teams: teamIds.map((id) => ({ id })),
+          users: [],
+        },
       });
+      // SPDX-SnippetEnd
       // `openInChat` hands the new app straight to a chat agent to build (the
       // Apps page create flow), so that agent is resolved up front: the app
       // binds to its environment below, and the seeded conversation reuses the
@@ -568,6 +589,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Names are unique per author and slugs per org; a duplicate of either
       // fails this insert before any backing is created.
       const created = await AppModel.create({
+        initialPermissionGrants: body.initialGrants,
+        initialVisibility: { scope, teamIds },
         app: {
           organizationId,
           authorId: user.id,
@@ -890,6 +913,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const app = await loadViewableApp({
+        action: "update",
         appId,
         userId: user.id,
         organizationId,
@@ -905,6 +929,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : undefined;
 
       await assertCallerMayModifyApp({
+        appId: app.id,
         userId: user.id,
         organizationId,
         scope: app.scope,
@@ -948,7 +973,39 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Handing an app to named individuals widens who can reach it just as a
       // team change does, so it goes through the same destination check rather
       // than riding along on plain view access.
-      if (reScoping || nextTeamIds !== undefined || nextUserIds !== undefined) {
+      const currentUserIds =
+        nextUserIds !== undefined
+          ? ((await AppAccessModel.getUserDetailsForApps([app.id]))
+              .get(app.id)
+              ?.map((entry) => entry.id) ?? [])
+          : [];
+      const teamSharingChanged =
+        nextTeamIds !== undefined &&
+        !sameRecipientIds(nextTeamIds, resourceTeamIds);
+      const userSharingChanged =
+        nextUserIds !== undefined &&
+        !sameRecipientIds(nextUserIds, currentUserIds);
+      if (reScoping || teamSharingChanged || userSharingChanged) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.rejectLegacySharing({
+          organizationId,
+          resource: "app",
+          scope: app.id,
+        });
+        // SPDX-SnippetEnd
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId,
+          userId: user.id,
+          resource: "app",
+          scope: app.id,
+          action: "manage-permissions",
+        });
+        // SPDX-SnippetEnd
         await assertCallerMayModifyApp({
           userId: user.id,
           organizationId,
@@ -1109,6 +1166,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const found = new Map<string, App>();
           for (const appId of ids) {
             const app = await loadViewableApp({
+              action: "update",
               appId,
               userId: user.id,
               organizationId,
@@ -1119,10 +1177,31 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         describe: (app) => app.name,
         authorize: async (app) => {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await ResourcePermissions.rejectLegacySharing({
+            organizationId,
+            resource: "app",
+            scope: app.id,
+          });
+          // SPDX-SnippetEnd
           const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await ResourcePermissions.require({
+            organizationId,
+            userId: user.id,
+            resource: "app",
+            scope: app.id,
+            action: "manage-permissions",
+          });
+          // SPDX-SnippetEnd
           // Twice, as the single-app update does: the caller must be allowed
           // to modify the app where it is, and to place it where it is going.
           await assertCallerMayModifyApp({
+            appId: app.id,
             userId: user.id,
             organizationId,
             scope: app.scope,
@@ -1137,7 +1216,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resourceTeamIds: teamIds,
           });
         },
-        applyEach: async (app, appId) => {
+        applyEach: async (_app, appId) => {
           const updated = await AppModel.update({
             id: appId,
             patch: { scope },
@@ -1192,6 +1271,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const found = new Map<string, App>();
           for (const appId of ids) {
             const app = await loadViewableApp({
+              action: "delete",
               appId,
               userId: user.id,
               organizationId,
@@ -1203,6 +1283,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         describe: (app) => app.name,
         authorize: async (app) => {
           await assertCallerMayModifyApp({
+            action: "delete",
+            appId: app.id,
             userId: user.id,
             organizationId,
             scope: app.scope,
@@ -1251,11 +1333,14 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { appId }, user, organizationId }, reply) => {
       const app = await loadViewableApp({
+        action: "delete",
         appId,
         userId: user.id,
         organizationId,
       });
       await assertCallerMayModifyApp({
+        action: "delete",
+        appId: app.id,
         userId: user.id,
         organizationId,
         scope: app.scope,
@@ -1305,6 +1390,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
         await assertCallerMayModifyApp({
+          appId: app.id,
           userId: user.id,
           organizationId,
           scope: app.scope,
@@ -1357,6 +1443,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
         await assertCallerMayModifyApp({
+          appId: app.id,
           userId: user.id,
           organizationId,
           scope: app.scope,
@@ -1468,6 +1555,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply,
     ) => {
       const app = await loadViewableApp({
+        action: "update",
         appId,
         userId: user.id,
         organizationId,
@@ -1744,6 +1832,7 @@ function appConflictError(
 /** Load an app the caller may view, or throw 404 (no existence leak). */
 async function loadViewableApp(params: {
   appId: string;
+  action?: "read" | "update" | "delete";
   userId: string;
   organizationId: string;
   /**
@@ -1759,7 +1848,23 @@ async function loadViewableApp(params: {
     userId: params.userId,
     isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
   });
-  if (!app) {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const effective = app
+    ? await ResourcePermissions.getEffective({
+        ...params,
+        resource: "app",
+        scope: params.appId,
+      })
+    : null;
+  // SPDX-SnippetEnd
+  if (
+    !app ||
+    !effective?.grants.some(
+      (grant) => grant.action === "read" || grant.action === params.action,
+    )
+  ) {
     throw new ApiError(
       404,
       `No app found with id ${params.addressedAs ?? params.appId}.`,
@@ -1827,8 +1932,9 @@ async function assertCallerMayModifyAppById(params: {
   userId: string;
   organizationId: string;
 }): Promise<void> {
-  const app = await loadViewableApp(params);
+  const app = await loadViewableApp({ ...params, action: "update" });
   await assertCallerMayModifyApp({
+    appId: app.id,
     userId: params.userId,
     organizationId: params.organizationId,
     scope: app.scope,
@@ -1964,3 +2070,10 @@ async function environmentIsAssignable(params: {
 }
 
 export default appRoutes;
+
+function sameRecipientIds(next: string[], current: string[]): boolean {
+  return (
+    new Set(next).size === new Set(current).size &&
+    next.every((id) => current.includes(id))
+  );
+}

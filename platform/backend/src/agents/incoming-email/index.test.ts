@@ -1,5 +1,6 @@
 import type { IncomingEmailSecurityMode } from "@archestra/shared";
 import { vi } from "vitest";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 
 const { startDetachedAgentTask, watchTaskCompletion } = vi.hoisted(() => ({
   startDetachedAgentTask: vi.fn(),
@@ -1390,6 +1391,19 @@ describe("processIncomingEmail security modes", () => {
       scope: "team",
     });
     const agentId = agent.id;
+    const key = {
+      organizationId: org.id,
+      resource: "agent" as const,
+      scope: agentId,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ],
+    });
 
     // Assign agent to team
     await db
@@ -1539,12 +1553,14 @@ describe("processIncomingEmail security modes", () => {
     makeUser,
     makeOrganization,
     makeTeam,
+    makeMember,
   }) => {
     // Create an admin user (user exists but is not a team member)
     const adminUser = await makeUser({ email: "admin@company.com" });
     // Create another user who owns the team
     const teamOwner = await makeUser({ email: "owner@company.com" });
     const org = await makeOrganization();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
     // Create a team owned by teamOwner, admin is NOT a member
     const team = await makeTeam(org.id, teamOwner.id);
 

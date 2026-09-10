@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { betterAuth, hasPermission } from "@/auth";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import OrganizationRoleModel from "@/models/organization-role";
@@ -960,6 +961,7 @@ describe("custom role routes", () => {
   describe("without an enterprise licence", () => {
     // Past the small-team threshold with no licence flag: core inactive.
     beforeEach(() => {
+      config.enterpriseFeatures.core = false;
       enterpriseTier.setUserCountForTesting(1_000);
     });
 

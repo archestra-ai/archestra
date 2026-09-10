@@ -2,6 +2,7 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, HookFileModel } from "@/models";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   constructResponseSchema,
@@ -29,8 +30,13 @@ const hookRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectHookFileSchema)),
       },
     },
-    async ({ query: { agentId }, organizationId }, reply) => {
-      await requireAgentInOrg(agentId, organizationId);
+    async ({ query: { agentId }, organizationId, user }, reply) => {
+      await requireAgentAccess({
+        agentId,
+        organizationId,
+        userId: user.id,
+        action: "read",
+      });
 
       const hooks = await HookFileModel.listByAgent(agentId, organizationId);
       return reply.status(200).send(hooks);
@@ -48,8 +54,13 @@ const hookRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectHookFileSchema),
       },
     },
-    async ({ body, organizationId }, reply) => {
-      await requireAgentInOrg(body.agentId, organizationId);
+    async ({ body, organizationId, user }, reply) => {
+      await requireAgentAccess({
+        agentId: body.agentId,
+        organizationId,
+        userId: user.id,
+        action: "update",
+      });
 
       const hook = await withUniqueHookConflict(() =>
         HookFileModel.create({ ...body, organizationId }),
@@ -79,7 +90,15 @@ const hookRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectHookFileSchema),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      const existing = await HookFileModel.findById(id, organizationId);
+      if (!existing) throw new ApiError(404, "Hook not found");
+      await requireAgentAccess({
+        agentId: existing.agentId,
+        organizationId,
+        userId: user.id,
+        action: "update",
+      });
       const hook = await withUniqueHookConflict(() =>
         HookFileModel.update({ id, organizationId, data: body }),
       );
@@ -105,7 +124,15 @@ const hookRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const existing = await HookFileModel.findById(id, organizationId);
+      if (!existing) throw new ApiError(404, "Hook not found");
+      await requireAgentAccess({
+        agentId: existing.agentId,
+        organizationId,
+        userId: user.id,
+        action: "update",
+      });
       const deleted = await HookFileModel.delete(id, organizationId);
 
       if (!deleted) {
@@ -139,12 +166,25 @@ async function withUniqueHookConflict<T>(op: () => Promise<T>): Promise<T> {
   }
 }
 
-async function requireAgentInOrg(
-  agentId: string,
-  organizationId: string,
-): Promise<void> {
-  const agentOrgId = await AgentModel.findOrganizationId(agentId);
-  if (agentOrgId !== organizationId) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function requireAgentAccess(params: {
+  agentId: string;
+  organizationId: string;
+  userId: string;
+  action: "read" | "update";
+}): Promise<void> {
+  const agent = await AgentModel.findById(params.agentId);
+  if (!agent || agent.organizationId !== params.organizationId) {
     throw new ApiError(404, "Agent not found");
   }
+  await ResourcePermissions.require({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    resource: agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent",
+    scope: agent.id,
+    action: params.action,
+  });
 }
+// SPDX-SnippetEnd

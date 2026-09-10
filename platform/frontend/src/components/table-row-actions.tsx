@@ -20,6 +20,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 
 type TableRowAction = {
+  permissionScope?: string;
   icon: React.ReactNode;
   label: string;
   className?: string;
@@ -41,6 +42,7 @@ type TableRowAction = {
 };
 
 type TableRowActionsProps = {
+  permissionScope?: string;
   actions: TableRowAction[];
   dropdownActions?: TableRowAction[];
   size?: "sm" | "default";
@@ -57,6 +59,7 @@ export function TableRowActions({
   dropdownActions,
   size = "sm",
   itemName,
+  permissionScope,
 }: TableRowActionsProps) {
   const buttonSize = size === "sm" ? "icon-sm" : "icon";
 
@@ -66,7 +69,10 @@ export function TableRowActions({
         {actions.map((action) => (
           <ActionButton
             key={action.label}
-            action={action}
+            action={{
+              ...action,
+              permissionScope: action.permissionScope ?? permissionScope,
+            }}
             size={buttonSize}
             itemName={itemName}
           />
@@ -93,7 +99,13 @@ export function TableRowActions({
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               {dropdownActions.map((action) => (
-                <DropdownActionButton key={action.label} action={action} />
+                <DropdownActionButton
+                  key={action.label}
+                  action={{
+                    ...action,
+                    permissionScope: action.permissionScope ?? permissionScope,
+                  }}
+                />
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -133,6 +145,7 @@ function ActionButton({
       return (
         <PermissionButton
           permissions={action.permissions as Permissions}
+          permissionScope={action.permissionScope}
           tooltip={tooltipText}
           aria-label={accessibleLabel}
           variant="outline"
@@ -152,6 +165,7 @@ function ActionButton({
     return (
       <PermissionButton
         permissions={action.permissions as Permissions}
+        permissionScope={action.permissionScope}
         tooltip={tooltipText}
         aria-label={accessibleLabel}
         variant="outline"
@@ -223,6 +237,7 @@ function ActionButton({
 function DropdownActionButton({ action }: { action: TableRowAction }) {
   const { data: hasPermission } = useHasPermissions(
     (action.permissions as Permissions) || {},
+    action.permissionScope,
   );
   const reasonId = useId();
 

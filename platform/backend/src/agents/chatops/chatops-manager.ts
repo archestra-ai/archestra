@@ -10,13 +10,11 @@ import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
-import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
-  AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
@@ -29,6 +27,7 @@ import {
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { getHiddenMessagingChannels } from "@/services/integration-overrides";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
@@ -137,17 +136,12 @@ export class ChatOpsManager {
   }
 
   /**
-   * Get agents available for a chatops provider, filtered by user access.
-   * If senderEmail is provided and resolves to a user, only returns agents
-   * the user has team-based access to. Falls back to all agents if user
-   * cannot be resolved (access check still happens at message processing time).
-   *
-   * When isDm=true, includes the user's own personal agents.
-   * When isDm=false (default), excludes all personal agents since channels are shared.
+   * Offer only agents the resolved organization member can use. An unresolved
+   * sender receives no resource names. Legacy visibility does not restrict an
+   * explicit use grant; execution checks the grant again for each message.
    */
   async getAccessibleChatopsAgents({
     senderEmail,
-    isDm,
   }: {
     senderEmail?: string;
     isDm: boolean;
@@ -156,33 +150,13 @@ export class ChatOpsManager {
       ? await UserModel.findByEmail(senderEmail.toLowerCase())
       : null;
 
-    // For DMs with a known user, include that user's personal agents
-    const agents =
-      isDm && user
-        ? await AgentModel.findAllInternalAgentsIncludingPersonal(user.id)
-        : await AgentModel.findAllInternalAgents();
-
-    if (!user || agents.length === 0) {
-      return agents;
-    }
-
+    if (!user) return [];
     const org = await OrganizationModel.getFirst();
-    if (!org) {
-      return agents;
-    }
-
-    const isAgentAdmin = await userHasPermission(
-      user.id,
-      org.id,
-      "agent",
-      "admin",
-    );
-    const accessibleIds = await AgentTeamModel.getUserAccessibleAgentIds(
-      user.id,
-      isAgentAdmin,
-    );
-    const accessibleSet = new Set(accessibleIds);
-    return agents.filter((a) => accessibleSet.has(a.id));
+    if (!org) return [];
+    return AgentModel.findUsableChatopsAgents({
+      organizationId: org.id,
+      userId: user.id,
+    });
   }
 
   /**
@@ -1591,18 +1565,17 @@ export class ChatOpsManager {
       }).catch(() => {});
     }
 
-    // Check if user has access to this specific agent (via team membership or admin)
-    const isAgentAdmin = await userHasPermission(
-      user.id,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const hasAccess = await ResourcePermissions.allows({
+      userId: user.id,
       organizationId,
-      "agent",
-      "admin",
-    );
-    const hasAccess = await AgentTeamModel.userHasAgentAccess(
-      user.id,
-      agentId,
-      isAgentAdmin,
-    );
+      resource: "agent",
+      scope: agentId,
+      action: "use",
+    });
+    // SPDX-SnippetEnd
 
     if (!hasAccess) {
       logger.warn(

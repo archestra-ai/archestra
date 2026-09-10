@@ -1,15 +1,34 @@
 import { archestraApiSdk, type Permissions } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
-import { hasPermissions } from "@/lib/auth/auth.utils";
+import { hasPagePermissions, hasPermissions } from "@/lib/auth/auth.utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 
 export async function serverCanAccessPage(pathname: string): Promise<boolean> {
-  return serverHasPermissions(requiredPagePermissionsMap[pathname] ?? {});
+  const required = requiredPagePermissionsMap[pathname] ?? {};
+  const userPermissions = await getServerPermissions();
+  if (hasPermissions(userPermissions, required)) return true;
+  // This is a navigation fallback only. Each API operation retains its own
+  // resource authorization, including list filtering and exact-object checks.
+  const headers = await getServerApiHeaders();
+  const { data, error, response } = await archestraApiSdk.getScopedCapabilities(
+    { headers },
+  );
+  if (error && (!response || response.status >= 500))
+    throw new Error("Scoped permission lookup failed", { cause: error });
+  return hasPagePermissions({
+    userPermissions,
+    required,
+    capabilities: data ?? [],
+  });
 }
 
 export async function serverHasPermissions(
   permissionsToCheck: Permissions,
 ): Promise<boolean> {
+  return hasPermissions(await getServerPermissions(), permissionsToCheck);
+}
+
+async function getServerPermissions(): Promise<Permissions | undefined> {
   const headers = await getServerApiHeaders();
   const {
     data: userPermissions,
@@ -34,5 +53,5 @@ export async function serverHasPermissions(
     );
   }
 
-  return hasPermissions(userPermissions ?? undefined, permissionsToCheck);
+  return userPermissions ?? undefined;
 }

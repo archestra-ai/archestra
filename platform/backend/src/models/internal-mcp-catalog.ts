@@ -1,3 +1,7 @@
+import type {
+  ResourcePermissionAction,
+  ResourcePermissionGrant,
+} from "@archestra/shared";
 import {
   and,
   count,
@@ -37,10 +41,13 @@ import LimitModel from "./limit";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import SecretModel from "./secret";
 import ToolModel, { toolUiResourceUriSql } from "./tool";
 
 type CatalogListOptions = {
+  /** Restrict a reader without organization-wide discovery to explicit grants. */
+  readGrantContext?: { userId: string; organizationId: string };
   expandSecrets?: boolean;
   userId?: string;
   isAdmin?: boolean;
@@ -64,7 +71,11 @@ type CatalogListOptions = {
 class InternalMcpCatalogModel {
   static async create(
     catalogItem: InsertInternalMcpCatalog,
-    context?: { organizationId: string; authorId?: string },
+    context?: {
+      organizationId: string;
+      authorId?: string;
+      initialPermissionGrants?: ResourcePermissionGrant[];
+    },
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
 
@@ -88,12 +99,33 @@ class InternalMcpCatalogModel {
       ...(context?.authorId ? { authorId: context.authorId } : {}),
     };
 
-    let createdItem = (
-      await db
+    let createdItem = await withDbTransaction(async (tx) => {
+      const [row] = await tx
         .insert(schema.internalMcpCatalogTable)
         .values(insertValues)
-        .returning()
-    )[0];
+        .returning();
+      if (row.organizationId && row.serverType !== "app") {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissionPolicyModel.createInitial({
+          tx,
+          organizationId: row.organizationId,
+          resource: "mcpRegistry",
+          scope: row.id,
+          grants: context?.initialPermissionGrants,
+          authorId: row.authorId,
+          visibility: row.scope,
+          teams: teams?.map((team) =>
+            typeof team === "string"
+              ? { id: team, level: "write" as const }
+              : { ...team, level: team.level ?? "write" },
+          ),
+        });
+        // SPDX-SnippetEnd
+      }
+      return row;
+    });
 
     if (labels && labels.length > 0) {
       await McpCatalogLabelModel.syncCatalogLabels(
@@ -297,8 +329,37 @@ class InternalMcpCatalogModel {
       ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
     );
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const searchCondition = and(
       baseSearchCondition,
+      userId && organizationId
+        ? ResourcePermissionPolicyModel.migratedAccessCondition({
+            organizationId,
+            userId,
+            resource: "mcpRegistry",
+            scopeColumn: schema.internalMcpCatalogTable.id,
+            action: "read",
+          })
+        : undefined,
+      ...(options?.readGrantContext
+        ? [
+            or(
+              eq(
+                schema.internalMcpCatalogTable.organizationId,
+                options.readGrantContext.organizationId,
+              ),
+              isNull(schema.internalMcpCatalogTable.organizationId),
+            ),
+            ResourcePermissionPolicyModel.grantCondition({
+              ...options.readGrantContext,
+              resource: "mcpRegistry",
+              scopeColumn: schema.internalMcpCatalogTable.id,
+              action: "read",
+            }),
+          ]
+        : []),
       // Hidden runtime variants and legacy preset rows are never surfaced.
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
       // App backing catalogs are never surfaced via registry search.
@@ -309,6 +370,7 @@ class InternalMcpCatalogModel {
         ? [catalogInEnvironmentPredicate(environmentId)]
         : []),
     );
+    // SPDX-SnippetEnd
 
     if (userId && !isAdmin && !organizationId) {
       return [];
@@ -358,6 +420,7 @@ class InternalMcpCatalogModel {
   static async findById(
     id: string,
     options?: {
+      accessAction?: ResourcePermissionAction;
       expandSecrets?: boolean;
       userId?: string;
       isAdmin?: boolean;
@@ -376,12 +439,13 @@ class InternalMcpCatalogModel {
     }
 
     if (userId && organizationId) {
-      const hasAccess = await McpCatalogTeamModel.userHasCatalogAccess(
-        userId,
-        id,
-        !!isAdmin,
-        organizationId,
-      );
+      const hasAccess = await McpCatalogTeamModel.userHasCatalogAccess({
+        userId: userId,
+        catalogId: id,
+        isAdmin: !!isAdmin,
+        organizationId: organizationId,
+        action: options?.accessAction,
+      });
       if (!hasAccess) return null;
     }
 
@@ -1127,12 +1191,24 @@ class InternalMcpCatalogModel {
 
   /** Physical delete — reserved for purge/rollback flows, never a user action. */
   static async hardDelete(id: string): Promise<boolean> {
-    const count = await hardDelete(
-      db,
-      schema.internalMcpCatalogTable,
-      eq(schema.internalMcpCatalogTable.id, id),
-    );
-    return count > 0;
+    return withDbTransaction(async (tx) => {
+      const count = await hardDelete(
+        tx,
+        schema.internalMcpCatalogTable,
+        eq(schema.internalMcpCatalogTable.id, id),
+      );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (count > 0)
+        await ResourcePermissionPolicyModel.deleteForTarget({
+          tx,
+          resources: ["mcpRegistry"],
+          scope: id,
+        });
+      // SPDX-SnippetEnd
+      return count > 0;
+    });
   }
 
   /**
@@ -1554,9 +1630,48 @@ class InternalMcpCatalogModel {
       // Hide soft-deleted catalog items from the registry.
       notDeleted(schema.internalMcpCatalogTable),
     ];
+    if (userId && options?.organizationId) {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      listConditions.push(
+        ResourcePermissionPolicyModel.migratedAccessCondition({
+          organizationId: options.organizationId,
+          userId,
+          resource: "mcpRegistry",
+          scopeColumn: schema.internalMcpCatalogTable.id,
+          action: "read",
+        }) as SQL,
+      );
+      // SPDX-SnippetEnd
+    }
     if (environmentId !== undefined) {
       listConditions.push(catalogInEnvironmentPredicate(environmentId));
     }
+    if (options?.readGrantContext) {
+      listConditions.push(
+        or(
+          eq(
+            schema.internalMcpCatalogTable.organizationId,
+            options.readGrantContext.organizationId,
+          ),
+          isNull(schema.internalMcpCatalogTable.organizationId),
+        ) as SQL,
+      );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      listConditions.push(
+        ResourcePermissionPolicyModel.grantCondition({
+          ...options.readGrantContext,
+          resource: "mcpRegistry",
+          scopeColumn: schema.internalMcpCatalogTable.id,
+          action: "read",
+        }),
+      );
+      // SPDX-SnippetEnd
+    }
+
     if (!includeApps) {
       // App backing catalogs are managed on the Apps page, never surfaced in the
       // MCP registry (UI list or the agent-callable registry search).
@@ -1752,6 +1867,18 @@ class InternalMcpCatalogModel {
       : [];
 
     return {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      resourcePermissions:
+        (
+          await ResourcePermissionPolicyModel.find({
+            organizationId,
+            resource: "mcpRegistry",
+            scope: row.id,
+          })
+        )?.grants ?? [],
+      // SPDX-SnippetEnd
       id: row.id,
       name: row.name,
       version: row.version ?? null,

@@ -2,6 +2,7 @@ import { ADMIN_ROLE_NAME, ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -483,13 +484,13 @@ describe("service account API authentication", () => {
     const organization = await makeOrganization();
     const owner = await makeUser();
     const agent = await makeAgent({
+      agentType: "agent",
       organizationId: organization.id,
       authorId: owner.id,
       scope: "personal",
     });
     const role = await makeCustomRole(organization.id, {
       permission: {
-        agent: ["admin"],
         chat: ["create"],
       },
     });
@@ -499,6 +500,23 @@ describe("service account API authentication", () => {
       role: role.role,
       createdBy: null,
     });
+    const key = {
+      organizationId: organization.id,
+      resource: "agent" as const,
+      scope: agent.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    const granted = await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "serviceAccount", id: serviceAccount.id },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+    expect(granted).not.toBeNull();
     const serviceToken = await ServiceAccountModel.createToken({
       serviceAccountId: serviceAccount.id,
       organizationId: organization.id,

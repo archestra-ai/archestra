@@ -26,6 +26,7 @@ import type {
   PriceSource,
 } from "@/types";
 import ModelTeamModel from "./model-team";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
  * Effective pricing result with source tracking. All prices are per-million
@@ -360,12 +361,22 @@ class ModelModel {
    * Create new model
    */
   static async create(data: CreateModel): Promise<Model> {
-    const [result] = await db
-      .insert(schema.modelsTable)
-      .values(data)
-      .returning();
+    return withDbTransaction(async (tx) => {
+      const [result] = await tx
+        .insert(schema.modelsTable)
+        .values(data)
+        .returning();
 
-    return result;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.initializeModels({
+        tx,
+        modelIds: [result.id],
+      });
+      // SPDX-SnippetEnd
+      return result;
+    });
   }
 
   /**
@@ -373,42 +384,52 @@ class ModelModel {
    * Does NOT overwrite customPricePerMillionInput/Output on conflict.
    */
   static async upsert(data: CreateModel): Promise<Model> {
-    const [result] = await db
-      .insert(schema.modelsTable)
-      .values(data)
-      .onConflictDoUpdate({
-        target: [schema.modelsTable.provider, schema.modelsTable.modelId],
-        set: {
-          externalId: data.externalId,
-          description: data.description,
-          contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
-          // Unlike the other capability fields, outputLength has no admin editor
-          // and is used as an output-token safety cap, so prefer the freshly
-          // synced value (keeping the last known value only when the sync omits it)
-          // — a lowered provider cap must propagate, not be pinned forever.
-          outputLength: sql`COALESCE(excluded.output_length, ${schema.modelsTable.outputLength})`,
-          inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
-          outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
-          supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
-          promptPricePerToken: data.promptPricePerToken,
-          completionPricePerToken: data.completionPricePerToken,
-          cacheReadPricePerToken: data.cacheReadPricePerToken,
-          cacheWritePricePerToken: data.cacheWritePricePerToken,
-          embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
-          // Display-only provider metadata (not user-editable): prefer the fresh
-          // synced value so changed Ollama defaults show up, keeping the last
-          // known value only when a sync omits it (e.g. a transient /api/show miss).
-          defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
-          lastSyncedAt: new Date(),
-          updatedAt: new Date(),
-          // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
-          // NOTE: capability fields only backfill when the existing DB value is null
-          // to preserve user-edited values while still populating missing metadata
-        },
-      })
-      .returning();
+    return withDbTransaction(async (tx) => {
+      const [result] = await tx
+        .insert(schema.modelsTable)
+        .values(data)
+        .onConflictDoUpdate({
+          target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+          set: {
+            externalId: data.externalId,
+            description: data.description,
+            contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
+            // Unlike the other capability fields, outputLength has no admin editor
+            // and is used as an output-token safety cap, so prefer the freshly
+            // synced value (keeping the last known value only when the sync omits it)
+            // — a lowered provider cap must propagate, not be pinned forever.
+            outputLength: sql`COALESCE(excluded.output_length, ${schema.modelsTable.outputLength})`,
+            inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
+            outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
+            supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
+            promptPricePerToken: data.promptPricePerToken,
+            completionPricePerToken: data.completionPricePerToken,
+            cacheReadPricePerToken: data.cacheReadPricePerToken,
+            cacheWritePricePerToken: data.cacheWritePricePerToken,
+            embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
+            // Display-only provider metadata (not user-editable): prefer the fresh
+            // synced value so changed Ollama defaults show up, keeping the last
+            // known value only when a sync omits it (e.g. a transient /api/show miss).
+            defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
+            lastSyncedAt: new Date(),
+            updatedAt: new Date(),
+            // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
+            // NOTE: capability fields only backfill when the existing DB value is null
+            // to preserve user-edited values while still populating missing metadata
+          },
+        })
+        .returning();
 
-    return result;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.initializeModels({
+        tx,
+        modelIds: [result.id],
+      });
+      // SPDX-SnippetEnd
+      return result;
+    });
   }
 
   /**
@@ -503,6 +524,14 @@ class ModelModel {
           })
           .returning();
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissionPolicyModel.initializeModels({
+          tx,
+          modelIds: insertedBatch.map((model) => model.id),
+        });
+        // SPDX-SnippetEnd
         batchResults.push(...insertedBatch);
       }
 
@@ -588,6 +617,14 @@ class ModelModel {
           })
           .returning();
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissionPolicyModel.initializeModels({
+          tx,
+          modelIds: insertedBatch.map((model) => model.id),
+        });
+        // SPDX-SnippetEnd
         batchResults.push(...insertedBatch);
       }
 

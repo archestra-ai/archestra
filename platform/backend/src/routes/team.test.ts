@@ -163,6 +163,49 @@ describe("team route TOON compression contract", () => {
   });
 
   describe("PUT /api/teams/:id", () => {
+    test("team admins may edit their own team's metadata without organization-wide team update", async ({
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      await MemberModel.updateRole(adminUser.id, organizationId, "member");
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
+      const own = await makeTeam(organizationId, adminUser.id);
+      const other = await makeTeam(organizationId, adminUser.id);
+      await makeTeamMember(own.id, adminUser.id, { role: "admin" });
+      await makeTeamMember(other.id, adminUser.id, { role: "member" });
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${own.id}`,
+        payload: { name: "Renamed team", description: "Updated team metadata" },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        name: "Renamed team",
+        description: "Updated team metadata",
+      });
+      const audit = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceId: own.id,
+        offset: 0,
+        limit: 10,
+      });
+      expect(audit.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            after: expect.objectContaining({ name: "Renamed team" }),
+          }),
+        ]),
+      );
+      const denied = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${other.id}`,
+        payload: { name: "Unauthorized rename" },
+      });
+      expect(denied.statusCode).toBe(403);
+    });
     test("persists convertToolResultsToToon=true even when org scope is 'organization'", async ({
       makeTeam,
     }) => {

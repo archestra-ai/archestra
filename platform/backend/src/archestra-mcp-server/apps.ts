@@ -1,4 +1,5 @@
 import {
+  type ResourcePermissionGrant,
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
@@ -40,7 +41,6 @@ import {
 } from "@/services/agent-tool-assignment";
 import {
   assertCallerMayAuthorApp,
-  assertCallerMayModifyApp,
   callerIsAppAdmin,
   resolveOrgTeams,
 } from "@/services/apps/app-authorization";
@@ -56,7 +56,6 @@ import {
 import {
   createAppBacking,
   deleteAppBacking,
-  syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
 import { buildAppRenderResult } from "@/services/apps/app-render-result";
 import {
@@ -78,6 +77,7 @@ import { restoreAppVersion } from "@/services/apps/app-version-restore";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
 import { loadConversationAttachmentSource } from "@/services/conversation-attachment-source";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { sniffInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
@@ -551,15 +551,31 @@ const registry = defineArchestraTools([
       let payload: VersionPayload;
       let warnings: string[];
       try {
-        // Creating a shared (org) app needs the matching authority; a plain
-        // member may only create personal apps they author.
-        await assertCallerMayModifyApp({
-          userId,
-          organizationId,
-          scope,
-          authorId: userId,
-          resourceTeamIds: [],
-        });
+        if (
+          !(await userHasPermission(userId, organizationId, "app", "create"))
+        ) {
+          throw new ApiError(403, "Permission to create apps is required");
+        }
+        if (args.initialGrants?.length) {
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          await ResourcePermissions.validateInitialGrants({
+            organizationId,
+            userId,
+            resource: "app",
+            grants: args.initialGrants,
+            target: {
+              id: crypto.randomUUID(),
+              name: args.name,
+              authorId: userId,
+              scope,
+              teams: [],
+              users: [],
+            },
+          });
+          // SPDX-SnippetEnd
+        }
         // Scaffold always seeds the single default template.
         const resolved = await resolveCreateAppHtml({ name: args.name });
         const validated = await buildValidatedVersionPayload({
@@ -617,6 +633,8 @@ const registry = defineArchestraTools([
       let created: Awaited<ReturnType<typeof AppModel.create>>;
       try {
         created = await AppModel.create({
+          initialPermissionGrants: args.initialGrants,
+          initialVisibility: { scope, teamIds: [] },
           app: {
             organizationId,
             authorId: userId,
@@ -876,6 +894,12 @@ const registry = defineArchestraTools([
       const auth = requireAuthed(context);
       if ("error" in auth) return auth.error;
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
+        onlyExplicitGrants: !(await userHasPermission(
+          auth.userId,
+          auth.organizationId,
+          "app",
+          "read",
+        )),
         organizationId: auth.organizationId,
         userId: auth.userId,
         isAppAdmin: await callerIsAppAdmin(auth.userId, auth.organizationId),
@@ -994,7 +1018,7 @@ const registry = defineArchestraTools([
           );
         }
       }
-      const gate = await loadApp({ ...auth, appId: args.appId });
+      const gate = await loadApp({ action: "use", ...auth, appId: args.appId });
       if ("error" in gate) return gate.error;
       return buildAppRenderResult(gate.app);
     },
@@ -1621,7 +1645,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_PUBLISH_APP_SHORT_NAME,
     title: "Publish App",
     description:
-      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teams — team names or ids) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Publishing changes only the app's sharing scope: it does not modify the HTML or re-run validation, so confirm the current version is sound with validate_app (or get_app_diagnostics) beforehand if you need to. Returns the app's standalone page.",
+      "Share an app by granting read and use access to specific teams (scope: team, teams: names or IDs) or the whole organization (scope: org). Requires manage-permissions and the actions being granted on this app. Existing grants and app content are preserved. Validate the app with validate_app before sharing. Returns the standalone page.",
     schema: PublishAppSchema,
     outputSchema: PublishAppOutputSchema,
     async handler({ args, context }) {
@@ -1645,65 +1669,65 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      let teamIds: string[];
       try {
-        // Validate the requested teams exist in the caller's org before any auth
-        // or write, so a foreign-org or unknown team can never be assigned to
-        // the app's backing catalog.
-        teamIds =
+        const teamIds =
           args.scope === "team"
             ? await resolveOrgTeams(args.teams, organizationId)
             : [];
-        // Authorize BOTH the app's current scope and the destination, exactly as
-        // the REST re-scope path does. The source check is the chat-authoring
-        // gate: it stops a team admin from demoting or hijacking an org-scoped
-        // app they can merely see, AND stops an app-admin from re-scoping a
-        // personal app they only see through oversight. The destination check
-        // stops redirecting an app to teams they don't administer.
-        await assertCallerMayAuthorApp({
-          userId,
+        const key = {
           organizationId,
-          app: {
-            id: app.id,
-            scope: app.scope,
-            authorId: app.authorId,
-            enabled: app.enabled,
-          },
-          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
-        });
-        await assertCallerMayModifyApp({
           userId,
-          organizationId,
-          scope: args.scope,
-          authorId: app.authorId,
-          resourceTeamIds: teamIds,
+          resource: "app" as const,
+          scope: app.id,
+        };
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        const policy = await ResourcePermissions.getPolicy(key);
+        // SPDX-SnippetEnd
+        const subjects: ResourcePermissionGrant["subject"][] =
+          args.scope === "org"
+            ? [{ type: "organization", id: "*" }]
+            : teamIds.map((id) => ({ type: "team", id }));
+        const grants: ResourcePermissionGrant[] = policy.grants.map(
+          ({ subject, actions }) => ({ subject, actions }),
+        );
+        for (const subject of subjects) {
+          const existing = grants.find(
+            (grant) =>
+              grant.subject.type === subject.type &&
+              grant.subject.id === subject.id,
+          );
+          if (existing)
+            existing.actions = [
+              ...new Set([
+                ...existing.actions,
+                "read" as const,
+                "use" as const,
+              ]),
+            ];
+          else grants.push({ subject, actions: ["read", "use"] });
+        }
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.updatePolicy({
+          ...key,
+          revision: policy.revision,
+          grants,
         });
+        // SPDX-SnippetEnd
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
         throw error;
       }
-
-      const updated = await AppModel.update({
-        id: args.appId,
-        patch: { scope: args.scope },
-        teamIds,
-      });
-      if (!updated) {
-        return errorResult(`Failed to publish app ${args.appId}.`);
-      }
-      // Keep the backing server/catalog scope in sync with the published scope,
-      // exactly as the REST re-scope path does — otherwise the registry/gateway
-      // would expose the app under its old scope.
-      await syncAppBacking(updated);
-
-      const runUrl = appRunUrl(updated);
       const audience =
-        updated.scope === "org"
+        args.scope === "org"
           ? "the whole organization"
           : "the selected team(s)";
       return structuredSuccessResult(
-        { id: updated.id, scope: updated.scope, runUrl },
-        `Published "${escapeAppNameForModelText(updated.name)}" to ${audience}. Standalone page: ${appRunLink(updated.name, updated)}`,
+        { id: app.id, scope: args.scope, runUrl: appRunUrl(app) },
+        `Published "${escapeAppNameForModelText(app.name)}" to ${audience}. Standalone page: ${appRunLink(app.name, app)}`,
       );
     },
   }),
@@ -1913,7 +1937,12 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const auth = requireAuthed(context);
       if ("error" in auth) return auth.error;
-      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
+      const gate = await loadApp({
+        action: "delete",
+        ...auth,
+        appId: args.appId,
+        modify: true,
+      });
       if ("error" in gate) return gate.error;
       const { app } = gate;
       const deleted = await AppModel.delete(args.appId);
@@ -2173,11 +2202,13 @@ async function loadApp(params: {
    */
   sessionKey?: string;
   modify?: boolean;
+  action?: "read" | "use" | "update" | "delete";
   /** set_app_lock's own escape: the unlock call must reach a locked app. */
   allowLocked?: boolean;
 }): Promise<{ app: App } | { error: CallToolResult }> {
   const app = await AppModel.findByIdForCaller({
     id: params.appId,
+    action: params.action === "use" ? "use" : "read",
     organizationId: params.organizationId,
     userId: params.userId,
     isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
@@ -2202,12 +2233,28 @@ async function loadApp(params: {
   if (!app || (!app.enabled && !graced)) {
     return { error: errorResult(`No app found with id ${params.appId}.`) };
   }
+  try {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    await ResourcePermissions.require({
+      ...params,
+      resource: "app",
+      scope: params.appId,
+      action: params.action ?? (params.modify ? "update" : "read"),
+    });
+    // SPDX-SnippetEnd
+  } catch (error) {
+    if (error instanceof ApiError) return { error: errorResult(error.message) };
+    throw error;
+  }
   if (params.modify) {
     try {
       // The chat authoring path: an app-admin who only sees this app through
       // oversight (someone else's personal app, or a team app they're not in)
       // is refused here — they may still change its settings over REST.
       await assertCallerMayAuthorApp({
+        action: params.action === "delete" ? "delete" : "update",
         userId: params.userId,
         organizationId: params.organizationId,
         app: {

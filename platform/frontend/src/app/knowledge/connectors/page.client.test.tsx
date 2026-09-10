@@ -183,29 +183,8 @@ describe("ConnectorsPage", () => {
     await screen.findByRole("columnheader", { name: "Connector" });
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual([
-      "",
-      "Connector",
-      "Status",
-      "Accessible to",
-      "Schedule",
-      "Actions",
-    ]);
+    ).toEqual(["", "Connector", "Status", "Schedule", "Actions"]);
     expect(screen.getByRole("button", { name: "View 1 label" })).toBeVisible();
-  });
-
-  it("shows who each connector is accessible to, in the shared scope badge language", () => {
-    render(<ConnectorsPage />);
-
-    // Org-wide -> the amber Organization badge; team-scoped -> the team's
-    // name; auto-sync -> the violet Source permissions badge with its
-    // explanation on hover.
-    expect(screen.getByText("Organization")).toBeInTheDocument();
-    expect(screen.getByText("Platform Team")).toBeInTheDocument();
-    expect(screen.getByText("Source permissions")).toBeInTheDocument();
-    expect(
-      screen.getByText(/mirrors the source system's own permissions/),
-    ).toBeInTheDocument();
   });
 
   it("keeps the bulk bar visible while all matching connectors load", async () => {

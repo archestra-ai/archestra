@@ -207,7 +207,6 @@ import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from
 import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
-import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { ViewTransition } from "@/lib/view-transition";
 import {
@@ -335,9 +334,6 @@ export function ChatPageContent({
   const forkSharedConversationMutation = useForkSharedConversation();
   const { data: session } = useSession();
 
-  const { data: isAgentAdmin } = useHasPermissions({
-    agent: ["admin"],
-  });
   const { data: canCreateAgent } = useHasPermissions({
     agent: ["create"],
   });
@@ -350,12 +346,6 @@ export function ChatPageContent({
   const { data: canReadLlmModels } = useHasPermissions({
     llmModel: ["read"],
   });
-  const { data: canReadTeams } = useHasPermissions({
-    team: ["read"],
-  });
-  const { data: canUpdateAgent } = useHasPermissions({
-    agent: ["team-admin"],
-  });
   const { data: canSeeAgentPicker, isLoading: isAgentPickerPermissionLoading } =
     useHasPermissions({
       chatAgentPicker: ["enable"],
@@ -363,11 +353,6 @@ export function ChatPageContent({
   const { data: canCreateProjectPerm } = useHasPermissions({
     project: ["create"],
   });
-  const { data: teams } = useTeams({ enabled: !!canReadTeams });
-
-  // Non-admin users with no teams cannot create agents
-  const cannotCreateDueToNoTeams =
-    !isAgentAdmin && (!teams || teams.length === 0);
 
   const isMobile = useIsMobile();
 
@@ -1863,6 +1848,10 @@ export function ChatPageContent({
     useHasPlaywrightMcpTools(browserToolsAgentId, {
       enabled: shouldCheckBrowserTools,
     });
+  const { data: canUpdateAgent } = useHasPermissions(
+    { agent: ["update"] },
+    browserToolsAgentId ?? "",
+  );
   // Show while loading so it doesn't flash hidden for members whose agent already has playwright
   // tools. Once loading is done, hides only if the user lacks permission AND agent has no tools.
   const showBrowserButton =
@@ -3114,14 +3103,10 @@ export function ChatPageContent({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          {cannotCreateDueToNoTeams ? (
+          {!canCreateAgent ? (
             <ButtonWithTooltip
               disabled
-              disabledText={
-                canCreateAgent
-                  ? "You need to be a member of at least one team to create agents"
-                  : "You don't have permission to create agents"
-              }
+              disabledText={"You don't have permission to create agents"}
             >
               <Plus className="h-4 w-4" />
               Create Agent

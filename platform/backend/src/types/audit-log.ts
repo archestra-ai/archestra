@@ -14,6 +14,10 @@ import { schema } from "@/database";
  *    `audit-log-action-labels.ts` ACTION_LABEL map.
  */
 export const AuditEventNameSchema = z.enum([
+  "resourcePermissions.updated",
+  "hook.created",
+  "hook.updated",
+  "hook.deleted",
   // Resource CRUD — alphabetical by prefix
   "agent.created",
   "agent.updated",

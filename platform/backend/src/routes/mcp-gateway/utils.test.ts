@@ -33,6 +33,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   appConnectorAudienceRef,
   buildConnectorResourceUri,
@@ -138,7 +139,8 @@ describe("validateMCPGatewayToken", () => {
   });
 
   describe("team token validation", () => {
-    test("validates org token for any profile", async ({
+    test("validates org token for an organization-granted profile", async ({
+      makeAgent,
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -150,8 +152,8 @@ describe("validateMCPGatewayToken", () => {
         isOrganizationToken: true,
       });
 
-      const profileId = crypto.randomUUID();
-      const result = await validateMCPGatewayToken(profileId, value);
+      const profile = await makeAgent({ organizationId: org.id, scope: "org" });
+      const result = await validateMCPGatewayToken(profile.id, value);
 
       expect(result).not.toBeNull();
       expect(result?.tokenId).toBe(token.id);
@@ -169,7 +171,11 @@ describe("validateMCPGatewayToken", () => {
       const org = await makeOrganization();
       const user = await makeUser();
       const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        scope: "team",
+      });
 
       const { token, value } = await TeamTokenModel.create({
         organizationId: org.id,
@@ -197,7 +203,11 @@ describe("validateMCPGatewayToken", () => {
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
 
       // Agent assigned to team2 only
-      const agent = await makeAgent({ teams: [team2.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team2.id],
+        scope: "team",
+      });
 
       // Token for team1
       const { value } = await TeamTokenModel.create({
@@ -227,7 +237,11 @@ describe("validateMCPGatewayToken", () => {
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
-      const agent = await makeAgent({ teams: [team2.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team2.id],
+        scope: "team",
+      });
       const { value } = await TeamTokenModel.create({
         organizationId: org.id,
         name: "Team 1 Token",
@@ -236,7 +250,7 @@ describe("validateMCPGatewayToken", () => {
 
       const teamHasAgentAccessSpy = vi.spyOn(
         AgentTeamModel,
-        "teamHasAgentAccess",
+        "credentialHasAgentAccess",
       );
 
       const firstResult = await validateMCPGatewayToken(agent.id, value);
@@ -252,6 +266,7 @@ describe("validateMCPGatewayToken", () => {
     });
 
     test("reuses resolved team tokens across profiles", async ({
+      makeAgent,
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -264,11 +279,11 @@ describe("validateMCPGatewayToken", () => {
       const validateTeamTokenSpy = vi.spyOn(TeamTokenModel, "validateToken");
 
       const firstResult = await validateMCPGatewayToken(
-        crypto.randomUUID(),
+        (await makeAgent({ organizationId: org.id, scope: "org" })).id,
         value,
       );
       const secondResult = await validateMCPGatewayToken(
-        crypto.randomUUID(),
+        (await makeAgent({ organizationId: org.id, scope: "org" })).id,
         value,
       );
 
@@ -281,6 +296,52 @@ describe("validateMCPGatewayToken", () => {
   });
 
   describe("user token validation", () => {
+    test("a private gateway requires use rather than read and revocation takes effect on the same token", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const owner = await makeUser();
+      const role = await makeCustomRole(org.id, { permission: {} });
+      await makeMember(user.id, org.id, { role: role.role });
+      const gateway = await makeAgent({
+        organizationId: org.id,
+        authorId: owner.id,
+        agentType: "mcp_gateway",
+        scope: "personal",
+      });
+      const { value } = await UserTokenModel.create(user.id, org.id);
+      const key = {
+        organizationId: org.id,
+        resource: "mcpGateway" as const,
+        scope: gateway.id,
+      };
+      const subject = { type: "user" as const, id: user.id };
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: 0,
+        grants: [{ subject, actions: ["read"] }],
+      });
+      expect(await validateMCPGatewayToken(gateway.id, value)).toBeNull();
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: 1,
+        grants: [{ subject, actions: ["use"] }],
+      });
+      expect(await validateMCPGatewayToken(gateway.id, value)).toMatchObject({
+        userId: user.id,
+      });
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: 2,
+        grants: [],
+      });
+      expect(await validateMCPGatewayToken(gateway.id, value)).toBeNull();
+    });
     test("validates user token when user has team access to profile", async ({
       makeOrganization,
       makeUser,
@@ -295,7 +356,11 @@ describe("validateMCPGatewayToken", () => {
 
       const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
       await makeTeamMember(team.id, user.id);
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        scope: "team",
+      });
 
       const { token, value } = await UserTokenModel.create(
         user.id,
@@ -331,7 +396,11 @@ describe("validateMCPGatewayToken", () => {
       const team2 = await makeTeam(org.id, user2.id, { name: "Team 2" });
 
       // Agent is only assigned to team2
-      const agent = await makeAgent({ teams: [team2.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team2.id],
+        scope: "team",
+      });
 
       // Create token for user1 (who is NOT in team2)
       const { value } = await UserTokenModel.create(
@@ -364,7 +433,11 @@ describe("validateMCPGatewayToken", () => {
       });
 
       // Agent assigned to team
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        scope: "team",
+      });
 
       // Create token for admin user
       const { token, value } = await UserTokenModel.create(
@@ -395,7 +468,11 @@ describe("validateMCPGatewayToken", () => {
 
       const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
       await makeTeamMember(team.id, user.id);
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        scope: "team",
+      });
       const { value } = await UserTokenModel.create(user.id, org.id);
       const userHasAgentAccessSpy = vi.spyOn(
         AgentTeamModel,
@@ -406,7 +483,9 @@ describe("validateMCPGatewayToken", () => {
 
       expect(result).not.toBeNull();
       expect(userHasAgentAccessSpy).toHaveBeenCalledTimes(1);
-      expect(userHasAgentAccessSpy.mock.calls[0]?.[3]).toMatchObject({
+      expect(
+        userHasAgentAccessSpy.mock.calls[0]?.[0].agentAccessContext,
+      ).toMatchObject({
         id: agent.id,
         organizationId: agent.organizationId,
         scope: "team",
@@ -429,7 +508,7 @@ describe("validateMCPGatewayToken", () => {
       await makeMember(adminUser.id, org.id, { role: "admin" });
 
       // Agent with no teams
-      const agent = await makeAgent({ teams: [] });
+      const agent = await makeAgent({ organizationId: org.id, teams: [] });
 
       // Create admin user token
       const { token, value } = await UserTokenModel.create(
@@ -461,7 +540,11 @@ describe("validateMCPGatewayToken", () => {
 
       // Create team with other user, agent in that team
       const team = await makeTeam(org.id, otherUser.id, { name: "Other Team" });
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        scope: "team",
+      });
 
       // Token for user with no teams
       const { value } = await UserTokenModel.create(
@@ -490,7 +573,11 @@ describe("validateMCPGatewayToken", () => {
 
       // Create team with other user, agent in that team
       const team = await makeTeam(org.id, otherUser.id, { name: "Other Team" });
-      const agent = await makeAgent({ teams: [team.id], scope: "team" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        teams: [team.id],
+        scope: "team",
+      });
 
       // Token for admin with no teams
       const { token, value } = await UserTokenModel.create(

@@ -124,6 +124,7 @@ import {
 } from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { generateConversationTitle } from "@/services/title-generation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -415,6 +416,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "The agent associated with this conversation has been deleted",
         );
+      }
+
+      if (conversation.agent.agentType !== "llm_proxy") {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        await ResourcePermissions.require({
+          organizationId,
+          userId: user.id,
+          resource:
+            conversation.agent.agentType === "mcp_gateway"
+              ? "mcpGateway"
+              : "agent",
+          scope: conversation.agentId,
+          action: "use",
+        });
+        // SPDX-SnippetEnd
       }
 
       // A shared agent may be configured to refuse callers who cannot reach one

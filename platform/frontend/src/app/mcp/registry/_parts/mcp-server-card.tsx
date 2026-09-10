@@ -27,7 +27,6 @@ import { type MouseEventHandler, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { TableCard } from "@/components/table-card-view";
 import {
   Avatar,
@@ -617,9 +616,6 @@ export function McpServerCard({
   }
   const extraCount = connectionAvatars.length - MAX_AVATARS;
 
-  // Cards are one mixed list. Like Apps and Projects, every row names its
-  // visibility so personal entries never rely on a removed ownership heading.
-  const showScopeBadge = Boolean(item.scope);
   const showApprovalPanel = item.imageApprovalRequired === true;
 
   /** Who is connected and whether a connection needs attention. */
@@ -630,8 +626,8 @@ export function McpServerCard({
       hasOrgConnection ||
       Boolean(oauthReauthIndicator));
 
-  /** Whether anything follows the badge in the row. */
-  const hasCompactInfoAfterScopeBadge =
+  /** Operational details shown alongside resource metadata. */
+  const hasOperationalDetails =
     toolsCount > 0 || totalAgentCount > 0 || hasTrailingCluster;
   const hasCardMetadata = Boolean(
     environmentLabel ||
@@ -641,8 +637,7 @@ export function McpServerCard({
       showApprovalPanel,
   );
 
-  const hasCompactInfoContent =
-    hasCardMetadata || showScopeBadge || hasCompactInfoAfterScopeBadge;
+  const hasCompactInfoContent = hasCardMetadata || hasOperationalDetails;
 
   /*
     This usually fits on one line at the grid's card width, but operational
@@ -686,19 +681,6 @@ export function McpServerCard({
         <Badge variant="outline" className="shrink-0">
           Image needs approval
         </Badge>
-      )}
-      {showScopeBadge && (
-        <div className="flex min-w-0 items-center">
-          <ResourceVisibilityBadge
-            scope={item.scope}
-            teams={item.teams}
-            authorId={item.authorId}
-            authorName={item.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-            compact
-          />
-        </div>
       )}
       {toolsCount > 0 && (
         <div className="flex shrink-0 items-center gap-1">

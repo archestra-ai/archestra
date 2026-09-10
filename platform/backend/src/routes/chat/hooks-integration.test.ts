@@ -107,10 +107,17 @@ describe("POST /api/chat lifecycle hooks", () => {
   let conversationId: string;
 
   beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+    async ({
+      makeAgent,
+      makeConversation,
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
       user = await makeUser();
       const organization = await makeOrganization({ name: "Test Org" });
       organizationId = organization.id;
+      await makeMember(user.id, organizationId);
 
       const agent = await makeAgent({
         organizationId,

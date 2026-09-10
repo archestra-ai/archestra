@@ -97,7 +97,14 @@ const SIMPLE_PAYLOAD = (model = "gpt-4o") => ({
 describe("LLM proxy limit enforcement (integration)", () => {
   let app: FastifyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await ModelModel.create({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
     vi.restoreAllMocks();
   });
 

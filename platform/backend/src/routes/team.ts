@@ -12,6 +12,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import { TeamLabelModel, TeamModel } from "@/models";
 import {
   validateInheritedTeamRoles,
+  validateNewTeamMembership,
   validateTeamRoles,
 } from "@/services/role-assignment";
 import {
@@ -231,7 +232,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      if (!canUpdateTeams) {
+      if (
+        !(await canManageTeamMembers({
+          isOrgTeamManager: canUpdateTeams,
+          userId: user.id,
+          teamId: id,
+        }))
+      ) {
         throw new ApiError(403, "You are not authorized to update this team");
       }
 
@@ -437,7 +444,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(409, "User is already a member of this team");
       }
 
-      await validateInheritedTeamRoles({
+      await validateNewTeamMembership({
         teamId: id,
         organizationId,
         userId: user.id,

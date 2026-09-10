@@ -384,7 +384,7 @@ const PromptInputContent = ({
   // /debug toggles per-conversation hook debug chips; admin-only, existing
   // conversation only. Mirrors the server gate (agent-type admin) loosely — the
   // toggle endpoint enforces it for real.
-  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: isAgentAdmin } = useHasPermissions({ agent: ["update"] }, "*");
   const toggleHooksDebug = useToggleHooksDebug();
   const agentHooksEnabled = useFeature("agentHooksEnabled") ?? false;
   const hooksDebugEnabled = conversation?.hooksDebugEnabled ?? false;

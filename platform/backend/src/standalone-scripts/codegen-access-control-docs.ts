@@ -119,33 +119,114 @@ function generateCustomRolesPermissionsTable(): string {
 }
 
 function generateScopedResourcesSection(): string {
-  return `## Scoped Resources
+  return `## Resource Permission Grants
 
-Some resources use a two-step authorization model:
+Agents, MCP gateways, MCP registry entries, skills, apps, and models support grants for individual resources. A grant identifies a recipient and the actions they may perform on that resource.
 
-1. RBAC grants a base action such as \`read\`, \`create\`, \`update\`, or \`delete\`
-2. Runtime scope rules further restrict which records a user can see or modify
+| Where you are | Manage permissions |
+| --- | --- |
+| Creating an agent, MCP registry entry, skill, or app | Add recipients in **Permissions** before saving |
+| Agent, MCP gateway, MCP registry entry, or skill detail page | Open the **Permissions** tab |
+| App settings | Open **Permissions** in the settings dialog |
+| Models list | Choose **Permissions** from the model's actions |
+| All objects of a resource type | Open **Settings > Roles > Resource grants** and select the resource type |
 
-The most common scopes are:
+Initial grants are validated before creation and persisted with the resource. Invalid recipients or grants beyond your authority reject the creation. Creation APIs and their matching MCP authoring tools accept an optional \`initialGrants\` array with the same recipient/action entries used below. Models are discovered from providers, so their permissions are configured after discovery.
 
-- \`personal\`: owned by one user
-- \`team\`: shared with one or more teams
-- \`org\`: shared across the organization
+Resource grants are an Enterprise feature, available under the small-team allowance described in [Pricing Model](/docs/platform-pricing-model). When that entitlement ends, existing grants continue to be enforced and you can revoke or reduce them; adding or expanding grants requires an active entitlement.
 
-The elevated actions \`:admin\` and \`:team-admin\` are not global shortcuts with identical meaning on every resource. Their effect depends on the resource's runtime authorization rules.
+Recipients can be users, teams, service accounts, roles, or everyone in the organization. A service account is an independent recipient; its grants do not depend on the person who created it. Disabled service accounts cannot use their grants. Their assigned roles and organization-wide grants also contribute to access, so removing one direct grant does not necessarily remove all access.
+
+### Actions And Scopes
+
+Each permission is evaluated as one complete action-and-scope pair. The scope identifies one resource, all resources, or resources shared with the recipient’s teams. A wildcard for agents does not grant access to MCP servers, and a wildcard never crosses the organization boundary.
+
+| Scope | Applies To |
+| --- | --- |
+| Resource ID | One resource |
+| \`*\` | Every current and future resource of that type in the organization |
+| \`teams:*\` | Resources with a direct grant to one of the recipient's current teams |
+
+Team-relative scopes follow current membership, including ancestor teams. They do not depend on team membership roles. Service accounts have no team membership, so team-relative grants do not apply to them.
+
+| Action | Allows |
+| --- | --- |
+| \`read\` | View the resource |
+| \`use\` | Use or execute the resource |
+| \`update\` | Edit its configuration |
+| \`delete\` | Delete the resource |
+| \`manage-permissions\` | Change its direct grants, within the caller's own authority |
+
+Viewing a resource does not by itself grant execution. Uncatalogued model IDs require a model \`use\` grant on \`*\`. For example, a model read grant does not bypass its invocation restrictions; use a model use grant to permit invocation. Disabled apps remain private to their author, even when another recipient has a grant. Editing configuration does not grant permission to share the resource. Creation continues to require the resource's organization-level \`create\` permission because the object does not exist yet.
+
+For example, a service account can have \`read\` on all MCP registry entries and \`update\` on one entry. Those grants allow it to view every entry and edit only that one. The evaluator does not combine the wildcard from the first grant with the update action from the second.
+
+The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. Inspect the action list below each recipient before saving.
+
+Public marketplace link management remains organization-wide. Creating, listing, rotating, or revoking skill marketplace links requires skill \`read\`, \`use\`, and \`manage-permissions\` on \`*\`. Editing a skill alone does not authorize public distribution. A link contains the skills selected when it is created; it does not automatically include future skills.
+
+### Inheritance And Revocation
+
+A recipient receives the union of its applicable grants: direct user or service-account grants, team grants, grants to its effective roles, and organization-wide grants. Team grants follow the team hierarchy described below. Grants to roles follow role composition.
+
+The Permissions editor shows direct grants and inherited grants with their source scopes. Removing a direct grant does not remove access supplied by another grant. Change an inherited grant at its source. List views omit personal, team, and organization visibility categories. Built-in origin and labels remain separate filters.
+
+### Migration From Visibility
+
+The migration converts existing sharing into resource grants. Organization-wide sharing becomes an organization grant. Personal ownership becomes an explicit full-access grant. Team use shares become read and use grants. Team write shares additionally grant update. Every team member receives those actions, regardless of their membership role.
+
+Resource-level \`:admin\` scopes become \`*\` grants with their associated actions. Resource-level \`:team-admin\` scopes become \`teams:*\` grants. These legacy scope flags are distinct from the team's membership admin role.
+
+Existing explicit grants, including service-account grants, survive migration. Migrated policies replace legacy sharing checks. Revoking a grant cannot restore access through an old ownership or visibility setting. Other applicable grants can still provide access.
+
+Creation with \`initialGrants\` also records the creator's full access explicitly. An empty array creates a creator-only direct policy. Inherited grants still apply. Resources outside this conversion retain the rules described under **Scoped Resources** below.
+
+### Delegation And Concurrent Edits
+
+To change a policy, you need \`manage-permissions\` on that scope. You can grant only actions that you also hold on that same scope. Authority over one object does not authorize a wildcard grant. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
+
+Saving includes the policy revision. If someone else changes the policy first, the API returns \`409\` and the editor preserves your draft. Reload the latest policy before saving again. Changes to grants are recorded in the audit log. Unsaved permission edits are kept separate from ordinary configuration saves; use **Save permissions** to apply them.
+
+### API Example
+
+Read a policy with \`GET /api/resource-permissions/mcpRegistry/<catalog-id>\`. Replace its direct grants with \`PUT\` to the same URL, passing the revision returned by the read:
+
+\`\`\`json
+{
+  "revision": 0,
+  "grants": [
+    {
+      "subject": {
+        "type": "serviceAccount",
+        "id": "00000000-0000-4000-8000-000000000001"
+      },
+      "actions": ["read", "use"]
+    }
+  ]
+}
+\`\`\`
+
+Use the service account's ID, not an API-key ID. The recipient must belong to the organization and be active. \`PUT\` replaces the complete direct-grant list; include any existing direct grants you intend to retain. It does not replace inherited grants.
+
+## Scoped Resources
+
+Agents, MCP gateways, registry entries, apps, skills, and models use the grants described above.
+Each grant pairs actions with a resource scope. Creation uses the resource's create permission.
+Legacy visibility fields do not authorize access after migration.
 
 ### Team Roles
 
 Team membership has its own role, separate from organization RBAC:
 
 - \`member\`: belongs to the team and can access resources shared with that team
-- \`admin\`: can manage membership and team-scoped settings for that team, such as external group sync mappings
+- \`admin\`: can add and remove members, rename the team, edit its description and metadata, and manage team-scoped settings such as external group sync mappings
 
 Whoever creates a team joins it as that team's first admin, so they can manage its members straight away.
 
-Team admins do **not** automatically receive organization-level team permissions. Renaming a team, editing its description, creating teams, and deleting teams require the matching organization RBAC permission such as \`team:update\`, \`team:create\`, or \`team:delete\`.
+Team admins can edit their own team without organization-wide \`team:update\`. This does not let them edit other teams, create teams, or delete teams; those operations require their own authorization. A team membership admin role does not grant MCP catalog editing, installation management, or connection reauthentication. Team members receive the same resource grants regardless of their membership role.
 
-Team roles are also separate from resource actions named \`:team-admin\`. For example, \`agent:team-admin\` controls team-scoped agent management; it does not make the user an admin member of every team.
+Team administration does not grant access to resources shared with the team.
+Resource access comes from grants and inherited organization roles.
 
 ### Team Hierarchies
 
@@ -155,20 +236,12 @@ Hierarchy expands resource visibility and inherits organization roles assigned t
 
 External group sync continues to create direct memberships on the mapped team. Those members receive inherited resource access from its ancestors; see [SSO Team Sync](/docs/platform-sso-team-sync).
 
-### Agents, MCP Gateways, and Apps
+### Agents, MCP Gateways, Apps, and Skills
 
-\`agent\`, \`mcpGateway\`, and \`app\` share the same scope model:
-
-- \`personal\`: the author can manage their own records
-- \`team\`: requires \`<resource>:team-admin\` and membership in at least one assigned team
-- \`org\`: requires \`<resource>:admin\`
-
-Examples:
-
-- \`agent:delete\` alone does **not** allow deleting every agent
-- \`agent:team-admin\` allows managing team-scoped agents only in teams the user belongs to
-- \`agent:admin\` bypasses those scope restrictions
-- sharing an MCP App with named users grants use only; the app stays personal and only its author can edit it
+Object grants control reading, execution, editing, deletion, and permission management independently.
+An update grant does not include execution or permission management.
+Creation adds a full grant for the creator. That grant can be revoked.
+Ownership and team administration do not override revocation.
 
 ### Visibility-Scoped Credentials
 
@@ -180,11 +253,12 @@ Examples:
 
 These resources do **not** use \`:team-admin\`.
 
-### Team-Restricted Models
+### Models
 
-You can limit an LLM model to specific teams. Open the model on the Models page and pick teams under "Limit to teams" — dev teams get frontier models while test teams use cheaper ones, for example.
-
-A model with no teams selected stays available to everyone. A restricted model is hidden from model pickers and \`/models\` listings for users outside its teams, and the LLM Proxy rejects their requests to it with \`403\`. Users with \`llmModel:update\`, including organization admins, keep full access.
+Model read grants control discovery. Model use grants control invocation through the LLM Proxy.
+Sharing a model with a team does not grant editing.
+A wildcard use grant includes future models of that organization.
+Provider catalog refreshes preserve existing grants and revocations.
 
 ### Chat Access And Optional UI Controls
 
@@ -199,13 +273,10 @@ The selector visibility permissions are UI toggles. They should be treated indep
 
 ### MCP Registry And Installation Records
 
-Some MCP-related resources also apply runtime scope checks in addition to RBAC, but their rules differ from agents and MCP gateways:
+Registry grants control access to the catalog entry.
+Installation permissions separately control connections, credentials, and running servers.
+Editing a team does not authorize installing or reauthenticating its connections.
 
-- Internal MCP catalog items can be \`personal\`, \`team\`, or \`org\`
-- Organization-wide catalog items require \`mcpServerInstallation:admin\`
-- Team MCP server installations depend on team membership, with broader control for organization-level team managers and admins of the selected team
-
-When designing custom roles, treat the permission matrix as the first gate and the resource's scope rules as the second gate.
 `;
 }
 
@@ -220,8 +291,8 @@ function generateLlmApiPermissionsSection(): string {
 | Cost totals, teams, agents, models, and savings | \`llmCost:read\` | All matching usage in the active organization |
 | User cost statistics (\`/api/statistics/users\`) | \`llmCost:read\` | The caller's usage |
 | User cost statistics for all users | \`llmCost:read\` and \`member:read\` | Identified users in the active organization |
-| App cost statistics | \`llmCost:read\` and \`app:read\` | Apps visible to the caller; \`app:admin\` includes all apps |
-| Skill cost statistics | \`llmCost:read\` and \`skill:read\` | Skills visible to the caller; \`skill:admin\` includes all skills |
+| App cost statistics | \`llmCost:read\` and \`app:read\` | Apps allowed by the caller’s read grants |
+| Skill cost statistics | \`llmCost:read\` and \`skill:read\` | Skills allowed by the caller’s read grants |
 | LLM and MCP logs for the caller | \`log:read\` | Records attributed to the caller |
 | All LLM and MCP logs | \`log:read\` and \`log:admin\` | All records in the active organization, including unattributed traffic |
 
@@ -304,37 +375,12 @@ ${generateLlmApiPermissionsSection()}
 
 ${generateScopedResourcesSection()}
 
-## Best Practices
+## Team Access
 
-### Principle of Least Privilege
-
-Grant users only the minimum permissions necessary for their role. Start with the "Member" role and add specific permissions as needed.
-
-### Team-Based Organization
-
-Combine roles with team-based access control for fine-grained resource access:
-
-1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
-2. **Assign Agents, MCP Gateways, and MCP Servers** to specific teams
-3. **Add users to teams** based on their role and responsibilities
-
-#### Default Team
-
-New users are automatically added to the "Default Team" when they accept an invitation. This ensures all users have immediate access to Archestra resources assigned to this team.
-
-#### Team Access Control Rules
-
-**For MCP Gateways and Agents:**
-
-- Users can see team-scoped agents and gateways assigned to their direct teams or an ancestor team, as described in [Team Hierarchies](#team-hierarchies)
-- The resource's \`:admin\` action bypasses its scope restrictions
-- Resources with no team assignment are visible to all users
-
-**For MCP Servers:**
-
-- Users can see, install, and manage MCP servers assigned to their direct teams or an ancestor team
-- Exception: Users with \`mcpServerInstallation:admin\` permission can access all MCP servers
-- Exception: MCP servers with no team assignment are accessible to all users
+Team grants apply to direct members and descendant-team members.
+Every membership role receives the same resource grants.
+An empty grant list does not make a resource public.
+Wildcard grants remain effective when an object's direct grants are removed.
 
 #### Agent Access vs MCP Server Access
 
@@ -348,13 +394,6 @@ In **Auto** tool mode, each caller can only discover and run tools from MCP serv
 
 Policies and tool assignments follow their associated resources. LLM and MCP logs use the permissions in [LLM API Permissions](#llm-api-permissions).
 
-### Regular Review
-
-Periodically review custom roles and team membership assignments to ensure they align with current needs and security requirements.
-
-### Role Naming
-
-Use clear, descriptive names for custom roles that indicate their purpose (e.g., "Agent-Manager", "Read-Only-Analyst", "Tool-Developer").
 `;
 }
 
@@ -425,7 +464,7 @@ async function main() {
   const markdownContent = generateMarkdownContent(existingContent);
 
   // Write the generated content
-  fs.writeFileSync(docsFilePath, markdownContent);
+  fs.writeFileSync(docsFilePath, `${markdownContent.trimEnd()}\n`);
 
   logger.info(`🙉 Documentation generated at: ${docsFilePath}`);
   logger.info("📊 Generated tables for:");

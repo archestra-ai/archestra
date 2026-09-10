@@ -30,10 +30,7 @@ import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
-import {
-  ResourceScopeFilter,
-  useScopeFilterParams,
-} from "@/components/resource-scope-filter";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCardGrid,
@@ -1189,14 +1186,7 @@ export function InternalMCPCatalog({
             }
           >
             <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
-            {!selectedFacet && (
-              <ResourceScopeFilter
-                adminPermission={{ mcpServerInstallation: ["admin"] }}
-                ownerLabelPlural="connections"
-                allLabel="All scopes"
-                navigate={replaceRegistryListUrl}
-              />
-            )}
+
             {selectedFacet ? (
               <RegistryFilterDropdown
                 label="Issue"

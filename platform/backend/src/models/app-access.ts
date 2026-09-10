@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { and, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamModel from "./team";
 
 /**
@@ -27,6 +29,7 @@ class AppAccessModel {
     organizationId: string;
     userId?: string;
     isAppAdmin?: boolean;
+    onlyExplicitGrants?: boolean;
   }): Promise<string[]> {
     const { organizationId, userId, isAppAdmin } = params;
     const isEnabled = eq(schema.appsTable.enabled, true);
@@ -105,7 +108,30 @@ class AppAccessModel {
         and(
           eq(schema.appsTable.organizationId, organizationId),
           notDeleted(schema.appsTable),
-          scopeCondition,
+          or(
+            params.onlyExplicitGrants
+              ? undefined
+              : and(
+                  scopeCondition,
+                  ResourcePermissionPolicyModel.legacySharingCondition({
+                    organizationId,
+                    resource: "app",
+                    scopeColumn: schema.appsTable.id,
+                  }),
+                ),
+            userId
+              ? and(
+                  or(isEnabled, disabledVisibility),
+                  ResourcePermissionPolicyModel.grantCondition({
+                    organizationId,
+                    userId,
+                    resource: "app",
+                    scopeColumn: schema.appsTable.id,
+                    action: "read",
+                  }),
+                )
+              : undefined,
+          ),
         ),
       );
     return rows.map((row) => row.id);
@@ -130,12 +156,37 @@ class AppAccessModel {
       enabled: boolean;
     };
     isAppAdmin: boolean;
+    action?: "read" | "use";
   }): Promise<boolean> {
     const { app, organizationId, userId } = params;
     if (app.organizationId !== organizationId) return false;
-    if (!app.enabled) {
-      return userId !== undefined && app.authorId === userId;
+    if (!app.enabled && app.authorId !== userId) return false;
+    if (userId) {
+      const [grant] = await db
+        .select({ id: schema.appsTable.id })
+        .from(schema.appsTable)
+        .where(
+          and(
+            eq(schema.appsTable.id, app.id),
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId,
+              userId,
+              resource: "app",
+              scopeColumn: schema.appsTable.id,
+              action: params.action ?? "read",
+            }),
+          ),
+        )
+        .limit(1);
+      if (grant) return true;
     }
+
+    const policies = await ResourcePermissionPolicyModel.findApplicable({
+      organizationId,
+      resource: "app",
+      scope: app.id,
+    });
+    if (policies.some((policy) => policy.legacySharingMigrated)) return false;
     if (params.isAppAdmin) return true;
 
     switch (app.scope) {

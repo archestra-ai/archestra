@@ -6,14 +6,7 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import {
-  ChevronDown,
-  ChevronUp,
-  Pencil,
-  Plus,
-  Trash2,
-  Waypoints,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, Waypoints } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -38,7 +31,6 @@ import {
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -50,7 +42,6 @@ import {
 import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
-import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -58,7 +49,6 @@ import {
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -83,13 +73,16 @@ import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useAllMatchingProfiles,
   useBulkDeleteProfiles,
-  useBulkUpdateProfileVisibility,
   useDeleteProfile,
   usePermanentlyDeleteProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
@@ -233,8 +226,6 @@ function McpGateways({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteProfiles();
-  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
-  const bulkVisibility = useBulkUpdateProfileVisibility();
   const clearSelection = useCallback(() => {
     setRowSelection({});
     setEscalatedFor(null);
@@ -242,6 +233,7 @@ function McpGateways({
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
+  const scopedCapabilities = useScopedCapabilities();
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canDeleteAgents } = useHasPermissions({ agent: ["delete"] });
   const gatewayAgentTypes: Array<"mcp_gateway" | "profile"> = canReadAgents
@@ -287,14 +279,16 @@ function McpGateways({
     enabled: !!canReadTeams,
   });
 
-  const { data: isAdmin } = useHasPermissions({ mcpGateway: ["admin"] });
-  const { data: isTeamAdmin } = useHasPermissions({
-    mcpGateway: ["team-admin"],
-  });
-  const { data: isLegacyAdmin } = useHasPermissions({ agent: ["admin"] });
-  const { data: isLegacyTeamAdmin } = useHasPermissions({
-    agent: ["team-admin"],
-  });
+  const { data: isAdmin } = useHasPermissions({ mcpGateway: ["update"] }, "*");
+  const { data: isTeamAdmin } = useHasPermissions(
+    { mcpGateway: ["update"] },
+    "teams:*",
+  );
+  const { data: isLegacyAdmin } = useHasPermissions({ agent: ["update"] }, "*");
+  const { data: isLegacyTeamAdmin } = useHasPermissions(
+    { agent: ["update"] },
+    "teams:*",
+  );
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
@@ -404,6 +398,7 @@ function McpGateways({
   const renderGatewayActions = (agent: GatewayData) => {
     const isLegacy = agent.agentType === "profile";
     const canModify = computeCanModifyAgent({
+      scopedGrants: scopedCapabilities.data ?? [],
       agent,
       isAdmin: isLegacy ? !!isLegacyAdmin : !!isAdmin,
       isTeamAdmin: isLegacy ? !!isLegacyTeamAdmin : !!isTeamAdmin,
@@ -583,25 +578,7 @@ function McpGateways({
         );
       },
     },
-    {
-      id: "team",
-      header: "Accessible to",
-      size: 140,
-      enableSorting: false,
-      cell: ({ row }) => (
-        <RowClickShield>
-          <ResourceVisibilityBadge
-            scope={row.original.scope}
-            teams={row.original.teams}
-            users={row.original.users}
-            authorId={row.original.authorId}
-            authorName={row.original.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
-        </RowClickShield>
-      ),
-    },
+
     {
       id: "actions",
       header: "Actions",
@@ -700,19 +677,12 @@ function McpGateways({
                 <ResourceScopeFilter
                   showLabels
                   ownerLabelPlural="MCP gateways"
-                  adminPermission={{ mcpGateway: ["admin"] }}
                 />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}
                 />
               </FilterBar>
-              {!canReadTeams && (
-                <PermissionRequirementHint
-                  message="Team-based filters and sharing details are unavailable without"
-                  permissions={[{ resource: "team", action: "read" }]}
-                />
-              )}
-              <ActiveFilterBadges adminPermission={{ mcpGateway: ["admin"] }} />
+              <ActiveFilterBadges />
             </CollectionFilters>
 
             <div data-testid={E2eTestId.AgentsTable}>
@@ -733,15 +703,6 @@ function McpGateways({
                     : "match the current filters",
                 }}
               >
-                <PermissionButton
-                  permissions={{ mcpGateway: ["update"] }}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBulkVisibilityOpen(true)}
-                >
-                  <Pencil className="h-4 w-4" />
-                  <span>Edit visibility</span>
-                </PermissionButton>
                 <PermissionButton
                   permissions={{ mcpGateway: ["delete"] }}
                   variant="destructive"
@@ -823,15 +784,6 @@ function McpGateways({
                         }
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <ResourceVisibilityBadge
-                            scope={agent.scope}
-                            teams={agent.teams}
-                            users={agent.users}
-                            authorId={agent.authorId}
-                            authorName={agent.authorName}
-                            currentUserId={currentUserId}
-                            showSelfAsMe
-                          />
                           <AgentAccessBadges agent={agent} />
                         </div>
                       </TableCard>
@@ -903,39 +855,6 @@ function McpGateways({
                 }
               />
             </div>
-
-            {bulkVisibilityOpen && (
-              <BulkVisibilityDialog
-                items={selectedGateways.map((profile) => ({
-                  ...profile,
-                  teams: profile.teams ?? [],
-                  users: profile.users ?? [],
-                }))}
-                noun="gateway"
-                plural="gateways"
-                open={bulkVisibilityOpen}
-                onOpenChange={setBulkVisibilityOpen}
-                isPending={bulkVisibility.isPending}
-                onApply={async (change) => {
-                  const outcome = await bulkVisibility.mutateAsync({
-                    profiles: selectedGateways,
-                    scope: change.scope,
-                    teamIds: change.teamIds,
-                    userIds: change.userIds,
-                  });
-                  reportBulkOutcome({
-                    outcome,
-                    verb: "Updated",
-                    failureVerb: "update",
-                    noun: "gateway",
-                    plural: "gateways",
-                  });
-                  if (outcome.succeeded.length === 0) return false;
-                  if (outcome.failed.length === 0) clearSelection();
-                  return true;
-                }}
-              />
-            )}
 
             {bulkDeleteOpen && (
               <DeleteConfirmDialog

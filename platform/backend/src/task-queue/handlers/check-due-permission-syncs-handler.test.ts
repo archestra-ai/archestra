@@ -67,6 +67,7 @@ describe("handleCheckDuePermissionSyncs", () => {
     makeKnowledgeBaseConnector,
   }) => {
     // Over the small-team threshold with no license env flag → tier inactive.
+    config.enterpriseFeatures.knowledgeBase = false;
     enterpriseTier.setUserCountForTesting(1000);
     try {
       const org = await makeOrganization();

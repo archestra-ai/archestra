@@ -2,6 +2,7 @@ import {
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   LocalConfigFormSchema,
+  ResourcePermissionGrantSchema,
 } from "@archestra/shared";
 import { z } from "zod";
 
@@ -238,6 +239,9 @@ export const formSchema = z
       .optional(),
     // Scope for catalog item visibility
     scope: z.enum(["personal", "team", "org"]).optional(),
+    initialGrants: z
+      .array(ResourcePermissionGrantSchema.extend({ name: z.string() }))
+      .optional(),
     // Teams a team-scoped item is shared with, each with its access level
     teams: z
       .array(z.object({ id: z.string(), level: z.enum(["use", "write"]) }))

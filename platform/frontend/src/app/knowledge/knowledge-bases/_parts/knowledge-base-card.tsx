@@ -18,7 +18,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { KnowledgeBaseAccessBadge } from "./knowledge-base-access-badge";
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
@@ -103,12 +102,6 @@ export function KnowledgeBaseCard({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <KnowledgeBaseAccessBadge
-          visibility={knowledgeBase.visibility}
-          teamIds={knowledgeBase.teamIds}
-          createdBy={knowledgeBase.createdBy}
-          compact
-        />
         <CardStat
           icon={<FileText className="h-3.5 w-3.5" />}
           value={totalDocsIndexed.toLocaleString()}

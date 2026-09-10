@@ -5,6 +5,7 @@ import { getPermissionsForUserContext } from "@/auth/utils";
 import { ServiceAccountLabelModel } from "@/models";
 import OrganizationRoleModel from "@/models/organization-role";
 import ServiceAccountModel from "@/models/service-account";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   CreateServiceAccountBodySchema,
@@ -441,6 +442,15 @@ async function validateRoleOrThrow(params: {
     throw new ApiError(400, "Role not found");
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  await ResourcePermissions.validateSubjectAssignment({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    subjects: [{ type: "role", id: resolvedRole.id }],
+  });
+  // SPDX-SnippetEnd
   const callerPermissions = await getPermissionsForUserContext({
     userId: params.userId,
     organizationId: params.organizationId,

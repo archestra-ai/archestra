@@ -4148,7 +4148,7 @@ describe("mcp server inspect route", () => {
     );
   }
 
-  test("install scope=team: organization-level team manager can install for a non-member team", async ({
+  test("install scope=team: organization-level team manager cannot install without installation permissions", async ({
     makeInternalMcpCatalog,
     makeTeam,
     makeUser,
@@ -4181,7 +4181,7 @@ describe("mcp server inspect route", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(403);
   });
 
   test("install scope=team: editor + member of team succeeds", async ({
@@ -4284,7 +4284,7 @@ describe("mcp server inspect route", () => {
     );
   });
 
-  test("revoke team-scoped: organization-level team manager can revoke for a non-member team", async ({
+  test("revoke team-scoped: organization-level team manager cannot revoke without installation permissions", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTeam,
@@ -4309,7 +4309,7 @@ describe("mcp server inspect route", () => {
       url: `/api/mcp_server/${mcpServer.id}`,
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(403);
   });
 
   test("revoke team-scoped: editor not a member is rejected", async ({
@@ -5017,9 +5017,7 @@ describe("mcp server core route coverage", () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toBe(
-        "App servers are managed via the Apps API and cannot be installed here.",
-      );
+      expect(response.json().error.message).toBe("Catalog item not found");
     });
 
     test("rejects manual Playwright browser installations", async ({
@@ -5048,9 +5046,7 @@ describe("mcp server core route coverage", () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toBe(
-        "The Playwright browser runtime is managed automatically.",
-      );
+      expect(response.json().error.message).toBe("Catalog item not found");
     });
 
     test("ignores client-supplied OAuth refresh-failure fields — they are server-owned state", async ({

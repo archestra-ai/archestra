@@ -603,11 +603,11 @@ class ToolModel {
 
     // Check access control for non-agent admins
     if (tool.agentId && userId && !isAgentAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        tool.agentId,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: tool.agentId,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }
@@ -671,11 +671,11 @@ class ToolModel {
         return null;
       }
       if (!params.isAdmin) {
-        const hasAccess = await AgentTeamModel.userHasAgentAccess(
-          params.userId,
-          tool.agentId,
-          false,
-        );
+        const hasAccess = await AgentTeamModel.userHasAgentAccess({
+          userId: params.userId,
+          agentId: tool.agentId,
+          isAgentAdmin: false,
+        });
         if (!hasAccess) {
           return null;
         }
@@ -830,11 +830,11 @@ class ToolModel {
 
     // Check access control for non-admins
     if (tool.agentId && userId && !isAgentAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        tool.agentId,
-        false,
-      );
+      const hasAccess = await AgentTeamModel.userHasAgentAccess({
+        userId: userId,
+        agentId: tool.agentId,
+        isAgentAdmin: false,
+      });
       if (!hasAccess) {
         return null;
       }

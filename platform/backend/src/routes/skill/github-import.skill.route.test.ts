@@ -3,29 +3,26 @@ import { vi } from "vitest";
 import {
   GithubAppConfigModel,
   OrganizationModel,
+  ServiceAccountModel,
   SkillFileModel,
   SkillModel,
   SkillVersionModel,
 } from "@/models";
+import MemberModel from "@/models/member";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
 import { createGithubPat } from "@/services/github-pat";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  useRouteTestApp,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   STUB_COMMIT_SHA,
   stubGithub,
   stubSkillManifest,
 } from "@/test/github-skills-stub";
 import skillRoutes from "./skill.routes";
+import { useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("POST /api/skills/github/{discover,preview,import}", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -86,6 +83,79 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         1,
       );
       expect(v1?.sourceCommit).toBe(STUB_COMMIT_SHA);
+    });
+
+    test("imports service-account grants on every new skill without sharing skipped skills", async () => {
+      const account = await ServiceAccountModel.create({
+        organizationId: ctx.organizationId,
+        name: "Skill import automation",
+        role: "member",
+        createdBy: ctx.user.id,
+      });
+      stubGithub([
+        {
+          owner: "route-grants",
+          repo: "skills",
+          files: {
+            "first/SKILL.md": stubSkillManifest("import-grant-first"),
+            "second/SKILL.md": stubSkillManifest("import-grant-second"),
+          },
+        },
+      ]);
+      const grants = [
+        {
+          subject: { type: "serviceAccount", id: account.id },
+          actions: ["read", "use"],
+        },
+      ];
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills/github/import",
+        payload: {
+          repoUrl: "route-grants/skills",
+          skillPaths: ["first", "second"],
+          initialGrants: grants,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().created).toHaveLength(2);
+      for (const skill of response.json().created) {
+        const policy = await ResourcePermissionPolicyModel.find({
+          organizationId: ctx.organizationId,
+          resource: "skill",
+          scope: skill.id,
+        });
+        expect(policy?.grants).toEqual(expect.arrayContaining(grants));
+        expect(
+          policy?.grants.some((grant) => grant.subject.type === "organization"),
+        ).toBe(false);
+      }
+      const retry = await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills/github/import",
+        payload: {
+          repoUrl: "route-grants/skills",
+          skillPaths: ["first", "second"],
+          initialGrants: [
+            {
+              subject: { type: "organization", id: "*" },
+              actions: ["read", "use"],
+            },
+          ],
+        },
+      });
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(retry.json().created).toHaveLength(0);
+      for (const skill of response.json().created) {
+        const policy = await ResourcePermissionPolicyModel.find({
+          organizationId: ctx.organizationId,
+          resource: "skill",
+          scope: skill.id,
+        });
+        expect(
+          policy?.grants.some((grant) => grant.subject.type === "organization"),
+        ).toBe(false);
+      }
     });
 
     test("import skips a skill whose name collides and creates the rest", async () => {
@@ -221,19 +291,37 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
   });
 
   describe("scope", () => {
-    test("non-admins cannot import skills as org-scoped", async () => {
-      // scope is authorized before any GitHub call, so this 403s without network
+    test("creators can choose organization grants during import", async () => {
+      stubGithub([
+        {
+          owner: "route-org-grants",
+          repo: "skills",
+          files: { "pdf/SKILL.md": stubSkillManifest("org-import") },
+        },
+      ]);
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/import",
         payload: {
-          repoUrl: "github.com/example/skills",
-          skillPaths: ["pdf-processing"],
+          repoUrl: "route-org-grants/skills",
+          skillPaths: ["pdf"],
           scope: "org",
         },
       });
-
-      expect(response.statusCode).toBe(403);
+      expect(response.statusCode, response.body).toBe(200);
+      const policy = await ResourcePermissionPolicyModel.find({
+        organizationId: ctx.organizationId,
+        resource: "skill",
+        scope: response.json().created[0].id,
+      });
+      expect(policy?.grants).toEqual(
+        expect.arrayContaining([
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ]),
+      );
     });
   });
 
@@ -251,12 +339,12 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    test("rejects a malformed githubAppConfigId before it reaches the database", async ({
-      makeMember,
-    }) => {
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: EDITOR_ROLE_NAME,
-      });
+    test("rejects a malformed githubAppConfigId before it reaches the database", async () => {
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        EDITOR_ROLE_NAME,
+      );
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/discover",
@@ -281,13 +369,13 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
       expect(response.statusCode).toBe(403);
     });
 
-    test("404 when the referenced GitHub App config does not exist", async ({
-      makeMember,
-    }) => {
+    test("404 when the referenced GitHub App config does not exist", async () => {
       // editors (not default members) hold githubAppConfig:read
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: EDITOR_ROLE_NAME,
-      });
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        EDITOR_ROLE_NAME,
+      );
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/discover",
@@ -299,12 +387,12 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    test("400 when the GitHub App config targets GitHub Enterprise", async ({
-      makeMember,
-    }) => {
-      await makeMember(ctx.user.id, ctx.organizationId, {
-        role: EDITOR_ROLE_NAME,
-      });
+    test("400 when the GitHub App config targets GitHub Enterprise", async () => {
+      await MemberModel.updateRole(
+        ctx.user.id,
+        ctx.organizationId,
+        EDITOR_ROLE_NAME,
+      );
       const secret = await secretManager().createSecret(
         { apiToken: "pem" },
         "ghes-app",
@@ -332,7 +420,7 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
 });
 
 describe("import sync mode", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -413,19 +501,19 @@ describe("import sync mode", () => {
 });
 
 describe("import with a stored PAT", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  test("sync with a saved token is allowed and persists githubPatId", async ({
-    makeMember,
-  }) => {
+  test("sync with a saved token is allowed and persists githubPatId", async () => {
     // resolving a stored credential requires githubAppConfig:read
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const pat = await createGithubPat({
       organizationId: ctx.organizationId,
       data: { name: "skills token", token: "ghp_stored_token" },
@@ -479,7 +567,7 @@ describe("import with a stored PAT", () => {
 });
 
 describe("online skill catalog disabled for the organization", () => {
-  const ctx = useRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(skillRoutes);
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -535,12 +623,12 @@ describe("online skill catalog disabled for the organization", () => {
     ).toEqual([]);
   });
 
-  test("an org admin gets no exemption — the setting is not a permission", async ({
-    makeMember,
-  }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+  test("an org admin gets no exemption — the setting is not a permission", async () => {
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
 
     const response = await ctx.app.inject({
       method: "POST",

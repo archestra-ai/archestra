@@ -10,7 +10,6 @@ import {
   Bot,
   ChevronDown,
   ChevronUp,
-  Pencil,
   Plus,
   Trash2,
   Upload,
@@ -39,7 +38,6 @@ import {
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   DefaultAgentTag,
@@ -56,7 +54,6 @@ import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
-import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -64,7 +61,6 @@ import {
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -83,7 +79,6 @@ import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useAllMatchingProfiles,
   useBulkDeleteProfiles,
-  useBulkUpdateProfileVisibility,
   useDefaultAgentId,
   useDeleteProfile,
   useExportAgent,
@@ -92,7 +87,11 @@ import {
   useRestoreProfile,
   useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { FIELD_LABEL } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
@@ -214,16 +213,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     initialData: initialData?.agents ?? undefined,
     ...listFilters,
   });
+  const scopedCapabilities = useScopedCapabilities();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
-  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
-  const { data: isAgentTeamAdmin } = useHasPermissions({
-    agent: ["team-admin"],
-  });
+  const { data: isAgentAdmin } = useHasPermissions({ agent: ["update"] }, "*");
+  const { data: isAgentTeamAdmin } = useHasPermissions(
+    { agent: ["update"] },
+    "teams:*",
+  );
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
@@ -329,8 +330,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteProfiles();
-  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
-  const bulkVisibility = useBulkUpdateProfileVisibility();
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
   // another page drop out of both the count and the request. The trash view
@@ -388,6 +387,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   const renderAgentActions = (agent: AgentData) => {
     const canModify = computeCanModifyAgent({
+      scopedGrants: scopedCapabilities.data ?? [],
       agent,
       isAdmin: !!isAgentAdmin,
       isTeamAdmin: !!isAgentTeamAdmin,
@@ -504,24 +504,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         );
       },
     },
-    {
-      id: "team",
-      header: "Accessible to",
-      enableSorting: false,
-      cell: ({ row }) => (
-        <RowClickShield>
-          <ResourceVisibilityBadge
-            scope={row.original.scope}
-            teams={row.original.teams}
-            users={row.original.users}
-            authorId={row.original.authorId}
-            authorName={row.original.authorName}
-            currentUserId={currentUserId}
-            showSelfAsMe
-          />
-        </RowClickShield>
-      ),
-    },
+
     ...(showEnvironmentColumn
       ? [
           {
@@ -630,19 +613,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   showBuiltIn
                   showLabels
                   ownerLabelPlural="agents"
-                  adminPermission={{ agent: ["admin"] }}
                 />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ agent: ["delete"] }}
                 />
               </FilterBar>
-              {!canReadTeams && (
-                <PermissionRequirementHint
-                  message="Team-based filters and sharing details are unavailable without"
-                  permissions={[{ resource: "team", action: "read" }]}
-                />
-              )}
-              <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
+              <ActiveFilterBadges />
             </CollectionFilters>
 
             <BulkActions
@@ -661,15 +637,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   : "match the current filters",
               }}
             >
-              <PermissionButton
-                permissions={{ agent: ["update"] }}
-                variant="outline"
-                size="sm"
-                onClick={() => setBulkVisibilityOpen(true)}
-              >
-                <Pencil className="h-4 w-4" />
-                <span>Edit visibility</span>
-              </PermissionButton>
               <PermissionButton
                 permissions={{ agent: ["delete"] }}
                 variant="destructive"
@@ -730,15 +697,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                         }
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <ResourceVisibilityBadge
-                            scope={agent.scope}
-                            teams={agent.teams}
-                            users={agent.users}
-                            authorId={agent.authorId}
-                            authorName={agent.authorName}
-                            currentUserId={currentUserId}
-                            showSelfAsMe
-                          />
                           {effectiveDefault?.agentId === agent.id ? (
                             <DefaultAgentTag source={effectiveDefault.source} />
                           ) : null}
@@ -791,39 +749,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 }
               />
             </div>
-
-            {bulkVisibilityOpen && (
-              <BulkVisibilityDialog
-                items={selectedAgents.map((profile) => ({
-                  ...profile,
-                  teams: profile.teams ?? [],
-                  users: profile.users ?? [],
-                }))}
-                noun="agent"
-                plural="agents"
-                open={bulkVisibilityOpen}
-                onOpenChange={setBulkVisibilityOpen}
-                isPending={bulkVisibility.isPending}
-                onApply={async (change) => {
-                  const outcome = await bulkVisibility.mutateAsync({
-                    profiles: selectedAgents,
-                    scope: change.scope,
-                    teamIds: change.teamIds,
-                    userIds: change.userIds,
-                  });
-                  reportBulkOutcome({
-                    outcome,
-                    verb: "Updated",
-                    failureVerb: "update",
-                    noun: "agent",
-                    plural: "agents",
-                  });
-                  if (outcome.succeeded.length === 0) return false;
-                  if (outcome.failed.length === 0) clearSelection();
-                  return true;
-                }}
-              />
-            )}
 
             {bulkDeleteOpen && (
               <DeleteConfirmDialog

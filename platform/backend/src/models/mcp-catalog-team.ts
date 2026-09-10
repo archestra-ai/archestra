@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import type { ResourcePermissionAction } from "@archestra/shared";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -7,6 +9,7 @@ import {
   DEFAULT_CATALOG_TEAM_ACCESS_LEVEL,
   normalizeCatalogTeamInput,
 } from "@/types/catalog-team-level";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import TeamModel from "./team";
 
 interface CatalogTeamDetail {
@@ -58,6 +61,10 @@ class McpCatalogTeamModel {
         WHERE ${TeamModel.effectiveMembershipCondition({ userId, teamIdColumn: schema.mcpCatalogTeamsTable.teamId })}
           AND c.scope = 'team'
           AND c.organization_id = ${organizationId}
+      UNION
+      SELECT id FROM internal_mcp_catalog
+        WHERE (organization_id = ${organizationId} OR organization_id IS NULL)
+          AND ${ResourcePermissionPolicyModel.grantCondition({ organizationId, userId, resource: "mcpRegistry", scopeColumn: sql`internal_mcp_catalog.id`, action: "read" })}
     `);
 
     return result.rows.map((r) => r.id);
@@ -66,12 +73,14 @@ class McpCatalogTeamModel {
   /**
    * Check if a user has access to a specific catalog item.
    */
-  static async userHasCatalogAccess(
-    userId: string,
-    catalogId: string,
-    isAdmin: boolean,
-    organizationId: string,
-  ): Promise<boolean> {
+  static async userHasCatalogAccess(params: {
+    userId: string;
+    catalogId: string;
+    isAdmin: boolean;
+    organizationId: string;
+    action?: ResourcePermissionAction;
+  }): Promise<boolean> {
+    const { userId, catalogId, isAdmin, organizationId } = params;
     const [catalog] = await db
       .select({
         scope: schema.internalMcpCatalogTable.scope,
@@ -86,6 +95,44 @@ class McpCatalogTeamModel {
     if (catalog.organizationId && catalog.organizationId !== organizationId) {
       return false;
     }
+    const [grant] = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, catalogId),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+          or(
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId,
+              userId,
+              resource: "mcpRegistry",
+              scopeColumn: schema.internalMcpCatalogTable.id,
+              action: params.action ?? "read",
+            }),
+            params.action && params.action !== "read"
+              ? ResourcePermissionPolicyModel.grantCondition({
+                  organizationId,
+                  userId,
+                  resource: "mcpRegistry",
+                  scopeColumn: schema.internalMcpCatalogTable.id,
+                  action: "read",
+                })
+              : undefined,
+          ),
+        ),
+      )
+      .limit(1);
+    if (grant) return true;
+    const policies = await ResourcePermissionPolicyModel.findApplicable({
+      organizationId,
+      resource: "mcpRegistry",
+      scope: catalogId,
+    });
+    if (policies.some((policy) => policy.legacySharingMigrated)) return false;
     if (isAdmin) return true;
 
     if (catalog.scope === "org") return true;

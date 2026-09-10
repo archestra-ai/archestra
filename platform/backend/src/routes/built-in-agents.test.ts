@@ -18,9 +18,12 @@ describe("built-in agents routes", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     (getAgentTypePermissionChecker as Mock).mockResolvedValue({
       require: vi.fn(),
+      getAgentTypesWithPermission: vi
+        .fn()
+        .mockReturnValue(["agent", "mcp_gateway"]),
       isAdmin: vi.fn().mockReturnValue(true),
       isTeamAdmin: vi.fn().mockReturnValue(true),
       hasAnyReadPermission: vi.fn().mockReturnValue(true),
@@ -32,6 +35,7 @@ describe("built-in agents routes", () => {
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     // Seed the built-in policy config agent for this organization
     await AgentModel.create({

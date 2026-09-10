@@ -15,7 +15,6 @@ import {
   Loader2,
   Pencil,
   Plus,
-  Server,
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
@@ -46,12 +45,9 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -71,12 +67,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
@@ -99,7 +89,6 @@ import {
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
-import { cn } from "@/lib/utils";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import {
   buildSubscriptionOffers,
@@ -160,7 +149,7 @@ export default function ApiKeysPage() {
   // Read defensively: suites that render this page mock the auth query module
   // wholesale, and the Access column should fall back to the scope label
   // rather than crash the table (same convention as `user-share-field.tsx`).
-  const currentUserId = useSession()?.data?.user?.id;
+  const _currentUserId = useSession()?.data?.user?.id;
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const bulkDeleteMutation = useBulkDeleteLlmProviderApiKeys();
@@ -535,59 +524,7 @@ export default function ApiKeysPage() {
           );
         },
       },
-      {
-        accessorKey: "scope",
-        header: "Access",
-        size: 210,
-        minSize: 170,
-        cell: ({ row }) => {
-          const credential = row.original;
-          if (credential.isSystem) {
-            // Not a visibility scope: nobody in the org owns this row. It is
-            // auto-provisioned because the deployment authenticates with cloud
-            // credentials, so it borrows the platform-owned styling that the
-            // built-in agent badge uses.
-            return (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        platformOwnedStyles,
-                        "max-w-full cursor-help gap-1",
-                      )}
-                    >
-                      <Server className="h-3 w-3" />
-                      <span className="truncate">System</span>
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    Provisioned automatically because this deployment
-                    authenticates with cloud credentials instead of an API key.
-                    Managed through environment configuration and usable by the
-                    whole organization.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          }
-          return (
-            <ResourceVisibilityBadge
-              scope={credential.scope}
-              teams={
-                credential.teamId && credential.teamName
-                  ? [{ id: credential.teamId, name: credential.teamName }]
-                  : undefined
-              }
-              authorId={credential.userId}
-              authorName={credential.userName}
-              currentUserId={currentUserId}
-              showSelfAsMe
-            />
-          );
-        },
-      },
+
       {
         accessorKey: "secretStorageType",
         header: "Storage",
@@ -689,7 +626,6 @@ export default function ApiKeysPage() {
       getKeyUsage,
       azureOpenAiEntraIdEnabled,
       anthropicKeylessAuthEnabled,
-      currentUserId,
       providerCatalog,
     ],
   );

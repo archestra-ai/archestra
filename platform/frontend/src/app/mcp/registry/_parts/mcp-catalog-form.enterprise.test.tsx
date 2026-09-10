@@ -20,6 +20,10 @@ const { useIdentityProvidersMock, useK8sImagePullSecretsMock } = vi.hoisted(
   }),
 );
 
+vi.mock("@/components/initial-resource-permissions", () => ({
+  InitialResourcePermissions: () => null,
+}));
+
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/config/config", () => ({

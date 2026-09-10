@@ -108,18 +108,23 @@ describe("GET /api/apps/:appId", () => {
     const other = await makeUser();
     await makeMember(other.id, organizationId, { role: "member" });
 
-    // Grant through the catalog backing the app — the single source of truth
-    // every access path reads.
-    const { default: McpCatalogUserModel } = await import(
-      "@/models/mcp-catalog-user"
+    const { default: ResourcePermissionPolicyModel } = await import(
+      "@/models/resource-permission-policy"
     );
-    const { McpServerModel } = await import("@/models");
-    const server = await McpServerModel.findById(
-      personal.mcpServerId as string,
-    );
-    await McpCatalogUserModel.syncCatalogUsers(server?.catalogId as string, [
-      other.id,
-    ]);
+    const key = {
+      organizationId,
+      resource: "app" as const,
+      scope: personal.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(key);
+    const granted = await ResourcePermissionPolicyModel.replace({
+      ...key,
+      revision: policy?.revision ?? 0,
+      grants: [
+        { subject: { type: "user", id: other.id }, actions: ["read", "use"] },
+      ],
+    });
+    expect(granted).not.toBeNull();
 
     user = other;
     const response = await app.inject({
@@ -128,9 +133,8 @@ describe("GET /api/apps/:appId", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ id: personal.id });
-    expect(response.json().users).toEqual([
-      expect.objectContaining({ id: other.id }),
-    ]);
+    // The access grant is stored in the policy, not the retired users list.
+    expect(response.json().users).toEqual([]);
   });
 
   test("revoking the grant closes access again", async ({

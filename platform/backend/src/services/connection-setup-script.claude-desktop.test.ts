@@ -114,6 +114,8 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         profile = json.loads(profile_path.read_text())
         if ${auth === "none" ? "False" : "True"}:
             assert profile['inferenceGatewayApiKey'] == token
+            assert profile['modelDiscoveryEnabled'] is True
+            assert 'inferenceModels' not in profile
             assert profile['inferenceCustomHeaders'].get('X-Archestra-Virtual-Key') == ${auth === "provider-key" ? "'archestra-test-user'" : "None"}
         else:
             assert 'inferenceProvider' not in profile
@@ -125,7 +127,8 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         # Migrate a profile made by the older per-deployment installer.
         legacy_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:https://proxy.example/v1/mcp/test'))
         legacy_path = library / (legacy_id + '.json')
-        legacy_path.write_text(json.dumps(profile))
+        legacy_profile = {**profile, 'inferenceModels': [{'name': 'claude-haiku-4-5-20251001'}], 'modelDiscoveryEnabled': False} if ${auth === "none" ? "False" : "True"} else profile
+        legacy_path.write_text(json.dumps(legacy_profile))
         old_metadata = {**metadata, 'appliedId': legacy_id, 'entries': metadata['entries'] + [{'id': legacy_id, 'name': 'Old deployment'}]}
         (library / '_meta.json').write_text(json.dumps(old_metadata))
         # A different deployment replaces the managed connection without duplicating it.
@@ -135,8 +138,11 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         replaced_metadata = json.loads((library / '_meta.json').read_text())
         assert replaced_metadata == metadata
         assert not legacy_path.exists()
-        assert json.loads(legacy_path.with_name(legacy_path.name + '.before-archestra').read_text()) == profile
+        assert json.loads(legacy_path.with_name(legacy_path.name + '.before-archestra').read_text()) == legacy_profile
         replaced_profile = json.loads(profile_path.read_text())
+        if ${auth === "none" ? "False" : "True"}:
+            assert replaced_profile['modelDiscoveryEnabled'] is True
+            assert 'inferenceModels' not in replaced_profile
         assert replaced_profile['managedMcpServers'][0]['url'] == 'https://replacement.example/v1/mcp/test'
         assert 'proxy.example' not in json.dumps(replaced_profile)
         assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}

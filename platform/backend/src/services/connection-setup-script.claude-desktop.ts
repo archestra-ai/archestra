@@ -229,7 +229,9 @@ def main():
             'inferenceProvider': 'gateway', 'inferenceCredentialKind': 'static',
             'inferenceGatewayBaseUrl': proxy['url'], 'inferenceGatewayApiKey': token,
             'inferenceGatewayAuthScheme': 'bearer', 'inferenceCustomHeaders': headers,
-            'inferenceModels': [{'name': model}],
+            # An explicit inferenceModels list overrides discovery and would
+            # restrict the picker to the model used for the connection check.
+            'modelDiscoveryEnabled': True,
         })
     if SETUP.get('mcp'):
         mcp = SETUP['mcp']

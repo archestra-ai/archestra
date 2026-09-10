@@ -3,6 +3,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { RuntimeCredentialConnectionModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -118,6 +119,33 @@ describe("Runtime credential routes", () => {
     expect(JSON.stringify(listed.json())).not.toContain(
       "personal-github-token",
     );
+  });
+
+  test("normalizes wrapped Claude OAuth tokens without rewriting other credentials", async () => {
+    for (const [key, input, expected] of [
+      [
+        "claude-code",
+        "sk-ant-oat01-example \n wrapped-token",
+        "sk-ant-oat01-examplewrapped-token",
+      ],
+      ["github", "a secret containing spaces", "a secret containing spaces"],
+    ]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/runtime-credentials/${key}/personal`,
+        payload: { value: input },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ configured: true });
+      expect(
+        await RuntimeCredentialConnectionModel.resolveValue({
+          organizationId,
+          userId: user.id,
+          credentialId: key,
+          scope: "personal",
+        }),
+      ).toBe(expected);
+    }
   });
 
   test("lists Agents that use a credential", async () => {

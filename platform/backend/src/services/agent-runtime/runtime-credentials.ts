@@ -135,7 +135,14 @@ export async function setRuntimeCredentialConnection(params: {
   scope: RuntimeCredentialConnectionScope;
   value: string;
 }) {
-  assertConnectionValue(params.value);
+  // Terminal-wrapped setup-token output can pick up spaces or newlines when copied.
+  // Only the known OAuth token format is whitespace-free; other secrets may contain spaces.
+  const value =
+    params.credentialId === "claude-code" &&
+    params.value.trim().startsWith("sk-ant-oat")
+      ? params.value.replace(/\s/g, "")
+      : params.value;
+  assertConnectionValue(value);
   const definition = await requireRuntimeCredentialDefinition(params);
   assertScopeAllowed({ definition, scope: params.scope });
   return RuntimeCredentialConnectionModel.upsert({
@@ -143,7 +150,7 @@ export async function setRuntimeCredentialConnection(params: {
     userId: params.scope === "personal" ? params.userId : null,
     credentialId: params.credentialId,
     scope: params.scope,
-    value: params.value,
+    value,
   });
 }
 

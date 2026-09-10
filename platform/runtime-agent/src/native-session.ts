@@ -19,6 +19,7 @@ export class NativeSession {
   private requests = new Map<string, { message: RpcMessage; kind: string }>();
   private stopped = false;
   private initialTurn = true;
+  private interrupting = false;
   private ready = false;
   private restoring = false;
   private saveWork: Promise<void> = Promise.resolve();
@@ -120,6 +121,7 @@ export class NativeSession {
       return;
     }
     if (control.type === "interrupt") {
+      this.interrupting = true;
       if (this.params.provider === "codex") {
         if (this.turnId)
           await this.rpc.request("turn/interrupt", {
@@ -144,6 +146,7 @@ export class NativeSession {
       throw new Error(
         "Wait for the current turn or interrupt it before sending another message",
       );
+    this.interrupting = false;
     this.snapshot.session = { state: "working", requests: [] };
     this.acpMessage = "";
     this.upsert({
@@ -242,6 +245,7 @@ export class NativeSession {
   }
 
   private complete(_cancelled = false): void {
+    this.interrupting = false;
     this.turnId = "";
     this.requests.clear();
     this.snapshot.session = { state: "idle", requests: [] };
@@ -352,14 +356,24 @@ export class NativeSession {
       const content = object(message.message);
       const id = string(content.id) || string(message.uuid);
       for (const [index, block] of objects(content.content).entries()) {
-        if (block.type === "text" && message.type === "assistant")
+        if (block.type === "text" && message.type === "assistant") {
+          // Claude can omit thinking blocks from the completed message, so its
+          // content indexes need not match the indexes in stream_event.
+          const text = string(block.text);
+          const streamed = this.snapshot.entries.find(
+            (entry) =>
+              entry.type === "message" &&
+              entry.role === "assistant" &&
+              entry.id.startsWith(`${id}:`) &&
+              entry.text === text,
+          );
           this.upsert({
-            id: `${id}:${index}`,
+            id: streamed?.id ?? `${id}:${index}`,
             type: "message",
             role: "assistant",
-            text: string(block.text),
+            text,
           });
-        else if (block.type === "tool_use")
+        } else if (block.type === "tool_use")
           this.upsert({
             id: string(block.id),
             type: "tool_call",
@@ -378,7 +392,9 @@ export class NativeSession {
       }
     } else if (message.type === "result") {
       this.sessionId = string(message.session_id) || this.sessionId;
-      if (message.is_error)
+      // Claude reports a canceled stream as an error result, but the process
+      // still accepts later turns after its interrupt control request.
+      if (message.is_error && !this.interrupting)
         this.fail("The agent could not complete this turn.");
       else this.complete();
     } else if (message.type === "control_request") this.requestInput(message);

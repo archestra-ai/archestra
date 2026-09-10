@@ -134,7 +134,7 @@ test.each([
   ).toHaveLength(1);
 });
 
-test("Claude reconciles streamed text with the completed message without duplication", async () => {
+test("Claude reconciles streamed text when completed output omits a thinking block", async () => {
   const runtimeDir = await mkdtemp(path.join(tmpdir(), "agent-session-"));
   directories.push(runtimeDir);
   const session = makeSession({
@@ -149,8 +149,27 @@ test("Claude reconciles streamed text with the completed message without duplica
       (entry) => entry.type === "message" && entry.role === "assistant",
     ),
   ).toEqual([
-    { id: "message-1:0", type: "message", role: "assistant", text: "Hello 🌱" },
+    { id: "message-1:1", type: "message", role: "assistant", text: "Hello 🌱" },
   ]);
+});
+
+test("Claude interruption keeps the session available for a later turn", async () => {
+  const runtimeDir = await mkdtemp(path.join(tmpdir(), "agent-session-"));
+  directories.push(runtimeDir);
+  const session = makeSession({
+    provider: "claude-code",
+    runtimeDir,
+    script: CLAUDE,
+  });
+  await session.start("Wait");
+  expect(session.snapshot.session.state).toBe("working");
+  await session.control({ type: "interrupt" });
+  await vi.waitFor(() => expect(session.snapshot.session.state).toBe("idle"));
+  await session.control({ type: "message", text: "Hello" });
+  await vi.waitFor(() => expect(session.snapshot.session.state).toBe("idle"));
+  expect(session.snapshot.entries).toContainEqual(
+    expect.objectContaining({ role: "assistant", text: "Hello 🌱" }),
+  );
 });
 
 function makeSession(params: {
@@ -221,10 +240,11 @@ if(message.id==='permission') {
 const CLAUDE =
   PREFIX +
   `
-if(message.type==='user') {
+if(message.type==='control_request' && message.request.subtype==='interrupt') send({type:'result',session_id:'session-1',is_error:true});
+if(message.type==='user' && message.message.content!=='Wait') {
  send({type:'system',subtype:'init',session_id:'session-1'});
  send({type:'stream_event',event:{type:'message_start',message:{id:'message-1'}}});
- send({type:'stream_event',event:{type:'content_block_delta',index:0,delta:{type:'text_delta',text:'Hello 🌱'}}});
+ send({type:'stream_event',event:{type:'content_block_delta',index:1,delta:{type:'text_delta',text:'Hello 🌱'}}});
  send({type:'assistant',message:{id:'message-1',content:[{type:'text',text:'Hello 🌱'}]}});
  send({type:'result',session_id:'session-1',is_error:false});
 }

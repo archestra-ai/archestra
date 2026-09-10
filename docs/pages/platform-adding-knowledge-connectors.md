@@ -3,7 +3,7 @@ title: Adding Knowledge Connectors
 category: Development
 order: 3
 description: Developer guide for implementing new Knowledge Base connectors in Archestra Platform
-lastUpdated: 2026-05-05
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -378,7 +378,7 @@ Only document options users can actually configure in the create/edit dialogs. D
 
 The database schema in `backend/src/database/schemas/knowledge-base-connector.ts` does not need changes when adding a new connector. The `config` and `checkpoint` columns use `jsonb` typed with the discriminated union types, so any new variant is stored automatically.
 
-If your connector needs a migration (e.g., a new column), follow the standard Drizzle migration workflow described in `CLAUDE.md`.
+If your connector needs a migration (e.g., a new column), follow the standard Drizzle migration workflow described in `platform/AGENTS.md`.
 
 ## Testing
 

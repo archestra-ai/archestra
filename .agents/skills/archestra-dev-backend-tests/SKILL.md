@@ -93,7 +93,7 @@ The config sets `unstubGlobals: true` / `unstubEnvs: true`: every `vi.stubGlobal
 ## Database
 
 - Never mock `@/database` or model modules for DB behavior — every file gets a real PGlite loaded from a pre-migrated snapshot (`src/test/global-setup.ts` + `src/test/setup.ts`); tables are truncated between tests.
-- Create data through fixtures from `@/test` (`makeUser`, `makeOrganization`, `makeAgent`, ...) — see the Backend Test Fixtures section in platform/CLAUDE.md.
+- Create data through fixtures from `@/test` (`makeUser`, `makeOrganization`, `makeAgent`, ...) — see the Backend Test Fixtures section in platform/AGENTS.md.
 - On file teardown the injected DB is cleared: module-level code that runs between files gets getDb()'s "Database not initialized" (a handled condition), never a closed PGlite.
 
 ## Performance etiquette

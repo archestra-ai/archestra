@@ -218,10 +218,13 @@ export function useSuggestSkillDescription() {
 export function useProfilesPaginated(
   params?: archestraApiTypes.GetAgentsData["query"] & {
     initialData?: archestraApiTypes.GetAgentsResponses["200"];
+    /** Scope of the server seed; never reuse it for a different visibility filter. */
+    initialDataExcludeOtherPersonalAgents?: boolean;
   },
 ) {
   const {
     initialData,
+    initialDataExcludeOtherPersonalAgents,
     limit,
     offset,
     sortBy,
@@ -250,7 +253,7 @@ export function useProfilesPaginated(
     teamIds === undefined &&
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
-    excludeOtherPersonalAgents === undefined &&
+    excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
     labels === undefined &&
     status === undefined &&
     (limit === undefined || limit === DEFAULT_TABLE_LIMIT);

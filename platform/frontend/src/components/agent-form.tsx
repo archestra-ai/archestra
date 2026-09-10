@@ -3800,6 +3800,7 @@ export function AgentForm({
                   description="Skills available to you through this agent. Visibility shows how each skill is shared."
                 >
                   <AgentActivationSkillsTable
+                    key={`${agent?.id ?? "draft"}:${environmentId ?? "default"}`}
                     agentId={agent?.id}
                     environmentId={environmentId}
                   />

@@ -1,5 +1,10 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -15,6 +20,7 @@ type AgentSkillExclusions =
   archestraApiTypes.GetAgentSkillExclusionsResponses["200"];
 export type AgentActivationSkills =
   archestraApiTypes.GetAgentActivationSkillsResponses["200"];
+export type AgentActivationSkill = AgentActivationSkills["data"][number];
 
 /**
  * The PUT bodies carry ids only; the GET responses additionally carry the rows
@@ -27,6 +33,9 @@ type AgentSkillExclusionsInput = Omit<AgentSkillExclusions, "skills">;
 export function useAgentActivationSkills(params: {
   agentId?: string;
   environmentId?: string | null;
+  limit: number;
+  offset: number;
+  search?: string;
   enabled?: boolean;
 }) {
   return useQuery({
@@ -35,19 +44,28 @@ export function useAgentActivationSkills(params: {
       params.agentId ?? "draft",
       "activation-skills",
       params.environmentId ?? "default",
+      params.limit,
+      params.offset,
+      params.search ?? "",
     ],
     enabled: params.enabled ?? true,
     queryFn: async (): Promise<AgentActivationSkills> => {
-      const query = params.agentId
-        ? { agentId: params.agentId }
-        : params.environmentId
-          ? { environmentId: params.environmentId }
-          : {};
+      const query = {
+        ...(params.agentId
+          ? { agentId: params.agentId }
+          : params.environmentId
+            ? { environmentId: params.environmentId }
+            : {}),
+        limit: params.limit,
+        offset: params.offset,
+        search: params.search,
+      };
       const { data, error } = await getAgentActivationSkillsApi({ query });
       throwOnApiError(error, { toastOnError: false });
       if (!data) throw new Error("Activation skills response carried no body");
       return data;
     },
+    placeholderData: keepPreviousData,
   });
 }
 

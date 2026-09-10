@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useImperativeHandle } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,6 +32,8 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 } as typeof ResizeObserver;
+
+vi.mock("next/navigation");
 
 const {
   pendingSaveChanges,
@@ -199,8 +202,20 @@ const {
     isPending: false,
   })),
   useAgentActivationSkillsMock: vi.fn(() => ({
-    data: { enabled: true, skills: [] },
+    data: {
+      enabled: true,
+      data: [],
+      pagination: {
+        currentPage: 1,
+        limit: 10,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false,
+      },
+    },
     isPending: false,
+    isFetching: false,
     isError: false,
   })),
   useAgentSkillsMock: vi.fn(
@@ -870,6 +885,11 @@ beforeEach(() => {
     mutateAsync: vi.fn(),
     isPending: false,
   });
+  vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as never);
+  vi.mocked(usePathname).mockReturnValue("/agents/agent-1");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
   vi.mocked(useConnectors).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useConnectors>);
@@ -1756,6 +1776,9 @@ describe("AgentForm knowledge in Auto mode", () => {
     expect(useAgentActivationSkillsMock).toHaveBeenCalledWith({
       agentId: baseAgent.id,
       environmentId: undefined,
+      limit: 10,
+      offset: 0,
+      search: undefined,
     });
   });
 

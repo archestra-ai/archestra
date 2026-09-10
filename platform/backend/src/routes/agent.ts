@@ -47,8 +47,8 @@ import {
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
 import {
-  getAgentActivationSkills,
   getAgentSkillActivationAvailability,
+  getPaginatedAgentActivationSkills,
   listAvailableAgentSkills,
 } from "@/services/agent-activation-skills";
 import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
@@ -68,7 +68,6 @@ import {
 } from "@/services/environments/environment";
 import {
   type Agent,
-  AgentActivationSkillsResponseSchema,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
@@ -90,6 +89,7 @@ import {
   DeleteObjectResponseSchema,
   ImportAgentResponseSchema,
   InsertAgentSchema,
+  PaginatedAgentActivationSkillsResponseSchema,
   SelectAgentSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -1370,27 +1370,37 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentActivationSkills,
         description:
-          "List the skills the current user can activate through an internal agent, or preview for an unsaved agent in an environment",
+          "List a paginated, searchable view of the skills the current user can activate through an internal agent, or preview for an unsaved agent in an environment",
         tags: ["Agents"],
-        querystring: z
-          .object({
-            agentId: UuidIdSchema.optional().describe(
-              "Existing internal agent to evaluate. Omit to preview a new agent.",
+        querystring: PaginationQuerySchema.extend({
+          search: z
+            .string()
+            .optional()
+            .describe(
+              "Case-insensitive substring match on skill name, activation name, description, or provider name.",
             ),
-            environmentId: UuidIdSchema.optional().describe(
-              "Environment for a new-agent preview. Omit for the Default environment.",
-            ),
-          })
-          .refine(
-            ({ agentId, environmentId }) =>
-              agentId === undefined || environmentId === undefined,
-            "Pass agentId or environmentId, not both",
+          agentId: UuidIdSchema.optional().describe(
+            "Existing internal agent to evaluate. Omit to preview a new agent.",
           ),
-        response: constructResponseSchema(AgentActivationSkillsResponseSchema),
+          environmentId: UuidIdSchema.optional().describe(
+            "Environment for a new-agent preview. Omit for the Default environment.",
+          ),
+        }).refine(
+          ({ agentId, environmentId }) =>
+            agentId === undefined || environmentId === undefined,
+          "Pass agentId or environmentId, not both",
+        ),
+        response: constructResponseSchema(
+          PaginatedAgentActivationSkillsResponseSchema,
+        ),
       },
     },
     async (
-      { query: { agentId, environmentId }, user, organizationId },
+      {
+        query: { agentId, environmentId, limit, offset, search },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
       let enabled: boolean;
@@ -1440,11 +1450,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(
-        await getAgentActivationSkills({
+        await getPaginatedAgentActivationSkills({
           enabled,
           organizationId,
           userId: user.id,
           environmentId: resolvedEnvironmentId,
+          pagination: { limit, offset },
+          search,
         }),
       );
     },

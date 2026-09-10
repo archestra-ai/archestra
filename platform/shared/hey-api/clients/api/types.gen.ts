@@ -17277,6 +17277,12 @@ export type GetAgentActivationSkillsData = {
     body?: never;
     path?: never;
     query?: {
+        limit?: number;
+        offset?: number;
+        /**
+         * Case-insensitive substring match on skill name, activation name, description, or provider name.
+         */
+        search?: string;
         /**
          * Existing internal agent to evaluate. Omit to preview a new agent.
          */
@@ -17359,11 +17365,7 @@ export type GetAgentActivationSkillsResponses = {
      * Default Response
      */
     200: {
-        /**
-         * Whether load_skill is available for this agent or draft; when false, skills is empty.
-         */
-        enabled: boolean;
-        skills: Array<{
+        data: Array<{
             /**
              * Stable source identity: native uses skillId, external_mcp uses mcpServerId and uri, and plugin uses pluginId and skillPath.
              */
@@ -17424,6 +17426,18 @@ export type GetAgentActivationSkillsResponses = {
              */
             providerName: string | null;
         }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        /**
+         * Whether load_skill is available for this agent or draft; when false, data is empty.
+         */
+        enabled: boolean;
     };
 };
 

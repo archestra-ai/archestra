@@ -1,10 +1,12 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  type PaginationQuery,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import { AgentModel } from "@/models";
 import { listPluginSkills } from "@/plugins/plugin-skills";
 import {
@@ -22,6 +24,7 @@ import type {
   AgentActivationSkill,
   AgentActivationSkillsResponse,
   ExternalMcpSkillListItem,
+  PaginatedAgentActivationSkillsResponse,
   PluginSkillListItem,
   Skill,
 } from "@/types";
@@ -107,6 +110,42 @@ export async function getAgentActivationSkills(
         referenceKey(left).localeCompare(referenceKey(right)),
     );
   return { enabled: true, skills };
+}
+
+/**
+ * HTTP list projection of the complete activation catalog. Search is a
+ * case-insensitive substring match across display name, activation name,
+ * description, and provider name, and is applied before offset pagination.
+ */
+export async function getPaginatedAgentActivationSkills(
+  params: SkillAvailabilityContext & {
+    enabled: boolean;
+    pagination: PaginationQuery;
+    search?: string;
+  },
+): Promise<PaginatedAgentActivationSkillsResponse> {
+  const catalog = await getAgentActivationSkills(params);
+  const normalizedSearch = params.search?.trim().toLowerCase();
+  const filteredSkills = normalizedSearch
+    ? catalog.skills.filter((skill) =>
+        [
+          skill.name,
+          skill.activationName,
+          skill.description,
+          skill.providerName,
+        ].some((field) => field?.toLowerCase().includes(normalizedSearch)),
+      )
+    : catalog.skills;
+  const { limit, offset } = params.pagination;
+
+  return {
+    enabled: catalog.enabled,
+    ...createPaginatedResult(
+      filteredSkills.slice(offset, offset + limit),
+      filteredSkills.length,
+      params.pagination,
+    ),
+  };
 }
 
 /**

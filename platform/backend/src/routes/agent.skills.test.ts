@@ -147,7 +147,7 @@ describe("agent skills routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       enabled: true,
-      skills: [
+      data: [
         {
           reference: { source: "native", skillId: skill.id },
           name: "incident-response",
@@ -157,6 +157,14 @@ describe("agent skills routes", () => {
           providerName: null,
         },
       ],
+      pagination: {
+        currentPage: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
     });
     expect(response.body).not.toContain("# Instructions");
   });
@@ -182,7 +190,7 @@ describe("agent skills routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       enabled: true,
-      skills: [
+      data: [
         {
           reference: { source: "native", skillId: visible.id },
           name: "visible-here",
@@ -208,7 +216,18 @@ describe("agent skills routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ enabled: false, skills: [] });
+    expect(response.json()).toEqual({
+      enabled: false,
+      data: [],
+      pagination: {
+        currentPage: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false,
+      },
+    });
   });
 
   test("GET activation-skills follows Auto-mode dynamic load_skill availability", async ({
@@ -229,7 +248,7 @@ describe("agent skills routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       enabled: true,
-      skills: [{ name: "dynamically-reachable" }],
+      data: [{ name: "dynamically-reachable" }],
     });
   });
 
@@ -259,7 +278,82 @@ describe("agent skills routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ enabled: false, skills: [] });
+    expect(response.json()).toMatchObject({
+      enabled: false,
+      data: [],
+      pagination: { total: 0 },
+    });
+  });
+
+  test("GET activation-skills paginates the sorted accessible catalog", async ({
+    makeAgent,
+  }) => {
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({
+      agentType: "agent",
+      organizationId,
+    });
+    await ToolModel.assignSkillToolsToAgent(agent.id, organizationId);
+    await makeSkill({ name: "alpha" });
+    await makeSkill({ name: "bravo" });
+    await makeSkill({ name: "charlie" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/activation-skills?agentId=${agent.id}&limit=2&offset=2`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      data: [{ name: "charlie" }],
+      pagination: {
+        currentPage: 2,
+        limit: 2,
+        total: 3,
+        totalPages: 2,
+        hasNext: false,
+        hasPrev: true,
+      },
+    });
+  });
+
+  test("GET activation-skills searches the full catalog before pagination", async ({
+    makeAgent,
+  }) => {
+    await OrganizationModel.patch(organizationId, { skillToolsEnabled: true });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({
+      agentType: "agent",
+      organizationId,
+    });
+    await ToolModel.assignSkillToolsToAgent(agent.id, organizationId);
+    await makeSkill({ name: "alpha", description: "Routine work" });
+    await makeSkill({ name: "bravo", description: "Routine work" });
+    await makeSkill({
+      name: "charlie",
+      description: "Handles SEVERE incidents",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/activation-skills?agentId=${agent.id}&limit=2&offset=0&search=severe`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      data: [{ name: "charlie" }],
+      pagination: {
+        currentPage: 1,
+        limit: 2,
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
+    });
   });
 
   test("GET agents includes the caller-visible activation skill count on internal agents", async ({

@@ -1,4 +1,7 @@
-import { ResourceVisibilityScopeSchema } from "@archestra/shared";
+import {
+  createPaginatedResponseSchema,
+  ResourceVisibilityScopeSchema,
+} from "@archestra/shared";
 import { z } from "zod";
 import { UuidIdSchema } from "./api";
 
@@ -52,7 +55,19 @@ export const AgentActivationSkillsResponseSchema = z.object({
   skills: z.array(AgentActivationSkillSchema),
 });
 
+export const PaginatedAgentActivationSkillsResponseSchema =
+  createPaginatedResponseSchema(AgentActivationSkillSchema).extend({
+    enabled: z
+      .boolean()
+      .describe(
+        "Whether load_skill is available for this agent or draft; when false, data is empty.",
+      ),
+  });
+
 export type AgentActivationSkill = z.infer<typeof AgentActivationSkillSchema>;
 export type AgentActivationSkillsResponse = z.infer<
   typeof AgentActivationSkillsResponseSchema
+>;
+export type PaginatedAgentActivationSkillsResponse = z.infer<
+  typeof PaginatedAgentActivationSkillsResponseSchema
 >;

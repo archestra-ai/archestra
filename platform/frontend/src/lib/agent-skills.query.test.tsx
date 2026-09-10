@@ -30,22 +30,43 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("useAgentActivationSkills", () => {
-  it("loads the Default environment for a new agent without an id", async () => {
+  it("loads a searchable page for a new agent in the Default environment", async () => {
     let requestedUrl: URL | undefined;
     server.use(
       http.get(`${API_ORIGIN}/api/agents/activation-skills`, ({ request }) => {
         requestedUrl = new URL(request.url);
-        return HttpResponse.json({ enabled: true, skills: [] });
+        return HttpResponse.json({
+          enabled: true,
+          data: [],
+          pagination: {
+            currentPage: 2,
+            limit: 10,
+            total: 12,
+            totalPages: 2,
+            hasNext: false,
+            hasPrev: true,
+          },
+        });
       }),
     );
 
     const { result } = renderHook(
-      () => useAgentActivationSkills({ environmentId: undefined }),
+      () =>
+        useAgentActivationSkills({
+          environmentId: undefined,
+          limit: 10,
+          offset: 10,
+          search: "incident",
+        }),
       { wrapper },
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(requestedUrl?.search).toBe("");
-    expect(result.current.data).toEqual({ enabled: true, skills: [] });
+    expect(requestedUrl?.searchParams.get("agentId")).toBeNull();
+    expect(requestedUrl?.searchParams.get("environmentId")).toBeNull();
+    expect(requestedUrl?.searchParams.get("limit")).toBe("10");
+    expect(requestedUrl?.searchParams.get("offset")).toBe("10");
+    expect(requestedUrl?.searchParams.get("search")).toBe("incident");
+    expect(result.current.data).toMatchObject({ enabled: true, data: [] });
   });
 });

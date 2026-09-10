@@ -40,7 +40,7 @@ Disabling an app (in App settings) pulls it back without deleting it. It leaves 
 
 The `/apps` gallery lists apps you own and apps exposed by installed [MCP servers](./platform-mcp). Each `ui://` resource has its own card. The card uses the server's display name, such as *Task Tracker*. When a server exposes several apps, the title also includes the tool name — *Task Tracker / show_board*.
 
-Choose **Chat** to open an app in a new conversation. That chat stays out of your conversation list until you write into it. Owned cards also offer quick access to **Settings**. Their overflow menu includes version history, standalone launch, pinning, and deletion. External cards link to the backing MCP server and offer standalone launch when the tool needs no input.
+Click a card to open its app in a new conversation. That chat stays out of your conversation list until you write into it. Owned cards also offer quick access to **Settings**. Their overflow menu includes version history, standalone launch, pinning, and deletion. External cards link to the backing MCP server and offer standalone launch when the tool needs no input.
 
 While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `list_app_versions`, `restore_app_version`, `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 

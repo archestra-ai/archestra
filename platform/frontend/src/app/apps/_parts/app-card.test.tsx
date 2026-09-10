@@ -244,6 +244,12 @@ describe("ExternalAppCard", () => {
   it("links 'Open in new tab' to the install-pinned run page and 'Manage MCP server'", () => {
     render(<AppCard app={externalApp} />);
 
+    expect(
+      screen.queryByRole("button", {
+        name: "Chat Archestra PM / show_board",
+      }),
+    ).not.toBeInTheDocument();
+
     const expectedRun =
       "/a/catalog/cat-1?install=srv-1&resource=ui%3A%2F%2Fpm%2Fboard.html";
 
@@ -288,33 +294,19 @@ describe("OwnedAppCard", () => {
     openOwnedMutate.mockReset();
   });
 
-  it("offers Chat and Settings as quick card actions", () => {
+  it("offers Settings without duplicating the card's chat action", () => {
     const onOpenSettings = vi.fn();
     render(<AppCard app={ownedApp} onOpenSettings={onOpenSettings} />);
 
     expect(
-      screen.getByRole("button", { name: "Chat My Owned App" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Chat My Owned App" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Settings My Owned App" }),
     );
+    expect(onOpenSettings).toHaveBeenCalledOnce();
     expect(onOpenSettings).toHaveBeenCalledWith(ownedApp);
-  });
-
-  it("disables the Chat action while an app is opening", async () => {
-    openOwnedMutate.mockReturnValue(new Promise(() => undefined));
-    render(<AppCard app={ownedApp} />);
-
-    const chat = screen.getByRole("button", { name: "Chat My Owned App" });
-    fireEvent.click(chat);
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Chat My Owned App" }),
-      ).toBeDisabled(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Chat My Owned App" }));
-    expect(openOwnedMutate).toHaveBeenCalledTimes(1);
+    expect(openOwnedMutate).not.toHaveBeenCalled();
   });
 
   it("exposes a standalone link and a delete action", () => {

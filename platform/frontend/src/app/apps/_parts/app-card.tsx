@@ -5,7 +5,6 @@ import {
   AppWindow,
   History,
   Loader2,
-  MessageSquare,
   Pin,
   PinOff,
   Server,
@@ -183,12 +182,6 @@ function OwnedAppCard({
     }
   };
   const actions: TableRowAction[] = [
-    {
-      icon: <MessageSquare className="h-4 w-4" />,
-      label: "Chat",
-      disabled: isOpening,
-      onClick: () => void handleOpen(),
-    },
     {
       icon: <Settings className="h-4 w-4" />,
       label: "Settings",
@@ -371,12 +364,6 @@ function ExternalAppCard({
     }
   };
   const actions: TableRowAction[] = [
-    {
-      icon: <MessageSquare className="h-4 w-4" />,
-      label: "Chat",
-      disabled: isOpening,
-      onClick: () => void handleOpen(),
-    },
     {
       icon: <Server className="h-4 w-4" />,
       label: "Manage MCP server",

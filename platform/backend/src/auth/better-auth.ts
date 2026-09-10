@@ -11,7 +11,6 @@ import {
   getEmailDomain,
   OAUTH_PAGES,
   OAUTH_SCOPES,
-  PredefinedRoleNameSchema,
 } from "@archestra/shared";
 import {
   allAvailableActions,
@@ -150,9 +149,12 @@ export const auth = betterAuth({
     // same table as `/api/roles`, and they skip everything that surface adds:
     // the enterprise licence gate, the permissions-cache invalidation, the
     // `member:impersonate` system-role resync, and the audit trail. Close the
-    // door — `disabledPaths` is enforced in better-auth's HTTP router only,
-    // so `betterAuth.api.createOrgRole()` and friends keep working for the
-    // `/api/roles` handlers that call them server-side.
+    // door. Role writes go through `/api/roles`, which owns authorization
+    // (the no-privilege-escalation rule in `findUngrantablePermissions`) and
+    // writes the row itself; the plugin's own role CRUD is unused. Reads stay
+    // mounted, and `dynamicAccessControl.enabled` must stay on so
+    // better-auth's `hasPermission` still resolves custom roles from the
+    // database.
     "/organization/create-role",
     "/organization/update-role",
     "/organization/delete-role",
@@ -174,25 +176,6 @@ export const auth = betterAuth({
          * https://better-auth.com/docs/plugins/organization#maximumrolesperorganization
          */
         // maximumRolesPerOrganization: 50,
-        validateRoleName: async (roleName: string) => {
-          // Role names must be lowercase alphanumeric with underscores
-          if (!/^[a-z0-9_]+$/.test(roleName)) {
-            throw new Error(
-              "Role name must be lowercase letters, numbers, and underscores only",
-            );
-          }
-          if (roleName.length < 2) {
-            throw new Error("Role name must be at least 2 characters");
-          }
-          if (roleName.length > 50) {
-            throw new Error("Role name must be less than 50 characters");
-          }
-          if (PredefinedRoleNameSchema.safeParse(roleName).success) {
-            throw new Error(
-              `"${roleName}" is a predefined role name and cannot be used for a custom role`,
-            );
-          }
-        },
       },
       roles: {
         admin: adminRole,

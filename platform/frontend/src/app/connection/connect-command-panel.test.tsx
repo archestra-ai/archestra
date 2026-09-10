@@ -224,6 +224,90 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("opens the selected Cursor gateway independently of setup generation and updates its endpoint", async () => {
+    createSetupMock.mockResolvedValue(null);
+    const props = renderPanelProps({
+      client: findClient("cursor"),
+      llmProxyId: null,
+      mcpGateways: [
+        {
+          id: "g1",
+          name: "Tools & Reports #1",
+          slug: "reports",
+          agentType: "mcp_gateway",
+        },
+        { id: "g2", name: "Other Tools", agentType: "mcp_gateway" },
+      ],
+    });
+    const view = render(<ConnectCommandPanel {...props} />);
+    const readInstall = () => {
+      const link = new URL(
+        screen
+          .getByRole("link", { name: "Add to Cursor" })
+          .getAttribute("href") ?? "",
+      );
+      return {
+        name: link.searchParams.get("name"),
+        config: JSON.parse(
+          Buffer.from(link.searchParams.get("config") ?? "", "base64").toString(
+            "utf8",
+          ),
+        ),
+      };
+    };
+    expect(readInstall()).toEqual({
+      name: "tools_&_reports_#1",
+      config: { url: "http://localhost:9000/v1/mcp/reports" },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("connect-command-status")).toHaveTextContent(
+        "Setup command generation failed",
+      ),
+    );
+    expect(screen.getByRole("link", { name: "Add to Cursor" })).toBeVisible();
+
+    view.rerender(
+      <ConnectCommandPanel
+        {...props}
+        mcpGatewayId="g2"
+        baseUrl="https://gateway.example.com/v1"
+      />,
+    );
+    expect(readInstall()).toEqual({
+      name: "other_tools",
+      config: { url: "https://gateway.example.com/v1/mcp/g2" },
+    });
+  });
+
+  it.each([
+    "no gateway access",
+    "another client",
+  ])("does not offer a Cursor install link for %s", (scenario) => {
+    renderPanel({
+      client: findClient(
+        scenario === "another client" ? "claude-code" : "cursor",
+      ),
+      ...(scenario === "no gateway access" ? { mcpGateways: null } : {}),
+    });
+    expect(
+      screen.queryByRole("link", { name: "Add to Cursor" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the Cursor setup command alongside the MCP install link", async () => {
+    availableKeysMock.mockReturnValue({ data: [{ provider: "openai" }] });
+    renderPanel({ client: findClient("cursor") });
+    expect(screen.getByRole("link", { name: "Add to Cursor" })).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByTestId("connect-command-status")).toHaveTextContent(
+        "Setup command ready",
+      ),
+    );
+    expect(screen.getByText(COMMAND)).not.toBeVisible();
+    fireEvent.click(screen.getByText("Set up proxy, skills, and plugins"));
+    expect(screen.getByText(COMMAND)).toBeVisible();
+  });
+
   it("offers Desktop subscription installation without a configured API key", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({
@@ -289,12 +373,15 @@ describe("ConnectCommandPanel", () => {
     );
   });
 
-  it("keeps approval compact while customized choices reach the approved setup", async () => {
+  it.each([
+    "claude-code",
+    "cursor",
+  ])("keeps %s approval compact while customized choices reach the approved setup", async (clientId) => {
     const decisions: unknown[] = [];
     const server = setupServer(
       http.get("http://localhost:9000/api/client-connections/demo", () =>
         HttpResponse.json({
-          clientId: "claude-code",
+          clientId,
           platform: "macos",
           userCode: "ABCD-1234",
           expiresAt: "2099-01-01T00:00:00Z",
@@ -306,7 +393,7 @@ describe("ConnectCommandPanel", () => {
           decisions.push(await request.json());
           return HttpResponse.json({
             status: "approved",
-            clientId: "claude-code",
+            clientId,
             platform: "macos",
           });
         },
@@ -327,11 +414,17 @@ describe("ConnectCommandPanel", () => {
     createSetupMock.mockResolvedValueOnce(null);
     const view = render(
       <QueryClientProvider client={queryClient}>
-        <ConnectCommandPanel {...renderPanelProps()} />
+        <ConnectCommandPanel
+          {...renderPanelProps({
+            client: findClient(clientId),
+            llmProxyId: null,
+          })}
+        />
       </QueryClientProvider>,
     );
     try {
       await screen.findByText("ABCD-1234");
+      expect(screen.queryByRole("link", { name: "Add to Cursor" })).toBeNull();
       await user.click(
         await screen.findByRole("button", { name: "Retry setup" }),
       );

@@ -182,6 +182,12 @@ The `codex` CLI must be on your `PATH`.
 
 ### Cursor
 
+**Add to Cursor** adds the selected MCP gateway through Cursor's native install prompt.
+Sign in through OAuth to access its tools.
+The link uses the selected endpoint and requires no copied token.
+
+The optional setup command configures the gateway, proxy, skills, and plugins together.
+Use it instead of the button when you need the full setup.
 Cursor is a desktop app, so the script edits its files directly and prints the UI-only steps.
 
 - **MCP gateway** — merges the server into `~/.cursor/mcp.json`. Turn it on in Cursor under Settings → MCP.

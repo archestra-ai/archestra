@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   type ComponentProps,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -58,6 +59,7 @@ import {
   type ConnectionBaseUrl,
   deriveMcpServerName,
 } from "./connection-flow.utils";
+import { CursorInstallLink } from "./cursor-install-link";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -149,7 +151,7 @@ function useConnectSkills(
 interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
-  mcpGateways: AgentSelectorAgent[] | null;
+  mcpGateways: (AgentSelectorAgent & { slug?: string | null })[] | null;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
@@ -430,6 +432,18 @@ export function ConnectCommandPanel({
     gatewayName: gateway?.name ?? "",
     appName,
   });
+
+  const cursorInstallHref =
+    !connectRequest &&
+    gateway &&
+    client.id === "cursor" &&
+    client.mcp.kind === "custom"
+      ? client.mcp.cta?.buildHref({
+          url: `${baseUrl}/mcp/${gateway.slug ?? gateway.id}`,
+          serverName: oauthServerName,
+          token: null,
+        })
+      : undefined;
 
   // Passthrough setups also get a personal passthrough virtual key wired into the
   // command (best-effort: only when the user can mint one) so requests are
@@ -1119,162 +1133,179 @@ export function ConnectCommandPanel({
             ? "Approve the connection"
             : client.id === "claude-desktop"
               ? "Install the connection"
-              : "Run the setup script"
+              : cursorInstallHref
+                ? `Connect ${client.label}`
+                : "Run the setup script"
         }
         last={!showOAuthStep}
       >
         <div className="flex flex-col gap-3">
-          {client.id === "claude-desktop" && (
-            <p className="text-sm text-muted-foreground">
-              Install Claude Desktop, Node.js 18+, and Python 3.9+ first.
-              {hasProxy && effectiveProxyAuth === "provider-key" && (
-                <span>
-                  {" "}
-                  Subscription sign-in also requires the Claude Code CLI.
-                </span>
-              )}
-              <span> Finish active Desktop tasks before running setup.</span>
-            </p>
-          )}
-          <output
-            className="sr-only"
-            aria-live="polite"
-            data-testid="connect-command-status"
-          >
-            {commandStatus}
-          </output>
-          <CreditWarningNotice warning={result?.creditWarning} />
-          {connectRequest && failed && (
-            <div role="alert" className="flex items-center gap-3 text-sm">
-              <span>Could not prepare the setup.</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => runGeneration(inputsKey)}
-              >
-                <span>Retry setup</span>
-              </Button>
+          {cursorInstallHref && (
+            <div className="grid justify-items-start gap-3">
+              <CursorInstallLink href={cursorInstallHref} />
+              <p className="text-sm text-muted-foreground">
+                Add the MCP gateway in Cursor, then sign in to access tools.
+              </p>
             </div>
           )}
-          <div
-            className={cn(
-              "overflow-hidden rounded-xl border",
-              connectRequest
-                ? "bg-card"
-                : "border-[#1f2937] bg-[#0d1117] shadow-lg",
-            )}
-          >
-            {!hasRunnableAnything ? (
-              <div className="px-5 py-4 text-sm text-[#9ca3af]">
-                No selected resource can be configured for this client and
-                operating system. Choose another platform or add a connection
-                resource.
-              </div>
-            ) : needsPerUserConnect && provider ? (
-              <PerUserConnectGate
-                providerLabel={providerCatalog.label(provider)}
-                pending={createPerUserKey.isPending}
-                onToken={async (token) => {
-                  try {
-                    await createPerUserKey.mutateAsync({
-                      name: providerCatalog.label(provider),
-                      provider,
-                      apiKey: token,
-                      scope: "personal",
-                    });
-                    // availableKeys invalidates → the command auto-generates.
-                  } catch {
-                    // handleApiError already surfaced the failure (e.g. no seat)
-                  }
-                }}
-              />
-            ) : virtualKeyUnbacked ? (
-              <ProviderKeyGate
-                reason={noVirtualKeyReason}
-                provider={soleProvider}
-                addKeyPhrase={addKeyPhrase}
-                canAddKey={canCreateProviderKey === true}
-                onAddKey={() => setShowAddProviderKey(true)}
-              />
-            ) : connectRequest ? (
-              <ClientConnectionApproval
-                key={connectRequest}
-                requestId={connectRequest}
-                setupId={result?.id}
-                clientId={client.id}
-                platform={setupPlatform}
-              />
-            ) : client.id === "claude-desktop" && result?.installerUrl ? (
-              <div className="space-y-3 p-4 text-zinc-100">
-                <Button asChild variant="outline" size="sm" className="text-xs">
-                  <a href={result.installerUrl} download>
-                    <Download className="size-3.5" />
-                    <span>Download installer</span>
-                  </a>
-                </Button>
-                <p className="max-w-xl text-xs leading-relaxed text-zinc-400">
-                  Open in Claude Desktop and confirm Install. Setup runs in a
-                  terminal and restarts Desktop. Valid subscription tokens are
-                  reused automatically.
-                </p>
-                <details className="text-xs text-zinc-400">
-                  <summary className="cursor-pointer">
-                    Use terminal instead
-                  </summary>
-                  <SetupCommandLine
-                    command={result.command}
-                    pending={false}
-                    failed={false}
-                    onRetry={() => runGeneration(inputsKey)}
-                  />
-                </details>
-              </div>
-            ) : (
-              <SetupCommandLine
-                command={result?.command ?? null}
-                pending={isPending || (!result && !failed)}
-                failed={failed}
-                onRetry={() => runGeneration(inputsKey)}
-              />
-            )}
-          </div>
-
-          {!connectRequest && (
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
-              <span className="max-w-2xl">
-                {client.id === "claude-desktop" ? (
+          <SetupScriptDetails collapsed={!!cursorInstallHref}>
+            {client.id === "claude-desktop" && (
+              <p className="text-sm text-muted-foreground">
+                Install Claude Desktop, Node.js 18+, and Python 3.9+ first.
+                {hasProxy && effectiveProxyAuth === "provider-key" && (
                   <span>
-                    The installer expires in 15 minutes. Already using a
-                    third-party Desktop profile? Use the terminal option. You
-                    can remove the setup helper from Desktop Extensions
-                    afterward.
-                  </span>
-                ) : (
-                  <span>
-                    The command downloads a one-time setup script (expires in 15
-                    minutes) and pipes it straight to{" "}
-                    {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
-                    {client.id === "claude-desktop"
-                      ? "macOS"
-                      : platformLabels[platform]}
-                    . The script applies the setup reviewed above by editing
-                    your client config in place — it isn&apos;t undone
-                    automatically, so revert manually if you need to.
+                    {" "}
+                    Subscription sign-in also requires the Claude Code CLI.
                   </span>
                 )}
-              </span>
-              <button
-                type="button"
-                onClick={() => runGeneration(inputsKey)}
-                disabled={isPending}
-                data-testid="connect-regenerate-command"
-                className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
-              >
-                <RotateCcw className="size-3" />
-                Regenerate
-              </button>
+                <span> Finish active Desktop tasks before running setup.</span>
+              </p>
+            )}
+            <output
+              className="sr-only"
+              aria-live="polite"
+              data-testid="connect-command-status"
+            >
+              {commandStatus}
+            </output>
+            <CreditWarningNotice warning={result?.creditWarning} />
+            {connectRequest && failed && (
+              <div role="alert" className="flex items-center gap-3 text-sm">
+                <span>Could not prepare the setup.</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => runGeneration(inputsKey)}
+                >
+                  <span>Retry setup</span>
+                </Button>
+              </div>
+            )}
+            <div
+              className={cn(
+                "overflow-hidden rounded-xl border",
+                connectRequest
+                  ? "bg-card"
+                  : "border-[#1f2937] bg-[#0d1117] shadow-lg",
+              )}
+            >
+              {!hasRunnableAnything ? (
+                <div className="px-5 py-4 text-sm text-[#9ca3af]">
+                  No selected resource can be configured for this client and
+                  operating system. Choose another platform or add a connection
+                  resource.
+                </div>
+              ) : needsPerUserConnect && provider ? (
+                <PerUserConnectGate
+                  providerLabel={providerCatalog.label(provider)}
+                  pending={createPerUserKey.isPending}
+                  onToken={async (token) => {
+                    try {
+                      await createPerUserKey.mutateAsync({
+                        name: providerCatalog.label(provider),
+                        provider,
+                        apiKey: token,
+                        scope: "personal",
+                      });
+                      // availableKeys invalidates → the command auto-generates.
+                    } catch {
+                      // handleApiError already surfaced the failure (e.g. no seat)
+                    }
+                  }}
+                />
+              ) : virtualKeyUnbacked ? (
+                <ProviderKeyGate
+                  reason={noVirtualKeyReason}
+                  provider={soleProvider}
+                  addKeyPhrase={addKeyPhrase}
+                  canAddKey={canCreateProviderKey === true}
+                  onAddKey={() => setShowAddProviderKey(true)}
+                />
+              ) : connectRequest ? (
+                <ClientConnectionApproval
+                  key={connectRequest}
+                  requestId={connectRequest}
+                  setupId={result?.id}
+                  clientId={client.id}
+                  platform={setupPlatform}
+                />
+              ) : client.id === "claude-desktop" && result?.installerUrl ? (
+                <div className="space-y-3 p-4 text-zinc-100">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                  >
+                    <a href={result.installerUrl} download>
+                      <Download className="size-3.5" />
+                      <span>Download installer</span>
+                    </a>
+                  </Button>
+                  <p className="max-w-xl text-xs leading-relaxed text-zinc-400">
+                    Open in Claude Desktop and confirm Install. Setup runs in a
+                    terminal and restarts Desktop. Valid subscription tokens are
+                    reused automatically.
+                  </p>
+                  <details className="text-xs text-zinc-400">
+                    <summary className="cursor-pointer">
+                      Use terminal instead
+                    </summary>
+                    <SetupCommandLine
+                      command={result.command}
+                      pending={false}
+                      failed={false}
+                      onRetry={() => runGeneration(inputsKey)}
+                    />
+                  </details>
+                </div>
+              ) : (
+                <SetupCommandLine
+                  command={result?.command ?? null}
+                  pending={isPending || (!result && !failed)}
+                  failed={failed}
+                  onRetry={() => runGeneration(inputsKey)}
+                />
+              )}
             </div>
-          )}
+
+            {!connectRequest && (
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                <span className="max-w-2xl">
+                  {client.id === "claude-desktop" ? (
+                    <span>
+                      The installer expires in 15 minutes. Already using a
+                      third-party Desktop profile? Use the terminal option. You
+                      can remove the setup helper from Desktop Extensions
+                      afterward.
+                    </span>
+                  ) : (
+                    <span>
+                      The command downloads a one-time setup script (expires in
+                      15 minutes) and pipes it straight to{" "}
+                      {platform === "windows" ? "PowerShell" : "Bash"} on{" "}
+                      {client.id === "claude-desktop"
+                        ? "macOS"
+                        : platformLabels[platform]}
+                      . The script applies the setup reviewed above by editing
+                      your client config in place — it isn&apos;t undone
+                      automatically, so revert manually if you need to.
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => runGeneration(inputsKey)}
+                  disabled={isPending}
+                  data-testid="connect-regenerate-command"
+                  className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
+                >
+                  <RotateCcw className="size-3" />
+                  Regenerate
+                </button>
+              </div>
+            )}
+          </SetupScriptDetails>
         </div>
       </ConnectionSection>
 
@@ -1572,4 +1603,28 @@ function ConnectionSection({
 }: ComponentProps<typeof WizardStep> & { compact: boolean }) {
   if (!compact) return <WizardStep {...props} />;
   return <section className="mb-6 max-w-2xl">{props.children}</section>;
+}
+
+function SetupScriptDetails({
+  collapsed,
+  children,
+}: {
+  collapsed: boolean;
+  children: ReactNode;
+}) {
+  if (!collapsed) return children;
+  return (
+    <details className="group rounded-lg border p-4">
+      <summary className="cursor-pointer text-sm font-medium">
+        Set up proxy, skills, and plugins
+      </summary>
+      <div className="mt-3 flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">
+          Run this command to apply the full setup reviewed above. It also adds
+          the MCP gateway, so you can use it instead of the button.
+        </p>
+        {children}
+      </div>
+    </details>
+  );
 }

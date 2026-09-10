@@ -378,8 +378,12 @@ claude`,
       cta: {
         label: "Open in Cursor",
         buildHref: ({ url, serverName }) => {
-          const cfg = btoa(JSON.stringify({ url }));
-          return `cursor://anysphere.cursor-deeplink/mcp/install?name=${serverName}&config=${cfg}`;
+          const bytes = new TextEncoder().encode(JSON.stringify({ url }));
+          const cfg = btoa(
+            Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""),
+          );
+          const query = new URLSearchParams({ name: serverName, config: cfg });
+          return `cursor://anysphere.cursor-deeplink/mcp/install?${query}`;
         },
       },
       buildConfig: ({ url, token, serverName }) => {

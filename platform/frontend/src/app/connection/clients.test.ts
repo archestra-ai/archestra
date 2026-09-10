@@ -160,3 +160,29 @@ describe("Copilot CLI connection client", () => {
     expect(client.iconOverride).toBeUndefined();
   });
 });
+
+describe("Cursor MCP install links", () => {
+  it.each([
+    ["https://gateway.example.com/v1/mcp/tools?x=~&y=1", "tools & reports #1+"],
+    ["https://gateway.example.com/工具/v1/mcp/データ", "研究 🚀"],
+  ])("round-trips the endpoint and server name: %s", (url, serverName) => {
+    const client = CONNECT_CLIENTS.find((c) => c.id === "cursor");
+    if (client?.mcp.kind !== "custom" || !client.mcp.cta) {
+      throw new Error("Cursor MCP install link is missing");
+    }
+    const link = new URL(
+      client.mcp.cta.buildHref({ url, serverName, token: null }),
+    );
+    expect(`${link.protocol}//${link.host}${link.pathname}`).toBe(
+      "cursor://anysphere.cursor-deeplink/mcp/install",
+    );
+    expect(link.searchParams.get("name")).toBe(serverName);
+    expect(
+      JSON.parse(
+        Buffer.from(link.searchParams.get("config") ?? "", "base64").toString(
+          "utf8",
+        ),
+      ),
+    ).toEqual({ url });
+  });
+});

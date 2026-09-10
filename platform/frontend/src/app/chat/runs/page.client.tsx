@@ -315,7 +315,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         }
       />
       <ShareAgentRunDialog
-        taskId={taskId}
+        taskId={run?.taskId ?? taskId}
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
       />

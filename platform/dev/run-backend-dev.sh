@@ -7,7 +7,7 @@ export ARCHESTRA_LOGGING_LEVEL=debug
 export ARCHESTRA_ANALYTICS=disabled
 
 backend_pid=""
-backend_ports="$(node --env-file=.env -e 'let port = "9000"; try { port = new URL(process.env.ARCHESTRA_INTERNAL_API_BASE_URL).port || port; } catch {} process.stdout.write(port + " " + (process.env.ARCHESTRA_METRICS_PORT || "9050"));')"
+backend_ports="$(node --env-file-if-exists=.env -e 'let port = "9000"; try { port = new URL(process.env.ARCHESTRA_INTERNAL_API_BASE_URL).port || port; } catch {} process.stdout.write(port + " " + (process.env.ARCHESTRA_METRICS_PORT || "9050"));')"
 
 # The node server is a grandchild of $backend_pid (pnpm → tsdown --watch →
 # node), so the TERM to $backend_pid and its direct children can miss it. A

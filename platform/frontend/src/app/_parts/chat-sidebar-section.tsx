@@ -694,7 +694,8 @@ export function ChatSidebarSection({
   };
 
   const renderRunItem = (run: (typeof runs)[number]) => {
-    const active = currentRunTaskId === (run.sessionId ?? run.taskId);
+    const active =
+      currentRunTaskId === run.sessionId || currentRunTaskId === run.taskId;
     const menuKey = `run:${run.taskId}`;
     const isMenuOpen = openMenuId === menuKey;
     const isEditing = editingRunId === run.taskId;

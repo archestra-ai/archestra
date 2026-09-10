@@ -57,7 +57,7 @@ export function ShareAgentRunDialog({
   const hasVisibleShareLink =
     (isShared || hasSavedVisibleShare) && visibility !== "private";
 
-  const shareLink = `${window.location.origin}/chat/runs/${taskId}`;
+  const shareLink = `${window.location.origin}/agent/run/${taskId}`;
 
   const availableMembers = useMemo(
     () => members.filter((member) => member.id !== currentUserId),

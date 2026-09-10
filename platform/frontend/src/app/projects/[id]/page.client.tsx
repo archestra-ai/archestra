@@ -338,7 +338,7 @@ function ProjectChatInput({
             {
               onSuccess: (run) => {
                 if (run) {
-                  router.push(`/chat/runs/${run.taskId}`);
+                  router.push(`/agent/run/${run.taskId}`);
                 }
               },
             },
@@ -401,7 +401,7 @@ function RunsList({
         {runs.map((run) => (
           <Link
             key={run.taskId}
-            href={`/chat/runs/${run.taskId}`}
+            href={`/agent/run/${run.taskId}`}
             className="flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10">

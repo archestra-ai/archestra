@@ -18,6 +18,7 @@ import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
+import { ChatShell, ChatShellHeader } from "@/components/chat/chat-shell";
 import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
 import { ContinueAgentRunDialog } from "@/components/continue-agent-run-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -93,16 +94,10 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     new Date(run.workspace.expiresAt).getTime() > now;
 
   return (
-    <main className="flex h-full min-h-0 flex-col bg-background">
+    <ChatShell>
       {/* Keep this slot mounted while metadata loads so inserting the header
           cannot remount the terminal and restart its attach progress. */}
-      <header
-        className={
-          run
-            ? "flex shrink-0 items-center justify-between gap-4 border-b px-5 py-3"
-            : "hidden"
-        }
-      >
+      <ChatShellHeader hidden={!run}>
         {run ? (
           <>
             <div className="flex min-w-0 items-center gap-3">
@@ -111,7 +106,9 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="truncate text-sm font-medium">{run.title}</h1>
+                  <h1 className="truncate max-w-[360px] text-base font-normal text-muted-foreground">
+                    {run.title}
+                  </h1>
                   <AgentRunState
                     state={run.state}
                     statusReason={run.statusReason}
@@ -196,10 +193,17 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
             </div>
           </>
         ) : null}
-      </header>
+      </ChatShellHeader>
 
-      <section className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-6">
-        {run && live && <AgentRunLiveness run={run} />}
+      <section className="flex min-h-0 flex-1 flex-col">
+        {run && live && (
+          <div className="mx-3 -mt-px shrink-0">
+            <AgentRunLiveness
+              run={run}
+              className="rounded-t-none rounded-b-lg border-t-0 bg-muted/50 py-1.5"
+            />
+          </div>
+        )}
         {isOwner && !live && run?.workspace && (
           <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-2 sm:items-center">
@@ -323,6 +327,6 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
           </Button>
         </div>
       </StandardDialog>
-    </main>
+    </ChatShell>
   );
 }

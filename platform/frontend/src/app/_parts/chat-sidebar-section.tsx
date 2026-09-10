@@ -192,7 +192,7 @@ export function ChatSidebarSection({
     pathname.startsWith("/chat/") && !pathname.startsWith("/chat/runs/")
       ? (pathname.split("/").at(-1) ?? null)
       : null;
-  const currentRunTaskId = pathname.startsWith("/chat/runs/")
+  const currentRunTaskId = pathname.startsWith("/agent/run/")
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
@@ -725,7 +725,7 @@ export function ChatSidebarSection({
             <SidebarMenuButton
               onClick={() => {
                 if (isMobile) setOpenMobile(false);
-                router.push(`/chat/runs/${run.sessionId ?? run.taskId}`);
+                router.push(`/agent/run/${run.sessionId ?? run.taskId}`);
               }}
               isActive={active}
               className="cursor-pointer flex-1"

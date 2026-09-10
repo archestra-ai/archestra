@@ -57,6 +57,11 @@ import {
   deriveAppFilesRevisions,
   openedAppMetadataFromApps,
 } from "@/components/chat/chat-messages.utils";
+import {
+  ChatComposer,
+  ChatShell,
+  ChatThread,
+} from "@/components/chat/chat-shell";
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
@@ -208,7 +213,6 @@ import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
-import { cn } from "@/lib/utils";
 import { ViewTransition } from "@/lib/view-transition";
 import {
   buildCreateConversationInput,
@@ -285,11 +289,6 @@ export function ChatPageContent({
     router.replace(redirectPath);
   }, [routeConversationId, router]);
 
-  // Hide version display from layout - chat page has its own version display
-  useEffect(() => {
-    document.body.classList.add("hide-version");
-    return () => document.body.classList.remove("hide-version");
-  }, []);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
   const [isApplyingAgentSelection, setIsApplyingAgentSelection] =
     useState(false);
@@ -2833,7 +2832,7 @@ export function ChatPageContent({
             files: message.files,
           });
           if (!started) throw new Error("run-not-started");
-          router.push(`/chat/runs/${started.taskId}`);
+          router.push(`/agent/run/${started.taskId}`);
           return;
         }
         submitInitialMessage(message, options);
@@ -3217,7 +3216,7 @@ export function ChatPageContent({
       appFilesRevisions={appFilesRevisions}
       onAppModelContext={handleAppModelContext}
     >
-      <div className="flex flex-col h-full w-full min-h-0">
+      <ChatShell>
         <ChatStatusAnnouncer status={status} />
         {/* Full-width top bar: title + the Files/Browser/Apps tab strip. It
             sits above the [chat | panel] split so the panel's resize divider
@@ -3315,81 +3314,74 @@ export function ChatPageContent({
                   {/* Chat content - hidden on mobile when panels are open.
                       The ViewTransition eases the thread in when the splash
                       (or another page) hands off to a conversation. */}
-                  <ViewTransition enter="chat-thread-enter" default="none">
-                    <div
-                      className={cn(
-                        "flex-1 min-h-0 relative",
-                        isRightPanelOpen && "hidden md:block",
-                      )}
-                    >
-                      {isScheduledRunInProgress ? (
-                        <ScheduledRunInProgress />
-                      ) : isReadOnlyConversation ? (
-                        <MessageThread
-                          messages={sharedConversationMessages}
-                          chatErrors={conversation?.chatErrors ?? []}
-                          conversationId={conversationId}
-                          containerClassName="h-full"
-                          hideDivider
-                          profileId={conversation?.agent?.id}
-                          agentName={conversation?.agent?.name}
-                          selectedModel={conversation?.modelId ?? undefined}
-                        />
-                      ) : (
-                        <ChatMessages
-                          conversationId={conversationId}
-                          agentId={
-                            currentProfileId || initialAgentId || undefined
-                          }
-                          messages={messages}
-                          status={status}
-                          isContextCompacting={isContextCompacting}
-                          contextCompactionFeedback={manualCompactionFeedback}
-                          isUpstreamIdle={isUpstreamIdle}
-                          optimisticToolCalls={optimisticToolCalls}
-                          isLoadingConversation={isLoadingConversation}
-                          onMessagesUpdate={setMessages}
-                          onMessageFeedback={
-                            // No thumbs until the live session's setter exists —
-                            // a click before then could not apply or roll back.
-                            setMessages ? handleMessageFeedback : undefined
-                          }
-                          feedbackDisabled={setChatMessageFeedback.isPending}
-                          agentName={
-                            (currentProfileId
-                              ? internalAgents.find(
-                                  (a) => a.id === currentProfileId,
-                                )
-                              : internalAgents.find(
-                                  (a) => a.id === initialAgentId,
-                                )
-                            )?.name
-                          }
-                          selectedModel={conversationModelId ?? initialModel}
-                          modelSource={
-                            conversationModelSource ?? initialModelSource
-                          }
-                          chatErrors={conversation?.chatErrors ?? []}
-                          compactions={conversation?.compactions ?? []}
-                          onRegenerateUserMessage={regenerateUserMessage}
-                          onProviderConnected={handleProviderConnected}
-                          onChatErrorRetry={handleChatErrorRetry}
-                          error={error}
-                          onToolApprovalResponse={
-                            addToolApprovalResponse
-                              ? ({ id, approved, reason }) => {
-                                  addToolApprovalResponse({
-                                    id,
-                                    approved,
-                                    reason,
-                                  });
-                                }
-                              : undefined
-                          }
-                        />
-                      )}
-                    </div>
-                  </ViewTransition>
+                  <ChatThread hiddenOnMobile={isRightPanelOpen}>
+                    {isScheduledRunInProgress ? (
+                      <ScheduledRunInProgress />
+                    ) : isReadOnlyConversation ? (
+                      <MessageThread
+                        messages={sharedConversationMessages}
+                        chatErrors={conversation?.chatErrors ?? []}
+                        conversationId={conversationId}
+                        containerClassName="h-full"
+                        hideDivider
+                        profileId={conversation?.agent?.id}
+                        agentName={conversation?.agent?.name}
+                        selectedModel={conversation?.modelId ?? undefined}
+                      />
+                    ) : (
+                      <ChatMessages
+                        conversationId={conversationId}
+                        agentId={
+                          currentProfileId || initialAgentId || undefined
+                        }
+                        messages={messages}
+                        status={status}
+                        isContextCompacting={isContextCompacting}
+                        contextCompactionFeedback={manualCompactionFeedback}
+                        isUpstreamIdle={isUpstreamIdle}
+                        optimisticToolCalls={optimisticToolCalls}
+                        isLoadingConversation={isLoadingConversation}
+                        onMessagesUpdate={setMessages}
+                        onMessageFeedback={
+                          // No thumbs until the live session's setter exists —
+                          // a click before then could not apply or roll back.
+                          setMessages ? handleMessageFeedback : undefined
+                        }
+                        feedbackDisabled={setChatMessageFeedback.isPending}
+                        agentName={
+                          (currentProfileId
+                            ? internalAgents.find(
+                                (a) => a.id === currentProfileId,
+                              )
+                            : internalAgents.find(
+                                (a) => a.id === initialAgentId,
+                              )
+                          )?.name
+                        }
+                        selectedModel={conversationModelId ?? initialModel}
+                        modelSource={
+                          conversationModelSource ?? initialModelSource
+                        }
+                        chatErrors={conversation?.chatErrors ?? []}
+                        compactions={conversation?.compactions ?? []}
+                        onRegenerateUserMessage={regenerateUserMessage}
+                        onProviderConnected={handleProviderConnected}
+                        onChatErrorRetry={handleChatErrorRetry}
+                        error={error}
+                        onToolApprovalResponse={
+                          addToolApprovalResponse
+                            ? ({ id, approved, reason }) => {
+                                addToolApprovalResponse({
+                                  id,
+                                  approved,
+                                  reason,
+                                });
+                              }
+                            : undefined
+                        }
+                      />
+                    )}
+                  </ChatThread>
 
                   {isScheduledRunInProgress ? null : isReadOnlyConversation ? (
                     <div className="sticky bottom-0 bg-background border-t p-4">
@@ -3474,107 +3466,88 @@ export function ChatPageContent({
                     </div>
                   ) : (
                     activeAgentId && (
-                      <div className="sticky bottom-0 bg-background border-t p-4">
-                        {/* Shared-element pair with the centered New Chat
-                            composer (and the project-page composer): on the
-                            splash → conversation swap the box morphs from
-                            center screen to its bottom anchor. */}
-                        <ViewTransition
-                          name="chat-composer"
-                          share="chat-composer-morph"
-                          default="none"
-                        >
-                          <div className="max-w-4xl mx-auto space-y-3">
-                            <AgentConnectionNotice agentId={activeAgentId} />
-                            <ArchestraPromptInput
-                              onSubmit={handleSubmit}
-                              toolsUnavailable={conversationToolsUnavailable}
-                              notRecommendedForAgents={
-                                conversationNotRecommended
-                              }
-                              onStop={handleStopStreaming}
-                              status={status}
-                              selectedModel={conversationModelId ?? ""}
-                              onModelChange={handleModelChange}
-                              agentId={promptAgentId ?? activeAgentId}
-                              conversationId={conversationId}
-                              currentConversationChatApiKeyId={
-                                conversation?.chatApiKeyId
-                              }
-                              currentProvider={currentProvider}
-                              textareaRef={textareaRef}
-                              onProviderChange={handleProviderChange}
-                              allowFileUploads={
-                                organization?.allowChatFileUploads ?? false
-                              }
-                              isModelsLoading={isModelsLoading}
-                              tokensUsed={tokensUsed}
-                              cachedTokens={tokenUsage?.cacheReadTokens}
-                              maxContextLength={selectedModelContextLength}
-                              contextWindow={contextWindow}
-                              lastCompaction={contextCompaction?.lastCompaction}
-                              inputModalities={selectedModelInputModalities}
-                              agentLlmApiKeyId={
-                                conversation?.agent?.llmApiKeyId ?? null
-                              }
-                              submitDisabled={
-                                isApplyingAgentSelection ||
-                                isAgentSubscriptionMetadataPending
-                              }
-                              subscriptionConnectRequired={
-                                conversationPerUserConnect.needsConnect
-                              }
-                              subscriptionProvider={
-                                conversationPerUserConnect.provider
-                              }
-                              isContextCompacting={isContextCompacting}
-                              onCompactConversation={
-                                isActionAvailableForConversation(
-                                  conversation,
-                                  "compaction",
-                                )
-                                  ? handleCompactConversation
-                                  : undefined
-                              }
-                              selectorAgentId={activeAgentId}
-                              onAgentChange={handleConversationAgentChange}
-                              modelSource={conversationModelSource}
-                              onResetModelOverride={
-                                handleConversationResetModelOverride
-                              }
-                              thinkingEffort={displayedThinkingEffort}
-                              onThinkingEffortChange={
-                                handleThinkingEffortChange
-                              }
-                              agentRequiresPerUserConnect={
-                                isApplyingAgentSelection ||
-                                isAgentSubscriptionMetadataPending ||
-                                conversationModelSource === "agent" ||
-                                conversationPerUserConnect.needsConnect
-                              }
-                              agentModelDisplayName={
-                                conversationPerUserConnect.needsConnect
-                                  ? conversationPerUserConnect.modelName
-                                  : undefined
-                              }
-                              prefillText={composerPrefill}
-                              onPrefillApplied={handleComposerPrefillApplied}
-                              externalMcpSkillAttachment={
-                                externalMcpSkillAttachment
-                              }
-                              onRemoveExternalMcpSkillAttachment={
-                                handleRemoveExternalMcpSkillAttachment
-                              }
-                              onRestoreExternalMcpSkillAttachment={
-                                setExternalMcpSkillAttachment
-                              }
-                            />
-                            <div className="text-center">
-                              <Version inline />
-                            </div>
-                          </div>
-                        </ViewTransition>
-                      </div>
+                      <ChatComposer>
+                        <AgentConnectionNotice agentId={activeAgentId} />
+                        <ArchestraPromptInput
+                          onSubmit={handleSubmit}
+                          toolsUnavailable={conversationToolsUnavailable}
+                          notRecommendedForAgents={conversationNotRecommended}
+                          onStop={handleStopStreaming}
+                          status={status}
+                          selectedModel={conversationModelId ?? ""}
+                          onModelChange={handleModelChange}
+                          agentId={promptAgentId ?? activeAgentId}
+                          conversationId={conversationId}
+                          currentConversationChatApiKeyId={
+                            conversation?.chatApiKeyId
+                          }
+                          currentProvider={currentProvider}
+                          textareaRef={textareaRef}
+                          onProviderChange={handleProviderChange}
+                          allowFileUploads={
+                            organization?.allowChatFileUploads ?? false
+                          }
+                          isModelsLoading={isModelsLoading}
+                          tokensUsed={tokensUsed}
+                          cachedTokens={tokenUsage?.cacheReadTokens}
+                          maxContextLength={selectedModelContextLength}
+                          contextWindow={contextWindow}
+                          lastCompaction={contextCompaction?.lastCompaction}
+                          inputModalities={selectedModelInputModalities}
+                          agentLlmApiKeyId={
+                            conversation?.agent?.llmApiKeyId ?? null
+                          }
+                          submitDisabled={
+                            isApplyingAgentSelection ||
+                            isAgentSubscriptionMetadataPending
+                          }
+                          subscriptionConnectRequired={
+                            conversationPerUserConnect.needsConnect
+                          }
+                          subscriptionProvider={
+                            conversationPerUserConnect.provider
+                          }
+                          isContextCompacting={isContextCompacting}
+                          onCompactConversation={
+                            isActionAvailableForConversation(
+                              conversation,
+                              "compaction",
+                            )
+                              ? handleCompactConversation
+                              : undefined
+                          }
+                          selectorAgentId={activeAgentId}
+                          onAgentChange={handleConversationAgentChange}
+                          modelSource={conversationModelSource}
+                          onResetModelOverride={
+                            handleConversationResetModelOverride
+                          }
+                          thinkingEffort={displayedThinkingEffort}
+                          onThinkingEffortChange={handleThinkingEffortChange}
+                          agentRequiresPerUserConnect={
+                            isApplyingAgentSelection ||
+                            isAgentSubscriptionMetadataPending ||
+                            conversationModelSource === "agent" ||
+                            conversationPerUserConnect.needsConnect
+                          }
+                          agentModelDisplayName={
+                            conversationPerUserConnect.needsConnect
+                              ? conversationPerUserConnect.modelName
+                              : undefined
+                          }
+                          prefillText={composerPrefill}
+                          onPrefillApplied={handleComposerPrefillApplied}
+                          externalMcpSkillAttachment={
+                            externalMcpSkillAttachment
+                          }
+                          onRemoveExternalMcpSkillAttachment={
+                            handleRemoveExternalMcpSkillAttachment
+                          }
+                          onRestoreExternalMcpSkillAttachment={
+                            setExternalMcpSkillAttachment
+                          }
+                        />
+                      </ChatComposer>
                     )
                   )}
                 </>
@@ -3924,7 +3897,7 @@ export function ChatPageContent({
             onAgentChange={setForkAgentId}
           />
         </StandardDialog>
-      </div>
+      </ChatShell>
     </AppsProvider>
   );
   return (

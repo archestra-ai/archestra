@@ -93,7 +93,13 @@ const SIDEBAR_MODE_STORAGE_KEY = "archestra-sidebar-mode";
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
-  const chatPrefixes = ["/chat", "/projects", "/apps", "/connection"];
+  const chatPrefixes = [
+    "/chat",
+    "/agent/run",
+    "/projects",
+    "/apps",
+    "/connection",
+  ];
   if (
     chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {

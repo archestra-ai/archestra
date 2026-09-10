@@ -437,7 +437,7 @@ describe("run tools", () => {
           runs: Array<{ run_url: string }>;
         }
       ).runs[0]?.run_url,
-    ).toMatch(new RegExp(`/chat/runs/${task.id}$`));
+    ).toMatch(new RegExp(`/agent/run/${task.id}$`));
   });
 
   test("does not reveal runs for an inaccessible Agent", async ({

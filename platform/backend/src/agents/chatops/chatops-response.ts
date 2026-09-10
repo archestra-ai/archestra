@@ -16,7 +16,7 @@ export function compactChatOpsResponse(text: string): string {
 function extractStructuredRunLaunch(text: string): string | null {
   const lines = text.split("\n");
   const liveRunIndex = lines.findIndex((line) =>
-    /^\s*[•*-]\s*Live run:\s*<?https?:\/\/\S+\/chat\/runs\/[0-9a-f-]+/i.test(
+    /^\s*[•*-]\s*Live run:\s*<?https?:\/\/\S+\/(?:agent\/run|chat\/runs)\/[0-9a-f-]+/i.test(
       line,
     ),
   );

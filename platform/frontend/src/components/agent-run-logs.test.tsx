@@ -201,6 +201,29 @@ describe("AgentRunLogs", () => {
     );
   });
 
+  it("recovers when the viewer opens before the runtime pod is ready", async () => {
+    render(<AgentRunLogs run={{ ...completedRun, endedAt: null }} />);
+    emit({
+      type: "agent_run_logs_error",
+      payload: {
+        runId: "task-1",
+        error: "This session has no running pod to read output from",
+      },
+    });
+    expect(screen.getByText("Waiting for output")).toBeInTheDocument();
+    await waitFor(() => expect(socket.send).toHaveBeenCalledTimes(2), {
+      timeout: 2000,
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "Ready after startup" },
+    });
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "Ready after startup",
+    );
+    expect(screen.queryByText(/no running pod/)).not.toBeInTheDocument();
+  });
+
   it("retries when completed metadata arrives before retained output", async () => {
     render(<AgentRunLogs run={completedRun} />);
     expect(socket.send).toHaveBeenCalledTimes(1);

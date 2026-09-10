@@ -69,6 +69,7 @@ export function AgentRunLogs({
   useEffect(() => {
     let receivedOutput = false;
     let emptyRetryCount = 0;
+    let startupRetryCount = 0;
     let emptyRetryTimer: ReturnType<typeof setTimeout> | undefined;
     const subscribeToLogs = () => {
       websocketService.send({
@@ -109,6 +110,19 @@ export function AgentRunLogs({
         "agent_run_logs_error",
         (message: AgentRunLogsErrorMessage) => {
           if (message.payload.runId === logId) {
+            // A newly launched run is navigable before its pod is ready.
+            if (
+              !run.endedAt &&
+              !receivedOutput &&
+              message.payload.error ===
+                "This session has no running pod to read output from" &&
+              startupRetryCount < 30
+            ) {
+              startupRetryCount += 1;
+              if (emptyRetryTimer) clearTimeout(emptyRetryTimer);
+              emptyRetryTimer = setTimeout(subscribeToLogs, 1000);
+              return;
+            }
             setError(message.payload.error);
             setIsStreaming(false);
           }

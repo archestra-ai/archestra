@@ -146,6 +146,30 @@ test("preserves an unsent message across disconnection and clears only a success
   await waitFor(() => expect(input).toHaveValue(""));
 });
 
+test("keeps the runtime composer usable while hiding unsupported chat controls", () => {
+  render(
+    <AgentRunConversation
+      agentId="test-agent"
+      agentName="Test agent"
+      transcript={idle}
+      taskId="run-1"
+      canControl
+    />,
+  );
+  expect(screen.getByRole("textbox")).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: "Attach files" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByTestId("chat-disabled-file-upload-button"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Start voice input" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+});
+
 test("interrupts without discarding a drafted follow-up and hides controls for observers", async () => {
   const transcript = {
     ...idle,

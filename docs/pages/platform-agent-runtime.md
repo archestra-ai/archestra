@@ -333,6 +333,11 @@ See the [tool reference](/docs/platform-archestra-mcp-server) for the request sc
 
 ### Conversation View
 
+Runtime conversations open at `/agent/run/<session-id>`.
+They use the same Chat shell, message area, and composer as ordinary conversations.
+Unsupported model controls and history actions are hidden.
+Existing `/chat/runs/<id>` links redirect to the new address.
+
 The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, and
 OpenClaw images export their native message and tool history as a readable
 transcript. A custom image can provide the same completed-run experience by

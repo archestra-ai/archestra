@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { AgentIcon } from "@/components/agent-icon";
+import { ChatShellHeader } from "@/components/chat/chat-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -146,234 +147,227 @@ export function ConversationHeader({
   );
 
   return (
-    <div
-      className={cn(
-        "sticky top-0 z-10 bg-background border-b p-2",
-        !conversationId && "hidden",
-      )}
-    >
-      <div className="relative flex min-h-8 items-center justify-between gap-2">
-        {/* Left side - conversation title + actions */}
-        <div className="flex items-center gap-2 min-w-0">
-          {conversationId && conversation && (
-            <div className="flex items-center flex-shrink min-w-0 gap-2">
-              {/* Project chats read as "{ProjectName}/{Chat title}" — the
+    <ChatShellHeader hidden={!conversationId}>
+      {/* Left side - conversation title + actions */}
+      <div className="flex items-center gap-2 min-w-0">
+        {conversationId && conversation && (
+          <div className="flex items-center flex-shrink min-w-0 gap-2">
+            {/* Project chats read as "{ProjectName}/{Chat title}" — the
                   project segment (emoji + name, like the sidebar) links to the
                   project. Hidden for viewers without project access. */}
-              {conversation.projectId && (
-                <ProjectTitlePrefix projectId={conversation.projectId} />
-              )}
-              {/* App-opened chats: an app glyph anchors the title, mirroring the
+            {conversation.projectId && (
+              <ProjectTitlePrefix projectId={conversation.projectId} />
+            )}
+            {/* App-opened chats: an app glyph anchors the title, mirroring the
                   Projects detail header's icon + name. */}
-              {isAppConversation && (
-                <AppWindow
-                  className="h-[22px] w-[22px] shrink-0 text-foreground"
-                  aria-hidden
-                />
-              )}
-              {/* Non-clickable "scheduled task" segment (orientation only) when
+            {isAppConversation && (
+              <AppWindow
+                className="h-[22px] w-[22px] shrink-0 text-foreground"
+                aria-hidden
+              />
+            )}
+            {/* Non-clickable "scheduled task" segment (orientation only) when
                   this chat was opened from a schedule's run. */}
-              {scheduleTriggerId && (
-                <ScheduledTaskPrefix triggerId={scheduleTriggerId} />
-              )}
-              {/* Skip TruncatedTooltip while the title animates: its resize
+            {scheduleTriggerId && (
+              <ScheduledTaskPrefix triggerId={scheduleTriggerId} />
+            )}
+            {/* Skip TruncatedTooltip while the title animates: its resize
                   measurement re-renders on every TypingText tick, which loops
                   past React's nested-update cap. */}
-              {isTitleAnimating ? (
-                <h1 className={titleClassName}>
-                  <TypingText
-                    text={getConversationDisplayTitle(
-                      conversation.title,
-                      conversation.messages,
-                    )}
-                    typingSpeed={35}
-                    showCursor
-                    cursorClassName="bg-muted-foreground"
-                  />
-                </h1>
-              ) : (
-                <TruncatedTooltip
-                  content={getConversationDisplayTitle(
+            {isTitleAnimating ? (
+              <h1 className={titleClassName}>
+                <TypingText
+                  text={getConversationDisplayTitle(
                     conversation.title,
                     conversation.messages,
                   )}
-                >
-                  <h1 className={titleClassName}>
-                    {getConversationDisplayTitle(
-                      conversation.title,
-                      conversation.messages,
-                    )}
-                  </h1>
-                </TruncatedTooltip>
-              )}
-            </div>
-          )}
-          {isAppOversight && (
-            <Badge variant="secondary" className="shrink-0">
-              Viewing as administrator
-              {oversightOwnerName ? ` · ${oversightOwnerName}` : ""}
-            </Badge>
-          )}
-          {/* Desktop: chat actions (Share / Export) next to the title */}
-          {conversationId && messageCount > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="hidden md:inline-flex h-7 w-7 flex-shrink-0"
-                  title="Chat actions"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Chat actions</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <ChatActionItems {...actionsProps} />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-        {/* Right side - desktop: the Files / Browser / Apps tab strip is always
-            visible (open or collapsed) so it never moves. Clicking a different
-            tab switches; clicking the already-open tab collapses the panel —
-            there is no separate collapse button. */}
-        <div className="hidden md:flex items-center flex-shrink-0">
-          <Tabs
-            value={panel.isOpen ? resolvedTab : ""}
-            activationMode="manual"
-            onValueChange={(value) => {
-              // Fires on any tab click while collapsed (value is "") and on a
-              // different-tab click while open. It never fires for the
-              // active-tab-while-open click (value unchanged), so it can't
-              // reopen right after handleTabMouseDown collapses the panel.
-              // Keyboard activation flows through here too.
-              panel.onOpenTab(value as RightPanelTab);
-            }}
-          >
-            <TabsList className="h-8">
-              {panel.hasReview && (
-                <TabsTrigger
-                  value="review"
-                  className="text-xs px-3"
-                  onMouseDown={handleTabMouseDown("review")}
-                >
-                  <PlayCircle className="h-3 w-3" />
-                  Replay
-                </TabsTrigger>
-              )}
-              {panel.scheduledRun && (
-                <TabsTrigger
-                  value="runs"
-                  className="text-xs px-3"
-                  onMouseDown={handleTabMouseDown("runs")}
-                >
-                  <CalendarClock className="h-3 w-3" />
-                  Runs
-                </TabsTrigger>
-              )}
-              <TabsTrigger
-                value="files"
-                className="text-xs px-3"
-                onMouseDown={handleTabMouseDown("files")}
+                  typingSpeed={35}
+                  showCursor
+                  cursorClassName="bg-muted-foreground"
+                />
+              </h1>
+            ) : (
+              <TruncatedTooltip
+                content={getConversationDisplayTitle(
+                  conversation.title,
+                  conversation.messages,
+                )}
               >
-                <FileText className="h-3 w-3" />
-                Files
-              </TabsTrigger>
-              {panel.showBrowserButton && (
-                <TabsTrigger
-                  value="browser"
-                  className="text-xs px-3"
-                  onMouseDown={handleTabMouseDown("browser")}
-                >
-                  <Globe className="h-3 w-3" />
-                  Browser
-                </TabsTrigger>
-              )}
-              <TabsTrigger
-                value="apps"
-                className="text-xs px-3"
-                onMouseDown={handleTabMouseDown("apps")}
-              >
-                <AppWindow className="h-3 w-3" />
-                Apps
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        {/* Right side - mobile: 3-dot dropdown */}
-        <div className="flex md:hidden items-center gap-2 flex-shrink-0">
+                <h1 className={titleClassName}>
+                  {getConversationDisplayTitle(
+                    conversation.title,
+                    conversation.messages,
+                  )}
+                </h1>
+              </TruncatedTooltip>
+            )}
+          </div>
+        )}
+        {isAppOversight && (
+          <Badge variant="secondary" className="shrink-0">
+            Viewing as administrator
+            {oversightOwnerName ? ` · ${oversightOwnerName}` : ""}
+          </Badge>
+        )}
+        {/* Desktop: chat actions (Share / Export) next to the title */}
+        {conversationId && messageCount > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
-                title="More options"
+                className="hidden md:inline-flex h-7 w-7 flex-shrink-0"
+                title="Chat actions"
               >
-                <MoreVertical className="h-4 w-4" />
-                <span className="sr-only">More options</span>
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Chat actions</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="start">
               <ChatActionItems {...actionsProps} />
-              {panel.hasReview && (
-                <DropdownMenuItem
-                  onSelect={() => {
-                    if (panel.isReviewVisible) {
-                      panel.onClose();
-                    } else {
-                      panel.onOpenTab("review");
-                    }
-                  }}
-                >
-                  <PlayCircle className="h-4 w-4" />
-                  {panel.isReviewVisible ? "Hide Replay" : "Show Replay"}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onSelect={() => {
-                  if (panel.isArtifactOpen) {
-                    panel.onClose();
-                  } else {
-                    panel.onOpenTab("files");
-                  }
-                }}
-              >
-                <FileText className="h-4 w-4" />
-                {panel.isArtifactOpen ? "Hide Files" : "Show Files"}
-              </DropdownMenuItem>
-              {panel.showBrowserButton && (
-                <DropdownMenuItem
-                  onSelect={() => {
-                    if (panel.isBrowserVisible) {
-                      panel.onClose();
-                    } else {
-                      panel.onOpenTab("browser");
-                    }
-                  }}
-                >
-                  <Globe className="h-4 w-4" />
-                  {panel.isBrowserVisible ? "Hide Browser" : "Show Browser"}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onSelect={() => {
-                  if (panel.isAppsVisible) {
-                    panel.onClose();
-                  } else {
-                    panel.onOpenTab("apps");
-                  }
-                }}
-              >
-                <AppWindow className="h-4 w-4" />
-                {panel.isAppsVisible ? "Hide Apps" : "Show Apps"}
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
+        )}
       </div>
-    </div>
+      {/* Right side - desktop: the Files / Browser / Apps tab strip is always
+            visible (open or collapsed) so it never moves. Clicking a different
+            tab switches; clicking the already-open tab collapses the panel —
+            there is no separate collapse button. */}
+      <div className="hidden md:flex items-center flex-shrink-0">
+        <Tabs
+          value={panel.isOpen ? resolvedTab : ""}
+          activationMode="manual"
+          onValueChange={(value) => {
+            // Fires on any tab click while collapsed (value is "") and on a
+            // different-tab click while open. It never fires for the
+            // active-tab-while-open click (value unchanged), so it can't
+            // reopen right after handleTabMouseDown collapses the panel.
+            // Keyboard activation flows through here too.
+            panel.onOpenTab(value as RightPanelTab);
+          }}
+        >
+          <TabsList className="h-8">
+            {panel.hasReview && (
+              <TabsTrigger
+                value="review"
+                className="text-xs px-3"
+                onMouseDown={handleTabMouseDown("review")}
+              >
+                <PlayCircle className="h-3 w-3" />
+                Replay
+              </TabsTrigger>
+            )}
+            {panel.scheduledRun && (
+              <TabsTrigger
+                value="runs"
+                className="text-xs px-3"
+                onMouseDown={handleTabMouseDown("runs")}
+              >
+                <CalendarClock className="h-3 w-3" />
+                Runs
+              </TabsTrigger>
+            )}
+            <TabsTrigger
+              value="files"
+              className="text-xs px-3"
+              onMouseDown={handleTabMouseDown("files")}
+            >
+              <FileText className="h-3 w-3" />
+              Files
+            </TabsTrigger>
+            {panel.showBrowserButton && (
+              <TabsTrigger
+                value="browser"
+                className="text-xs px-3"
+                onMouseDown={handleTabMouseDown("browser")}
+              >
+                <Globe className="h-3 w-3" />
+                Browser
+              </TabsTrigger>
+            )}
+            <TabsTrigger
+              value="apps"
+              className="text-xs px-3"
+              onMouseDown={handleTabMouseDown("apps")}
+            >
+              <AppWindow className="h-3 w-3" />
+              Apps
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      {/* Right side - mobile: 3-dot dropdown */}
+      <div className="flex md:hidden items-center gap-2 flex-shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title="More options"
+            >
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">More options</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <ChatActionItems {...actionsProps} />
+            {panel.hasReview && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (panel.isReviewVisible) {
+                    panel.onClose();
+                  } else {
+                    panel.onOpenTab("review");
+                  }
+                }}
+              >
+                <PlayCircle className="h-4 w-4" />
+                {panel.isReviewVisible ? "Hide Replay" : "Show Replay"}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onSelect={() => {
+                if (panel.isArtifactOpen) {
+                  panel.onClose();
+                } else {
+                  panel.onOpenTab("files");
+                }
+              }}
+            >
+              <FileText className="h-4 w-4" />
+              {panel.isArtifactOpen ? "Hide Files" : "Show Files"}
+            </DropdownMenuItem>
+            {panel.showBrowserButton && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (panel.isBrowserVisible) {
+                    panel.onClose();
+                  } else {
+                    panel.onOpenTab("browser");
+                  }
+                }}
+              >
+                <Globe className="h-4 w-4" />
+                {panel.isBrowserVisible ? "Hide Browser" : "Show Browser"}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onSelect={() => {
+                if (panel.isAppsVisible) {
+                  panel.onClose();
+                } else {
+                  panel.onOpenTab("apps");
+                }
+              }}
+            >
+              <AppWindow className="h-4 w-4" />
+              {panel.isAppsVisible ? "Hide Apps" : "Show Apps"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </ChatShellHeader>
   );
 }
 

@@ -441,7 +441,7 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByLabelText("Run may be stalled")).toBeInTheDocument();
     expect(screen.getByLabelText("Run actions")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Add export command"));
-    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/task-1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/agent/run/task-1");
   });
 
   it("requests a durable pin from a run's sidebar menu", () => {

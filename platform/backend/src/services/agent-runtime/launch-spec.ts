@@ -79,7 +79,7 @@ export async function buildAgentRunLaunchSpec(params: {
   runtime: ResolvedAgentRuntime;
   /** The A2A task this run carries; its id names the workload. */
   taskId: string;
-  /** The user-facing Agent run id used by /chat/runs/:id and telemetry. */
+  /** The user-facing Agent run id used by /agent/run/:id and telemetry. */
   runId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
   agentId: string;

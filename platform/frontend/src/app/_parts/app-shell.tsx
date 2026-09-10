@@ -98,7 +98,10 @@ export function AppShell({ children }: AppShellProps) {
   // need their children slot bounded to the viewport (min-h-0) so their
   // internal overflow containers take over. Other pages rely on natural body
   // scroll, so we only bound the chain for these to avoid clipping content.
-  const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
+  const isChat =
+    pathname === "/chat" ||
+    pathname.startsWith("/chat/") ||
+    pathname.startsWith("/agent/run/");
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
   const isViewportLocked = isChat || isProjectDetail;
   const { data: shouldCollapse, isSuccess: permissionLoaded } =

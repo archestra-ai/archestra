@@ -1112,6 +1112,7 @@ const PromptInputContent = ({
             toolsUnavailable={toolsUnavailable}
             notRecommendedForAgents={notRecommendedForAgents}
             runtimeMode={runtimeMode}
+            runtimeTaskId={runtimeTaskId}
             onResetModelOverride={onResetModelOverride}
             thinkingEffort={thinkingEffort}
             onThinkingEffortChange={onThinkingEffortChange}

@@ -591,7 +591,7 @@ const registry = defineArchestraTools([
             id: row.actorId,
             name: row.actorName,
           },
-          run_url: `${config.frontendBaseUrl}/chat/runs/${row.taskId}`,
+          run_url: `${config.frontendBaseUrl}/agent/run/${row.taskId}`,
           thread: buildRunThread(row),
         }));
         const byState = runs.reduce<Record<string, number>>((counts, run) => {

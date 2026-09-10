@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { ChatComposer, ChatThread } from "@/components/chat/chat-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -93,23 +94,25 @@ export function AgentRunConversation({
   };
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <ChatMessages
-        readOnlyHistory
-        conversationId={undefined}
-        agentId={agentId}
-        agentName={agentName}
-        messages={messages}
-        status={
-          working ? "streaming" : state === "starting" ? "submitted" : "ready"
-        }
-        error={
-          transcript.session?.error
-            ? new Error(transcript.session.error)
-            : undefined
-        }
-      />
+      <ChatThread>
+        <ChatMessages
+          readOnlyHistory
+          conversationId={undefined}
+          agentId={agentId}
+          agentName={agentName}
+          messages={messages}
+          status={
+            working ? "streaming" : state === "starting" ? "submitted" : "ready"
+          }
+          error={
+            transcript.session?.error
+              ? new Error(transcript.session.error)
+              : undefined
+          }
+        />
+      </ChatThread>
       {canControl && (
-        <div className="mx-auto w-full max-w-4xl shrink-0 space-y-3 px-4 pb-4">
+        <ChatComposer>
           {!connected && (
             <output className="text-sm text-muted-foreground">
               Reconnecting…
@@ -145,7 +148,7 @@ export function AgentRunConversation({
             }}
             onSubmit={({ text }) => send({ type: "message", text })}
           />
-        </div>
+        </ChatComposer>
       )}
     </div>
   );

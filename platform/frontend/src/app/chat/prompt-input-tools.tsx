@@ -80,6 +80,7 @@ export interface ChatPromptInputToolsProps {
   onLockedChatChange?: (lockedChat: boolean) => void;
   /** The composer launches an isolated Agent run, not a chat turn. */
   runtimeMode?: boolean;
+  runtimeTaskId?: string;
   /** Whether the agent has a code sandbox available (allows any file type) */
   sandboxAvailable?: boolean;
   /** Whether models are still loading - passed to API key selector */
@@ -173,6 +174,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   lockedChat = false,
   onLockedChatChange,
   runtimeMode = false,
+  runtimeTaskId,
   sandboxAvailable = false,
   isModelsLoading = false,
   tokensUsed = 0,
@@ -356,7 +358,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </div>
         )}
       {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
-      {isNarrow &&
+      {!runtimeTaskId &&
+        isNarrow &&
         (showDefaultLogo &&
         logoProvider &&
         !subscriptionConnectRequired &&
@@ -569,7 +572,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </TooltipContent>
           )}
         </Tooltip>
-      ) : (
+      ) : !runtimeTaskId ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <span
@@ -598,7 +601,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             )}
           </TooltipContent>
         </Tooltip>
-      )}
+      ) : null}
 
       {/* LockedChat toggle — placed with the always-visible controls (next to
           the attachment button) so it renders in both the wide and the

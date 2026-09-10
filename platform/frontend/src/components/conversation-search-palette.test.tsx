@@ -340,7 +340,7 @@ describe("ConversationSearchPalette", () => {
     mockRouterPush.mockClear();
 
     fireEvent.click(screen.getByTestId("cmd-item-exec-task-1"));
-    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/task-1");
+    expect(mockRouterPush).toHaveBeenCalledWith("/agent/run/task-1");
   });
 
   it("shows pinned run sessions under Pinned instead of Recent", () => {

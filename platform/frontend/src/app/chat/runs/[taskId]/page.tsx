@@ -1,10 +1,10 @@
-import { AgentRunChatSession } from "../page.client";
+import { permanentRedirect } from "next/navigation";
 
-export default async function AgentRunChatPage({
+export default async function LegacyAgentRunPage({
   params,
 }: {
   params: Promise<{ taskId: string }>;
 }) {
   const { taskId } = await params;
-  return <AgentRunChatSession taskId={taskId} />;
+  permanentRedirect(`/agent/run/${taskId}`);
 }

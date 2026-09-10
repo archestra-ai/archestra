@@ -8,8 +8,8 @@ fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
-export CODEX_HOME="${runtime_dir}/codex"
-mkdir -p "${CODEX_HOME}"
+export CODEX_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/codex"
+mkdir -p "${runtime_dir}" "${CODEX_HOME}"
 attention_hook="${runtime_dir}/codex-attention-hook.sh"
 cat > "${attention_hook}" <<'HOOK'
 #!/usr/bin/env bash

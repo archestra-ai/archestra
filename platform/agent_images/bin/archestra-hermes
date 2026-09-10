@@ -8,8 +8,8 @@ fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
-export HERMES_HOME="${runtime_dir}/hermes"
-mkdir -p "${HERMES_HOME}"
+export HERMES_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/hermes"
+mkdir -p "${runtime_dir}" "${HERMES_HOME}"
 attention_plugin_dir="${HERMES_HOME}/plugins/archestra-attention"
 mkdir -p "${attention_plugin_dir}"
 cat > "${attention_plugin_dir}/plugin.yaml" <<'PLUGIN_MANIFEST'

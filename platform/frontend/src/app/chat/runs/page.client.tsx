@@ -50,6 +50,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [continueDialogOpen, setContinueDialogOpen] = useState(false);
   const [reattachedTaskId, setReattachedTaskId] = useState<string | null>(null);
   const reattached = reattachedTaskId === taskId;
+  const [showHistory, setShowHistory] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [connectionCommand, setConnectionCommand] = useState<string | null>(
@@ -88,7 +89,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const canReattach = Boolean(isOwner && run?.workspace?.terminalAvailable);
   const showLiveTerminal =
     (!run && query.isPending) ||
-    (isOwner && (live || (reattached && canReattach)));
+    (isOwner && !showHistory && (live || (reattached && canReattach)));
   const canContinue =
     isOwner &&
     !live &&
@@ -131,6 +132,15 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {isOwner && (live || (reattached && canReattach)) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowHistory(!showHistory)}
+                >
+                  {showHistory ? "Live terminal" : "Session history"}
+                </Button>
+              )}
               {canContinue && !showLiveTerminal && (
                 <Button
                   size="sm"
@@ -238,7 +248,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         )}
         {showLiveTerminal ? (
           <AgentRunTerminal
-            taskId={taskId}
+            taskId={run?.taskId ?? taskId}
             active
             title={live ? "Live terminal" : "Output"}
             showManualCommand={false}
@@ -255,7 +265,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
           />
         ) : run ? (
           <>
-            {live && (
+            {live && !isOwner && (
               <div className="shrink-0 overflow-hidden rounded-md border bg-slate-950">
                 <ExecTerminalStatus
                   title="Read-only terminal"
@@ -264,7 +274,11 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                 />
               </div>
             )}
-            <AgentRunLogs run={run} />
+            <AgentRunLogs
+              key={run.taskId}
+              run={run}
+              sessionId={isOwner ? run.sessionId : undefined}
+            />
           </>
         ) : null}
       </section>

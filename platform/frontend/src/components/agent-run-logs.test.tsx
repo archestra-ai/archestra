@@ -62,6 +62,28 @@ describe("AgentRunLogs", () => {
     expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
   });
 
+  it("renders session history delivered to the stable URL after a continuation", () => {
+    render(<AgentRunLogs run={completedRun} sessionId="original-session" />);
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "original-session", logs: "Earlier turn output\n" },
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "unrelated-session", logs: "Private unrelated output" },
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "original-session", logs: "Continuation output\n" },
+    });
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "Earlier turn output Continuation output",
+    );
+    expect(
+      screen.queryByText(/Private unrelated output/),
+    ).not.toBeInTheDocument();
+  });
+
   it("warns when only the bounded tail could be retained", () => {
     render(<AgentRunLogs run={completedRun} />);
 

@@ -7,6 +7,7 @@ export ARCHESTRA_LOGGING_LEVEL=debug
 export ARCHESTRA_ANALYTICS=disabled
 
 backend_pid=""
+backend_ports="$(node --env-file=.env -e 'let port = "9000"; try { port = new URL(process.env.ARCHESTRA_INTERNAL_API_BASE_URL).port || port; } catch {} process.stdout.write(port + " " + (process.env.ARCHESTRA_METRICS_PORT || "9050"));')"
 
 # The node server is a grandchild of $backend_pid (pnpm → tsdown --watch →
 # node), so the TERM to $backend_pid and its direct children can miss it. A
@@ -14,7 +15,7 @@ backend_pid=""
 # is why `tilt trigger pnpm-dev-backend` used to leave the old server running.
 # Sweep the dev ports on both stop and start.
 free_backend_ports() {
-  for port in 9000 "${ARCHESTRA_METRICS_PORT:-9050}"; do
+  for port in $backend_ports; do
     pids="$(lsof -t -i "tcp:$port" -s tcp:LISTEN 2>/dev/null || true)"
     [ -n "$pids" ] || continue
     echo "killing stale backend listener(s) on port $port: $pids" >&2

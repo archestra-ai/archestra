@@ -21,6 +21,7 @@ import {
   A2ATaskModel,
   AgentRunModel,
   AgentRunShareModel,
+  AgentWorkspaceModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
@@ -750,6 +751,115 @@ describe("websocket Agent run authorization and cleanup", () => {
         .map((message) => message.payload.logs)
         .join(""),
     ).toBe(readableTranscript);
+  });
+
+  test("owner session history includes earlier turns while shared access remains per turn", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const other = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const turns = [];
+    const workloadName = `history-${crypto.randomUUID()}`;
+    for (const text of ["first turn ✓", "second turn ✓"]) {
+      const task = await A2ATaskModel.create({
+        contextId: context.id,
+        agentId: agent.id,
+        state: "TASK_STATE_COMPLETED",
+      });
+      const run = await AgentRunModel.create({
+        organizationId: org.id,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "user",
+        actorId: owner.id,
+        actorUserId: owner.id,
+        workloadName,
+        backend: "kubernetes",
+        runtimeScope: "test",
+        virtualApiKeyId: null,
+      });
+      await AgentRunModel.close({ id: run.id });
+      await agentRunTranscriptStore.persist({
+        runId: run.id,
+        transcript: text,
+        observedBytes: Buffer.byteLength(text),
+      });
+      turns.push(task);
+    }
+    await AgentWorkspaceModel.create({
+      id: turns[0].id,
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      state: "idle",
+      lastTaskId: turns[1].id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: owner.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: false,
+    });
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: turns[0].id, includeSessionHistory: true },
+      },
+      ws,
+    );
+    const messages = vi
+      .mocked(ws.send)
+      .mock.calls.map(([value]) => JSON.parse(String(value)));
+    expect(
+      messages
+        .filter(
+          (message) =>
+            message.type === "agent_run_logs" && !message.payload.channel,
+        )
+        .map((message) => message.payload.logs)
+        .join(""),
+    ).toBe("first turn ✓\r\n\u001b[0msecond turn ✓");
+    expect(
+      messages.find((message) => message.type === "agent_run_logs_ended")
+        .payload.truncated,
+    ).toBe(false);
+    vi.mocked(ws.send).mockClear();
+    // Requesting the same session ID never grants another user the owner's accumulated history.
+    service.clientContexts.set(ws, {
+      userId: other.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: false,
+    });
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: turns[0].id, includeSessionHistory: true },
+      },
+      ws,
+    );
+    expect(
+      vi
+        .mocked(ws.send)
+        .mock.calls.map(([value]) => JSON.parse(String(value)))
+        .map((message) => message.type),
+    ).toEqual(["agent_run_logs_error"]);
   });
 
   test("does not let an Agent administrator attach to another user's run", async ({

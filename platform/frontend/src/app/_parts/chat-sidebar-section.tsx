@@ -694,7 +694,7 @@ export function ChatSidebarSection({
   };
 
   const renderRunItem = (run: (typeof runs)[number]) => {
-    const active = currentRunTaskId === run.taskId;
+    const active = currentRunTaskId === (run.sessionId ?? run.taskId);
     const menuKey = `run:${run.taskId}`;
     const isMenuOpen = openMenuId === menuKey;
     const isEditing = editingRunId === run.taskId;
@@ -724,7 +724,7 @@ export function ChatSidebarSection({
             <SidebarMenuButton
               onClick={() => {
                 if (isMobile) setOpenMobile(false);
-                router.push(`/chat/runs/${run.taskId}`);
+                router.push(`/chat/runs/${run.sessionId ?? run.taskId}`);
               }}
               isActive={active}
               className="cursor-pointer flex-1"

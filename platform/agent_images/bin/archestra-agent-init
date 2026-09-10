@@ -42,7 +42,7 @@ if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; the
   # Coding agents commonly prefer the SSH clone URL shown by GitHub. The
   # catalog credential is an HTTPS token, so normalize either SSH spelling to
   # the authenticated HTTPS transport instead of requiring a second SSH key.
-  git config --global url."https://github.com/".insteadOf "git@github.com:"
+  git config --global --replace-all url."https://github.com/".insteadOf "git@github.com:"
   git config --global --add url."https://github.com/".insteadOf \
     "ssh://git@github.com/"
   unset github_token

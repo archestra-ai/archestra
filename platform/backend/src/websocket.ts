@@ -35,6 +35,7 @@ import {
 } from "@/services/agent-runtime/output-capture";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
+import type { AgentRunRecord } from "@/types";
 
 interface McpLogsSubscription {
   serverId: string;
@@ -254,6 +255,7 @@ class WebSocketService {
         message.payload.runId,
         message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
         clientContext,
+        message.payload.includeSessionHistory ?? false,
       );
     },
     unsubscribe_agent_run_logs: (ws) => {
@@ -669,13 +671,24 @@ class WebSocketService {
     runId: string,
     lines: number,
     clientContext: WebSocketClientContext,
+    includeSessionHistory = false,
   ): Promise<void> {
     this.unsubscribeAgentRunLogs(ws);
     const abortController = new AbortController();
     const stream = new PassThrough();
     this.agentRunLogsSubscriptions.set(ws, { runId, stream, abortController });
 
-    const session = await AgentRunModel.findByTaskId(runId);
+    const owned = includeSessionHistory
+      ? await AgentRunModel.findCurrentSessionForActor({
+          taskId: runId,
+          actorUserId: clientContext.userId,
+          organizationId: clientContext.organizationId,
+        })
+      : null;
+    const resolvedTaskId = includeSessionHistory ? owned?.taskId : runId;
+    const session = resolvedTaskId
+      ? await AgentRunModel.findByTaskId(resolvedTaskId)
+      : null;
     if (abortController.signal.aborted) return;
     if (!session || session.organizationId !== clientContext.organizationId) {
       this.sendToClient(ws, {
@@ -698,6 +711,31 @@ class WebSocketService {
       this.unsubscribeAgentRunLogs(ws);
       return;
     }
+
+    let history = { complete: true, bytes: 0 };
+    try {
+      if (includeSessionHistory) {
+        history = await this.streamAgentSessionHistory({
+          ws,
+          runId,
+          session,
+          signal: abortController.signal,
+        });
+      }
+    } catch (error) {
+      if (abortController.signal.aborted) return;
+      logger.error(
+        { error, taskId: session.taskId },
+        "Could not read session history",
+      );
+      this.sendToClient(ws, {
+        type: "agent_run_logs_error",
+        payload: { runId, error: "Could not read session history" },
+      });
+      this.unsubscribeAgentRunLogs(ws);
+      return;
+    }
+    if (abortController.signal.aborted) return;
 
     if (session.endedAt) {
       if (session.virtualApiKeyId) {
@@ -763,8 +801,8 @@ class WebSocketService {
           payload: {
             runId,
             source: "full",
-            truncated: false,
-            totalBytes: transcript.uncompressedBytes,
+            truncated: !history.complete,
+            totalBytes: transcript.uncompressedBytes + history.bytes,
             ...(readable ? { readable } : {}),
           },
         });
@@ -792,6 +830,7 @@ class WebSocketService {
           runId,
           source: "tail",
           truncated:
+            !history.complete ||
             transcript?.isComplete === false ||
             Buffer.byteLength(session.logs ?? "", "utf8") >= RETAINED_LOG_BYTES,
           totalBytes: transcript?.uncompressedBytes,
@@ -836,6 +875,50 @@ class WebSocketService {
       });
       this.unsubscribeAgentRunLogs(ws);
     }
+  }
+
+  private async streamAgentSessionHistory(params: {
+    ws: WebSocket;
+    runId: string;
+    session: AgentRunRecord;
+    signal: AbortSignal;
+  }): Promise<{ complete: boolean; bytes: number }> {
+    let afterId: string | undefined;
+    let complete = true;
+    let bytes = 0;
+    while (!params.signal.aborted) {
+      const turns = await AgentRunModel.listPreviousTurns({
+        run: params.session,
+        afterId,
+      });
+      if (!turns.length) break;
+      for (const turn of turns) {
+        if (params.signal.aborted) return { complete, bytes };
+        const decoder = new StringDecoder("utf8");
+        const send = (logs: string) => {
+          if (logs && !params.signal.aborted)
+            this.sendToClient(params.ws, {
+              type: "agent_run_logs",
+              payload: { runId: params.runId, logs },
+            });
+        };
+        const transcript = await agentRunTranscriptStore.stream({
+          runId: turn.id,
+          onChunk: (chunk) => send(decoder.write(chunk)),
+        });
+        send(decoder.end());
+        if (!transcript?.isComplete) {
+          complete = false;
+          send(turn.logs ?? "");
+        }
+        bytes +=
+          transcript?.uncompressedBytes ??
+          Buffer.byteLength(turn.logs ?? "", "utf8");
+        send("\r\n\u001b[0m");
+      }
+      afterId = turns.at(-1)?.id;
+    }
+    return { complete, bytes };
   }
 
   private async streamReadableAgentRunTranscript(params: {

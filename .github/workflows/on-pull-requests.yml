@@ -374,6 +374,9 @@ jobs:
           pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
 
+      - name: Test release-track migration repairs
+        run: pnpm --dir backend test:migration-upgrades
+
       - name: Release skill harness
         run: pnpm test:release-skill
 

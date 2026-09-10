@@ -24,7 +24,7 @@ export async function buildDesktopInstallerBundle(params: {
       display_name: `Connect ${params.appName}`,
       icon: "icon.png",
       version: `0.0.${Date.now()}`,
-      description: `Installing this helper runs the setup you reviewed at ${params.origin}. It reuses your Claude subscription token or opens sign-in, verifies inference, and restarts Desktop.`,
+      description: `Connect Claude Desktop to ${params.appName} (${params.origin}) using the setup you reviewed. The installer reuses your Claude subscription token or opens sign-in, verifies inference through ${params.appName}, and restarts Desktop.`,
       author: { name: params.appName },
       server: {
         type: "node",

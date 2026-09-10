@@ -81,6 +81,12 @@ test("packages white-label names and converts the configured SVG into a PNG icon
   );
   expect(manifest.display_name).toBe("Connect Acme Assistant");
   expect(manifest.author.name).toBe("Acme Assistant");
+  expect(manifest.description).toContain(
+    "Connect Claude Desktop to Acme Assistant (https://proxy.example)",
+  );
+  expect(manifest.description).toContain(
+    "verifies inference through Acme Assistant",
+  );
   const icon = await bundle.file(manifest.icon)?.async("nodebuffer");
   expect(icon?.subarray(0, 8)).toEqual(
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

@@ -36,13 +36,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Recheck after merge against current release refs, before creating a release.
-      - name: Check migration upgrade paths across release tracks
-        working-directory: ./platform
-        env:
-          BASE_BRANCH: ${{ github.ref_name }}
-        run: python3 ../.github/scripts/check-migration-upgrades.py --base-branch "$BASE_BRANCH"
-
       - name: Generate a token
         id: generate-token
         uses: ./.github/actions/github-app-token

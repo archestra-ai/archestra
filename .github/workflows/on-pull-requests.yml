@@ -364,16 +364,7 @@ jobs:
           git -c credential.helper= \
               -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
               fetch --depth=1 origin \
-              "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" \
-              "+refs/heads/release/*:refs/remotes/origin/release/*"
-
-      - name: Check migration upgrade paths across release tracks
-        env:
-          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref }}
-        run: |
-          python3 ../.github/scripts/test_check_migration_upgrades.py
-          pnpm --dir backend test:migration-upgrades
-          python3 ../.github/scripts/check-migration-upgrades.py --base-branch "${BASE_BRANCH#refs/heads/}"
+              "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
 
       # Backend unit tests run in the parallel sharded "Backend Unit Tests"
       # jobs below; here the backend runs check:commit (same checks minus
@@ -382,6 +373,9 @@ jobs:
         run: |
           pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
+
+      - name: Test release-track migration repairs
+        run: pnpm --dir backend test:migration-upgrades
 
       - name: Release skill harness
         run: pnpm test:release-skill

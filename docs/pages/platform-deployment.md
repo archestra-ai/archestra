@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-07
+lastUpdated: 2026-09-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1340,6 +1340,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Opt-in: raise it when an upstream can take more than 5 minutes to send headers or the next stream chunk
   - Keep it below the load balancer's request or idle timeout. For a 600-second load balancer timeout, use `540000` so Archestra can report the upstream timeout before the load balancer closes the connection
   - Keep it finite so genuinely-dead upstreams still surface as errors
+
+- **`ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS`** - Longest a streaming proxy response goes without a byte before Archestra writes an SSE keep-alive comment.
+  - Default: `10000` (10 seconds). Set `0` to turn the keep-alive off.
+  - Archestra holds back tool calls until the model turn ends and tool invocation policies have run. A large tool call — a long file write, for example — is a silent stream for the client until then. Streaming clients treat silence as a stalled connection and retry; Claude Code flags a stall after 20 seconds. The keep-alive comment is a valid SSE line that clients ignore, so the connection stays busy without changing the response.
+  - Only applies to `text/event-stream` responses. Bedrock's binary event stream and Ollama's NDJSON stream have no comment syntax and get no keep-alive.
+  - Keep it below the shortest stall timeout of your clients.
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify subscription credentials as subscription usage.
   - Default: `true`

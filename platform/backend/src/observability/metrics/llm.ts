@@ -114,6 +114,15 @@ type Fetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+/**
+ * Shared by the two first-token/first-byte histograms. Dense below 10s where
+ * healthy latency lives, then 20s and 180s bracket the silence a streaming
+ * client treats as a stall and as grounds to abort and retry.
+ */
+const FIRST_BYTE_BUCKETS = [
+  0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 180, 300,
+] as const;
+
 // LLM-specific metrics matching fastify-metrics format for consistency.
 // You can monitor request count, duration and error rate with these.
 let llmRequestDuration: client.Histogram<string>;
@@ -124,6 +133,7 @@ let llmCostTotal: client.Counter<string>;
 let llmCacheCostTotal: client.Counter<string>;
 let llmCacheSavingsTotal: client.Counter<string>;
 let llmTimeToFirstToken: client.Histogram<string>;
+let llmTimeToFirstByte: client.Histogram<string>;
 let llmTokensPerSecond: client.Histogram<string>;
 let llmTokenUsage: client.Histogram<string>;
 
@@ -151,6 +161,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     llmCacheCostTotal &&
     llmCacheSavingsTotal &&
     llmTimeToFirstToken &&
+    llmTimeToFirstByte &&
     llmTokensPerSecond &&
     llmTokenUsage
   ) {
@@ -187,6 +198,9 @@ export function initializeMetrics(labelKeys: string[]): void {
     }
     if (llmTimeToFirstToken) {
       client.register.removeSingleMetric("llm_time_to_first_token_seconds");
+    }
+    if (llmTimeToFirstByte) {
+      client.register.removeSingleMetric("llm_time_to_first_byte_seconds");
     }
     if (llmTokensPerSecond) {
       client.register.removeSingleMetric("llm_tokens_per_second");
@@ -283,10 +297,24 @@ export function initializeMetrics(labelKeys: string[]): void {
 
   llmTimeToFirstToken = new client.Histogram({
     name: "llm_time_to_first_token_seconds",
-    help: "Time to first token in seconds (streaming latency)",
+    help: "Time from upstream call to first upstream chunk in seconds (streaming latency)",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
-    // Buckets optimized for TTFT - typically faster than full response
-    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+    // Dense below 10s where healthy TTFT lives, then sparse up to the
+    // 20s / 180s marks streaming clients use as stall and abort thresholds.
+    // With the old 10s ceiling every stall landed in +Inf next to a 12s TTFT.
+    buckets: [...FIRST_BYTE_BUCKETS],
+    enableExemplars: true,
+  });
+
+  // Client-visible latency: from the proxy receiving the request to the first
+  // byte it writes, so preflight (auth, agent resolution, guardrails) counts.
+  // llm_time_to_first_token_seconds starts its clock at the upstream call and
+  // never sees that window.
+  llmTimeToFirstByte = new client.Histogram({
+    name: "llm_time_to_first_byte_seconds",
+    help: "Time from request receipt to the first byte written to the client in seconds (streaming)",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    buckets: [...FIRST_BYTE_BUCKETS],
     enableExemplars: true,
   });
 
@@ -545,6 +573,32 @@ export function reportLLMCacheCost(
  * @param ttftSeconds Time to first token in seconds
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  */
+/**
+ * Reports client-visible time to first byte for streaming requests: request
+ * receipt to first write, preflight included.
+ */
+export function reportTimeToFirstByte(
+  provider: SupportedProvider,
+  profile: GatewayAgent,
+  model: string,
+  ttfbSeconds: number,
+  source: InteractionSource,
+): void {
+  if (!llmTimeToFirstByte) {
+    logger.warn("LLM metrics not initialized, skipping TTFB reporting");
+    return;
+  }
+  if (ttfbSeconds <= 0) {
+    logger.warn("Invalid TTFB value, must be positive");
+    return;
+  }
+  llmTimeToFirstByte.observe({
+    labels: buildMetricLabels(profile, { provider }, model, source),
+    value: ttfbSeconds,
+    exemplarLabels: getExemplarLabels(),
+  });
+}
+
 export function reportTimeToFirstToken(
   provider: SupportedProvider,
   profile: GatewayAgent,

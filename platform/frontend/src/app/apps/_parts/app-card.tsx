@@ -316,6 +316,7 @@ function OwnedAppCard({
             scope={app.scope}
             teamNames={app.teams?.map((team) => team.name)}
             userNames={app.users?.map((user) => user.name)}
+            showLabel
           />
           {!app.enabled ? <Badge variant="outline">Disabled</Badge> : null}
           {app.locked ? <Badge variant="outline">Locked</Badge> : null}
@@ -450,7 +451,7 @@ function ExternalAppCard({
     >
       {isOpening ? <CardOpeningOverlay /> : null}
       <div className="flex flex-wrap items-center gap-2">
-        <ScopeBadge scope={app.scope} />
+        <ScopeBadge scope={app.scope} showLabel />
       </div>
     </TableCard>
   );

@@ -614,13 +614,20 @@ describe("interaction routes", () => {
     await make("codex", CODEX_CLIENT_ID);
     await make("customer", "my-custom-agent");
 
-    // The Claude filter expands to every Claude client id → both Claude sessions.
-    const filtered = await app.inject({
-      method: "GET",
-      url: `/api/interactions/sessions?limit=50&client=${CLAUDE_CLIENT_FILTER}`,
-    });
-    expect(filtered.statusCode).toBe(200);
-    expect(filtered.json().data).toHaveLength(2);
+    // Legacy Claude URLs and explicit Code filters exclude Desktop traffic.
+    for (const [client, expectedId] of [
+      [CLAUDE_CLIENT_FILTER, CLAUDE_CLIENT_ID],
+      ["claude-code", CLAUDE_CLIENT_ID],
+      ["claude-desktop", CLAUDE_DESKTOP_CLIENT_ID],
+    ]) {
+      const filtered = await app.inject({
+        method: "GET",
+        url: `/api/interactions/sessions?limit=50&client=${client}`,
+      });
+      expect(filtered.statusCode).toBe(200);
+      expect(filtered.json().data).toHaveLength(1);
+      expect(filtered.json().data[0].externalAgentIds).toEqual([expectedId]);
+    }
 
     // The Codex filter → the single Codex session.
     const codex = await app.inject({

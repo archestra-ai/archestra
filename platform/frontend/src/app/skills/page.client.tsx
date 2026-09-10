@@ -83,10 +83,14 @@ import {
 } from "@/lib/entity-labels.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
-import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import {
+  useBulkSelection,
+  useControlledRowSelection,
+} from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   type SkillUsageReference,
+  useAllMatchingSkills,
   useBulkDeleteSkills,
   useExternalMcpSkills,
   usePermanentlyDeleteSkill,
@@ -214,6 +218,12 @@ function SkillsList() {
     pluginSkillsEnabled &&
     !isDeletedView &&
     (kind === "all" || kind === "plugin");
+  // Name-based edit links may target a skill beyond the visible page, so keep
+  // their existing complete standalone list until the name has resolved.
+  const openEdit = searchParams.get("openEdit");
+  const isStandalonePaginatedView =
+    !isDeletedView && kind === "standalone" && !openEdit;
+  const usesPaginatedSkills = isDeletedView || isStandalonePaginatedView;
 
   /**
    * Everything that narrows the table, with the page itself left out — the
@@ -245,7 +255,7 @@ function SkillsList() {
       offset: pageIndex * pageSize,
       ...listFilters,
     },
-    { enabled: isDeletedView, toastOnError: false },
+    { enabled: usesPaginatedSkills, toastOnError: false },
   );
   const {
     data: activeSkills = [],
@@ -254,13 +264,14 @@ function SkillsList() {
     isLoadingError: isActiveSkillsLoadError,
     refetch: refetchActiveSkills,
   } = useSkillsList(listFilters, {
-    enabled: !isDeletedView && showStandaloneSkills,
+    enabled:
+      !isDeletedView && showStandaloneSkills && !isStandalonePaginatedView,
     toastOnError: false,
   });
-  const isFetching = isDeletedView
+  const isFetching = usesPaginatedSkills
     ? isDeletedSkillsFetching
     : isActiveSkillsFetching;
-  const isSkillsLoadError = isDeletedView
+  const isSkillsLoadError = usesPaginatedSkills
     ? isDeletedSkillsLoadError
     : isActiveSkillsLoadError;
   const { data: sourceReposData } = useSkillSourceRepos();
@@ -383,7 +394,9 @@ function SkillsList() {
   const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
   const userTeamIdSet = new Set((userTeams ?? []).map((team) => team.id));
 
-  const standaloneSkills = isDeletedView ? (skills?.data ?? []) : activeSkills;
+  const standaloneSkills = usesPaginatedSkills
+    ? (skills?.data ?? [])
+    : activeSkills;
   const items: ListedSkill[] = [
     ...(showStandaloneSkills
       ? standaloneSkills.map((skill) => ({
@@ -421,7 +434,15 @@ function SkillsList() {
    * the whole matching set fits in one bulk request, so an escalation that
    * survived a filter change could otherwise claim more than it can act on.
    */
-  const filterSignature = JSON.stringify(listFilters);
+  const filterSignature = JSON.stringify({ kind, ...listFilters });
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected =
+    usesPaginatedSkills && escalatedFor === filterSignature;
+  const {
+    data: allMatchingSkills,
+    isFetching: isAllMatchingFetching,
+    isError: isAllMatchingError,
+  } = useAllMatchingSkills(listFilters, { enabled: allMatchingSelected });
   const selection = useBulkSelection({
     rows: items,
     getId: (row) => row.key,
@@ -431,26 +452,41 @@ function SkillsList() {
       ? "match this search query"
       : "match the current filters",
   });
+  const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
+    useControlledRowSelection({
+      rowSelection: selection.rowSelection,
+      setRowSelection: selection.setRowSelection,
+      rows: items,
+      getRowId: (row) => row.key,
+      canSelect: canBulkActOnSkill,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+    });
   const visibleRows = items.filter((item) =>
     selection.pageRowIds.includes(item.key),
   );
   const cardSelection = useBulkCardSelection({
     rows: visibleRows,
     getRowId: (row) => row.key,
-    rowSelection: selection.rowSelection,
-    setRowSelection: selection.setRowSelection,
+    rowSelection: effectiveRowSelection,
+    setRowSelection: onRowSelectionChange,
     canSelect: canBulkActOnSkill,
-    rangeSelection: selection.rangeSelection,
+    rangeSelection,
   });
-  const selectedSkills = selection.selected
+  const pageSelectedSkills = selection.selected
     .filter((item) => item.source === "standalone")
     .map((item) => item.skill);
-  const clearSelection = selection.clearSelection;
+  const selectedSkills = allMatchingSelected
+    ? (allMatchingSkills ?? pageSelectedSkills)
+    : pageSelectedSkills;
+  const clearSelection = () => {
+    selection.clearSelection();
+    setEscalatedFor(null);
+  };
 
   // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
   // (e.g. from the chat SkillPill). The name resolves to an id once the items
   // it was searched by have loaded.
-  const openEdit = searchParams.get("openEdit");
   useEffect(() => {
     if (!openEdit || standaloneSkills.length === 0) return;
     const match = standaloneSkills.find((skill) => skill.name === openEdit);
@@ -458,10 +494,12 @@ function SkillsList() {
     router.replace(`/skills/${match.id}`);
   }, [openEdit, standaloneSkills, router]);
   const pagination = skills?.pagination;
-  const totalStandaloneSkills = isDeletedView
+  const totalStandaloneSkills = usesPaginatedSkills
     ? (pagination?.total ?? 0)
     : activeSkills.length;
-  const totalSkills = isDeletedView ? totalStandaloneSkills : items.length;
+  const totalSkills = usesPaginatedSkills
+    ? totalStandaloneSkills
+    : items.length;
   const hasActiveFilters =
     !!search ||
     !!sourceRepo ||
@@ -490,7 +528,7 @@ function SkillsList() {
    * which is only true during a first load of a query that is switched on.
    */
   const isInitialSkillsLoad =
-    ((isDeletedView ? isDeletedSkillsPending : isActiveSkillsPending) &&
+    ((usesPaginatedSkills ? isDeletedSkillsPending : isActiveSkillsPending) &&
       isFetching) ||
     (showMcpSkills && isExternalSkillsPending && isExternalSkillsFetching) ||
     (showPluginSkills && isPluginSkillsPending && isPluginSkillsFetching);
@@ -803,7 +841,7 @@ function SkillsList() {
         <QueryLoadError
           title="Couldn't load your skills"
           onRetry={() =>
-            isDeletedView ? refetchSkills() : refetchActiveSkills()
+            usesPaginatedSkills ? refetchSkills() : refetchActiveSkills()
           }
         />
       </PageLayout>
@@ -952,7 +990,20 @@ function SkillsList() {
                   noun="skill"
                   countTestId={E2eTestId.SkillsBulkSelectionCount}
                   onClear={clearSelection}
-                  selectAllMatching={selection.selectAllMatching}
+                  busy={
+                    allMatchingSelected &&
+                    (isAllMatchingFetching || isAllMatchingError)
+                  }
+                  selectAllMatching={
+                    usesPaginatedSkills
+                      ? {
+                          ...selection.selectAllMatching,
+                          total: skills?.pagination.total ?? 0,
+                          active: allMatchingSelected,
+                          onSelectAll: () => setEscalatedFor(filterSignature),
+                        }
+                      : selection.selectAllMatching
+                  }
                 >
                   <PermissionButton
                     permissions={{ skill: ["update"] }}
@@ -1068,8 +1119,8 @@ function SkillsList() {
                       : "No skills match the current filters."
                   }
                   onClearFilters={clearFilters}
-                  manualPagination={isDeletedView}
-                  manualSorting={isDeletedView}
+                  manualPagination={usesPaginatedSkills}
+                  manualSorting={usesPaginatedSkills}
                   sorting={sorting}
                   onSortingChange={handleSortingChange}
                   pagination={{ pageIndex, pageSize, total: totalSkills }}
@@ -1079,10 +1130,10 @@ function SkillsList() {
                       ? undefined
                       : (item) => router.push(listedSkillHref(item))
                   }
-                  rowSelection={selection.rowSelection}
-                  onRowSelectionChange={selection.setRowSelection}
+                  rowSelection={effectiveRowSelection}
+                  onRowSelectionChange={onRowSelectionChange}
                   onPageRowIdsChange={selection.onPageRowIdsChange}
-                  rangeSelection={selection.rangeSelection}
+                  rangeSelection={rangeSelection}
                   fixedWidthColumnIds={["visibility", "files", "usageCount"]}
                   flexibleColumnIds={["name"]}
                 />

@@ -367,6 +367,66 @@ describe("SkillsPage rows", () => {
     );
   });
 
+  it("uses one server page and its total for a standalone-only active view", () => {
+    mockUseFeature.mockImplementation(
+      (name: string) => name === "mcpGatewaySkillsEnabled",
+    );
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("kind=standalone&pageSize=10") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useSkillsPaginated).mockReturnValue({
+      data: { data: [MINE], pagination: { total: 250 } },
+      isPending: false,
+      isFetching: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+
+    render(<SkillsPage />);
+
+    expect(screen.getByText("pdf-tools")).toBeInTheDocument();
+    expect(screen.getByText("Page 1 of 25")).toBeInTheDocument();
+    expect(vi.mocked(useSkillsPaginated)).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 10, offset: 0 }),
+      expect.objectContaining({ enabled: true }),
+    );
+    expect(vi.mocked(useSkillsList)).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it("keeps the complete standalone list for name-based edit links", () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    mockUseFeature.mockImplementation(
+      (name: string) => name === "mcpGatewaySkillsEnabled",
+    );
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("kind=standalone&openEdit=pdf-tools") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<SkillsPage />);
+
+    expect(vi.mocked(useSkillsList)).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ enabled: true }),
+    );
+    expect(vi.mocked(useSkillsPaginated)).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(replace).toHaveBeenCalledWith(`/skills/${MINE.id}`);
+  });
+
   it("clamps a stale card page after filters shrink the collection", async () => {
     const push = vi.fn();
     vi.mocked(useRouter).mockReturnValue({
@@ -403,9 +463,7 @@ describe("SkillsPage rows", () => {
 
     render(<SkillsPage />);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Clear filters" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(push).toHaveBeenCalledWith("/skills?page=1", { scroll: false });
   });
 

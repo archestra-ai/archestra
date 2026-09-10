@@ -83,10 +83,14 @@ import {
 } from "@/lib/entity-labels.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
-import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
+import {
+  useBulkSelection,
+  useControlledRowSelection,
+} from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   type SkillUsageReference,
+  useAllMatchingSkills,
   useBulkDeleteSkills,
   useExternalMcpSkills,
   usePermanentlyDeleteSkill,
@@ -430,7 +434,15 @@ function SkillsList() {
    * the whole matching set fits in one bulk request, so an escalation that
    * survived a filter change could otherwise claim more than it can act on.
    */
-  const filterSignature = JSON.stringify(listFilters);
+  const filterSignature = JSON.stringify({ kind, ...listFilters });
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected =
+    usesPaginatedSkills && escalatedFor === filterSignature;
+  const {
+    data: allMatchingSkills,
+    isFetching: isAllMatchingFetching,
+    isError: isAllMatchingError,
+  } = useAllMatchingSkills(listFilters, { enabled: allMatchingSelected });
   const selection = useBulkSelection({
     rows: items,
     getId: (row) => row.key,
@@ -440,21 +452,37 @@ function SkillsList() {
       ? "match this search query"
       : "match the current filters",
   });
+  const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
+    useControlledRowSelection({
+      rowSelection: selection.rowSelection,
+      setRowSelection: selection.setRowSelection,
+      rows: items,
+      getRowId: (row) => row.key,
+      canSelect: canBulkActOnSkill,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+    });
   const visibleRows = items.filter((item) =>
     selection.pageRowIds.includes(item.key),
   );
   const cardSelection = useBulkCardSelection({
     rows: visibleRows,
     getRowId: (row) => row.key,
-    rowSelection: selection.rowSelection,
-    setRowSelection: selection.setRowSelection,
+    rowSelection: effectiveRowSelection,
+    setRowSelection: onRowSelectionChange,
     canSelect: canBulkActOnSkill,
-    rangeSelection: selection.rangeSelection,
+    rangeSelection,
   });
-  const selectedSkills = selection.selected
+  const pageSelectedSkills = selection.selected
     .filter((item) => item.source === "standalone")
     .map((item) => item.skill);
-  const clearSelection = selection.clearSelection;
+  const selectedSkills = allMatchingSelected
+    ? (allMatchingSkills ?? pageSelectedSkills)
+    : pageSelectedSkills;
+  const clearSelection = () => {
+    selection.clearSelection();
+    setEscalatedFor(null);
+  };
 
   // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
   // (e.g. from the chat SkillPill). The name resolves to an id once the items
@@ -962,7 +990,20 @@ function SkillsList() {
                   noun="skill"
                   countTestId={E2eTestId.SkillsBulkSelectionCount}
                   onClear={clearSelection}
-                  selectAllMatching={selection.selectAllMatching}
+                  busy={
+                    allMatchingSelected &&
+                    (isAllMatchingFetching || isAllMatchingError)
+                  }
+                  selectAllMatching={
+                    usesPaginatedSkills
+                      ? {
+                          ...selection.selectAllMatching,
+                          total: skills?.pagination.total ?? 0,
+                          active: allMatchingSelected,
+                          onSelectAll: () => setEscalatedFor(filterSignature),
+                        }
+                      : selection.selectAllMatching
+                  }
                 >
                   <PermissionButton
                     permissions={{ skill: ["update"] }}
@@ -1089,10 +1130,10 @@ function SkillsList() {
                       ? undefined
                       : (item) => router.push(listedSkillHref(item))
                   }
-                  rowSelection={selection.rowSelection}
-                  onRowSelectionChange={selection.setRowSelection}
+                  rowSelection={effectiveRowSelection}
+                  onRowSelectionChange={onRowSelectionChange}
                   onPageRowIdsChange={selection.onPageRowIdsChange}
-                  rangeSelection={selection.rangeSelection}
+                  rangeSelection={rangeSelection}
                   fixedWidthColumnIds={["visibility", "files", "usageCount"]}
                   flexibleColumnIds={["name"]}
                 />

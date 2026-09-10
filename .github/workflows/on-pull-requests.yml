@@ -589,7 +589,7 @@ jobs:
           node-version: "24.11.1"
 
       - name: Run Node triage parity test
-        run: node --test ../.claude/skills/archestra-dev-bench-analysis/bin/render-triage.test.mjs
+        run: node --test ../.agents/skills/archestra-dev-bench-analysis/bin/render-triage.test.mjs
 
       - name: Rust formatting
         run: cargo fmt --all --check

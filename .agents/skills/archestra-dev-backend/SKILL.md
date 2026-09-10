@@ -42,7 +42,7 @@ Use this skill before changing files under `platform/backend/` (except unit test
 
 - All DB queries go through `backend/src/models/` — never inline Drizzle in routes or services. Create a model file for new entities; business logic stays in services.
 - Batch-load related data to avoid N+1 (e.g. `AgentTeamModel.getTeamsForAgents` in `backend/src/models/agent-team.ts`), never per-item queries in a loop.
-- Entity types come from drizzle-zod (`createSelectSchema` / `createInsertSchema` / `createUpdateSchema` + `z.infer`), never hand-written interfaces. See the Database Types section in `platform/CLAUDE.md`.
+- Entity types come from drizzle-zod (`createSelectSchema` / `createInsertSchema` / `createUpdateSchema` + `z.infer`), never hand-written interfaces. See the Database Types section in `platform/AGENTS.md`.
 - Schema changes: use the `archestra-dev-migrations` skill.
 
 ## MCP-tool mirror

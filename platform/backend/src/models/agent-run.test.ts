@@ -187,3 +187,96 @@ describe("AgentRunModel completion notifications", () => {
     );
   });
 });
+
+test("continuations keep one owner session and ordered history without exposing it to another user", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const owner = await makeUser();
+  const other = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: owner.id,
+  });
+  const first = await A2ATaskModel.createForRun({
+    contextId: context.id,
+    agentId: agent.id,
+  });
+  const workloadName = `session-${first.id}`;
+  const common = {
+    organizationId: org.id,
+    agentId: agent.id,
+    actorKind: "user" as const,
+    actorId: owner.id,
+    actorUserId: owner.id,
+    workloadName,
+    backend: "kubernetes" as const,
+    runtimeScope: "test",
+  };
+  const firstRun = await AgentRunModel.create({ ...common, taskId: first.id });
+  await AgentRunModel.close({ id: firstRun.id, logs: "first turn" });
+  const workspace = await AgentWorkspaceModel.create({
+    ...common,
+    id: first.id,
+    state: "idle",
+    lastTaskId: first.id,
+    expiresAt: new Date(Date.now() + 3600_000),
+  });
+  const second = await A2ATaskModel.createForRun({
+    contextId: context.id,
+    agentId: agent.id,
+  });
+  const secondRun = await AgentRunModel.create({
+    ...common,
+    taskId: second.id,
+  });
+  expect(
+    await AgentWorkspaceModel.claim({
+      id: workspace.id,
+      organizationId: org.id,
+      actorKind: "user",
+      actorId: owner.id,
+      agentId: agent.id,
+      taskId: second.id,
+    }),
+  ).not.toBeNull();
+  const lookup = { actorUserId: owner.id, organizationId: org.id };
+  for (const taskId of [first.id, second.id, workspace.id]) {
+    expect(
+      await AgentRunModel.findCurrentSessionForActor({ ...lookup, taskId }),
+    ).toMatchObject({
+      taskId: second.id,
+      sessionId: first.id,
+    });
+    expect(
+      await AgentRunModel.findCurrentSessionForActor({
+        ...lookup,
+        taskId,
+        actorUserId: other.id,
+      }),
+    ).toBeNull();
+  }
+  const listed = await AgentRunModel.listForActor({
+    ...lookup,
+    pagination: { limit: 10, offset: 0 },
+  });
+  expect(listed.data.map((run) => run.taskId)).toEqual([second.id]);
+  const history = await AgentRunModel.listPreviousTurns({ run: secondRun });
+  expect(history.map((run) => run.id)).toEqual([firstRun.id]);
+  expect(
+    await AgentRunModel.listPreviousTurns({
+      run: secondRun,
+      afterId: firstRun.id,
+    }),
+  ).toEqual([]);
+  // Explicit per-turn sharing must still resolve the requested record.
+  expect(
+    await AgentRunModel.findSessionByTaskId({
+      taskId: first.id,
+      organizationId: org.id,
+    }),
+  ).toMatchObject({ taskId: first.id });
+});

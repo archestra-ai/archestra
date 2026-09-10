@@ -275,6 +275,55 @@ describe("run tools", () => {
     return task;
   }
 
+  test("get_run resolves the current turn from the original session ID", async () => {
+    const first = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const firstRun = await AgentRunModel.findByTaskId(first.id);
+    if (!firstRun) throw new Error("Run fixture missing");
+    await AgentRunModel.close({ id: firstRun.id, logs: "first answer" });
+    const next = await A2ATaskModel.create({
+      contextId: first.contextId,
+      agentId: callingAgent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: next.id,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      actorUserId: actorId,
+      workloadName: firstRun.workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    await AgentWorkspaceModel.create({
+      id: first.id,
+      organizationId,
+      agentId: callingAgent.id,
+      actorKind: "user",
+      actorId,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName: firstRun.workloadName,
+      state: "active",
+      lastTaskId: next.id,
+      activeTaskId: next.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const result = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: first.id },
+      context,
+    );
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      run: { task_id: next.id, state: "working" },
+    });
+  });
+
   test("workspace file tools accept the task ID and enforce original ownership", async ({
     makeUser,
     makeMember,

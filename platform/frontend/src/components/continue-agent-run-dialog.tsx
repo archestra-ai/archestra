@@ -34,7 +34,7 @@ export function ContinueAgentRunDialog({
               if (!result) return;
               form.reset();
               onOpenChange(false);
-              router.push(`/chat/runs/${result.taskId}`);
+              router.push(`/chat/runs/${result.sessionId ?? taskId}`);
             },
           },
         ),

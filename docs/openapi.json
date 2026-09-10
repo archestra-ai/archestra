@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-beta.3"
+    "version": "1.4.0-beta.4"
   },
   "components": {
     "schemas": {
@@ -68753,6 +68753,11 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "sessionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "taskId": {
                       "type": "string",
                       "format": "uuid",
@@ -69214,6 +69219,11 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "sessionId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "prompt": {
                             "type": "string"
                           },
@@ -69272,6 +69282,7 @@
                           "stateChangedAt",
                           "hardDeadlineAt",
                           "lastModelActivityAt",
+                          "sessionId",
                           "prompt",
                           "agent",
                           "projectName",
@@ -69719,6 +69730,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "sessionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "prompt": {
                       "type": "string"
                     },
@@ -69872,6 +69888,7 @@
                     "stateChangedAt",
                     "hardDeadlineAt",
                     "lastModelActivityAt",
+                    "sessionId",
                     "prompt",
                     "agent",
                     "projectName",
@@ -70299,6 +70316,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "sessionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "prompt": {
                       "type": "string"
                     },
@@ -70357,6 +70379,7 @@
                     "stateChangedAt",
                     "hardDeadlineAt",
                     "lastModelActivityAt",
+                    "sessionId",
                     "prompt",
                     "agent",
                     "projectName",
@@ -70956,6 +70979,11 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "sessionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "taskId": {
                       "type": "string",
                       "format": "uuid",
@@ -353676,6 +353704,11 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "sessionId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "prompt": {
                         "type": "string"
                       },
@@ -353829,6 +353862,7 @@
                       "stateChangedAt",
                       "hardDeadlineAt",
                       "lastModelActivityAt",
+                      "sessionId",
                       "prompt",
                       "agent",
                       "projectName",

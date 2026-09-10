@@ -6,9 +6,11 @@ import type {
   AgentRunLogsMessage,
 } from "@archestra/shared";
 import { FileX2, TerminalSquare } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { formatAgentRunReadableTranscript } from "@/components/agent-run-readable-transcript";
 import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -20,6 +22,14 @@ export function AgentRunLogs({
   title?: string;
 }) {
   const [terminalContent, setTerminalContent] = useState("");
+  const [readableContent, setReadableContent] = useState("");
+  const [view, setView] = useState<"readable" | "terminal">("terminal");
+  const readableTranscript = useMemo(
+    () => formatAgentRunReadableTranscript(readableContent),
+    [readableContent],
+  );
+  const hasReadableTranscript = !!readableTranscript;
+  const showReadable = hasReadableTranscript && view === "readable";
   const [error, setError] = useState<string>();
   const [isStreaming, setIsStreaming] = useState(!run.endedAt);
   const [retainedStatus, setRetainedStatus] = useState<{
@@ -38,6 +48,8 @@ export function AgentRunLogs({
       });
     };
     setTerminalContent("");
+    setReadableContent("");
+    setView("terminal");
     setError(undefined);
     setIsStreaming(!run.endedAt);
     setRetainedStatus(undefined);
@@ -46,12 +58,13 @@ export function AgentRunLogs({
       websocketService.subscribe(
         "agent_run_logs",
         (message: AgentRunLogsMessage) => {
-          if (
-            message.payload.runId === run.taskId &&
-            message.payload.channel !== "readable"
-          ) {
+          if (message.payload.runId === run.taskId) {
             receivedOutput = true;
-            setTerminalContent((value) => value + message.payload.logs);
+            if (message.payload.channel === "readable") {
+              setReadableContent((value) => value + message.payload.logs);
+            } else {
+              setTerminalContent((value) => value + message.payload.logs);
+            }
           }
         },
       ),
@@ -101,11 +114,29 @@ export function AgentRunLogs({
 
   return (
     <DeploymentLogPanel
+      className="min-w-0"
       title={title}
-      content={terminalContent}
-      contentRenderer={(output) => (
-        <TerminalRecording key={run.taskId} content={output} />
-      )}
+      actions={
+        hasReadableTranscript ? (
+          <Tabs
+            value={showReadable ? "readable" : "terminal"}
+            onValueChange={(value) =>
+              setView(value === "readable" ? "readable" : "terminal")
+            }
+          >
+            <TabsList aria-label="Output view">
+              <TabsTrigger value="readable">Readable transcript</TabsTrigger>
+              <TabsTrigger value="terminal">Terminal recording</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        ) : undefined
+      }
+      content={showReadable ? readableTranscript : terminalContent}
+      contentRenderer={
+        showReadable
+          ? undefined
+          : (output) => <TerminalRecording key={run.taskId} content={output} />
+      }
       error={error}
       emptyIcon={run.endedAt ? FileX2 : TerminalSquare}
       emptyMessage={run.endedAt ? "No output recorded" : "Waiting for output"}
@@ -126,6 +157,10 @@ export function AgentRunLogs({
             </span>
             <span>Streaming</span>
           </div>
+        ) : showReadable ? (
+          <span className="font-mono text-xs text-slate-500">
+            Readable transcript
+          </span>
         ) : terminalContent ? (
           <RetainedTranscriptStatus status={retainedStatus} />
         ) : null

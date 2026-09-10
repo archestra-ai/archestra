@@ -1,5 +1,6 @@
 import type { ServerWebSocketMessage } from "@archestra/shared";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun } from "@/lib/agent-runtime.query";
 
@@ -126,7 +127,7 @@ describe("AgentRunLogs", () => {
     expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
   });
 
-  it("keeps terminal recording visible when structured output arrives", () => {
+  it("keeps the recording selected and offers responsive readable output", async () => {
     render(<AgentRunLogs run={completedRun} />);
 
     emit({
@@ -162,14 +163,81 @@ describe("AgentRunLogs", () => {
       },
     });
 
-    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
-    expect(screen.queryByText("Readable transcript")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Start of the run/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "terminal frame",
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Readable transcript" }),
+    );
+    expect(screen.getByText(/Start of the run/)).toHaveTextContent(
+      "Assistant End of the run",
+    );
+    expect(screen.queryByTestId("terminal-playback")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Terminal recording" }),
+    );
 
     expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
       "terminal frame",
     );
     expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "later output" },
+    });
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "later output",
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Readable transcript" }),
+    );
+    expect(screen.getByText(/Start of the run/)).toBeInTheDocument();
+  });
+
+  it("keeps replay usable until a chunked readable transcript is complete", async () => {
+    const { rerender } = render(<AgentRunLogs run={completedRun} />);
+    emit({
+      type: "agent_run_logs",
+      payload: { runId: "task-1", logs: "recorded output" },
+    });
+    const readable = JSON.stringify({
+      version: 1,
+      provider: "codex",
+      entries: [
+        {
+          type: "message",
+          role: "assistant",
+          text: "A full-width answer from a phone run",
+        },
+      ],
+    });
+    emit({
+      type: "agent_run_logs",
+      payload: {
+        runId: "task-1",
+        channel: "readable",
+        logs: readable.slice(0, 50),
+      },
+    });
+    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
+      "recorded output",
+    );
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    emit({
+      type: "agent_run_logs",
+      payload: {
+        runId: "task-1",
+        channel: "readable",
+        logs: readable.slice(50),
+      },
+    });
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Readable transcript" }),
+    );
+    expect(screen.getByText(/A full-width answer/)).toBeInTheDocument();
+    rerender(<AgentRunLogs run={{ ...completedRun, taskId: "task-2" }} />);
+    expect(screen.queryByText(/A full-width answer/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 });
 

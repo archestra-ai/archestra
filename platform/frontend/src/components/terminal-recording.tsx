@@ -10,6 +10,7 @@ import { Slider } from "@/components/ui/slider";
 /** A terminal recording is a sequence of screens, not just its final buffer. */
 export function TerminalRecording({ content }: { content: string }) {
   const positions = useMemo(() => indexTerminalRecording(content), [content]);
+  const [fitToWidth, setFitToWidth] = useState(true);
   const [selectedOffset, setSelectedOffset] = useState<number | null>(null);
   const last = positions.length - 1;
   const matchingPosition =
@@ -34,7 +35,7 @@ export function TerminalRecording({ content }: { content: string }) {
   const seek = (next: number) =>
     setSelectedOffset(next >= last ? null : positions[Math.max(0, next)]);
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-1 text-slate-400">
         <Button
           variant="ghost"
@@ -87,7 +88,19 @@ export function TerminalRecording({ content }: { content: string }) {
             : `${Math.round((position / Math.max(1, last)) * 100)}%`}
         </span>
       </div>
-      <TerminalPlayback content={replay} />
+      {geometry ? (
+        <div className="flex justify-end border-b border-slate-800 px-3 py-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setFitToWidth((value) => !value)}
+            className="text-slate-400"
+          >
+            {fitToWidth ? "Actual size" : "Fit width"}
+          </Button>
+        </div>
+      ) : null}
+      <TerminalPlayback content={replay} fitToWidth={fitToWidth} />
     </div>
   );
 }

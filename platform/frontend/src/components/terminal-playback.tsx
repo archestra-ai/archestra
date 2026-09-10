@@ -2,13 +2,20 @@
 
 import { useEffect, useRef } from "react";
 import { isUsableTerminalDimensions } from "./exec/exec-terminal.utils";
+import { attachTerminalTouchScroll } from "./terminal-touch-scroll";
 
 /**
  * Replays a captured PTY byte stream through xterm so cursor movement, clears,
  * and colour changes retain the terminal's live structure while completed
  * output remains readable and scrollable.
  */
-export function TerminalPlayback({ content }: { content: string }) {
+export function TerminalPlayback({
+  content,
+  fitToWidth = true,
+}: {
+  content: string;
+  fitToWidth?: boolean;
+}) {
   const recording = parseTerminalRecording(content);
   const viewportRef = useRef<HTMLDivElement>(null);
   const recordingFrameRef = useRef<HTMLDivElement>(null);
@@ -16,6 +23,7 @@ export function TerminalPlayback({ content }: { content: string }) {
   const terminalRef = useRef<import("@xterm/xterm").Terminal | null>(null);
   const updateRecordedScaleRef = useRef<() => void>(() => {});
   const recordingRef = useRef(recording);
+  const fitToWidthRef = useRef(fitToWidth);
   const renderedContentRef = useRef("");
   const recordedDimensionsRef = useRef<TerminalDimensions | null>(null);
   recordingRef.current = recording;
@@ -25,6 +33,7 @@ export function TerminalPlayback({ content }: { content: string }) {
 
     let disposed = false;
     let resizeObserver: ResizeObserver | undefined;
+    let detachTouchScroll: (() => void) | undefined;
     let initializedTerminal: import("@xterm/xterm").Terminal | null = null;
 
     const initialize = async () => {
@@ -44,8 +53,7 @@ export function TerminalPlayback({ content }: { content: string }) {
         cursorBlink: false,
         disableStdin: true,
         fontSize: 12,
-        fontFamily:
-          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+        fontFamily: TERMINAL_FONT_FAMILY,
         lineHeight: TERMINAL_LINE_HEIGHT,
         scrollback: RETAINED_SCROLLBACK_LINES,
         scrollSensitivity: TERMINAL_SCROLL_SENSITIVITY,
@@ -73,6 +81,12 @@ export function TerminalPlayback({ content }: { content: string }) {
 
       terminal.loadAddon(fitAddon);
       terminal.open(containerRef.current);
+      detachTouchScroll = attachTerminalTouchScroll({
+        container: containerRef.current,
+        terminal,
+        readOnly: true,
+        scrollViewport: viewportRef.current ?? undefined,
+      });
       let layoutReady = false;
       let rendered = false;
       let renderedDimensions: { cols: number; rows: number } | null = null;
@@ -98,10 +112,9 @@ export function TerminalPlayback({ content }: { content: string }) {
           0,
           viewport.clientWidth - RETAINED_TERMINAL_HORIZONTAL_PADDING_PX,
         );
-        const scale = Math.min(
-          1,
-          Math.max(MIN_RETAINED_TERMINAL_SCALE, availableWidth / naturalWidth),
-        );
+        const scale = fitToWidthRef.current
+          ? Math.max(MIN_RETAINED_TERMINAL_SCALE, availableWidth / naturalWidth)
+          : 1;
 
         container.style.transform = `scale(${scale})`;
         container.style.transformOrigin = "top left";
@@ -195,6 +208,7 @@ export function TerminalPlayback({ content }: { content: string }) {
     void initialize();
     return () => {
       disposed = true;
+      detachTouchScroll?.();
       resizeObserver?.disconnect();
       initializedTerminal?.dispose();
       terminalRef.current = null;
@@ -234,15 +248,23 @@ export function TerminalPlayback({ content }: { content: string }) {
     recordedDimensionsRef.current = nextRecording.dimensions;
   }, [content]);
 
+  useEffect(() => {
+    fitToWidthRef.current = fitToWidth;
+    updateRecordedScaleRef.current();
+  }, [fitToWidth]);
+
   return (
     <div
       ref={viewportRef}
-      className="flex min-h-0 flex-1 overflow-auto bg-slate-950 p-4 pb-2"
+      className="flex min-h-0 min-w-0 flex-1 overflow-auto bg-slate-950 p-4 pb-2"
+      style={{ fontSize: 12, fontFamily: TERMINAL_FONT_FAMILY }}
       data-testid="terminal-playback-viewport"
     >
       <div
         ref={recordingFrameRef}
-        className={recording.dimensions ? "shrink-0" : "flex min-h-0 flex-1"}
+        className={
+          recording.dimensions ? "shrink-0" : "flex min-h-0 min-w-0 flex-1"
+        }
         style={
           recording.dimensions
             ? {
@@ -254,7 +276,9 @@ export function TerminalPlayback({ content }: { content: string }) {
       >
         <div
           ref={containerRef}
-          className={recording.dimensions ? "shrink-0" : "min-h-0 flex-1"}
+          className={
+            recording.dimensions ? "shrink-0" : "min-h-0 min-w-0 flex-1"
+          }
           data-testid="terminal-playback"
           style={
             recording.dimensions
@@ -277,6 +301,8 @@ const READ_ONLY_TERMINAL_STATE =
 const ALTERNATE_SCREEN_MODES = new Set([47, 1047, 1049]);
 const RETAINED_SCROLLBACK_LINES = 1_000_000;
 const TERMINAL_SCROLL_SENSITIVITY = 3;
+const TERMINAL_FONT_FAMILY =
+  "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
 const TERMINAL_LINE_HEIGHT = 1.2;
 const MIN_RETAINED_TERMINAL_SCALE = 0.5;
 const RETAINED_TERMINAL_HORIZONTAL_PADDING_PX = 32;

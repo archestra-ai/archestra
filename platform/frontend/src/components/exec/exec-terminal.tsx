@@ -3,6 +3,7 @@
 import { Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { attachTerminalTouchScroll } from "@/components/terminal-touch-scroll";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -185,6 +186,10 @@ export function ExecTerminal({
 
       terminal.loadAddon(fitAddon);
       terminal.open(terminalRef.current);
+      const detachTouchScroll = attachTerminalTouchScroll({
+        container: terminalRef.current,
+        terminal,
+      });
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from
@@ -295,6 +300,7 @@ export function ExecTerminal({
       });
 
       return () => {
+        detachTouchScroll();
         resizeObserver.disconnect();
         closeSession?.();
       };
@@ -330,7 +336,7 @@ export function ExecTerminal({
   }, [command]);
 
   return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0">
+    <div className="flex flex-col gap-4 flex-1 min-h-0 min-w-0">
       <div className="flex flex-col gap-2 flex-1 min-h-0">
         {title && (
           <h3 className="text-sm font-semibold flex-shrink-0">{title}</h3>

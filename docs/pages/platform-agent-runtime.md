@@ -621,7 +621,9 @@ After the pod is removed, Archestra retains the normalized readable transcript
 and the complete PTY recording. The readable view lists messages and tool
 activity in chronological order without storing raw provider events. Native
 TUI recordings preserve their original terminal geometry and scale as one
-canvas to fit narrower viewers. The history follows the run's task retention
+canvas to fit the viewer’s width on phones and desktops. Scaling preserves
+the original line breaks. The readable transcript rewraps text to the current
+width. The history follows the run's task retention
 period, which is 90 days by default. Set
 `ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES` to cap the
 uncompressed transcript size accepted from one run. A run beyond that ceiling

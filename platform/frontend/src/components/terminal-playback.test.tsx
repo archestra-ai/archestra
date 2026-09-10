@@ -191,6 +191,41 @@ describe("TerminalPlayback", () => {
     expect(terminal.resize).toHaveBeenCalledTimes(1);
   });
 
+  it("expands a phone recording on desktop and can return to actual size without changing its grid", async () => {
+    const content = "\u001b]777;archestra-terminal-size=40x20\u0007Phone frame";
+    const { getByTestId, rerender } = render(
+      <TerminalPlayback content={content} />,
+    );
+    await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());
+    const viewport = getByTestId("terminal-playback-viewport");
+    const playback = getByTestId("terminal-playback");
+    Object.defineProperty(viewport, "clientWidth", {
+      configurable: true,
+      value: 1232,
+    });
+    Object.defineProperties(playback, {
+      offsetHeight: { configurable: true, value: 300 },
+      offsetWidth: { configurable: true, value: 300 },
+    });
+    act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
+    expect(playback.style.transform).toBe("scale(4)");
+    expect(playback.parentElement).toHaveStyle({
+      width: "1200px",
+      height: "1200px",
+    });
+    rerender(<TerminalPlayback content={content} fitToWidth={false} />);
+    expect(playback.style.transform).toBe("scale(1)");
+    rerender(<TerminalPlayback content={content} />);
+    Object.defineProperty(viewport, "clientWidth", {
+      configurable: true,
+      value: 332,
+    });
+    act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
+    expect(playback.style.transform).toBe("scale(1)");
+    expect(terminal.resize).toHaveBeenCalledExactlyOnceWith(40, 20);
+    expect(terminal.reset).not.toHaveBeenCalled();
+  });
+
   it("keeps retained playback locally scrollable", async () => {
     render(<TerminalPlayback content="captured frame" />);
     await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());

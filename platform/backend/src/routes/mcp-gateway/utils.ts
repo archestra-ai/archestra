@@ -264,7 +264,10 @@ const rawArchestraTokenCache =
 /**
  * Creates an MCP server for the given agent.
  */
+import { openappaEnabled } from "@/openappa/service";
+
 export async function createAgentServer(params: {
+  openappaSession?: import("@/openappa/service").OpenAppaSession;
   agentId: string;
   tokenAuth?: TokenAuthContext;
   runId?: string;
@@ -420,11 +423,19 @@ export async function createAgentServer(params: {
     const implicitTaskControlTools = hasTaskStarter
       ? getImplicitTaskControlTools()
       : [];
+    const implicitOpenAppaTools = openappaEnabled()
+      ? getArchestraMcpTools().filter(
+          (tool) =>
+            archestraMcpBranding.getToolShortName(tool.name) ===
+            "execute_remedy_plan",
+        )
+      : [];
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter((tool) => !tool.delegateToAgentId),
         ...implicitMetaTools,
         ...implicitTaskControlTools,
+        ...implicitOpenAppaTools,
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
           description: tool.description,
@@ -909,6 +920,7 @@ export async function createAgentServer(params: {
             user: mcpUser,
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
+                openappaSession: params.openappaSession,
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
                 userId: tokenAuth?.userId,
@@ -2336,6 +2348,9 @@ function filterExposedTools(params: {
     // operator chose. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
+          (openappaEnabled() &&
+            archestraMcpBranding.getToolShortName(tool.name) ===
+              "execute_remedy_plan") ||
           isTaskControlTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
           (advertiseUiResourceTools &&

@@ -168,7 +168,8 @@
     "tiktoken": "^1.0.22",
     "undici": "7.29.0",
     "ws": "^8.20.1",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@archestra/openappa-rs": "workspace:*"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.16",

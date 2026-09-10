@@ -65,13 +65,20 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import {
+  approveToolResult,
+  chatOpenAppaSession,
+  checkToolCalls,
+  type ExecutionOutcome,
+  openappaEnabled,
+} from "@/openappa/service";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import type {
   Tool as CatalogTool,
   ChatToolExecutionClaim,
   UnsafeContextBoundary,
 } from "@/types";
-import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import { ApiError, agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
@@ -195,7 +202,28 @@ export function buildMcpGatewayTool(params: {
     }),
     execute: async (args: unknown, options) => {
       const toolArguments = isRecord(args) ? args : undefined;
-      return executeWithToolSpan({
+      if (openappaEnabled() && ctx.conversationId) {
+        // Reuses the proxy's persisted call receipt. Also protects resumed
+        // approvals and old conversations whose call predates this integration.
+        const refusal = await checkToolCalls(
+          chatOpenAppaSession(
+            ctx.organizationId,
+            ctx.userId,
+            ctx.sessionId ?? ctx.conversationId,
+          ),
+          [
+            {
+              id: options.toolCallId,
+              name: mcpTool.name,
+              arguments: toolArguments ?? {},
+            },
+          ],
+          (name) => name,
+        );
+        if (refusal) throw new ApiError(409, refusal.refusalMessage);
+      }
+      let appaOutcome: ExecutionOutcome = "unknown";
+      const output = await executeWithToolSpan({
         toolName: mcpTool.name,
         args,
         spanToolArgs: toolArguments,
@@ -277,9 +305,10 @@ export function buildMcpGatewayTool(params: {
                 // LockedChat: never detach into a durable task — task rows
                 // persist tool results in plaintext. Forcing inline execution
                 // keeps the result inside the encrypted conversation only.
-                taskBridge: ctx.suppressContentLogging
-                  ? undefined
-                  : ctx.taskBridge,
+                taskBridge:
+                  ctx.suppressContentLogging || openappaEnabled()
+                    ? undefined
+                    : ctx.taskBridge,
                 // Lets a task minted inside run_tool attach its card to the
                 // run_tool call the user sees, not the synthetic inner id.
                 currentToolCallId: options.toolCallId,
@@ -309,6 +338,12 @@ export function buildMcpGatewayTool(params: {
               },
             );
 
+            appaOutcome =
+              extractMcpToolError(archestraResponse)?.type === "cancelled"
+                ? "unknown"
+                : archestraResponse.isError
+                  ? "failure"
+                  : "success";
             span.setAttribute(
               ATTR_MCP_IS_ERROR_RESULT,
               archestraResponse.isError ?? false,
@@ -397,7 +432,15 @@ export function buildMcpGatewayTool(params: {
               considerContextUntrusted: ctx.considerContextUntrusted,
               abortSignal: ctx.abortSignal,
               elicitation: ctx.elicitation,
-              taskBridge: ctx.taskBridge,
+              taskBridge: openappaEnabled() ? undefined : ctx.taskBridge,
+              onExecutionResult: (result) => {
+                appaOutcome =
+                  extractMcpToolError(result)?.type === "cancelled"
+                    ? "unknown"
+                    : result.isError
+                      ? "failure"
+                      : "success";
+              },
               toolCallId: options.toolCallId,
               isUiProvidingTool,
               suppressContentLogging: ctx.suppressContentLogging,
@@ -419,6 +462,20 @@ export function buildMcpGatewayTool(params: {
             : toolResult;
         },
       });
+      if (!openappaEnabled() || !ctx.conversationId) return output;
+      // Persist and compact only approved text. Rich MCP payloads may carry the
+      // original in rawContent or structuredContent, so don't retain those when
+      // OpenAPPA is responsible for admission.
+      return approveToolResult(
+        chatOpenAppaSession(
+          ctx.organizationId,
+          ctx.userId,
+          ctx.sessionId ?? ctx.conversationId,
+        ),
+        options.toolCallId,
+        toolResultText(output),
+        appaOutcome,
+      );
     },
     // Strip UI-only fields (structuredContent, rawContent, _meta) so the LLM
     // only receives the plain-text `content` summary (SEP-1865).
@@ -1193,6 +1250,11 @@ interface ToolExecutionContext {
   /** Detaches this call into a cancellable task if it runs long (chat only). */
   taskBridge?: ChatTaskBridge;
   /** The model's id for this call, linking a task card to the call it backs. */
+  onExecutionResult?: (result: {
+    isError?: boolean;
+    _meta?: Record<string, unknown>;
+    structuredContent?: Record<string, unknown>;
+  }) => void;
   toolCallId?: string;
   /**
    * Set when the tool's gateway-listed definition carries a `ui://` resource,
@@ -1390,6 +1452,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   }
   throwIfAborted(abortSignal);
 
+  ctx.onExecutionResult?.(result);
   // The MCP path always returns ContentBlock[] in content — narrow from unknown.
   const mcpContent = result.content as ContentBlock[];
 

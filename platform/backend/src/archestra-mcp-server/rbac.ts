@@ -20,6 +20,7 @@ export const TOOL_PERMISSIONS: Record<
 > = {
   // Identity — available to all
   whoami: null,
+  execute_remedy_plan: null,
 
   // Agents
   create_agent: { resource: "agent", action: "create" },

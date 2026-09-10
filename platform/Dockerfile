@@ -223,6 +223,7 @@ COPY archestra-rs/napi-loader/package.json archestra-rs/napi-loader/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
 COPY archestra-rs/image-rs/package.json archestra-rs/image-rs/
+COPY archestra-rs/openappa-rs/package.json archestra-rs/openappa-rs/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -245,7 +246,28 @@ RUN set -eux; \
 # <----- Rust dependency cache ----->
 FROM base AS rust-builder-base
 WORKDIR /app
-RUN apk add --no-cache build-base cargo rust
+RUN apk add --no-cache build-base cargo rust openssl-dev pkgconf
+# Supply the matching OpenAPPA checkout with --build-context openappa=../../openappa.
+# Only source/manifests are copied; credentials, target/, and local runtime data
+# never enter the image. /openappa matches the native crate's relative paths.
+COPY --from=openappa Cargo.toml Cargo.lock /openappa/
+COPY --from=openappa appa-engine /openappa/appa-engine
+COPY --from=openappa appa-policy /openappa/appa-policy
+COPY --from=openappa appa-eventlog /openappa/appa-eventlog
+COPY --from=openappa appa-runtime-api /openappa/appa-runtime-api
+COPY --from=openappa appa-runtime /openappa/appa-runtime
+COPY --from=openappa appa-adapter-claude-code /openappa/appa-adapter-claude-code
+COPY --from=openappa appa-adapter-kagent /openappa/appa-adapter-kagent
+COPY --from=openappa appa-builtin /openappa/appa-builtin
+COPY --from=openappa appa-package /openappa/appa-package
+# OpenAPPA's existing runtime build script fingerprints its bundled plugin.
+COPY --from=openappa marketplace /openappa/marketplace
+COPY --from=openappa integrations/appa-guide /openappa/integrations/appa-guide
+COPY --from=openappa website/content/docs/contracts.md /openappa/website/content/docs/contracts.md
+# Public protocol constant, NOT a credential: receiver/appa-yell/README.md
+# states it ships in the repository and is compiled into every build;
+# appa-runtime/src/yell/client.rs:6 calls it "public by construction".
+COPY --from=openappa receiver/appa-yell/salt.txt /openappa/receiver/appa-yell/salt.txt
 
 FROM rust-builder-base AS rust-deps
 ARG TARGETARCH
@@ -256,9 +278,10 @@ COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
 COPY archestra-rs/app-runtime-rs/Cargo.toml archestra-rs/app-runtime-rs/build.rs ./archestra-rs/app-runtime-rs/
 COPY archestra-rs/image-core/Cargo.toml ./archestra-rs/image-core/
 COPY archestra-rs/image-rs/Cargo.toml archestra-rs/image-rs/build.rs ./archestra-rs/image-rs/
+COPY archestra-rs/openappa-rs/Cargo.toml archestra-rs/openappa-rs/build.rs ./archestra-rs/openappa-rs/
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    for crate in sandbox-core sandbox-rs app-runtime-core app-runtime-rs image-core image-rs; do \
+    for crate in sandbox-core sandbox-rs app-runtime-core app-runtime-rs image-core image-rs openappa-rs; do \
       mkdir -p "archestra-rs/${crate}/src"; \
       printf 'pub fn dependency_cache_placeholder() {}\n' > "archestra-rs/${crate}/src/lib.rs"; \
     done && \
@@ -268,7 +291,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
       arm64) RUST_TARGET=aarch64-alpine-linux-musl ;; \
       *) echo "Unsupported Rust architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
-    for package in app_runtime_rs image_rs sandbox_rs; do \
+    for package in app_runtime_rs image_rs sandbox_rs openappa_rs; do \
       RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --locked \
         --target "${RUST_TARGET}" -p "${package}"; \
     done
@@ -282,6 +305,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
 COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
+COPY --from=deps /app/archestra-rs/openappa-rs/node_modules ./archestra-rs/openappa-rs/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
@@ -291,6 +315,7 @@ COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
 COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 COPY archestra-rs/image-core ./archestra-rs/image-core
 COPY archestra-rs/image-rs ./archestra-rs/image-rs
+COPY archestra-rs/openappa-rs ./archestra-rs/openappa-rs
 
 # These tasks stay outside Turbo's shared cache because their artifacts are
 # platform-specific. This Docker layer is architecture-scoped and exportable,
@@ -303,7 +328,8 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     find archestra-rs -type f -path '*/src/*.rs' -exec touch {} + && \
     pnpm --filter @archestra/sandbox-rs \
          --filter @archestra/app-runtime-rs \
-         --filter @archestra/image-rs build
+         --filter @archestra/image-rs \
+         --filter @archestra/openappa-rs build
 
 # VERSION is intentionally declared after the native RUN. Build args implicitly
 # participate in following RUN cache keys, and every staging commit has a new
@@ -333,7 +359,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=bind,from=rust-deps,source=/app/archestra-rs/target,target=/app/archestra-rs/target,rw \
     --mount=type=cache,id=rust-napi-debug,target=/app/archestra-rs/target/debug \
-    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs check:musl
+    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs --filter @archestra/openappa-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder

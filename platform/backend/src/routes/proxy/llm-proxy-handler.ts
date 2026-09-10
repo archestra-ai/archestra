@@ -76,6 +76,17 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import {
+  APPA_CALLER_AUTH_HEADER,
+  verifyChatIdentity,
+} from "@/openappa/chat-identity";
+import {
+  checkToolCalls,
+  type OpenAppaSession,
+  openappaEnabled,
+  processProxyResults,
+  sessionFromHeaders,
+} from "@/openappa/service";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -143,6 +154,7 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  openappaSession?: OpenAppaSession;
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -729,6 +741,12 @@ export async function handleLLMProxy<
   // Content never reaches spans or logs for a locked-chat session, whether it
   // ends up encrypted or redacted.
   const suppressContent = lockedChat.kind !== "none";
+  if (openappaEnabled() && suppressContent) {
+    throw new ApiError(
+      409,
+      "OpenAPPA does not yet support encrypted policy storage for locked chats",
+    );
+  }
 
   // Advisor consultations bill to the delegating caller's environment (the
   // advisor's own row is env-less). Resolved once so the limit check and every
@@ -1006,47 +1024,80 @@ export async function handleLLMProxy<
           }
         : undefined;
 
+    const appaSessionId = headersForExtraction["x-appa-session-id"];
+    const appaParentId = headersForExtraction["x-appa-parent-id"];
+    const signedChatCaller =
+      openappaEnabled() &&
+      source === "chat" &&
+      isLoopbackRequest(request) &&
+      userId &&
+      typeof appaSessionId === "string" &&
+      (appaParentId === undefined || typeof appaParentId === "string") &&
+      verifyChatIdentity(
+        headersForExtraction[APPA_CALLER_AUTH_HEADER.toLowerCase()],
+        {
+          agentId: resolvedAgent.id,
+          userId,
+          sessionId: appaSessionId,
+          parentId: appaParentId,
+        },
+      );
+    const openappaSession = sessionFromHeaders({
+      headers: headersForExtraction,
+      organizationId: resolvedAgent.organizationId,
+      callerId: signedChatCaller
+        ? `user:${userId}`
+        : authenticatedUserId
+          ? `user:${authenticatedUserId}`
+          : authenticatedApp
+            ? `app:${authenticatedApp.id}`
+            : virtualKeyId
+              ? `virtual-key:${virtualKeyId}`
+              : undefined,
+    });
     const {
       toolResultUpdates,
       contextIsTrusted,
       dualLlmAnalyses,
       unsafeContextBoundary,
-    } = await utils.trustedData.evaluateIfContextIsTrusted({
-      messages: commonMessages,
-      agentId: resolvedAgentId,
-      organizationId: resolvedAgent.organizationId,
-      userId,
-      considerContextUntrusted: effectiveConsiderContextUntrusted,
-      policyContext: { teamIds, externalAgentId },
-      onDualLlmStart: (info) => {
-        writeDualLlmKeepAlive?.();
-        publishDualLlmEvent?.({ kind: "start", ...info });
-      },
-      onDualLlmProgress: (progress) => {
-        writeDualLlmKeepAlive?.();
-        publishDualLlmEvent?.({ kind: "qa", ...progress });
-      },
-      // A failed analysis fails the request closed. Chat renders the failure
-      // from the structured event; for other clients the message is written
-      // as a text delta — safe here because the request errors out and no
-      // model output follows that could fuse with it.
-      onDualLlmError: (info) => {
-        publishDualLlmEvent?.({ kind: "error", ...info });
-        if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
-          ensureStreamHeaders();
-          reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
-        }
-      },
-      onDualLlmComplete: (analysis, info) =>
-        publishDualLlmEvent?.({
-          kind: "complete",
-          toolCallId: analysis.toolCallId,
-          toolName: info.toolName,
-          analysis,
-          cached: info.cached,
-        }),
-      initialUntrustedReason,
-    });
+    } = openappaSession
+      ? await processProxyResults(openappaSession, commonMessages)
+      : await utils.trustedData.evaluateIfContextIsTrusted({
+          messages: commonMessages,
+          agentId: resolvedAgentId,
+          organizationId: resolvedAgent.organizationId,
+          userId,
+          considerContextUntrusted: effectiveConsiderContextUntrusted,
+          policyContext: { teamIds, externalAgentId },
+          onDualLlmStart: (info) => {
+            writeDualLlmKeepAlive?.();
+            publishDualLlmEvent?.({ kind: "start", ...info });
+          },
+          onDualLlmProgress: (progress) => {
+            writeDualLlmKeepAlive?.();
+            publishDualLlmEvent?.({ kind: "qa", ...progress });
+          },
+          // A failed analysis fails the request closed. Chat renders the failure
+          // from the structured event; for other clients the message is written
+          // as a text delta — safe here because the request errors out and no
+          // model output follows that could fuse with it.
+          onDualLlmError: (info) => {
+            publishDualLlmEvent?.({ kind: "error", ...info });
+            if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
+              ensureStreamHeaders();
+              reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
+            }
+          },
+          onDualLlmComplete: (analysis, info) =>
+            publishDualLlmEvent?.({
+              kind: "complete",
+              toolCallId: analysis.toolCallId,
+              toolName: info.toolName,
+              analysis,
+              cached: info.cached,
+            }),
+          initialUntrustedReason,
+        });
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
@@ -1287,6 +1338,7 @@ export async function handleLLMProxy<
     }
 
     const ctx: LLMProxyContext<TRequest> = {
+      openappaSession,
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
@@ -1734,24 +1786,30 @@ async function handleStreaming<
       // `normalizeToolCallsForPolicy` unwraps straight back to the same
       // targets — so a repaired call faces exactly the gate a `run_tool`
       // dispatch the model wrote itself would have faced.
-      toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-        normalizeToolCallsForPolicy(
-          rewrittenToolCalls ?? toolCalls,
-          canonicalizeToolName,
-        ),
-        agent.id,
-        {
-          teamIds: teamIds ?? [],
-          externalAgentId,
-          sensitiveContextOrigin:
-            utils.trustedData.sensitiveContextOriginFromBoundary(
-              unsafeContextBoundary,
+      toolInvocationRefusal = ctx.openappaSession
+        ? await checkToolCalls(
+            ctx.openappaSession,
+            rewrittenToolCalls ?? toolCalls,
+            canonicalizeToolName,
+          )
+        : await utils.toolInvocation.evaluatePolicies(
+            normalizeToolCallsForPolicy(
+              rewrittenToolCalls ?? toolCalls,
+              canonicalizeToolName,
             ),
-        },
-        contextIsTrusted,
-        enabledToolNames,
-        { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-      );
+            agent.id,
+            {
+              teamIds: teamIds ?? [],
+              externalAgentId,
+              sensitiveContextOrigin:
+                utils.trustedData.sensitiveContextOriginFromBoundary(
+                  unsafeContextBoundary,
+                ),
+            },
+            contextIsTrusted,
+            enabledToolNames,
+            { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+          );
 
       logger.info(
         { refused: !!toolInvocationRefusal },
@@ -2203,28 +2261,34 @@ async function handleNonStreaming<
       providerName,
     });
 
-    const toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-      normalizeToolCallsForPolicy(
-        rewrittenToolCalls ??
-          toolCalls.map((toolCall) => ({
-            name: toolCall.name,
-            arguments: toolCall.arguments,
-          })),
-        canonicalizeToolName,
-      ),
-      agent.id,
-      {
-        teamIds: teamIds ?? [],
-        externalAgentId,
-        sensitiveContextOrigin:
-          utils.trustedData.sensitiveContextOriginFromBoundary(
-            unsafeContextBoundary,
+    const toolInvocationRefusal = ctx.openappaSession
+      ? await checkToolCalls(
+          ctx.openappaSession,
+          rewrittenToolCalls ?? toolCalls,
+          canonicalizeToolName,
+        )
+      : await utils.toolInvocation.evaluatePolicies(
+          normalizeToolCallsForPolicy(
+            rewrittenToolCalls ??
+              toolCalls.map((toolCall) => ({
+                name: toolCall.name,
+                arguments: toolCall.arguments,
+              })),
+            canonicalizeToolName,
           ),
-      },
-      contextIsTrusted,
-      enabledToolNames,
-      { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-    );
+          agent.id,
+          {
+            teamIds: teamIds ?? [],
+            externalAgentId,
+            sensitiveContextOrigin:
+              utils.trustedData.sensitiveContextOriginFromBoundary(
+                unsafeContextBoundary,
+              ),
+          },
+          contextIsTrusted,
+          enabledToolNames,
+          { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+        );
 
     if (toolInvocationRefusal) {
       const { refusalMessage, contentMessage, reason, allToolCallNames } =

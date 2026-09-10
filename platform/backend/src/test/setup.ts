@@ -46,6 +46,9 @@ process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
+// Native/OpenAPPA tests opt in explicitly; local policy settings must not
+// switch unrelated PGlite suites away from the existing guardrails.
+process.env.ARCHESTRA_OPENAPPA_POLICY_PATH = "";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";

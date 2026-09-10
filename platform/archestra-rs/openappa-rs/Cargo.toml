@@ -1,0 +1,24 @@
+[package]
+name = "openappa_rs"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+appa-runtime = { package = "appa", path = "../../../../openappa/appa-runtime" }
+appa-runtime-api = { path = "../../../../openappa/appa-runtime-api" }
+appa-eventlog = { path = "../../../../openappa/appa-eventlog", features = ["postgres"] }
+napi = { version = "3", features = ["tokio_rt"] }
+napi-derive = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.10"
+tokio = { version = "1", features = ["sync"] }
+futures-util = "0.3"
+
+[build-dependencies]
+napi-build = "2"

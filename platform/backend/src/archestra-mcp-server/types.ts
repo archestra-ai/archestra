@@ -9,6 +9,7 @@ import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
  * Context for the Archestra MCP server
  */
 export interface ArchestraContext {
+  openappaSession?: import("@/openappa/service").OpenAppaSession;
   agent: {
     id: string;
     name: string;

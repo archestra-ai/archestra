@@ -15,6 +15,14 @@ import {
   isReadonlyVaultEnabled,
 } from "./vault-database-url";
 
+let nativeDatabaseConnectionString: string | undefined;
+/** Resolved database URL for embedded storage, including Vault-backed setups. */
+export function getDatabaseConnectionString(): string {
+  if (!nativeDatabaseConnectionString)
+    throw new Error("Database not initialized");
+  return nativeDatabaseConnectionString;
+}
+
 /** Type for database transactions */
 export type Transaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
@@ -213,6 +221,7 @@ async function doInitializeDatabase(): Promise<void> {
     instrumentDrizzleClient(newDb, { dbSystem: "postgresql" });
     installDbErrorSafetyNet();
 
+    nativeDatabaseConnectionString = connectionString;
     pool = newPool;
     db = newDb;
   } catch (error) {

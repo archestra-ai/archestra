@@ -913,6 +913,26 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ephemeral in-app notifications; per-user UI state",
   },
+  openappaEventsTable: {
+    audited: false,
+    reason: "OpenAPPA owns its immutable policy event history",
+  },
+  openappaPolicyFilesTable: {
+    audited: false,
+    reason: "OpenAPPA owns content-addressed policy history",
+  },
+  openappaOperationsTable: {
+    audited: false,
+    reason: "native hook idempotency ledger",
+  },
+  openappaProcessedResultsTable: {
+    audited: false,
+    reason: "approved tool outputs and processing receipts",
+  },
+  openappaSessionsTable: {
+    audited: false,
+    reason: "authenticated adapter identity mapping",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

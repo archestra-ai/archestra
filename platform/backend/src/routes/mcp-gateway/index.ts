@@ -8,6 +8,7 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
+import { APPA_SESSION_HEADER, sessionFromHeaders } from "@/openappa/service";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   AgentRunAttentionStateSchema,
@@ -191,6 +192,17 @@ async function handleMcpPostRequest(
   try {
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
+      openappaSession:
+        request.headers[APPA_SESSION_HEADER.toLowerCase()] &&
+        tokenAuthContext?.organizationId
+          ? sessionFromHeaders({
+              headers: request.headers,
+              organizationId: tokenAuthContext.organizationId,
+              callerId: tokenAuthContext.userId
+                ? `user:${tokenAuthContext.userId}`
+                : undefined,
+            })
+          : undefined,
       agentId: profileId,
       tokenAuth: tokenAuthContext,
       runId,

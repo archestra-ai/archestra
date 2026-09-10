@@ -178,9 +178,7 @@ describe("ExternalAppCard", () => {
     expect(screen.getByText("Shows the project board")).toBeInTheDocument();
     expect(screen.queryByText(/archestra_pm/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("MCP server app")).toBeInTheDocument();
-    // Per-install card carries an icon-only scope pill (label in aria/tooltip)
-    // to disambiguate sibling installs.
-    expect(screen.getByLabelText("Organization")).toBeInTheDocument();
+    expect(screen.getByText("Organization")).toBeVisible();
   });
 
   it("opens the install in chat and navigates to the seeded conversation", async () => {
@@ -359,6 +357,7 @@ describe("OwnedAppCard", () => {
     );
 
     expect(screen.getByLabelText("Team: London HQ")).toBeInTheDocument();
+    expect(screen.getByText("Team")).toBeVisible();
   });
 
   it("shows the personal pill (no owner badge) for the viewer's own personal app", () => {
@@ -377,6 +376,7 @@ describe("OwnedAppCard", () => {
     );
 
     expect(screen.getByLabelText("Personal")).toBeInTheDocument();
+    expect(screen.getByText("Personal")).toBeVisible();
     expect(screen.queryByText(/owned by/i)).not.toBeInTheDocument();
   });
 
@@ -399,6 +399,23 @@ describe("OwnedAppCard", () => {
 
     expect(screen.getByLabelText("Personal")).toBeInTheDocument();
     expect(screen.getByText("Owned by Grace Hopper")).toBeInTheDocument();
+  });
+
+  it("labels a personal app shared directly with users as shared", () => {
+    render(
+      <AppCard
+        app={{
+          ...ownedApp,
+          scope: "personal",
+          viewerRole: "owner",
+          users: [{ id: "user-2", name: "Grace Hopper" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Shared with: Grace Hopper")).toBeVisible();
+    expect(screen.getByText("Shared")).toBeVisible();
+    expect(screen.queryByText("Personal")).not.toBeInTheDocument();
   });
 
   it("shows a 'Disabled' badge for a disabled app", () => {

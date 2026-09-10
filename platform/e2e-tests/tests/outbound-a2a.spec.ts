@@ -20,7 +20,6 @@ test("delegates from a parent agent to an external A2A agent", async ({
   request,
   makeRandomString,
   goToPage,
-  createAgent,
   deleteAgent,
   makeApiRequest,
   syncModels,
@@ -42,8 +41,8 @@ test("delegates from a parent agent to an external A2A agent", async ({
     await resetA2aFixture(request);
 
     // Connect the remote protocol endpoint through the same routed screen a
-    // user sees. Pasting the base URL automatically exercises Agent Card
-    // discovery without creating a half-configured connection.
+    // user sees. Checking the base URL exercises Agent Card discovery without
+    // creating a half-configured connection.
     await goToPage(page, "/a2a/agents");
     await page
       .getByRole("button", { name: "Connect agent", exact: true })
@@ -58,6 +57,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
     ).toBeVisible();
     await page.getByLabel("Agent base URL").fill(A2A_FIXTURE_BASE_URL);
     await page.getByLabel("Display name (optional)").fill(remoteName);
+    await page.getByRole("button", { name: "Check Agent Card" }).click();
     await expect(
       page.getByRole("status", { name: "Agent Card found" }),
     ).toContainText("Deterministic A2A Test Agent", { timeout: 30_000 });
@@ -78,20 +78,34 @@ test("delegates from a parent agent to an external A2A agent", async ({
       page.getByRole("heading", { name: remoteName, level: 1 }),
     ).toBeVisible({ timeout: 15_000 });
 
-    const parentResponse = await createAgent(request, parentName, "personal");
+    const parentResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agents",
+      data: {
+        name: parentName,
+        teams: [],
+        scope: "personal",
+        agentType: "agent",
+      },
+    });
     parentId = ((await parentResponse.json()) as { id: string }).id;
 
     // External assignments deliberately share the Agent form's Save lifecycle:
     // selecting the row only stages it; the POST must happen after Save changes.
     await goToPage(page, `/agents/${parentId}?section=tools`);
     await expect(
-      page.locator("#main-content").getByText("External A2A", { exact: true }),
+      page.locator("#main-content").getByText("External Agents", {
+        exact: true,
+      }),
     ).toBeVisible({ timeout: 20_000 });
-    await page.getByRole("button", { name: "Add external" }).click();
+    await page.getByRole("button", { name: "Add outbound agent" }).click();
     await page
       .getByRole("menuitemcheckbox", { name: new RegExp(remoteName) })
       .click();
-    await expect(page.getByText(remoteName, { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: `${remoteName} A2A` }),
+    ).toBeVisible();
 
     const assignmentResponse = page.waitForResponse(
       (response) =>

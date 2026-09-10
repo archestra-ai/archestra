@@ -530,33 +530,117 @@ class OrganizationRoleModel {
   }
 
   /**
-   * @deprecated Do not use directly. Routes should use betterAuth.api.createOrgRole() instead.
-   * This method exists only for test fixtures.
+   * Create a custom role.
+   *
+   * Authorization (the no-privilege-escalation rule), the enterprise licence
+   * gate, and name validation belong to the route; this only writes the row.
+   * Permissions are sanitized on the way in so the stored set never carries a
+   * resource or action outside the permission universe — reads sanitize too,
+   * so an unsanitized write would silently vanish on the way back out.
    */
-  static async create(): Promise<OrganizationRole> {
-    throw new Error(
-      "OrganizationRoleModel.create() should not be called directly. Use betterAuth.api.createOrgRole() in routes, or direct DB operations in test fixtures.",
+  static async create(params: {
+    organizationId: string;
+    role: string;
+    name: string;
+    description?: string | null;
+    permission: Permissions;
+  }): Promise<OrganizationRole> {
+    const permission = OrganizationRoleModel.sanitizePermissions(
+      params.permission,
     );
+    logger.debug(
+      { role: params.role, organizationId: params.organizationId },
+      "OrganizationRoleModel.create: inserting",
+    );
+
+    const [result] = await db
+      .insert(schema.organizationRolesTable)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: params.organizationId,
+        role: params.role,
+        name: params.name,
+        description: params.description ?? null,
+        permission: JSON.stringify(permission),
+      })
+      .returning();
+
+    return { ...result, permission, predefined: false };
   }
 
   /**
-   * @deprecated Do not use directly. Routes should use betterAuth.api.updateOrgRole() instead.
-   * This method exists only for test fixtures.
+   * Update a custom role's display name, description, and/or permissions.
+   * The `role` identifier is immutable. Returns null when no row matches.
    */
-  static async update(): Promise<OrganizationRole> {
-    throw new Error(
-      "OrganizationRoleModel.update() should not be called directly. Use betterAuth.api.updateOrgRole() in routes, or direct DB operations in test fixtures.",
+  static async update(params: {
+    id: string;
+    organizationId: string;
+    name?: string;
+    description?: string | null;
+    permission?: Permissions;
+  }): Promise<OrganizationRole | null> {
+    const updates: Partial<typeof schema.organizationRolesTable.$inferInsert> =
+      {};
+    if (params.name !== undefined) updates.name = params.name;
+    if (params.description !== undefined)
+      updates.description = params.description;
+    if (params.permission !== undefined) {
+      updates.permission = JSON.stringify(
+        OrganizationRoleModel.sanitizePermissions(params.permission),
+      );
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return OrganizationRoleModel.getById(params.id, params.organizationId);
+    }
+
+    logger.debug(
+      { roleId: params.id, organizationId: params.organizationId },
+      "OrganizationRoleModel.update: updating",
     );
+
+    const [result] = await db
+      .update(schema.organizationRolesTable)
+      .set(updates)
+      .where(
+        and(
+          eq(schema.organizationRolesTable.id, params.id),
+          eq(
+            schema.organizationRolesTable.organizationId,
+            params.organizationId,
+          ),
+        ),
+      )
+      .returning();
+
+    if (!result) return null;
+
+    return {
+      ...result,
+      permission: OrganizationRoleModel.sanitizePermissions(result.permission),
+      predefined: false,
+    };
   }
 
   /**
-   * @deprecated Do not use directly. Routes should use betterAuth.api.deleteOrgRole() instead.
-   * This method exists only for test fixtures.
+   * Delete a custom role. Returns false when no row matched.
    */
-  static async delete(): Promise<boolean> {
-    throw new Error(
-      "OrganizationRoleModel.delete() should not be called directly. Use betterAuth.api.deleteOrgRole() in routes, or direct DB operations in test fixtures.",
+  static async delete(id: string, organizationId: string): Promise<boolean> {
+    logger.debug(
+      { roleId: id, organizationId },
+      "OrganizationRoleModel.delete: deleting",
     );
+    const deleted = await db
+      .delete(schema.organizationRolesTable)
+      .where(
+        and(
+          eq(schema.organizationRolesTable.id, id),
+          eq(schema.organizationRolesTable.organizationId, organizationId),
+        ),
+      )
+      .returning({ id: schema.organizationRolesTable.id });
+
+    return deleted.length > 0;
   }
 
   static async findByIdForAudit(

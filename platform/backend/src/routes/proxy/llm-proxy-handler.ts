@@ -224,6 +224,8 @@ export type LLMProxyAuthOverride = {
   authenticated: boolean;
   source?: InteractionSource;
   authMethod?: InteractionAuthMethod;
+  /** Model Router virtual key ID, preserved for usage limits and interaction attribution. */
+  virtualKeyId?: string;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -316,7 +318,7 @@ export async function handleLLMProxy<
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
-  let virtualKeyId: string | undefined;
+  let virtualKeyId = authOverride?.virtualKeyId;
   let passthroughVirtualKeyId: string | undefined;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;

@@ -16,9 +16,16 @@ location directly. Both clients discover root skills when launched in
 `platform/`; do not add another skills link there. Check out Git symlinks as
 symlinks on systems that require explicit symlink support.
 
-The root `.claude/settings.json` configures Claude-specific attribution,
-permissions, and a formatting hook. Instructions do not replace these settings.
-There is no tracked `platform/.claude/settings.json`.
+The root `.claude/settings.json` disables Claude attribution in commits and PRs.
+`platform/.claude/settings.json` symlinks to it so the same setting applies when
+Claude starts from `platform/`. Only the settings file is linked; skills continue
+to be discovered from the root. Formatting checks remain in the existing Husky
+pre-commit workflow.
+
+The root `AGENTS.md` asks all agents, including Codex, to omit AI attribution from
+commits and PRs. This is an instruction, not a client-enforced setting. There is
+no Codex attribution key in the documented configuration reference, so no
+`.codex/config.toml` is needed for this preference.
 
 Other clients can read the skills as files using the routing instructions in
 `AGENTS.md`; automatic discovery and slash commands depend on the client's
@@ -35,3 +42,5 @@ References:
 - [Codex instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 - [Claude Code skills discovery](https://code.claude.com/docs/en/skills)
 - [Claude Code AGENTS.md imports](https://code.claude.com/docs/en/memory#agentsmd)
+
+- [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)

@@ -229,12 +229,14 @@ def main():
             'inferenceProvider': 'gateway', 'inferenceCredentialKind': 'static',
             'inferenceGatewayBaseUrl': proxy['url'], 'inferenceGatewayApiKey': token,
             'inferenceGatewayAuthScheme': 'bearer', 'inferenceCustomHeaders': headers,
-            'inferenceModels': [{'name': model}],
+            # An explicit inferenceModels list overrides discovery and would
+            # restrict the picker to the model used for the connection check.
+            'modelDiscoveryEnabled': True,
         })
     if SETUP.get('mcp'):
         mcp = SETUP['mcp']
         profile['managedMcpServers'] = [{'name': mcp['serverName'], 'transport': 'http',
-                                       'url': mcp['url'], 'oauth': {'mode': 'dcr'}, 'source': 'user'}]
+                                       'url': mcp['url'], 'oauth': {'mode': 'dcr'}}]
     if SETUP.get('skills'):
         skills = SETUP['skills']
         profile['allowedPluginMarketplaces'] = [{'source': 'git', 'url': skills['cloneUrl'],

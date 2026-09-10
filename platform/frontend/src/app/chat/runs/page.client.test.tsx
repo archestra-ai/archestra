@@ -143,7 +143,7 @@ describe("AgentRunChatSession", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("centers only the access notice, in the loader's placement, when the run cannot be opened", () => {
+  it("shows an unavailable run without incorrectly blaming ownership", () => {
     queryState.value.isError = true;
     queryState.value.error = new Error("Run not found");
 
@@ -151,10 +151,10 @@ describe("AgentRunChatSession", () => {
 
     // Rendered as an informational terminal state, not a generic error card.
     expect(screen.getByRole("status")).toBeInTheDocument();
-    expect(screen.getByText("Terminal unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Run unavailable")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Only the person who started this run can attach to it.",
+        "This run could not be loaded. It may no longer exist, or you may not have access.",
       ),
     ).toBeInTheDocument();
     // The old full-page error card is gone.

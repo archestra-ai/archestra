@@ -73,8 +73,8 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       <main className="flex h-full min-h-0 flex-col bg-background p-4 md:p-6">
         <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border bg-slate-950">
           <ExecTerminalStatus
-            title="Terminal unavailable"
-            detail="Only the person who started this run can attach to it."
+            title="Run unavailable"
+            detail="This run could not be loaded. It may no longer exist, or you may not have access."
           />
         </div>
       </main>

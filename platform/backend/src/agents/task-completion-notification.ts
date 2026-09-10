@@ -15,8 +15,8 @@ export function buildTaskCompletionNotification(params: {
   }
 
   if (params.state === "TASK_STATE_COMPLETED") {
-    const output = conciseOutput(params.output);
-    if (output && isCompactCompletionReport(output)) {
+    const output = cleanFinalOutput(params.output);
+    if (output) {
       return output;
     }
 
@@ -25,7 +25,7 @@ export function buildTaskCompletionNotification(params: {
       return `PR ready: ${pullRequestUrl}`;
     }
 
-    return output || "Task finished.";
+    return "Task finished.";
   }
 
   const outcome =
@@ -43,17 +43,10 @@ function findPullRequestUrl(output: string): string | null {
   return matches?.at(-1) ?? null;
 }
 
-function isCompactCompletionReport(output: string): boolean {
-  return (
-    output.length <= MAX_COMPLETION_REPORT_CHARS &&
-    output.split("\n").length <= MAX_COMPLETION_REPORT_LINES
-  );
-}
-
-function conciseOutput(output: string): string {
+function cleanFinalOutput(output: string): string {
   // Native catalog clients write their complete interactive transcript to the
   // execution log. That belongs in the execution console, not in a completion
-  // message. PR links are extracted above before this guard.
+  // message. PR links remain available as a fallback after this guard.
   if (
     output.includes("[archestra] agent session exited") ||
     looksLikeTerminalControlStream(output)
@@ -66,7 +59,6 @@ function conciseOutput(output: string): string {
     .filter((line) => {
       const trimmed = line.trim();
       return (
-        trimmed.length > 0 &&
         !trimmed.startsWith("[tool]") &&
         trimmed !== "[waiting for direction]" &&
         !trimmed.startsWith("Agent Runtime run for ") &&
@@ -78,7 +70,9 @@ function conciseOutput(output: string): string {
     .join("\n")
     .trim();
 
-  return cleaned.length > 1_000 ? `…${cleaned.slice(-1_000)}` : cleaned;
+  // This is the final answer, not a log tail. Delivery providers split long
+  // messages at their own limits; preserve the outcome and any caveats here.
+  return cleaned;
 }
 
 function looksLikeTerminalControlStream(output: string): boolean {
@@ -99,6 +93,3 @@ function looksLikeTerminalControlStream(output: string): boolean {
   );
   return (bareControlSequences?.length ?? 0) >= 3;
 }
-
-const MAX_COMPLETION_REPORT_CHARS = 500;
-const MAX_COMPLETION_REPORT_LINES = 4;

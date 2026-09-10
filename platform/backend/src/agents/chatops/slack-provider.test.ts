@@ -1318,6 +1318,33 @@ describe("SlackProvider.sendReply", () => {
     });
   });
 
+  test("delimits bare PR URLs without changing existing links or code", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only Slack network boundary
+    (provider as any).client = { chat: { postMessage } };
+    const url = "https://github.com/example/project/pull/42";
+    const unchanged = `Inline ${url} stays inline.\n[PR](${url})\n<${url}>\n\`${url}\`\n\`\`\`sh\ncurl ${url}\n\`\`\``;
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "hello",
+        rawText: "hello",
+        timestamp: new Date(),
+        isThreadReply: true,
+      },
+      text: `PR: ${url}\nNext: review.\nReport: ${url}.\n${unchanged}`,
+    });
+    expect(postMessage.mock.calls[0][0].blocks[0].text).toBe(
+      `PR: <${url}>\nNext: review.\nReport: <${url}>.\n${unchanged}`,
+    );
+  });
+
   test("renders the mute hint as its own subtle context block above the footer", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });

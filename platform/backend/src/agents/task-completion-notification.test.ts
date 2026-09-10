@@ -40,7 +40,7 @@ describe("buildTaskCompletionNotification", () => {
     ).toBe(output);
   });
 
-  test("reduces a verbose PR completion report to its review link", () => {
+  test("preserves a final report including its review link and caveats", () => {
     const output = [
       "The implementation is complete, but here is a long internal chronology.",
       "The policy gate required an audience-narrowing remedy before one operation.",
@@ -58,10 +58,10 @@ describe("buildTaskCompletionNotification", () => {
         statusReason: null,
         output,
       }),
-    ).toBe("PR ready: https://github.com/example/project/pull/42");
+    ).toBe(output);
   });
 
-  test("enforces the four-line worker completion contract", () => {
+  test("preserves the five-line worker report including demo status", () => {
     const output = [
       "CI is fully green and the implementation is complete.",
       "Done — the setting now explains the selected behavior inline.",
@@ -76,7 +76,38 @@ describe("buildTaskCompletionNotification", () => {
         statusReason: null,
         output,
       }),
-    ).toBe("PR ready: https://github.com/example/project/pull/42");
+    ).toBe(output);
+  });
+
+  test("keeps the beginning and ending of a long research answer", () => {
+    const output =
+      "The root cause is a missing guard.\n\n" +
+      "A complete explanation with supporting evidence. ".repeat(250) +
+      "\n\nNext: add the guard and exercise retries.";
+    expect(
+      buildTaskCompletionNotification({
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output,
+      }),
+    ).toBe(output);
+  });
+
+  test("does not hide a failed demo upload behind a PR link", () => {
+    const output = [
+      "Done — added the requested filter.",
+      "PR: https://github.com/example/project/pull/42",
+      "Validation: tests passed.",
+      "Demo: thread upload failed; recording linked in the PR.",
+      "Next: review, then promote.",
+    ].join("\n");
+    expect(
+      buildTaskCompletionNotification({
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output,
+      }),
+    ).toBe(output);
   });
 
   test("does not narrate a working task before it has a useful result", () => {

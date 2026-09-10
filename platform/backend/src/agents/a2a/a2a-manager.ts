@@ -71,7 +71,6 @@ import {
   type A2AProtocolListTasksRequest,
   type A2AProtocolListTasksResponse,
   type A2AProtocolMessage,
-  type A2AProtocolPart,
   A2AProtocolRole,
   type A2AProtocolSendMessageRequest,
   type A2AProtocolSendMessageResponse,
@@ -81,6 +80,7 @@ import {
   type A2AProtocolTaskPushNotificationConfig,
   A2AProtocolTaskState,
 } from "./a2a-protocol";
+import { extractProtocolPartsFromUIMessage } from "./a2a-response-parts";
 import { a2aTaskRunService } from "./a2a-task-run-service";
 
 /** Wire name of the single text artifact carrying a tasked run's answer. */
@@ -1843,19 +1843,6 @@ function buildStatusReasonMessage(params: {
     role: A2AProtocolRole.Agent,
     parts: [{ text: params.reason }],
   };
-}
-
-function extractProtocolPartsFromUIMessage(
-  uiMessage: UIMessage,
-): A2AProtocolPart[] {
-  const protocolParts: A2AProtocolPart[] = [];
-  const parts = uiMessage.parts;
-  for (const part of parts) {
-    if (part.type === "text") {
-      protocolParts.push({ text: part.text });
-    }
-  }
-  return protocolParts;
 }
 
 function extractApprovalRequestsFromUiMessage(

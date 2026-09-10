@@ -236,7 +236,7 @@ def main():
     if SETUP.get('mcp'):
         mcp = SETUP['mcp']
         profile['managedMcpServers'] = [{'name': mcp['serverName'], 'transport': 'http',
-                                       'url': mcp['url'], 'oauth': {'mode': 'dcr'}, 'source': 'user'}]
+                                       'url': mcp['url'], 'oauth': {'mode': 'dcr'}}]
     if SETUP.get('skills'):
         skills = SETUP['skills']
         profile['allowedPluginMarketplaces'] = [{'source': 'git', 'url': skills['cloneUrl'],

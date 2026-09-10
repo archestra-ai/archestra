@@ -119,6 +119,8 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
             assert profile['inferenceCustomHeaders'].get('X-Archestra-Virtual-Key') == ${auth === "provider-key" ? "'archestra-test-user'" : "None"}
         else:
             assert 'inferenceProvider' not in profile
+        assert 'source' not in profile['managedMcpServers'][0]
+        assert profile['managedMcpServers'][0]['oauth'] == {'mode': 'dcr'}
         assert profile['managedMcpServers'][0]['url'] == 'https://proxy.example/v1/mcp/test'
         assert profile_path.stat().st_mode & 0o777 == 0o600
         assert json.loads((library / '_meta.json.before-archestra').read_text()) == original
@@ -128,6 +130,7 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         legacy_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'archestra-desktop:https://proxy.example/v1/mcp/test'))
         legacy_path = library / (legacy_id + '.json')
         legacy_profile = {**profile, 'inferenceModels': [{'name': 'claude-haiku-4-5-20251001'}], 'modelDiscoveryEnabled': False} if ${auth === "none" ? "False" : "True"} else profile
+        legacy_profile = {**legacy_profile, 'managedMcpServers': [{**server, 'source': 'user'} for server in profile['managedMcpServers']]}
         legacy_path.write_text(json.dumps(legacy_profile))
         old_metadata = {**metadata, 'appliedId': legacy_id, 'entries': metadata['entries'] + [{'id': legacy_id, 'name': 'Old deployment'}]}
         (library / '_meta.json').write_text(json.dumps(old_metadata))
@@ -143,6 +146,8 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
         if ${auth === "none" ? "False" : "True"}:
             assert replaced_profile['modelDiscoveryEnabled'] is True
             assert 'inferenceModels' not in replaced_profile
+        assert 'source' not in replaced_profile['managedMcpServers'][0]
+        assert replaced_profile['managedMcpServers'][0]['oauth'] == {'mode': 'dcr'}
         assert replaced_profile['managedMcpServers'][0]['url'] == 'https://replacement.example/v1/mcp/test'
         assert 'proxy.example' not in json.dumps(replaced_profile)
         assert sum('setup-token' in args for args in calls) == ${auth === "provider-key" ? 1 : 0}

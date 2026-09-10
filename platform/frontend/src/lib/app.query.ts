@@ -1,11 +1,23 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  type Permissions,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  authQueryKeys,
+  useHasPermissions,
+  type useSession,
+} from "@/lib/auth/auth.query";
+import { hasPermissions } from "@/lib/auth/auth.utils";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import {
   generateLockedChatKey,
@@ -57,23 +69,31 @@ type AppDetailQueryOptions = { toastOnError?: boolean };
 
 // ===== Query hooks =====
 
+export const APPS_FIRST_PAGE = { limit: 100, offset: 0 } as const;
+
+/** Warm only the bounded initial list, after authenticated navigation intent. */
+export function prefetchApps(queryClient: QueryClient) {
+  const session = queryClient.getQueryData<
+    ReturnType<typeof useSession>["data"]
+  >(authQueryKeys.session());
+  const permissions = queryClient.getQueryData<Permissions>(
+    authQueryKeys.userPermissions(),
+  );
+  if (!session?.user || !hasPermissions(permissions, { app: ["read"] })) return;
+  return queryClient.prefetchQuery(appsQueryOptions(APPS_FIRST_PAGE, false));
+}
+
 export function useApps(
   params: AppsParams,
   options?: { enabled?: boolean; toastOnError?: boolean },
 ) {
-  const toastOnError = options?.toastOnError;
   // The endpoint requires app:read; skip the request for users whose role
   // lacks it (e.g. the chat sidebar mounts this for everyone) instead of 403ing.
   const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   return useQuery({
-    queryKey: ["apps", "paginated", params],
+    ...appsQueryOptions(params, options?.toastOnError),
     enabled: (options?.enabled ?? true) && !!canReadApps,
     placeholderData: (previousData) => previousData,
-    queryFn: async () => {
-      const { data, error } = await getApps({ query: params });
-      throwOnApiError(error, { toastOnError });
-      return data;
-    },
   });
 }
 
@@ -603,6 +623,17 @@ export function useAssignToolToApp() {
       queryClient.invalidateQueries({
         queryKey: ["apps", variables.appId, "tools"],
       });
+    },
+  });
+}
+
+function appsQueryOptions(params: AppsParams, toastOnError?: boolean) {
+  return queryOptions({
+    queryKey: ["apps", "paginated", params],
+    queryFn: async ({ signal }) => {
+      const { data, error } = await getApps({ query: params, signal });
+      throwOnApiError(error, { toastOnError });
+      return data;
     },
   });
 }

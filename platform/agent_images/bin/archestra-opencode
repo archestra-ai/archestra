@@ -263,6 +263,11 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   # instruction, while keeping terminal input available for live steering.
   terminal_command=(opencode run --interactive --continue --auto --model "archestra/${model}" -- "$(cat "${task_file}")")
 fi
+# Structured sessions preserve the maintained configuration/bootstrap contract.
+if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
+  exec archestra-agent-session opencode opencode acp --cwd "$PWD"
+fi
+
 case "${runtime_mode}" in
   interactive)
     exec "${terminal_command[@]}"

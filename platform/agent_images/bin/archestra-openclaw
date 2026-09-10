@@ -400,6 +400,29 @@ fi
 
 session_key="agent:main:${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}"
 
+if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
+  export OPENCLAW_GATEWAY_TOKEN="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+  gateway_token_file="${runtime_dir}/openclaw-gateway-token"
+  printf '%s' "${OPENCLAW_GATEWAY_TOKEN}" > "${gateway_token_file}"
+  chmod 0600 "${gateway_token_file}"
+  openclaw gateway run --allow-unconfigured --bind loopback --auth token --port 18789 > "${runtime_dir}/openclaw-gateway.log" 2>&1 &
+  gateway_pid=$!
+  cleanup_gateway() {
+    kill "${gateway_pid}" 2>/dev/null || true
+    cleanup_bootstrap
+  }
+  trap cleanup_gateway EXIT
+  ready=false
+  for attempt in $(seq 1 60); do
+    if openclaw gateway health --url ws://127.0.0.1:18789 --token "${OPENCLAW_GATEWAY_TOKEN}" >/dev/null 2>&1; then ready=true; break; fi
+    kill -0 "${gateway_pid}" 2>/dev/null || break
+    sleep 1
+  done
+  if [[ "${ready}" != true ]]; then echo "The agent gateway could not start" >&2; exit 1; fi
+  archestra-agent-session openclaw openclaw acp --url ws://127.0.0.1:18789 --token-file "${gateway_token_file}" --session "${session_key}" --no-prefix-cwd
+  exit $?
+fi
+
 case "${runtime_mode}" in
   interactive)
     set +e

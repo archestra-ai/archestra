@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
+import { type AgentRunControl, AgentRunControlSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
@@ -668,6 +669,46 @@ class AgentRuntimeManager {
     ) {
       throw new ApiError(409, "The workspace could not be resumed");
     }
+  }
+
+  async controlSession(params: {
+    session: AgentRunRecord;
+    commandId: string;
+    control: AgentRunControl;
+  }): Promise<void> {
+    if (params.session.endedAt) throw new ApiError(409, "This run has ended");
+    if (
+      !/^[a-f0-9-]{36}$/.test(params.commandId) ||
+      !/^[a-f0-9-]{36}$/.test(params.session.taskId)
+    )
+      throw new ApiError(400, "Invalid command identifier");
+    const control = AgentRunControlSchema.parse(params.control);
+    const podName = await this.findPodName(params.session);
+    if (!podName) throw new ApiError(409, "The agent is not running");
+    const result = await this.execInPod({
+      session: params.session,
+      podName,
+      stdin: NodeReadable.from([JSON.stringify(control)]),
+      command: [
+        "/bin/sh",
+        "-c",
+        [
+          "set -eu; umask 077",
+          'base="/var/run/archestra/turns/$1"; request="$base.controls/$2.json"',
+          '[ -d "$base.controls" ] && [ ! -f "$base.exit" ] || exit 1',
+          // A retry reads the existing acknowledgement, never submits the same command twice.
+          'if mkdir "$request.lock" 2>/dev/null; then cat > "$request.tmp"; mv "$request.tmp" "$request"; else cat >/dev/null; fi',
+          'attempt=0; while [ ! -f "$request.result" ]; do attempt=$((attempt + 1)); [ "$attempt" -lt 20 ] || exit 1; sleep 0.25; done',
+          "date +%s > /var/run/archestra/development-activity",
+          'cat "$request.result"',
+        ].join("\n"),
+        "_",
+        params.session.taskId,
+        params.commandId,
+      ],
+    });
+    const response = JSON.parse(result) as { error?: string };
+    if (response.error) throw new ApiError(409, response.error);
   }
 
   /**

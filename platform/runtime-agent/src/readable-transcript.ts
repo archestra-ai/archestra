@@ -1,18 +1,39 @@
 import { rename, writeFile } from "node:fs/promises";
 import type { ModelMessage } from "ai";
+import type { SessionPublisher } from "./session-publisher.js";
 
 export async function writeReadableTranscript(params: {
   messages: ModelMessage[];
   runtimeDir: string;
+  publisher?: SessionPublisher;
+  sessionState?: "starting" | "working" | "idle" | "failed" | "stopped";
 }): Promise<void> {
   const transcript = {
     version: 1,
     provider: "archestra-agent",
     entries: params.messages.flatMap(entriesForMessage),
+    ...(params.sessionState
+      ? { session: { state: params.sessionState, requests: [] } }
+      : {}),
   } as const;
+  if (params.publisher && params.sessionState) {
+    await params.publisher.publish({
+      ...transcript,
+      entries: transcript.entries.map((entry, index) => ({
+        ...entry,
+        id: `entry-${index}`,
+      })),
+      session: { state: params.sessionState, requests: [] },
+    });
+    return;
+  }
   const temporaryPath = `${params.runtimeDir}/readable-transcript.tmp.json`;
   await writeFile(temporaryPath, `${JSON.stringify(transcript)}\n`, "utf8");
   await rename(temporaryPath, `${params.runtimeDir}/readable-transcript.json`);
+  if (params.sessionState)
+    process.stdout.write(
+      `\x1b]777;archestra-readable-transcript=base64\x07${Buffer.from(JSON.stringify(transcript)).toString("base64")}\x1b]777;archestra-readable-transcript=end\x07\n`,
+    );
 }
 
 function entriesForMessage(message: ModelMessage): ReadableTranscriptEntry[] {

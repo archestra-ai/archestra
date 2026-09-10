@@ -1,5 +1,8 @@
 import { Writable } from "node:stream";
-import { AgentRunReadableTranscriptSchema } from "@archestra/shared";
+import {
+  type AgentRunReadableTranscript,
+  AgentRunReadableTranscriptSchema,
+} from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import type { AgentRunRecord } from "@/types";
@@ -31,6 +34,7 @@ export class AgentRuntimeOutputCapture {
       >;
       session: AgentRunRecord;
       onTextDelta?: (delta: string) => void;
+      onReadableTranscript?: (transcript: AgentRunReadableTranscript) => void;
       maxTranscriptBytes?: number;
       throwOnStreamError?: boolean;
       throwOnSnapshotError?: boolean;
@@ -39,7 +43,9 @@ export class AgentRuntimeOutputCapture {
     this.fullTranscript = new FullTranscriptCapture(
       params.maxTranscriptBytes ?? config.agentRuntime.transcriptMaxBytes,
     );
-    this.liveProtocol = new AgentRuntimeOutputProtocolParser();
+    this.liveProtocol = new AgentRuntimeOutputProtocolParser(
+      params.onReadableTranscript,
+    );
   }
 
   get transcript(): string {
@@ -198,6 +204,12 @@ class AgentRuntimeOutputProtocolParser {
   private encodedLength = 0;
   readableTranscript: string | null = null;
 
+  constructor(
+    private readonly onTranscript?: (
+      transcript: AgentRunReadableTranscript,
+    ) => void,
+  ) {}
+
   append(chunk: string): string {
     this.pending += chunk;
     let terminal = "";
@@ -274,11 +286,42 @@ class AgentRuntimeOutputProtocolParser {
     ) {
       return;
     }
-    const parsed = AgentRunReadableTranscriptSchema.safeParse(
-      parseJson(decoded),
-    );
+    const frame = parseJson(decoded);
+    const parsed = AgentRunReadableTranscriptSchema.safeParse(frame);
     if (parsed.success) {
-      this.readableTranscript = JSON.stringify(parsed.data);
+      if (frame && typeof frame === "object" && "replaceFrom" in frame) {
+        const offset = frame.replaceFrom;
+        const previous = this.readableTranscript
+          ? AgentRunReadableTranscriptSchema.safeParse(
+              parseJson(this.readableTranscript),
+            )
+          : null;
+        if (
+          typeof offset !== "number" ||
+          !Number.isSafeInteger(offset) ||
+          offset < 0
+        )
+          return;
+        if (
+          offset > 0 &&
+          (!previous?.success ||
+            previous.data.provider !== parsed.data.provider ||
+            offset > previous.data.entries.length)
+        )
+          return;
+        parsed.data.entries = [
+          ...(previous?.success ? previous.data.entries.slice(0, offset) : []),
+          ...parsed.data.entries,
+        ];
+      }
+      const complete = JSON.stringify(parsed.data);
+      if (
+        Buffer.byteLength(complete) >
+        AGENT_RUNTIME_READABLE_TRANSCRIPT_MAX_BYTES
+      )
+        return;
+      this.readableTranscript = complete;
+      this.onTranscript?.(parsed.data);
     }
   }
 }

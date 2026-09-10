@@ -23,7 +23,9 @@ COPY runtime-agent/tsconfig.json ./runtime-agent/tsconfig.json
 COPY runtime-agent/src ./runtime-agent/src
 RUN pnpm --filter @archestra/runtime-agent build \
  && chmod +x /opt/archestra/runtime-agent/dist/index.js \
- && ln -s /opt/archestra/runtime-agent/dist/index.js /usr/local/bin/archestra-runtime-agent
+ && ln -s /opt/archestra/runtime-agent/dist/index.js /usr/local/bin/archestra-runtime-agent \
+ && chmod +x /opt/archestra/runtime-agent/dist/session-main.js \
+ && ln -s /opt/archestra/runtime-agent/dist/session-main.js /usr/local/bin/archestra-agent-session
 
 COPY agent_images/bin /usr/local/bin
 RUN chmod 0755 /usr/local/bin/archestra-*
@@ -71,7 +73,7 @@ USER 1000:1000
 FROM agent-base AS agent-hermes
 USER root
 RUN python3 -m venv /opt/hermes \
- && /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp]==0.19.0' \
+ && /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp,acp]==0.19.0' \
  && HERMES_SITE_PACKAGES=$(/opt/hermes/bin/python -c 'import site; print(site.getsitepackages()[0])') \
  && printf '%s\n' docker > "${HERMES_SITE_PACKAGES}/.install_method" \
  && ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes \

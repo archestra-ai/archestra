@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated runtime
-lastUpdated: "2026-09-09"
+lastUpdated: "2026-09-10"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -171,7 +171,7 @@ form used by **Start from scratch**.
 
 The image field starts with the installation's default Agent Runtime image. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
 
-Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Agent Runtime images must include a POSIX shell and `tmux`, which keep the live process attachable from the Runs tab.
+Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Agent Runtime images must include a POSIX shell and `tmux` for terminal access.
 
 The dedicated runtime uses the same Agent system prompt and tool access as the foreground Agent loop. Keep the Agent's instructions focused on the specialist role you want it to perform in either mode.
 
@@ -260,7 +260,7 @@ resolves those concerns before the backend starts the image.
 | Requirement | Contract |
 | --- | --- |
 | Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
-| Live terminal | `tmux` must be on `PATH`. The process runs in one tmux session so the run can accept terminal input and a user can attach from the Runs tab. |
+| Live terminal | `tmux` must be on `PATH`. Maintained images use a separate shell alongside the agent session. Legacy and custom terminal clients run inside tmux. |
 | Input attention | Set the tmux user option `@archestra_attention` to `1` when the client needs input. Set `@archestra_attention_label` to a short reason, such as `Permission needed`. Clear both options when work resumes. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runtime-agent` must be on `PATH`. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
@@ -333,13 +333,24 @@ Paths resolve beneath `/home/node/workspace`; symbolic links and traversal are r
 Only the original run owner can access these files.
 See the [tool reference](/docs/platform-archestra-mcp-server) for the request schema.
 
-### Readable transcript
+### Conversation View
 
 The maintained Archestra Agent, Claude Code, Codex, OpenCode, Hermes, and
 OpenClaw images export their native message and tool history as a readable
 transcript. A custom image can provide the same completed-run experience by
 writing `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json` (normally
 `/var/run/archestra/readable-transcript.json`) before its process exits.
+
+Maintained images stream messages, tool activity, and input requests into the conversation view.
+Text reflows between phone and desktop widths at the same font size.
+You can scroll through earlier messages while the agent continues working.
+Interrupt ends the current turn without ending the conversation.
+
+Codex uses its app-server protocol. Claude Code uses streaming JSON.
+OpenCode, Hermes, and OpenClaw use ACP. Archestra uses its built-in agent loop.
+Tmux provides a separate workspace shell for these sessions.
+Custom images must inherit an updated maintained image to use this interface.
+Existing images and retained terminal sessions keep their terminal behavior.
 
 The file must be a JSON object using version 1 of this contract:
 
@@ -424,7 +435,8 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_AGENT_ID`, `ARCHESTRA_AGENT_RUNTIME_AGENT_NAME` | Durable Agent identity. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Durable run identifier. |
 | `ARCHESTRA_AGENT_RUNTIME_DIR` | Runtime-owned control and artifact directory. Defaults to `/var/run/archestra`. |
-| `ARCHESTRA_AGENT_RUNTIME_MODE` | `interactive` for a Chat-owned live terminal; `one_shot` for unattended delegation that must exit when complete. |
+| `ARCHESTRA_AGENT_RUNTIME_MODE` | `interactive` for a live conversation; `one_shot` for unattended delegation that must exit when complete. |
+| `ARCHESTRA_AGENT_RUNTIME_INTERFACE` | Internal workspace interface: `structured` for maintained native sessions, or `terminal` for legacy and custom clients. |
 | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`, `ARCHESTRA_AGENT_RUNTIME_CONTINUE` | Stable workspace identity and `1` when restoring a saved client session for a follow-up. |
 | `ARCHESTRA_AGENT_RUNTIME_TASK`, `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` | Initial task and Agent instructions. |
 | `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` | Parent directory containing each turn's attached files. |
@@ -598,18 +610,11 @@ the run.
 
 ## View Runs from an Agent
 
-An Agent with Agent Runtime configured has a **Runs** tab. A running run opens
-its live terminal. Completed runs open their retained terminal recording.
-Continue reattaches to the original interactive CLI while it remains alive.
-Detach returns to the recording without stopping that session.
-After suspension or Pod replacement, Resume conversation restores the saved conversation in a new process.
-The resumed terminal stays interactive after answering your follow-up.
-Recording navigation lets you revisit earlier screens, including output replaced by terminal redraws.
-Structured transcripts remain available to integrations. Use this tab to:
-
-- review run outcomes and timestamps
-- read live or retained container logs
-- attach to the live shell for troubleshooting or interactive work
+The **Runs** tab shows live and retained conversations.
+Messages and tool results remain readable after a run ends.
+Resume restores the saved conversation in its retained workspace.
+A suspended workspace starts a new agent process with its saved state.
+The terminal remains available for shell work and legacy clients.
 
 Agent Runtime workspaces provide `/var/run/archestra/attach` for direct Kubernetes access.
 Interactive `bash` and `sh` sessions opened through `kubectl exec` or k9s join
@@ -617,13 +622,11 @@ the Agent session automatically. Press `Ctrl-b`, then `d`, to detach without
 stopping the run. For a raw diagnostic shell, set
 `ARCHESTRA_AGENT_RUNTIME_AUTO_ATTACH=0` on the exec command.
 
-After the pod is removed, Archestra retains the normalized readable transcript
-and the complete PTY recording. The readable view lists messages and tool
-activity in chronological order without storing raw provider events. Native
-TUI recordings preserve their original terminal geometry and scale as one
-canvas to fit the viewer’s width on phones and desktops. Scaling preserves
-the original line breaks. The readable transcript rewraps text to the current
-width. The history follows the run's task retention
+After the pod is removed, Archestra retains the conversation and available terminal recording.
+Native TUI recordings preserve their original line breaks.
+Recordings shrink to fit narrow viewers without enlarging text by default.
+The conversation view rewraps text to the current width.
+The history follows the run's task retention
 period, which is 90 days by default. Set
 `ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES` to cap the
 uncompressed transcript size accepted from one run. A run beyond that ceiling

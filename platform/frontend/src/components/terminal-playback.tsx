@@ -11,7 +11,7 @@ import { attachTerminalTouchScroll } from "./terminal-touch-scroll";
  */
 export function TerminalPlayback({
   content,
-  fitToWidth = true,
+  fitToWidth = false,
 }: {
   content: string;
   fitToWidth?: boolean;
@@ -114,7 +114,13 @@ export function TerminalPlayback({
         );
         const scale = fitToWidthRef.current
           ? Math.max(MIN_RETAINED_TERMINAL_SCALE, availableWidth / naturalWidth)
-          : 1;
+          : Math.min(
+              1,
+              Math.max(
+                MIN_RETAINED_TERMINAL_SCALE,
+                availableWidth / naturalWidth,
+              ),
+            );
 
         container.style.transform = `scale(${scale})`;
         container.style.transformOrigin = "top left";

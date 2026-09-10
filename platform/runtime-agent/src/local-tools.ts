@@ -25,9 +25,10 @@ export function loadLocalWorkspaceTools(): ToolSet {
           .optional()
           .describe("Stop the command after this many seconds (default: 120)."),
       }),
-      execute: ({ command, timeoutSeconds }) =>
+      execute: ({ command, timeoutSeconds }, { abortSignal }) =>
         runCommand({
           command,
+          abortSignal,
           timeoutMs: (timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
         }),
     }),
@@ -37,12 +38,16 @@ export function loadLocalWorkspaceTools(): ToolSet {
 async function runCommand(params: {
   command: string;
   timeoutMs: number;
+  abortSignal?: AbortSignal;
 }): Promise<string> {
+  if (params.abortSignal?.aborted)
+    return "Command interrupted before starting.";
   return await new Promise((resolve) => {
     const child = spawn("/bin/bash", ["-lc", params.command], {
       cwd: process.cwd(),
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
     });
     const output: Buffer[] = [];
     let outputBytes = 0;
@@ -61,16 +66,33 @@ async function runCommand(params: {
     child.stdout.on("data", append);
     child.stderr.on("data", append);
 
-    const timeout = setTimeout(() => {
-      child.kill("SIGTERM");
-    }, params.timeoutMs);
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    const signalGroup = (signal: NodeJS.Signals) => {
+      if (!child.pid) return;
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        /* Already exited. */
+      }
+    };
+    const stop = () => {
+      signalGroup("SIGTERM");
+      killTimer ??= setTimeout(() => signalGroup("SIGKILL"), 1000);
+    };
+    const timeout = setTimeout(stop, params.timeoutMs);
+    params.abortSignal?.addEventListener("abort", stop, { once: true });
+    const cleanup = () => {
+      clearTimeout(timeout);
+      clearTimeout(killTimer);
+      params.abortSignal?.removeEventListener("abort", stop);
+    };
 
     child.once("error", (error) => {
-      clearTimeout(timeout);
+      cleanup();
       resolve(`Command could not start: ${error.message}`);
     });
     child.once("close", (code, signal) => {
-      clearTimeout(timeout);
+      cleanup();
       const text = Buffer.concat(output).toString("utf8").trimEnd();
       const status = signal
         ? `Command stopped by ${signal}.`

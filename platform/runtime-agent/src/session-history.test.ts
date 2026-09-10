@@ -15,6 +15,34 @@ test("restores saved model context and refuses malformed retained state", async 
     ];
     await saveSessionHistory({ runtimeDir, messages });
     expect(await loadSessionHistory(runtimeDir)).toEqual(messages);
+    const transcriptMessages: ModelMessage[] = [
+      ...messages,
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "interrupted",
+            toolName: "shell",
+            input: { command: "sleep 60" },
+          },
+        ],
+      },
+      { role: "assistant", content: "Turn interrupted by the user." },
+    ];
+    await saveSessionHistory({ runtimeDir, messages, transcriptMessages });
+    expect(await loadSessionHistory(runtimeDir)).toEqual(messages);
+    expect(await loadSessionHistory(runtimeDir, "transcript")).toEqual(
+      transcriptMessages,
+    );
+    // Existing workspaces stored only a model-message array.
+    await writeFile(
+      join(runtimeDir, "agent-session.json"),
+      JSON.stringify(messages),
+    );
+    expect(await loadSessionHistory(runtimeDir, "transcript")).toEqual(
+      messages,
+    );
     await writeFile(join(runtimeDir, "agent-session.json"), "{}");
     await expect(loadSessionHistory(runtimeDir)).rejects.toThrow(
       "retained Agent session is invalid",

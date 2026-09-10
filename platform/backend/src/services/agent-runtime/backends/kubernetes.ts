@@ -1,4 +1,5 @@
 import type { Readable, Writable } from "node:stream";
+import type { AgentRunControl } from "@archestra/shared";
 import type WebSocket from "ws";
 import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
@@ -39,6 +40,14 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
       params.organizationScope ??
       config.orchestrator.kubernetes.namespace
     );
+  }
+
+  async controlSession(params: {
+    session: AgentRunRecord;
+    commandId: string;
+    control: AgentRunControl;
+  }): Promise<void> {
+    await agentRuntimeManager.controlSession(params);
   }
 
   async launch(spec: AgentRunLaunchSpec): Promise<void> {

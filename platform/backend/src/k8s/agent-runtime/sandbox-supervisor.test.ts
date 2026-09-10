@@ -8,6 +8,30 @@ import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
   "sandbox supervisor",
   () => {
+    it("runs structured agents without a TTY, keeps a separate shell, and cancels their process group", () => {
+      const result = runInContainer(
+        `
+mkdir -p /var/run/archestra/turns
+printf 'test ! -t 0; echo native-output; touch /var/run/archestra/ready; sleep 60; touch /var/run/archestra/unwanted\\n' > /var/run/archestra/turns/1.request
+wait_for /var/run/archestra/ready
+tmux send-keys -t agent 'touch /var/run/archestra/shell-worked' Enter
+wait_for /var/run/archestra/shell-worked
+touch /var/run/archestra/turns/1.cancel
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 130
+test ! -f /var/run/archestra/unwanted
+grep -q native-output /var/run/archestra/turns/1.log
+printf 'echo second-native-turn\\n' > /var/run/archestra/turns/2.request
+wait_for /var/run/archestra/turns/2.exit
+test "$(cat /var/run/archestra/turns/2.exit)" = 0
+echo VERIFIED
+`,
+        true,
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
     it("keeps the same CLI and tmux contents interactive after completing a turn", () => {
       const result = runInContainer(`
 mkdir -p /var/run/archestra/turns
@@ -143,7 +167,7 @@ echo VERIFIED
   },
 );
 
-function runInContainer(assertions: string) {
+function runInContainer(assertions: string, structured = false) {
   return spawnSync(
     "docker",
     [
@@ -161,6 +185,7 @@ function runInContainer(assertions: string) {
       encoding: "utf8",
       timeout: 25_000,
       input: `set -eu
+${structured ? 'mkdir -p /tmp/native-bin; touch /tmp/native-bin/archestra-agent-session; chmod +x /tmp/native-bin/archestra-agent-session; export PATH="/tmp/native-bin:$PATH" ARCHESTRA_AGENT_RUNTIME_INTERFACE=structured' : ""}
 cat > /tmp/supervisor.sh <<'SUPERVISOR'
 ${buildSandboxSupervisorScript()}
 SUPERVISOR

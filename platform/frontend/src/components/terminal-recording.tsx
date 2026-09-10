@@ -10,7 +10,7 @@ import { Slider } from "@/components/ui/slider";
 /** A terminal recording is a sequence of screens, not just its final buffer. */
 export function TerminalRecording({ content }: { content: string }) {
   const positions = useMemo(() => indexTerminalRecording(content), [content]);
-  const [fitToWidth, setFitToWidth] = useState(true);
+  const [fitToWidth, setFitToWidth] = useState(false);
   const [selectedOffset, setSelectedOffset] = useState<number | null>(null);
   const last = positions.length - 1;
   const matchingPosition =

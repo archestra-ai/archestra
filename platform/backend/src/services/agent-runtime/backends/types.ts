@@ -1,5 +1,5 @@
 import type { Readable, Writable } from "node:stream";
-import type { AgentRunAttachPhase } from "@archestra/shared";
+import type { AgentRunAttachPhase, AgentRunControl } from "@archestra/shared";
 import type WebSocket from "ws";
 import type {
   AgentRunInput,
@@ -163,6 +163,13 @@ export interface AgentRuntimeBackendDriver {
     destination: Writable;
     lines?: number;
     abortSignal?: AbortSignal;
+  }): Promise<void>;
+
+  /** Deliver a typed command to a structured session, with an agent acknowledgement. */
+  controlSession(params: {
+    session: AgentRunRecord;
+    commandId: string;
+    control: AgentRunControl;
   }): Promise<void>;
 
   /** Interject into a live run using the runtime's delivery mode. */

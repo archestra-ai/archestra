@@ -247,6 +247,32 @@ class WebSocketService {
         subscription.socket.send(frame);
       }
     },
+    agent_run_control: async (ws, message, context) => {
+      if (message.type !== "agent_run_control") return;
+      const { runId, commandId, control } = message.payload;
+      let error: string | undefined;
+      try {
+        const session = await AgentRunModel.findByTaskId(runId);
+        if (
+          !session ||
+          session.organizationId !== context.organizationId ||
+          session.actorUserId !== context.userId
+        ) {
+          error = "Only the person who started this run can control it";
+        } else {
+          await resolveAgentRuntimeBackendDriver(
+            session.backend,
+          ).controlSession({ session, commandId, control });
+        }
+      } catch {
+        error =
+          "Input was not acknowledged. Check the session before trying again.";
+      }
+      this.sendToClient(ws, {
+        type: "agent_run_control_result",
+        payload: { runId, commandId, ...(error ? { error } : {}) },
+      });
+    },
     subscribe_agent_run_logs: (ws, message, clientContext) => {
       if (message.type !== "subscribe_agent_run_logs") return;
       return this.handleSubscribeAgentRunLogs(
@@ -674,6 +700,13 @@ class WebSocketService {
     const abortController = new AbortController();
     const stream = new PassThrough();
     this.agentRunLogsSubscriptions.set(ws, { runId, stream, abortController });
+    const unsubscribe = () => {
+      if (
+        this.agentRunLogsSubscriptions.get(ws)?.abortController ===
+        abortController
+      )
+        this.unsubscribeAgentRunLogs(ws);
+    };
 
     const session = await AgentRunModel.findByTaskId(runId);
     if (abortController.signal.aborted) return;
@@ -682,7 +715,7 @@ class WebSocketService {
         type: "agent_run_logs_error",
         payload: { runId, error: "Session not found" },
       });
-      this.unsubscribeAgentRunLogs(ws);
+      unsubscribe();
       return;
     }
     const mayView = await this.mayViewSessionLogs(session, clientContext);
@@ -695,7 +728,7 @@ class WebSocketService {
           error: "Only the person who started this run can view its logs",
         },
       });
-      this.unsubscribeAgentRunLogs(ws);
+      unsubscribe();
       return;
     }
 
@@ -768,7 +801,7 @@ class WebSocketService {
             ...(readable ? { readable } : {}),
           },
         });
-        this.unsubscribeAgentRunLogs(ws);
+        unsubscribe();
         return;
       }
 
@@ -798,22 +831,24 @@ class WebSocketService {
           ...(readable ? { readable } : {}),
         },
       });
-      this.unsubscribeAgentRunLogs(ws);
+      unsubscribe();
       return;
     }
 
     stream.on("data", (chunk: Buffer) => {
+      if (abortController.signal.aborted) return;
       this.sendToClient(ws, {
         type: "agent_run_logs",
         payload: { runId, logs: chunk.toString() },
       });
     });
     stream.on("end", () => {
+      if (abortController.signal.aborted) return;
       this.sendToClient(ws, {
         type: "agent_run_logs_ended",
         payload: { runId },
       });
-      this.unsubscribeAgentRunLogs(ws);
+      unsubscribe();
     });
 
     try {
@@ -823,10 +858,18 @@ class WebSocketService {
         maxTranscriptBytes: RETAINED_LOG_BYTES,
         throwOnStreamError: true,
         onTextDelta: (chunk) => stream.write(chunk),
+        onReadableTranscript: (transcript) => {
+          if (!abortController.signal.aborted)
+            this.sendToClient(ws, {
+              type: "agent_run_session",
+              payload: { runId, transcript },
+            });
+        },
       });
       await output.follow(abortController.signal, lines);
-      stream.end();
+      if (!abortController.signal.aborted) stream.end();
     } catch (error) {
+      if (abortController.signal.aborted) return;
       this.sendToClient(ws, {
         type: "agent_run_logs_error",
         payload: {
@@ -834,7 +877,7 @@ class WebSocketService {
           error: error instanceof Error ? error.message : "Could not read logs",
         },
       });
-      this.unsubscribeAgentRunLogs(ws);
+      unsubscribe();
     }
   }
 

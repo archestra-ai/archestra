@@ -14,7 +14,17 @@ umask 077
 root=/var/run/archestra
 mkdir -p "$root/turns"
 command -v tmux >/dev/null 2>&1 || { echo 'Agent Runtime requires tmux' >&2; exit 78; }
-trap 'tmux kill-server 2>/dev/null || true; exit 0' TERM INT
+# A retained terminal workspace must keep its native CLI session after an image upgrade.
+if [ ! -f "$root/session-interface" ]; then
+  interface=terminal
+  if [ "$(printenv ARCHESTRA_AGENT_RUNTIME_INTERFACE || true)" = structured ] && command -v archestra-agent-session >/dev/null 2>&1; then
+    interface=structured
+    for started in "$root"/turns/*.started; do [ ! -f "$started" ] || interface=terminal; done
+  fi
+  printf '%s' "$interface" > "$root/session-interface"
+fi
+native_pid=''
+trap '[ -z "$native_pid" ] || /bin/kill -TERM -- -"$native_pid" 2>/dev/null || true; tmux kill-server 2>/dev/null || true; exit 0' TERM INT
 
 tmux new-session -d -x 120 -y 40 -s agent 'while :; do sleep 1; done'
 tmux set-option -t agent mouse on
@@ -59,11 +69,26 @@ while :; do
     tmux pipe-pane -t agent "tee -a '$turn.log' >> /proc/1/fd/1"
     rm -f ${AGENT_RUNTIME_READABLE_TRANSCRIPT_FILE}
     printf '%s\n' "touch '$turn.running'; export ARCHESTRA_AGENT_RUNTIME_TURN_PREFIX='$turn'; /bin/sh '$request'; status=\$?; sleep 2; printf '%s\\n' \"\$status\" > '$turn.result.tmp'; mv '$turn.result.tmp' '$turn.result'; exit \"\$status\"" > "$turn.session"
-    tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
+    native_pid=''
+    if [ "$(cat "$root/session-interface")" = structured ] && command -v archestra-agent-session >/dev/null 2>&1; then
+      # The agent owns pipes, not a terminal. tmux remains available as a shell.
+      tmux pipe-pane -t agent
+      tmux respawn-pane -k -t agent "/bin/bash --noprofile --norc"
+      setsid /bin/sh "$turn.session" >> "$turn.log" 2>&1 &
+      native_pid=$!
+    else
+      tmux respawn-pane -k -t agent "/bin/sh '$turn.session'"
+    fi
     startup_polls=0
     dead_polls=0
     while [ ! -f "$turn.result" ]; do
       if [ -f "$turn.cancel" ]; then
+        [ -z "$native_pid" ] || /bin/kill -TERM -- -"$native_pid" 2>/dev/null || true
+        if [ -n "$native_pid" ]; then
+          polls=0
+          while kill -0 "$native_pid" 2>/dev/null && [ "$polls" -lt 5 ]; do sleep 1; polls=$((polls + 1)); done
+          /bin/kill -KILL -- -"$native_pid" 2>/dev/null || true
+        fi
         tmux respawn-pane -k -t agent 'while :; do sleep 1; done'
         printf '130\n' > "$turn.result.tmp"
         mv "$turn.result.tmp" "$turn.result"
@@ -72,7 +97,10 @@ while :; do
       # A crashed pane must fail the turn rather than leave it working forever.
       # tmux may still report the previous dead process just after respawn.
       startup_polls=$((startup_polls + 1))
-      if { [ -f "$turn.running" ] || [ "$startup_polls" -ge 30 ]; } && [ "$(tmux display-message -p -t agent '#{pane_dead}' 2>/dev/null || echo 1)" = 1 ]; then
+      if [ -n "$native_pid" ] && ! kill -0 "$native_pid" 2>/dev/null && [ ! -f "$turn.result" ]; then
+        printf '75\n' > "$turn.result"
+      fi
+      if [ -z "$native_pid" ] && { [ -f "$turn.running" ] || [ "$startup_polls" -ge 30 ]; } && [ "$(tmux display-message -p -t agent '#{pane_dead}' 2>/dev/null || echo 1)" = 1 ]; then
         dead_polls=$((dead_polls + 1))
         if [ "$dead_polls" -ge 3 ] && [ ! -f "$turn.result" ]; then
           printf '75\n' > "$turn.result.tmp"
@@ -92,6 +120,8 @@ while :; do
         printf '\033]777;archestra-readable-transcript=end\007'
       } | tee -a "$turn.log"
     fi
+    [ -z "$native_pid" ] || wait "$native_pid" || true
+    native_pid=''
     mv "$turn.result" "$turn.exit"
     # The request can contain turn-scoped credentials; keep only its outcome.
     rm -f "$request" "$turn.session" "$turn.running"

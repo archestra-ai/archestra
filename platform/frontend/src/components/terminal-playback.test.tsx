@@ -194,7 +194,7 @@ describe("TerminalPlayback", () => {
   it("expands a phone recording on desktop and can return to actual size without changing its grid", async () => {
     const content = "\u001b]777;archestra-terminal-size=40x20\u0007Phone frame";
     const { getByTestId, rerender } = render(
-      <TerminalPlayback content={content} />,
+      <TerminalPlayback content={content} fitToWidth />,
     );
     await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());
     const viewport = getByTestId("terminal-playback-viewport");
@@ -215,7 +215,7 @@ describe("TerminalPlayback", () => {
     });
     rerender(<TerminalPlayback content={content} fitToWidth={false} />);
     expect(playback.style.transform).toBe("scale(1)");
-    rerender(<TerminalPlayback content={content} />);
+    rerender(<TerminalPlayback content={content} fitToWidth />);
     Object.defineProperty(viewport, "clientWidth", {
       configurable: true,
       value: 332,

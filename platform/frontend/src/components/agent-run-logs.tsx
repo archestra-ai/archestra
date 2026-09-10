@@ -1,13 +1,15 @@
 "use client";
 
-import type {
-  AgentRunLogsEndedMessage,
-  AgentRunLogsErrorMessage,
-  AgentRunLogsMessage,
+import {
+  type AgentRunLogsEndedMessage,
+  type AgentRunLogsErrorMessage,
+  type AgentRunLogsMessage,
+  type AgentRunReadableTranscript,
+  AgentRunReadableTranscriptSchema,
 } from "@archestra/shared";
 import { FileX2, TerminalSquare } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { formatAgentRunReadableTranscript } from "@/components/agent-run-readable-transcript";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { AgentRunConversation } from "@/components/agent-run-conversation";
 import { DeploymentLogPanel } from "@/components/deployment-console";
 import { TerminalRecording } from "@/components/terminal-recording";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,18 +19,42 @@ import websocketService from "@/lib/websocket/websocket";
 export function AgentRunLogs({
   run,
   title = "Output",
+  liveTerminal,
+  canControl = false,
 }: {
   run: AgentRun;
   title?: string;
+  liveTerminal?: ReactNode;
+  canControl?: boolean;
 }) {
   const [terminalContent, setTerminalContent] = useState("");
   const [readableContent, setReadableContent] = useState("");
-  const [view, setView] = useState<"readable" | "terminal">("terminal");
-  const readableTranscript = useMemo(
-    () => formatAgentRunReadableTranscript(readableContent),
-    [readableContent],
+  const [view, setView] = useState<"readable" | "terminal">("readable");
+  const [snapshot, setSnapshot] = useState<AgentRunReadableTranscript | null>(
+    null,
   );
-  const hasReadableTranscript = !!readableTranscript;
+  const savedSnapshot = useMemo(() => {
+    try {
+      const parsed = AgentRunReadableTranscriptSchema.safeParse(
+        JSON.parse(readableContent),
+      );
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  }, [readableContent]);
+  const conversation = useMemo(() => {
+    const value = snapshot ?? savedSnapshot;
+    if (
+      run.endedAt &&
+      value?.session &&
+      ["starting", "working", "input_required"].includes(value.session.state)
+    ) {
+      return { ...value, session: { state: "stopped" as const, requests: [] } };
+    }
+    return value;
+  }, [snapshot, savedSnapshot, run.endedAt]);
+  const hasReadableTranscript = !!conversation;
   const showReadable = hasReadableTranscript && view === "readable";
   const [error, setError] = useState<string>();
   const [isStreaming, setIsStreaming] = useState(!run.endedAt);
@@ -49,12 +75,18 @@ export function AgentRunLogs({
     };
     setTerminalContent("");
     setReadableContent("");
-    setView("terminal");
+    setView("readable");
+    setSnapshot(null);
     setError(undefined);
     setIsStreaming(!run.endedAt);
     setRetainedStatus(undefined);
     websocketService.connect();
     const subscriptions = [
+      websocketService.subscribe("agent_run_session", (message) => {
+        if (message.payload.runId !== run.taskId) return;
+        receivedOutput = true;
+        setSnapshot(message.payload.transcript);
+      }),
       websocketService.subscribe(
         "agent_run_logs",
         (message: AgentRunLogsMessage) => {
@@ -81,6 +113,16 @@ export function AgentRunLogs({
         "agent_run_logs_ended",
         (message: AgentRunLogsEndedMessage) => {
           if (message.payload.runId === run.taskId) {
+            // A dropped exec/log stream does not end the running agent or the WebSocket.
+            if (!run.endedAt) {
+              if (emptyRetryTimer) clearTimeout(emptyRetryTimer);
+              emptyRetryTimer = setTimeout(() => {
+                setTerminalContent("");
+                setReadableContent("");
+                subscribeToLogs();
+              }, 1000);
+              return;
+            }
             if (!receivedOutput && emptyRetryCount < EMPTY_LOG_RETRY_LIMIT) {
               emptyRetryCount += 1;
               setIsStreaming(true);
@@ -101,8 +143,19 @@ export function AgentRunLogs({
         },
       ),
     ];
-    subscribeToLogs();
+    const unsubscribeConnection = websocketService.onConnectionChange(
+      (connected) => {
+        if (!connected) return;
+        // Reconnection replays an authoritative snapshot; terminal chunks restart too.
+        setTerminalContent("");
+        setReadableContent("");
+        receivedOutput = false;
+        subscribeToLogs();
+      },
+    );
+    if (websocketService.isConnected()) subscribeToLogs();
     return () => {
+      unsubscribeConnection();
       if (emptyRetryTimer) clearTimeout(emptyRetryTimer);
       for (const unsubscribe of subscriptions) unsubscribe();
       websocketService.send({
@@ -111,6 +164,44 @@ export function AgentRunLogs({
       });
     };
   }, [run.endedAt, run.taskId]);
+
+  if (showReadable && conversation)
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-medium">
+            {title === "Live terminal" ? "Conversation" : title}
+          </span>
+          <Tabs value="readable" onValueChange={() => setView("terminal")}>
+            <TabsList aria-label="Output view">
+              <TabsTrigger value="readable">Conversation</TabsTrigger>
+              <TabsTrigger value="terminal">Terminal</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        <AgentRunConversation
+          key={run.taskId}
+          transcript={conversation}
+          taskId={run.taskId}
+          canControl={canControl && !run.endedAt && !!conversation.session}
+        />
+      </div>
+    );
+
+  if (liveTerminal)
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        {conversation && (
+          <Tabs value="terminal" onValueChange={() => setView("readable")}>
+            <TabsList>
+              <TabsTrigger value="readable">Conversation</TabsTrigger>
+              <TabsTrigger value="terminal">Terminal</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+        {liveTerminal}
+      </div>
+    );
 
   return (
     <DeploymentLogPanel
@@ -125,13 +216,13 @@ export function AgentRunLogs({
             }
           >
             <TabsList aria-label="Output view">
-              <TabsTrigger value="readable">Readable transcript</TabsTrigger>
-              <TabsTrigger value="terminal">Terminal recording</TabsTrigger>
+              <TabsTrigger value="readable">Conversation</TabsTrigger>
+              <TabsTrigger value="terminal">Terminal</TabsTrigger>
             </TabsList>
           </Tabs>
         ) : undefined
       }
-      content={showReadable ? readableTranscript : terminalContent}
+      content={terminalContent}
       contentRenderer={
         showReadable
           ? undefined

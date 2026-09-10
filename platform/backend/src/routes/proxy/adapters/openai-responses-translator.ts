@@ -150,7 +150,7 @@ export function chatCompletionToResponses(
 function responseInputToChatMessages(
   input: LooseResponseItem[],
 ): OpenAiRequest["messages"] {
-  return input.flatMap((item) => {
+  const messages = input.flatMap<OpenAiRequest["messages"][number]>((item) => {
     if (
       item.type === "message" ||
       item.role === "user" ||
@@ -208,6 +208,24 @@ function responseInputToChatMessages(
 
     return [];
   });
+
+  // Responses represents parallel calls as separate items. Chat requires all
+  // calls from one assistant turn before any of their tool results.
+  const grouped: OpenAiRequest["messages"] = [];
+  for (const message of messages) {
+    const previous = grouped.at(-1);
+    if (
+      message.role === "assistant" &&
+      message.tool_calls?.length &&
+      previous?.role === "assistant" &&
+      previous.tool_calls?.length
+    ) {
+      previous.tool_calls.push(...message.tool_calls);
+    } else {
+      grouped.push(message);
+    }
+  }
+  return grouped;
 }
 
 function stringifyResponseContent(content: unknown): string {

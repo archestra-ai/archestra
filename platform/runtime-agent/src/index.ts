@@ -14,6 +14,8 @@ import { loadGatewayTools } from "./gateway-tools.js";
 import { loadLocalWorkspaceTools } from "./local-tools.js";
 import { writeReadableTranscript } from "./readable-transcript.js";
 import { loadSessionHistory, saveSessionHistory } from "./session-history.js";
+import { SessionMailbox } from "./session-mailbox.js";
+import { SessionPublisher } from "./session-publisher.js";
 import { SteerQueue } from "./steer-queue.js";
 
 /**
@@ -37,14 +39,35 @@ async function main(): Promise<number> {
     throw error;
   }
 
+  const structured =
+    process.env.ARCHESTRA_AGENT_RUNTIME_INTERFACE === "structured";
+  const publisher = new SessionPublisher(config.runtimeDir);
+  let sessionState: "starting" | "working" | "idle" | "failed" | "stopped" =
+    "starting";
+  let turnAbort = new AbortController();
   renderHeader(config);
 
   const steerQueue = new SteerQueue(config.steerFifo, (error: unknown) => {
     write(`runtime: could not read the steer channel: ${describe(error)}`);
   });
   steerQueue.start();
+  const mailbox = structured
+    ? new SessionMailbox({
+        runtimeDir: config.runtimeDir,
+        taskId: config.taskId,
+        control: async (control) => {
+          if (control.type === "interrupt") {
+            turnAbort.abort();
+            return;
+          }
+          if (control.type !== "message" || sessionState !== "idle")
+            throw new Error("The agent is busy");
+          steerQueue.enqueue(control.text);
+        },
+      })
+    : null;
   const terminalInput =
-    config.runMode === "interactive"
+    config.runMode === "interactive" && !structured
       ? createInterface({
           input: process.stdin,
           output: process.stdout,
@@ -60,6 +83,7 @@ async function main(): Promise<number> {
     steerQueue.stop();
     terminalInput?.close();
   };
+  const mailboxWork = mailbox?.start().catch(stop);
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
   // Readline owns terminal-mode Ctrl-C; it emits SIGINT on the interface
@@ -74,6 +98,8 @@ async function main(): Promise<number> {
     mcpClient = await connectGateway(config);
   } catch (error) {
     stop();
+    mailbox?.stop();
+    await mailboxWork;
     throw error;
   }
   const tools = {
@@ -86,7 +112,9 @@ async function main(): Promise<number> {
   let messages: ModelMessage[] = config.continuePreviousSession
     ? await loadSessionHistory(config.runtimeDir)
     : [];
-  const transcriptMessages: ModelMessage[] = [...messages];
+  const transcriptMessages: ModelMessage[] = config.continuePreviousSession
+    ? await loadSessionHistory(config.runtimeDir, "transcript")
+    : [];
   if (config.task) {
     renderTurn("You", config.task);
     const taskMessage = { role: "user", content: config.task } as const;
@@ -101,6 +129,14 @@ async function main(): Promise<number> {
       if (messages.length === 0 || messages.at(-1)?.role === "assistant") {
         // Nothing to answer. Park on the steer channel rather than spinning —
         // this is what makes a session that is idle for days almost free.
+        sessionState = "idle";
+        if (structured)
+          await writeReadableTranscript({
+            publisher,
+            messages: transcriptMessages,
+            runtimeDir: config.runtimeDir,
+            sessionState,
+          });
         terminalInput?.prompt();
         const incoming = await steerQueue.waitForMessage(config.idleTimeoutMs);
         if (incoming.length === 0) {
@@ -123,39 +159,130 @@ async function main(): Promise<number> {
       process.stdout.write(
         `\n${ANSI.accent}${config.agentName}${ANSI.reset}\n`,
       );
-      const result = streamText({
-        model,
-        system: config.systemPrompt ?? undefined,
-        messages,
-        tools,
-        stopWhen: stepCountIs(config.maxSteps),
-        abortSignal: shutdown.signal,
-      });
+      sessionState = "working";
+      turnAbort = new AbortController();
+      const pendingMessages: ModelMessage[] = [];
+      let partialText = "";
+      let lastPublished = 0;
+      const publishProgress = async () => {
+        if (!structured || Date.now() - lastPublished < 250) return;
+        lastPublished = Date.now();
+        await writeReadableTranscript({
+          publisher,
+          messages: [
+            ...transcriptMessages,
+            ...pendingMessages,
+            ...(partialText
+              ? [{ role: "assistant" as const, content: partialText }]
+              : []),
+          ],
+          runtimeDir: config.runtimeDir,
+          sessionState: "working",
+        });
+      };
+      await publishProgress();
+      try {
+        const result = streamText({
+          model,
+          system: config.systemPrompt ?? undefined,
+          messages,
+          tools,
+          stopWhen: stepCountIs(config.maxSteps),
+          abortSignal: AbortSignal.any([shutdown.signal, turnAbort.signal]),
+        });
 
-      let streamFailed = false;
-      for await (const part of result.fullStream) {
-        if (part.type === "text-delta") {
-          process.stdout.write(part.text);
-        } else if (part.type === "tool-call") {
-          write(`\n[tool] ${part.toolName}`);
-        } else if (part.type === "error") {
-          // Provider errors may include raw response data. The platform logs
-          // carry the detail; terminal scrollback must never echo secrets.
-          write("\n[error] The model request failed.");
-          streamFailed = true;
+        let streamFailed = false;
+        for await (const part of result.fullStream) {
+          if (part.type === "text-delta") {
+            process.stdout.write(part.text);
+            partialText += part.text;
+          } else if (part.type === "tool-call") {
+            lastPublished = 0;
+            write(`\n[tool] ${part.toolName}`);
+            if (partialText) {
+              pendingMessages.push({ role: "assistant", content: partialText });
+              partialText = "";
+            }
+            pendingMessages.push({
+              role: "assistant",
+              content: [
+                {
+                  type: "tool-call",
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  input: part.input,
+                },
+              ],
+            });
+          } else if (part.type === "tool-result") {
+            lastPublished = 0;
+            pendingMessages.push({
+              role: "tool",
+              content: [
+                {
+                  type: "tool-result",
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  output: {
+                    type: "json",
+                    value: JSON.parse(JSON.stringify(part.output ?? null)),
+                  },
+                },
+              ],
+            });
+          } else if (part.type === "error") {
+            // Provider errors may include raw response data. The platform logs
+            // carry the detail; terminal scrollback must never echo secrets.
+            write("\n[error] The model request failed.");
+            streamFailed = true;
+          }
+          await publishProgress();
         }
+        if (turnAbort.signal.aborted) throw new Error("Turn interrupted");
+        if (streamFailed) {
+          throw new Error("Model stream failed");
+        }
+        write("");
+        const responseMessages = (await result.response).messages;
+        messages.push(...responseMessages);
+        transcriptMessages.push(...responseMessages);
+        await persistReadableTranscript({
+          config,
+          messages: transcriptMessages,
+        });
+        messages = trimHistory(messages);
+        await saveSessionHistory({
+          runtimeDir: config.runtimeDir,
+          messages,
+          transcriptMessages,
+        });
+      } catch (error) {
+        if (!turnAbort.signal.aborted || shutdown.signal.aborted) throw error;
+        // Incomplete tool-call pairs must not enter the next model request.
+        const interrupted = {
+          role: "assistant",
+          content: "Turn interrupted by the user.",
+        } as const;
+        messages.push(interrupted);
+        transcriptMessages.push(...pendingMessages);
+        if (partialText)
+          transcriptMessages.push({ role: "assistant", content: partialText });
+        transcriptMessages.push(interrupted);
+        await saveSessionHistory({
+          runtimeDir: config.runtimeDir,
+          messages,
+          transcriptMessages,
+        });
       }
-      if (streamFailed) {
-        throw new Error("Model stream failed");
-      }
-      write("");
-      const responseMessages = (await result.response).messages;
-      messages.push(...responseMessages);
-      transcriptMessages.push(...responseMessages);
-      await persistReadableTranscript({ config, messages: transcriptMessages });
-      messages = trimHistory(messages);
-      await saveSessionHistory({ runtimeDir: config.runtimeDir, messages });
 
+      sessionState = "idle";
+      if (structured)
+        await writeReadableTranscript({
+          publisher,
+          messages: transcriptMessages,
+          runtimeDir: config.runtimeDir,
+          sessionState,
+        });
       if (config.runMode === "one_shot") break;
 
       // Steers that arrived mid-turn are consumed here, at the boundary, so
@@ -176,6 +303,19 @@ async function main(): Promise<number> {
       exitCode = 1;
     }
   } finally {
+    mailbox?.stop();
+    await mailboxWork;
+    if (structured)
+      await writeReadableTranscript({
+        publisher,
+        messages: transcriptMessages,
+        runtimeDir: config.runtimeDir,
+        sessionState: exitCode
+          ? "failed"
+          : shutdown.signal.aborted
+            ? "stopped"
+            : "idle",
+      });
     steerQueue.stop();
     terminalInput?.close();
     await Promise.race([

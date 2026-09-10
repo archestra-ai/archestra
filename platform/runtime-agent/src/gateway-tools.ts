@@ -22,11 +22,15 @@ export async function loadGatewayTools(client: Client): Promise<ToolSet> {
           properties: {},
         },
       ),
-      execute: async (args: unknown) => {
-        const result = await client.callTool({
-          name: mcpTool.name,
-          arguments: isRecord(args) ? args : {},
-        });
+      execute: async (args: unknown, { abortSignal }) => {
+        const result = await client.callTool(
+          {
+            name: mcpTool.name,
+            arguments: isRecord(args) ? args : {},
+          },
+          undefined,
+          { signal: abortSignal },
+        );
         return renderToolResult(result);
       },
     });

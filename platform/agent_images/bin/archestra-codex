@@ -240,6 +240,11 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   common_args=(resume --last "${common_args[@]}")
 fi
 
+# Structured sessions preserve the maintained configuration/bootstrap contract.
+if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
+  exec archestra-agent-session codex codex app-server --stdio
+fi
+
 case "${runtime_mode}" in
   interactive)
     # No subcommand means Codex's native full-screen TUI. The positional prompt

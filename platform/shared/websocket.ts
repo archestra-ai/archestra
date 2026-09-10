@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  AgentRunControlSchema,
+  type AgentRunReadableTranscript,
+} from "./agent-run-transcript";
 
 /**
  * MCP Logs defaults
@@ -190,6 +194,14 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("agent_run_attach_resize"),
     payload: AgentRunAttachResizePayloadSchema,
+  }),
+  z.object({
+    type: z.literal("agent_run_control"),
+    payload: z.object({
+      runId: z.string().uuid(),
+      commandId: z.string().uuid(),
+      control: AgentRunControlSchema,
+    }),
   }),
   z.object({
     type: z.literal("subscribe_agent_run_logs"),
@@ -475,6 +487,15 @@ export type AgentRunAttachClosedMessage = {
   };
 };
 
+export type AgentRunSessionMessage = {
+  type: "agent_run_session";
+  payload: { runId: string; transcript: AgentRunReadableTranscript };
+};
+export type AgentRunControlResultMessage = {
+  type: "agent_run_control_result";
+  payload: { runId: string; commandId: string; error?: string };
+};
+
 export type AgentRunLogsMessage = {
   type: "agent_run_logs";
   payload: {
@@ -593,6 +614,8 @@ export type ServerWebSocketMessage =
   | AgentRunAttachOutputMessage
   | AgentRunAttachErrorMessage
   | AgentRunAttachClosedMessage
+  | AgentRunSessionMessage
+  | AgentRunControlResultMessage
   | AgentRunLogsMessage
   | AgentRunLogsErrorMessage
   | AgentRunLogsEndedMessage

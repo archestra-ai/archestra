@@ -9,6 +9,8 @@ const socket = vi.hoisted(() => {
   return {
     handlers,
     connect: vi.fn(),
+    isConnected: vi.fn(() => true),
+    onConnectionChange: vi.fn(() => () => {}),
     send: vi.fn(),
     subscribe: vi.fn(
       (type: string, handler: (message: ServerWebSocketMessage) => void) => {
@@ -127,7 +129,7 @@ describe("AgentRunLogs", () => {
     expect(screen.getByText("Complete terminal recording")).toBeInTheDocument();
   });
 
-  it("keeps the recording selected and offers responsive readable output", async () => {
+  it("defaults to responsive conversation and preserves an explicit recording selection", async () => {
     render(<AgentRunLogs run={completedRun} />);
 
     emit({
@@ -163,19 +165,10 @@ describe("AgentRunLogs", () => {
       },
     });
 
-    expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
-      "terminal frame",
-    );
-    await userEvent.click(
-      screen.getByRole("tab", { name: "Readable transcript" }),
-    );
-    expect(screen.getByText(/Start of the run/)).toHaveTextContent(
-      "Assistant End of the run",
-    );
+    expect(screen.getByText("Start of the run")).toBeInTheDocument();
+    expect(screen.getByText("End of the run")).toBeInTheDocument();
     expect(screen.queryByTestId("terminal-playback")).not.toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("tab", { name: "Terminal recording" }),
-    );
+    await userEvent.click(screen.getByRole("tab", { name: "Terminal" }));
 
     expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
       "terminal frame",
@@ -188,9 +181,7 @@ describe("AgentRunLogs", () => {
     expect(screen.getByTestId("terminal-playback")).toHaveTextContent(
       "later output",
     );
-    await userEvent.click(
-      screen.getByRole("tab", { name: "Readable transcript" }),
-    );
+    await userEvent.click(screen.getByRole("tab", { name: "Conversation" }));
     expect(screen.getByText(/Start of the run/)).toBeInTheDocument();
   });
 
@@ -231,9 +222,7 @@ describe("AgentRunLogs", () => {
         logs: readable.slice(50),
       },
     });
-    await userEvent.click(
-      screen.getByRole("tab", { name: "Readable transcript" }),
-    );
+    await userEvent.click(screen.getByRole("tab", { name: "Conversation" }));
     expect(screen.getByText(/A full-width answer/)).toBeInTheDocument();
     rerender(<AgentRunLogs run={{ ...completedRun, taskId: "task-2" }} />);
     expect(screen.queryByText(/A full-width answer/)).not.toBeInTheDocument();

@@ -25,7 +25,7 @@ export function ContinueAgentRunDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Resume conversation"
-      description="Reopen the saved conversation in an interactive terminal. A suspended workspace starts up first."
+      description="Continue the saved conversation. A suspended workspace starts up first."
       onSubmit={form.handleSubmit(({ message }) =>
         continuation.mutate(
           { taskId, message },

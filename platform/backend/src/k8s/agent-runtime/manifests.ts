@@ -23,7 +23,7 @@ const DNS_PORTS = [
   { protocol: "TCP" as const, port: 53 },
 ];
 
-/** Session `tmux attach` lands in — the pane the agent itself is using. */
+/** Session used by the workspace shell or a legacy terminal client. */
 export const AGENT_RUNTIME_TMUX_SESSION = "agent";
 
 /** Container name in the Job spec; exec and log reads both address it. */
@@ -138,12 +138,9 @@ export type KubernetesAgentRunLaunchSpec = Omit<
 /**
  * PID 1 for every Agent Runtime run, whatever the image.
  *
- * tmux is what makes a session attachable and steerable: a human can attach
- * from the browser and type into the same session the agent is using, and a
- * steer can be delivered without a terminal attached at all. The FIFO is the
- * turn-boundary channel the Archestra runtime-agent reads; bring-your-own-image
- * CLIs that own their own input loop are steered with `tmux send-keys`
- * instead, which needs no cooperation from the process.
+ * Maintained agents use their native pipe protocols. tmux supplies their
+ * diagnostic shell and hosts legacy/custom terminal clients. The FIFO remains
+ * available for custom clients that consume messages at turn boundaries.
  *
  * The workspace supervisor owns PID 1; agent command completion is independent
  * of Pod completion. Durable request markers prevent replay after replacement.
@@ -493,6 +490,8 @@ function resolveEntrypoint(command: string[] | null): string {
       : command.map(shellQuote).join(" ");
   return [
     "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
+    'if [ -f /var/run/archestra/session-interface ]; then export ARCHESTRA_AGENT_RUNTIME_INTERFACE="$(cat /var/run/archestra/session-interface)"; fi',
+    "if ! command -v archestra-agent-session >/dev/null 2>&1; then unset ARCHESTRA_AGENT_RUNTIME_INTERFACE; fi",
     `exec ${resolved}`,
   ].join("\n");
 }

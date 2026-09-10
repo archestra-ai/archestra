@@ -287,6 +287,8 @@ jq -n \
     security:{allow_lazy_installs:false},
     plugins:{enabled:["archestra-attention"]},
     model:{
+      default:$model,
+      provider:"archestra",
       max_tokens:16384,
       context_length:1047576,
       default_headers:{
@@ -394,6 +396,11 @@ common_args=(
 )
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
   common_args+=(--continue)
+fi
+
+# Structured sessions preserve the maintained configuration/bootstrap contract.
+if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
+  exec archestra-agent-session hermes hermes acp --accept-hooks
 fi
 
 case "${runtime_mode}" in

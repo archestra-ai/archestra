@@ -8,6 +8,7 @@ import type {
   AgentRunAttachStartedMessage,
 } from "@archestra/shared";
 import { useMemo } from "react";
+import { AgentRunLogs } from "@/components/agent-run-logs";
 import {
   type ExecSessionTransport,
   ExecTerminal,
@@ -43,7 +44,7 @@ export function AgentRunTerminal({
     [taskId],
   );
 
-  return (
+  const terminal = (
     <ExecTerminal
       sessionKey={taskId}
       transport={transport}
@@ -61,6 +62,11 @@ export function AgentRunTerminal({
       onError={onError}
       onClosed={onClosed}
     />
+  );
+  return run ? (
+    <AgentRunLogs run={run} title={title} canControl liveTerminal={terminal} />
+  ) : (
+    terminal
   );
 }
 

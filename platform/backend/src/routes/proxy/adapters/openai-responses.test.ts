@@ -4,6 +4,70 @@ import { openAiResponsesAdapterFactory } from "./openai-responses";
 import { responsesToOpenaiChat } from "./openai-responses-translator";
 
 describe("responsesToOpenaiChat", () => {
+  test("groups parallel calls before their corresponding tool results", () => {
+    const request = {
+      model: "openai:gpt-4.1-mini",
+      input: [
+        { role: "user", content: "Read both files." },
+        {
+          type: "function_call",
+          call_id: "first",
+          name: "read",
+          arguments: '{"path":"a"}',
+        },
+        { type: "reasoning", summary: [] },
+        {
+          type: "function_call",
+          call_id: "second",
+          name: "read",
+          arguments: '{"path":"b"}',
+        },
+        { type: "function_call_output", call_id: "second", output: "B" },
+        { type: "function_call_output", call_id: "first", output: "A" },
+        {
+          type: "function_call",
+          call_id: "third",
+          name: "read",
+          arguments: "{}",
+        },
+        { type: "function_call_output", call_id: "third", output: "C" },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+    expect(responsesToOpenaiChat(request).chatBody.messages).toEqual([
+      { role: "user", content: "Read both files." },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "first",
+            type: "function",
+            function: { name: "read", arguments: '{"path":"a"}' },
+          },
+          {
+            id: "second",
+            type: "function",
+            function: { name: "read", arguments: '{"path":"b"}' },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "second", content: "B" },
+      { role: "tool", tool_call_id: "first", content: "A" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "third",
+            type: "function",
+            function: { name: "read", arguments: "{}" },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "third", content: "C" },
+    ]);
+  });
+
   test("translates AI SDK easy-input messages for the model router", () => {
     const request = {
       model: "openai:gpt-5.6-sol",

@@ -23,6 +23,7 @@ class WebSocketService {
   private maxReconnectDelay = 30000; // Max 30 seconds
   private isManuallyDisconnected = false;
   private isConnecting = false;
+  private serverReady = false;
   private pendingMessages: ClientWebSocketMessage[] = [];
 
   async connect(): Promise<void> {
@@ -36,16 +37,15 @@ class WebSocketService {
 
     this.isManuallyDisconnected = false;
     this.isConnecting = true;
+    this.serverReady = false;
 
     try {
       this.ws = new WebSocket(config.websocket.url);
 
       this.ws.addEventListener("open", () => {
         this.isConnecting = false;
-        this.reconnectAttempts = 0;
-        this.reconnectDelay = 1000;
-        this.flushPendingMessages();
-        this.notifyConnectionHandlers(true);
+        // The server authenticates asynchronously after accepting the socket.
+        // It cannot receive subscriptions until websocket_ready arrives.
       });
 
       // this.ws.addEventListener("error", (_error) => {});
@@ -53,6 +53,13 @@ class WebSocketService {
       this.ws.addEventListener("message", (event) => {
         try {
           const message: WebSocketMessage = JSON.parse(event.data);
+          if (message.type === "websocket_ready" && !this.serverReady) {
+            this.serverReady = true;
+            this.reconnectAttempts = 0;
+            this.reconnectDelay = 1000;
+            this.flushPendingMessages();
+            this.notifyConnectionHandlers(true);
+          }
           this.handleMessage(message);
         } catch (error) {
           console.error("[WebSocket] Failed to parse message:", error);
@@ -61,6 +68,7 @@ class WebSocketService {
 
       this.ws.addEventListener("close", () => {
         this.ws = null;
+        this.serverReady = false;
         this.isConnecting = false;
         this.notifyConnectionHandlers(false);
 
@@ -99,6 +107,7 @@ class WebSocketService {
   }
 
   disconnect(): void {
+    this.serverReady = false;
     this.isManuallyDisconnected = true;
     this.pendingMessages = [];
 
@@ -167,7 +176,7 @@ class WebSocketService {
   }
 
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.serverReady && this.ws?.readyState === WebSocket.OPEN;
   }
 
   private sendNow(message: ClientWebSocketMessage): void {

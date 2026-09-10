@@ -256,6 +256,8 @@ describe("buildAgentRuntimeSandbox", () => {
     expect(entrypoint?.value).toBe(
       [
         "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
+        'if [ -f /var/run/archestra/session-interface ]; then export ARCHESTRA_AGENT_RUNTIME_INTERFACE="$(cat /var/run/archestra/session-interface)"; fi',
+        "if ! command -v archestra-agent-session >/dev/null 2>&1; then unset ARCHESTRA_AGENT_RUNTIME_INTERFACE; fi",
         `exec 'claude' '--task' 'it'\\''s a '\\''quoted'\\'' task; rm -rf /'`,
       ].join("\n"),
     );
@@ -269,6 +271,8 @@ describe("buildAgentRuntimeSandbox", () => {
     );
     expect(entrypoint?.value).toBe(
       "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi\n" +
+        'if [ -f /var/run/archestra/session-interface ]; then export ARCHESTRA_AGENT_RUNTIME_INTERFACE="$(cat /var/run/archestra/session-interface)"; fi\n' +
+        "if ! command -v archestra-agent-session >/dev/null 2>&1; then unset ARCHESTRA_AGENT_RUNTIME_INTERFACE; fi\n" +
         "exec archestra-runtime-agent",
     );
   });

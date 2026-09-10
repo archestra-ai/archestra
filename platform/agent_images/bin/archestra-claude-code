@@ -195,6 +195,11 @@ jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript
 }}' > "${settings_file}"
 args+=(--settings "${settings_file}")
 
+# Structured sessions preserve the maintained configuration/bootstrap contract.
+if [[ "${ARCHESTRA_AGENT_RUNTIME_INTERFACE:-}" == "structured" ]]; then
+  exec archestra-agent-session claude-code claude --print "${args[@]}" --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio
+fi
+
 case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
     # A Chat execution owns a real pty. Start Claude Code's native TUI with the

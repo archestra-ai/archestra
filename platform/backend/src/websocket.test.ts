@@ -821,6 +821,79 @@ describe("websocket Agent run authorization and cleanup", () => {
     expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
   });
 
+  test("rejects structured session controls from another user or organization", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeMember,
+  }) => {
+    const organization = await makeOrganization();
+    const otherOrganization = await makeOrganization();
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(viewer.id, organization.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: owner.id,
+      actorUserId: owner.id,
+      workloadName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    for (const actor of [
+      { userId: viewer.id, organizationId: organization.id },
+      { userId: owner.id, organizationId: otherOrganization.id },
+    ]) {
+      service.clientContexts.set(ws, { ...actor, userIsMcpServerAdmin: false });
+      await service.handleMessage(
+        {
+          type: "agent_run_control",
+          payload: {
+            runId: task.id,
+            commandId: "e95d70af-c96c-470a-a517-b60a9b410fec",
+            control: { type: "message", text: "must not execute" },
+          },
+        },
+        ws,
+      );
+      expect(ws.send).toHaveBeenLastCalledWith(
+        JSON.stringify({
+          type: "agent_run_control_result",
+          payload: {
+            runId: task.id,
+            commandId: "e95d70af-c96c-470a-a517-b60a9b410fec",
+            error: "Only the person who started this run can control it",
+          },
+        }),
+      );
+    }
+  });
+
   test("destroys Agent run streams and detaches the exec socket on disconnect", () => {
     const ws = {} as WS;
     const attach = {

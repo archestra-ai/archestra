@@ -12,6 +12,35 @@ import {
 } from "./runtime-contract";
 
 describe("AgentRuntimeOutputCapture", () => {
+  test("reconstructs streamed history suffixes and ignores a delta without its prefix", async () => {
+    const message = (text: string) => ({
+      type: "message",
+      role: "assistant",
+      text,
+    });
+    const frame = (entries: unknown[], replaceFrom: number) =>
+      `${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_START}${Buffer.from(JSON.stringify({ version: 1, provider: "codex", entries, replaceFrom, session: { state: "idle", requests: [] } })).toString("base64")}${AGENT_RUNTIME_READABLE_TRANSCRIPT_PROTOCOL_END}`;
+    const onReadableTranscript = vi.fn();
+    const capture = new AgentRuntimeOutputCapture({
+      backend: outputBackend({
+        live:
+          frame([message("orphan")], 5) +
+          frame([message("first"), message("partial")], 0) +
+          frame([message("complete")], 1) +
+          frame([message("invalid")], 9),
+      }),
+      session,
+      onReadableTranscript,
+    });
+    await capture.follow();
+    expect(JSON.parse(capture.readableTranscript ?? "{}").entries).toEqual([
+      message("first"),
+      message("complete"),
+    ]);
+    expect(onReadableTranscript).toHaveBeenCalledTimes(2);
+    expect(capture.transcript).toBe("");
+  });
+
   test("a late live-stream close cannot overwrite the final readable snapshot", async () => {
     const readable = JSON.stringify({
       version: 1,

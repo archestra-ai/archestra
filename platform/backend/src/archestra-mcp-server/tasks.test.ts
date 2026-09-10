@@ -4,10 +4,11 @@ import {
   TOOL_POST_RUN_FILE_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
@@ -84,6 +85,64 @@ describe("run tools", () => {
     expect((result.content[0] as { text: string }).text).toContain(
       "Agent not found",
     );
+  });
+
+  test("returns a setup link and every missing credential before starting a run", async ({
+    makeAgent,
+  }) => {
+    const originalEnabled = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = true;
+    onTestFinished(() => {
+      config.agentRuntime.enabled = originalEnabled;
+    });
+    const target = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "agent",
+      scope: "org",
+      runtime: {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub token",
+            scope: "per_user",
+            required: true,
+          },
+          {
+            key: "CLAUDE_CODE_OAUTH_TOKEN",
+            label: "Claude Code token",
+            scope: "per_user",
+            required: true,
+          },
+        ],
+        ttlHours: null,
+        maxCostUsd: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const result = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: target.id, message: "Review the example repository" },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain("GITHUB_TOKEN");
+    expect(text).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(text).toContain(
+      `/agents/${target.id}?section=advanced&setup=credentials`,
+    );
+    expect(
+      await AgentRunModel.listForAgent({ agentId: target.id, organizationId }),
+    ).toEqual([]);
   });
 
   test("run controls remain callable without individual assignment", async ({

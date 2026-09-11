@@ -1572,6 +1572,106 @@ describe("GitHub Copilot surface selection", () => {
     baseUrl: null,
   };
 
+  test("replays assistant text and tool calls instead of unavailable stored items", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", async (_url: unknown, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      bodies.push(body);
+      if (
+        body.input.some(
+          (item: { type?: string }) => item.type === "item_reference",
+        )
+      ) {
+        return Response.json(
+          { error: { message: "Stored item not found", type: "not_found" } },
+          { status: 404 },
+        );
+      }
+      return Response.json({
+        id: "resp_test",
+        created_at: 0,
+        model: baseParams.modelName,
+        output: [
+          {
+            type: "message",
+            id: "msg_test",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: "The marker is TEST_OK.",
+                annotations: [],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+    });
+    const model = createLLMModel({
+      ...baseParams,
+      supportedEndpoints: ["/responses"],
+    });
+    const result = await generateText({
+      model,
+      maxRetries: 0,
+      providerOptions: { openai: { store: true } },
+      messages: [
+        { role: "user", content: "Look up the marker." },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "Looking it up.",
+              providerOptions: { openai: { itemId: "msg_previous" } },
+            },
+            {
+              type: "tool-call",
+              toolCallId: "call_test",
+              toolName: "lookup_marker",
+              input: { name: "demo" },
+              providerOptions: { openai: { itemId: "fc_previous" } },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_test",
+              toolName: "lookup_marker",
+              output: { type: "text", value: "TEST_OK" },
+            },
+          ],
+        },
+        { role: "user", content: "What was the marker?" },
+      ],
+    });
+    expect(result.text).toBe("The marker is TEST_OK.");
+    expect(bodies[0]).toMatchObject({
+      store: false,
+      input: expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          content: [{ type: "output_text", text: "Looking it up." }],
+        }),
+        expect.objectContaining({
+          type: "function_call",
+          call_id: "call_test",
+          name: "lookup_marker",
+          arguments: '{"name":"demo"}',
+        }),
+        expect.objectContaining({
+          type: "function_call_output",
+          call_id: "call_test",
+          output: "TEST_OK",
+        }),
+      ]),
+    });
+  });
+
   test("routes a Responses-only model to the Responses transport", () => {
     const model = createLLMModel({
       ...baseParams,

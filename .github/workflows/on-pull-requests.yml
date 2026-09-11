@@ -413,6 +413,11 @@ jobs:
       - name: Release skill harness
         run: pnpm test:release-skill
 
+      - name: Native APPA evidence and fixture regressions
+        run: |
+          python3 experiments/appa-proxy/test-native-live-harness.py
+          node --test experiments/appa-proxy/test-native-live-fixture-transport.cjs
+
       - name: Test backport automation
         run: python3 ../.github/scripts/test_backport.py
 

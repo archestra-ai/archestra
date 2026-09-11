@@ -98122,6 +98122,1999 @@
         }
       }
     },
+    "/api/appa-approvals": {
+      "get": {
+        "operationId": "listAppaApprovals",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "candidateCallId": {
+                        "type": "string"
+                      },
+                      "tool": {
+                        "type": "string"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      },
+                      "argumentsSha256": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "approved",
+                          "denied",
+                          "expired",
+                          "cancelled"
+                        ]
+                      },
+                      "expiresAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "approverId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "decidedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "candidateCallId",
+                      "tool",
+                      "args",
+                      "argumentsSha256",
+                      "status",
+                      "expiresAt",
+                      "approverId",
+                      "decidedAt",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentSettings:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)"
+      }
+    },
+    "/api/appa-approvals/{id}": {
+      "get": {
+        "operationId": "getAppaApproval",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "candidateCallId": {
+                      "type": "string"
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "args": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "argumentsSha256": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "denied",
+                        "expired",
+                        "cancelled"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "approverId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "decidedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "candidateCallId",
+                    "tool",
+                    "args",
+                    "argumentsSha256",
+                    "status",
+                    "expiresAt",
+                    "approverId",
+                    "decidedAt",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentSettings:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)"
+      }
+    },
+    "/api/appa-approvals/{id}/decision": {
+      "post": {
+        "operationId": "decideAppaApproval",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approve",
+                      "deny"
+                    ]
+                  }
+                },
+                "required": [
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "candidateCallId": {
+                      "type": "string"
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "args": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "argumentsSha256": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "denied",
+                        "expired",
+                        "cancelled"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "approverId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "decidedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "candidateCallId",
+                    "tool",
+                    "args",
+                    "argumentsSha256",
+                    "status",
+                    "expiresAt",
+                    "approverId",
+                    "decidedAt",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentSettings:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)"
+      }
+    },
+    "/api/appa-quarantines": {
+      "get": {
+        "operationId": "listAppaQuarantines",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "profileId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "profileId",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentSettings:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)"
+      }
+    },
+    "/api/appa-quarantines/{id}": {
+      "get": {
+        "operationId": "getAppaQuarantine",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "profileId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "actions": {
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "callRef": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "tool": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "authorization_intent",
+                              "open",
+                              "result_intent",
+                              "result_admitted",
+                              "denied"
+                            ]
+                          },
+                          "outcome": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "success",
+                              "failure",
+                              "indeterminate"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "callRef",
+                          "tool",
+                          "state",
+                          "outcome",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "profileId",
+                    "createdAt",
+                    "updatedAt",
+                    "actions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentSettings:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)"
+      }
+    },
+    "/api/appa-quarantines/{id}/acknowledgment": {
+      "post": {
+        "operationId": "acknowledgeAppaQuarantine",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "acknowledgment": {
+                    "type": "string",
+                    "enum": [
+                      "acknowledged",
+                      "reconciled"
+                    ]
+                  }
+                },
+                "required": [
+                  "acknowledgment"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "quarantine": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "acknowledgment": {
+                      "type": "string",
+                      "enum": [
+                        "acknowledged",
+                        "reconciled"
+                      ]
+                    },
+                    "acknowledgedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "quarantine",
+                    "acknowledgment",
+                    "acknowledgedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agentSettings:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)"
+      }
+    },
     "/v1/archestra/chat/completions": {
       "post": {
         "operationId": "archestraChatCompletionsWithDefaultAgent",
@@ -98764,6 +100757,9 @@
                 "app.deleted",
                 "app.bulk_updated",
                 "app.bulk_deleted",
+                "appaApproval.decided",
+                "appaQuarantine.acknowledged",
+                "appaQuarantine.reconciled",
                 "chatOpsBinding.created",
                 "chatOpsBinding.updated",
                 "chatOpsBinding.deleted",
@@ -99093,6 +101089,9 @@
                                   "app.deleted",
                                   "app.bulk_updated",
                                   "app.bulk_deleted",
+                                  "appaApproval.decided",
+                                  "appaQuarantine.acknowledged",
+                                  "appaQuarantine.reconciled",
                                   "chatOpsBinding.created",
                                   "chatOpsBinding.updated",
                                   "chatOpsBinding.deleted",
@@ -99733,6 +101732,9 @@
                             "app.deleted",
                             "app.bulk_updated",
                             "app.bulk_deleted",
+                            "appaApproval.decided",
+                            "appaQuarantine.acknowledged",
+                            "appaQuarantine.reconciled",
                             "chatOpsBinding.created",
                             "chatOpsBinding.updated",
                             "chatOpsBinding.deleted",
@@ -168115,141 +170117,211 @@
                               "response": {
                                 "anyOf": [
                                   {
-                                    "type": "object",
-                                    "properties": {
-                                      "id": {
-                                        "type": "string"
-                                      },
-                                      "object": {
-                                        "type": "string",
-                                        "enum": [
-                                          "response"
-                                        ]
-                                      },
-                                      "created_at": {
-                                        "type": "number"
-                                      },
-                                      "model": {
-                                        "type": "string"
-                                      },
-                                      "output": {
-                                        "type": "array",
-                                        "items": {
-                                          "anyOf": [
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "id": {
-                                                  "type": "string"
-                                                },
-                                                "type": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "message"
-                                                  ]
-                                                },
-                                                "role": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "assistant"
-                                                  ]
-                                                },
-                                                "status": {
-                                                  "type": "string"
-                                                },
-                                                "content": {
-                                                  "type": "array",
-                                                  "items": {
-                                                    "anyOf": [
-                                                      {
-                                                        "type": "object",
-                                                        "properties": {
-                                                          "type": {
-                                                            "type": "string",
-                                                            "enum": [
-                                                              "output_text"
-                                                            ]
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "object": {
+                                            "type": "string",
+                                            "enum": [
+                                              "response"
+                                            ]
+                                          },
+                                          "created_at": {
+                                            "type": "number"
+                                          },
+                                          "model": {
+                                            "type": "string"
+                                          },
+                                          "output": {
+                                            "type": "array",
+                                            "items": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "message"
+                                                      ]
+                                                    },
+                                                    "role": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "assistant"
+                                                      ]
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    },
+                                                    "content": {
+                                                      "type": "array",
+                                                      "items": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "output_text"
+                                                                ]
+                                                              },
+                                                              "text": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
+                                                              "text"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                                           },
-                                                          "text": {
-                                                            "type": "string"
-                                                          }
-                                                        },
-                                                        "required": [
-                                                          "type",
-                                                          "text"
-                                                        ],
-                                                        "additionalProperties": {},
-                                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
-                                                      },
-                                                      {
-                                                        "type": "object",
-                                                        "properties": {
-                                                          "type": {
-                                                            "type": "string",
-                                                            "enum": [
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "type": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                  "refusal"
+                                                                ]
+                                                              },
+                                                              "refusal": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "type",
                                                               "refusal"
-                                                            ]
-                                                          },
-                                                          "refusal": {
-                                                            "type": "string"
+                                                            ],
+                                                            "additionalProperties": {},
+                                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                                           }
-                                                        },
-                                                        "required": [
-                                                          "type",
-                                                          "refusal"
-                                                        ],
-                                                        "additionalProperties": {},
-                                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                        ]
                                                       }
-                                                    ]
-                                                  }
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id",
+                                                    "type",
+                                                    "role",
+                                                    "status",
+                                                    "content"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "function_call"
+                                                      ]
+                                                    },
+                                                    "id": {
+                                                      "type": "string"
+                                                    },
+                                                    "call_id": {
+                                                      "type": "string"
+                                                    },
+                                                    "name": {
+                                                      "type": "string"
+                                                    },
+                                                    "arguments": {
+                                                      "type": "string"
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type",
+                                                    "call_id",
+                                                    "name",
+                                                    "arguments"
+                                                  ],
+                                                  "additionalProperties": {},
+                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "type": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type"
+                                                  ],
+                                                  "additionalProperties": {}
                                                 }
+                                              ]
+                                            }
+                                          },
+                                          "status": {
+                                            "type": "string"
+                                          },
+                                          "usage": {
+                                            "type": "object",
+                                            "properties": {
+                                              "input_tokens": {
+                                                "type": "number"
                                               },
-                                              "required": [
-                                                "id",
-                                                "type",
-                                                "role",
-                                                "status",
-                                                "content"
-                                              ],
-                                              "additionalProperties": {},
-                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
-                                            },
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "type": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "function_call"
-                                                  ]
-                                                },
-                                                "id": {
-                                                  "type": "string"
-                                                },
-                                                "call_id": {
-                                                  "type": "string"
-                                                },
-                                                "name": {
-                                                  "type": "string"
-                                                },
-                                                "arguments": {
-                                                  "type": "string"
-                                                },
-                                                "status": {
-                                                  "type": "string"
-                                                }
+                                              "output_tokens": {
+                                                "type": "number"
                                               },
-                                              "required": [
-                                                "type",
-                                                "call_id",
-                                                "name",
-                                                "arguments"
-                                              ],
-                                              "additionalProperties": {},
-                                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                              "total_tokens": {
+                                                "type": "number"
+                                              }
                                             },
-                                            {
+                                            "required": [
+                                              "input_tokens",
+                                              "output_tokens",
+                                              "total_tokens"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "object",
+                                          "created_at",
+                                          "model",
+                                          "output",
+                                          "status"
+                                        ],
+                                        "additionalProperties": {},
+                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "object": {
+                                            "type": "string",
+                                            "enum": [
+                                              "response.compaction"
+                                            ]
+                                          },
+                                          "created_at": {
+                                            "type": "number"
+                                          },
+                                          "output": {
+                                            "type": "array",
+                                            "items": {
                                               "type": "object",
                                               "properties": {
                                                 "type": {
@@ -168261,44 +170333,40 @@
                                               ],
                                               "additionalProperties": {}
                                             }
-                                          ]
-                                        }
-                                      },
-                                      "status": {
-                                        "type": "string"
-                                      },
-                                      "usage": {
-                                        "type": "object",
-                                        "properties": {
-                                          "input_tokens": {
-                                            "type": "number"
                                           },
-                                          "output_tokens": {
-                                            "type": "number"
-                                          },
-                                          "total_tokens": {
-                                            "type": "number"
+                                          "usage": {
+                                            "type": "object",
+                                            "properties": {
+                                              "input_tokens": {
+                                                "type": "number"
+                                              },
+                                              "output_tokens": {
+                                                "type": "number"
+                                              },
+                                              "total_tokens": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "input_tokens",
+                                              "output_tokens",
+                                              "total_tokens"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                                           }
                                         },
                                         "required": [
-                                          "input_tokens",
-                                          "output_tokens",
-                                          "total_tokens"
+                                          "id",
+                                          "object",
+                                          "created_at",
+                                          "output",
+                                          "usage"
                                         ],
                                         "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                        "description": "https://developers.openai.com/api/reference/resources/responses/compact"
                                       }
-                                    },
-                                    "required": [
-                                      "id",
-                                      "object",
-                                      "created_at",
-                                      "model",
-                                      "output",
-                                      "status"
-                                    ],
-                                    "additionalProperties": {},
-                                    "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                    ]
                                   },
                                   {
                                     "type": "object",
@@ -204209,141 +206277,211 @@
                         "response": {
                           "anyOf": [
                             {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "object": {
-                                  "type": "string",
-                                  "enum": [
-                                    "response"
-                                  ]
-                                },
-                                "created_at": {
-                                  "type": "number"
-                                },
-                                "model": {
-                                  "type": "string"
-                                },
-                                "output": {
-                                  "type": "array",
-                                  "items": {
-                                    "anyOf": [
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "id": {
-                                            "type": "string"
-                                          },
-                                          "type": {
-                                            "type": "string",
-                                            "enum": [
-                                              "message"
-                                            ]
-                                          },
-                                          "role": {
-                                            "type": "string",
-                                            "enum": [
-                                              "assistant"
-                                            ]
-                                          },
-                                          "status": {
-                                            "type": "string"
-                                          },
-                                          "content": {
-                                            "type": "array",
-                                            "items": {
-                                              "anyOf": [
-                                                {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "type": {
-                                                      "type": "string",
-                                                      "enum": [
-                                                        "output_text"
-                                                      ]
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "object": {
+                                      "type": "string",
+                                      "enum": [
+                                        "response"
+                                      ]
+                                    },
+                                    "created_at": {
+                                      "type": "number"
+                                    },
+                                    "model": {
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "message"
+                                                ]
+                                              },
+                                              "role": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "assistant"
+                                                ]
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              },
+                                              "content": {
+                                                "type": "array",
+                                                "items": {
+                                                  "anyOf": [
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "output_text"
+                                                          ]
+                                                        },
+                                                        "text": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "text"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
                                                     },
-                                                    "text": {
-                                                      "type": "string"
-                                                    }
-                                                  },
-                                                  "required": [
-                                                    "type",
-                                                    "text"
-                                                  ],
-                                                  "additionalProperties": {},
-                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_text%20%3E%20(schema)"
-                                                },
-                                                {
-                                                  "type": "object",
-                                                  "properties": {
-                                                    "type": {
-                                                      "type": "string",
-                                                      "enum": [
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "enum": [
+                                                            "refusal"
+                                                          ]
+                                                        },
+                                                        "refusal": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
                                                         "refusal"
-                                                      ]
-                                                    },
-                                                    "refusal": {
-                                                      "type": "string"
+                                                      ],
+                                                      "additionalProperties": {},
+                                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
                                                     }
-                                                  },
-                                                  "required": [
-                                                    "type",
-                                                    "refusal"
-                                                  ],
-                                                  "additionalProperties": {},
-                                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_refusal%20%3E%20(schema)"
+                                                  ]
                                                 }
-                                              ]
-                                            }
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "type",
+                                              "role",
+                                              "status",
+                                              "content"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "function_call"
+                                                ]
+                                              },
+                                              "id": {
+                                                "type": "string"
+                                              },
+                                              "call_id": {
+                                                "type": "string"
+                                              },
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "arguments": {
+                                                "type": "string"
+                                              },
+                                              "status": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "call_id",
+                                              "name",
+                                              "arguments"
+                                            ],
+                                            "additionalProperties": {},
+                                            "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "type": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type"
+                                            ],
+                                            "additionalProperties": {}
                                           }
+                                        ]
+                                      }
+                                    },
+                                    "status": {
+                                      "type": "string"
+                                    },
+                                    "usage": {
+                                      "type": "object",
+                                      "properties": {
+                                        "input_tokens": {
+                                          "type": "number"
                                         },
-                                        "required": [
-                                          "id",
-                                          "type",
-                                          "role",
-                                          "status",
-                                          "content"
-                                        ],
-                                        "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_output_message%20%3E%20(schema)"
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "type": {
-                                            "type": "string",
-                                            "enum": [
-                                              "function_call"
-                                            ]
-                                          },
-                                          "id": {
-                                            "type": "string"
-                                          },
-                                          "call_id": {
-                                            "type": "string"
-                                          },
-                                          "name": {
-                                            "type": "string"
-                                          },
-                                          "arguments": {
-                                            "type": "string"
-                                          },
-                                          "status": {
-                                            "type": "string"
-                                          }
+                                        "output_tokens": {
+                                          "type": "number"
                                         },
-                                        "required": [
-                                          "type",
-                                          "call_id",
-                                          "name",
-                                          "arguments"
-                                        ],
-                                        "additionalProperties": {},
-                                        "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                        "total_tokens": {
+                                          "type": "number"
+                                        }
                                       },
-                                      {
+                                      "required": [
+                                        "input_tokens",
+                                        "output_tokens",
+                                        "total_tokens"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "object",
+                                    "created_at",
+                                    "model",
+                                    "output",
+                                    "status"
+                                  ],
+                                  "additionalProperties": {},
+                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "object": {
+                                      "type": "string",
+                                      "enum": [
+                                        "response.compaction"
+                                      ]
+                                    },
+                                    "created_at": {
+                                      "type": "number"
+                                    },
+                                    "output": {
+                                      "type": "array",
+                                      "items": {
                                         "type": "object",
                                         "properties": {
                                           "type": {
@@ -204355,44 +206493,40 @@
                                         ],
                                         "additionalProperties": {}
                                       }
-                                    ]
-                                  }
-                                },
-                                "status": {
-                                  "type": "string"
-                                },
-                                "usage": {
-                                  "type": "object",
-                                  "properties": {
-                                    "input_tokens": {
-                                      "type": "number"
                                     },
-                                    "output_tokens": {
-                                      "type": "number"
-                                    },
-                                    "total_tokens": {
-                                      "type": "number"
+                                    "usage": {
+                                      "type": "object",
+                                      "properties": {
+                                        "input_tokens": {
+                                          "type": "number"
+                                        },
+                                        "output_tokens": {
+                                          "type": "number"
+                                        },
+                                        "total_tokens": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "input_tokens",
+                                        "output_tokens",
+                                        "total_tokens"
+                                      ],
+                                      "additionalProperties": {},
+                                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
                                     }
                                   },
                                   "required": [
-                                    "input_tokens",
-                                    "output_tokens",
-                                    "total_tokens"
+                                    "id",
+                                    "object",
+                                    "created_at",
+                                    "output",
+                                    "usage"
                                   ],
                                   "additionalProperties": {},
-                                  "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                                  "description": "https://developers.openai.com/api/reference/resources/responses/compact"
                                 }
-                              },
-                              "required": [
-                                "id",
-                                "object",
-                                "created_at",
-                                "model",
-                                "output",
-                                "status"
-                              ],
-                              "additionalProperties": {},
-                              "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)"
+                              ]
                             },
                             {
                               "type": "object",
@@ -319890,6 +322024,786 @@
                     "usage"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openai/responses/compact": {
+      "post": {
+        "operationId": "openAiResponsesCompactWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Compact OpenAI Responses context (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "nullable": true,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        }
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "previous_response_id": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/compact"
+              }
+            }
+          },
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/compact"
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "https://developers.openai.com/api/reference/resources/responses/compact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "response.compaction"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "created_at",
+                    "output",
+                    "usage"
+                  ],
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api/reference/resources/responses/compact"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openai/{agentId}/responses/compact": {
+      "post": {
+        "operationId": "openAiResponsesCompactWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Compact OpenAI Responses context for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "nullable": true,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": {},
+                          "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
+                        }
+                      }
+                    ]
+                  },
+                  "instructions": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "previous_response_id": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": {},
+                "description": "https://developers.openai.com/api/reference/resources/responses/methods/compact"
+              }
+            }
+          },
+          "description": "https://developers.openai.com/api/reference/resources/responses/methods/compact"
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Bearer token for OpenAI"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "https://developers.openai.com/api/reference/resources/responses/compact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "response.compaction"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "input_tokens": {
+                          "type": "number"
+                        },
+                        "output_tokens": {
+                          "type": "number"
+                        },
+                        "total_tokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "input_tokens",
+                        "output_tokens",
+                        "total_tokens"
+                      ],
+                      "additionalProperties": {},
+                      "description": "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "created_at",
+                    "output",
+                    "usage"
+                  ],
+                  "additionalProperties": {},
+                  "description": "https://developers.openai.com/api/reference/resources/responses/compact"
                 }
               }
             }

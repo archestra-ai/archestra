@@ -2075,6 +2075,10 @@ Required RBAC permission: None (no additional RBAC permission required)
 |-----------|------|----------|-------------|
 | `tool_name` | `string` | Yes | Name of the tool to invoke. Use the exact name as it appears in the tools list, e.g. 'archestra__whoami', 'context7__resolve-library-id', or an agent delegation name 'agent-<id>'. |
 | `tool_args` | `object` | No | Arguments object for the target tool; must match its input schema. |
+| `wire_context` | `object` | No |  |
+| `wire_context.call_id` | `string` | Yes |  |
+| `wire_context.thread_id` | `string` | Yes |  |
+| `wire_context.item_id` | `string` | Yes |  |
 
 
 ### Skills

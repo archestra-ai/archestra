@@ -1,12 +1,12 @@
 import { PaginationMetaSchema } from "@archestra/shared";
 import { z } from "zod";
 import { PublicA2aRemoteAgentSchema } from "./a2a-outbound";
-import { SelectAgentSchema } from "./agent";
+import { AgentListItemSchema } from "./agent";
 
 export const AgentCatalogRowSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("agent"),
-    value: SelectAgentSchema,
+    value: AgentListItemSchema,
   }),
   z.object({
     type: z.literal("external"),

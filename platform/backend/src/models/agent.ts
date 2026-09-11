@@ -52,6 +52,7 @@ import {
   type Agent,
   type AgentActivationSkillMode,
   AgentActivationSkillModeSchema,
+  type AgentListItem,
   type AgentScope,
   type AgentScopeFilter,
   type AgentToolRef,
@@ -75,6 +76,7 @@ import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
+import AgentPinModel from "./agent-pin";
 import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
@@ -101,6 +103,8 @@ type AgentListFilters = {
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
+  /** Caller-relative pin filter for the paginated Agents surface. */
+  pinned?: boolean;
 };
 
 type AgentCatalogRowRef = {
@@ -1387,6 +1391,7 @@ class AgentModel {
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
       !params.filters?.providerApiKeyId &&
+      params.filters?.pinned !== true &&
       params.filters?.scope !== "built_in";
     const externalWhereConditions: SQL[] = [
       includeExternalAgents
@@ -1521,6 +1526,12 @@ class AgentModel {
           WHEN ${schema.agentsTable.scope} = 'personal'
             AND ${schema.agentsTable.authorId} = ${params.userId}
           THEN 0 ELSE 1 END`.as("personal_priority"),
+        pinnedAt: sql<Date | null>`(
+          SELECT ${schema.agentPinsTable.pinnedAt}
+          FROM ${schema.agentPinsTable}
+          WHERE ${schema.agentPinsTable.userId} = ${params.userId}
+            AND ${schema.agentPinsTable.agentId} = ${schema.agentsTable.id}
+        )`.as("pinned_at"),
       })
       .from(schema.agentsTable)
       .leftJoin(
@@ -1541,6 +1552,7 @@ class AgentModel {
           WHEN ${schema.a2aRemoteAgentsTable.scope} = 'personal'
             AND ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
           THEN 0 ELSE 1 END`.as("personal_priority"),
+        pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
       })
       .from(schema.a2aRemoteAgentsTable)
       .leftJoin(
@@ -1559,6 +1571,17 @@ class AgentModel {
           ? candidates.teamName
           : candidates.createdAt;
 
+    const candidateOrder =
+      params.filters?.pinned === true
+        ? [desc(candidates.pinnedAt), asc(candidates.name), asc(candidates.id)]
+        : [
+            asc(candidates.personalPriority),
+            direction(sortColumn),
+            asc(candidates.name),
+            asc(candidates.resourceType),
+            asc(candidates.id),
+          ];
+
     const [rows, [totals]] = await Promise.all([
       db
         .select({
@@ -1566,13 +1589,7 @@ class AgentModel {
           id: candidates.id,
         })
         .from(candidates)
-        .orderBy(
-          asc(candidates.personalPriority),
-          direction(sortColumn),
-          asc(candidates.name),
-          asc(candidates.resourceType),
-          asc(candidates.id),
-        )
+        .orderBy(...candidateOrder)
         .limit(params.pagination.limit)
         .offset(params.pagination.offset),
       db
@@ -1601,11 +1618,25 @@ class AgentModel {
     filters?: AgentListFilters,
     userId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<PaginatedResult<Agent>> {
+  ): Promise<PaginatedResult<AgentListItem>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = AgentModel.getOrderByClause(sorting);
     const personalAgentPriorityOrderClauses =
       AgentModel.getPersonalAgentPriorityOrderClauses(userId);
+    if (filters?.pinned !== undefined && !userId) {
+      return createPaginatedResult([], 0, pagination);
+    }
+    const pinnedAgentOrderClauses =
+      filters?.pinned === true && userId
+        ? [
+            desc(sql`(
+              SELECT ${schema.agentPinsTable.pinnedAt}
+              FROM ${schema.agentPinsTable}
+              WHERE ${schema.agentPinsTable.userId} = ${userId}
+                AND ${schema.agentPinsTable.agentId} = ${schema.agentsTable.id}
+            )`),
+          ]
+        : [];
 
     const whereClause = await AgentModel.buildListWhereClause({
       filters,
@@ -1647,6 +1678,7 @@ class AgentModel {
           eq(schema.agentsTable.id, subagentsCountSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           direction(sql`COALESCE(${subagentsCountSubquery.subagentsCount}, 0)`),
         );
@@ -1666,6 +1698,7 @@ class AgentModel {
           eq(schema.agentsTable.id, toolsCountSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`),
         );
@@ -1687,6 +1720,7 @@ class AgentModel {
           eq(schema.agentsTable.id, knowledgeSourcesCountSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           direction(
             sql`COALESCE(${knowledgeSourcesCountSubquery.knowledgeSourcesCount}, 0)`,
@@ -1722,6 +1756,7 @@ class AgentModel {
           eq(schema.agentsTable.id, lastUsedAtSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           // Ordered by the same value the row displays: the later of the two
           // signals. Never-used agents sort as oldest (asc first / desc last).
@@ -1752,11 +1787,13 @@ class AgentModel {
           eq(schema.agentsTable.id, teamNameSubquery.agentId),
         )
         .orderBy(
+          ...pinnedAgentOrderClauses,
           ...personalAgentPriorityOrderClauses,
           direction(sql`COALESCE(${teamNameSubquery.teamName}, '')`),
         );
     } else {
       query = query.orderBy(
+        ...pinnedAgentOrderClauses,
         ...personalAgentPriorityOrderClauses,
         orderByClause,
       );
@@ -1852,9 +1889,19 @@ class AgentModel {
       AgentModel.populateResolvedLlm(agents),
       AgentModel.populateLastUsedAt(agents),
     ]);
+    const pinnedAtByAgent = userId
+      ? await AgentPinModel.getPinnedAtForAgents({ userId, agentIds })
+      : new Map<string, Date>();
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
-    return createPaginatedResult(agents, Number(totalResult), pagination);
+    return createPaginatedResult(
+      agents.map((agent) => ({
+        ...agent,
+        pinnedAt: pinnedAtByAgent.get(agent.id) ?? null,
+      })),
+      Number(totalResult),
+      pagination,
+    );
   }
 
   /**
@@ -1982,6 +2029,26 @@ class AgentModel {
           ids.length > 0
             ? inArray(schema.agentsTable.id, ids)
             : sql<boolean>`false`,
+        );
+      }
+    }
+    if (filters?.pinned !== undefined) {
+      if (!userId) {
+        whereConditions.push(sql<boolean>`false`);
+      } else {
+        const pinExists = exists(
+          db
+            .select({ value: sql`1` })
+            .from(schema.agentPinsTable)
+            .where(
+              and(
+                eq(schema.agentPinsTable.userId, userId),
+                eq(schema.agentPinsTable.agentId, schema.agentsTable.id),
+              ),
+            ),
+        );
+        whereConditions.push(
+          filters.pinned ? pinExists : sql`NOT ${pinExists}`,
         );
       }
     }

@@ -25,7 +25,17 @@ import {
   useSuggestSkillDescription,
 } from "@/lib/agent.query";
 
-type Agent = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
+type Agent = Pick<
+  archestraApiTypes.GetAgentResponses["200"],
+  | "connectorIds"
+  | "description"
+  | "id"
+  | "knowledgeBaseIds"
+  | "llmModel"
+  | "modelId"
+  | "name"
+  | "tools"
+>;
 
 // skill-runtime tools every skill-enabled agent carries; recommending them in a
 // skill is circular, so they are excluded (mirrors the backend transform).

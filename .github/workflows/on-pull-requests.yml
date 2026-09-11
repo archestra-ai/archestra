@@ -803,13 +803,35 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
 
+      # apt mirror outages must not fail the job when the runner image already
+      # carries Chromium's system libraries: retry install-deps, then prove the
+      # browser launches instead of trusting apt's exit code.
       - name: Install Chromium for Playwright
         if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @frontend exec playwright install --with-deps chromium
+        run: |
+          pnpm --filter @frontend exec playwright install chromium
+          for attempt in 1 2 3; do
+            if pnpm --filter @frontend exec playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "install-deps attempt ${attempt} failed; retrying in 20s"
+            sleep 20
+          done
+          echo "install-deps failed; verifying Chromium launches with existing system libraries"
+          pnpm --filter @frontend exec playwright screenshot --browser chromium about:blank /tmp/chromium-deps-check.png
 
       - name: Install Chromium system dependencies
         if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @frontend exec playwright install-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter @frontend exec playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "install-deps attempt ${attempt} failed; retrying in 20s"
+            sleep 20
+          done
+          echo "install-deps failed; verifying Chromium launches with existing system libraries"
+          pnpm --filter @frontend exec playwright screenshot --browser chromium about:blank /tmp/chromium-deps-check.png
 
       - name: Install Chromium (macOS)
         # No system deps to install on macOS; a version already present in

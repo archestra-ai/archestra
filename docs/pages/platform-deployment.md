@@ -1354,9 +1354,9 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 ### OpenAPPA Proxy Hooks
 
-The experimental LLM proxy integration checks requests and tool proposals through an authenticated OpenAPPA runtime. Native paths cover Claude Code over Anthropic Messages, Codex over OpenAI Responses, and OpenCode over Kimi Chat Completions. Clients connect directly to Archestra without an enforcement relay or client plugin. MCP calls execute through the MCP Gateway with its existing authentication, RBAC, and policies. Provider-hosted MCP tools are rejected before provider forwarding.
+The experimental LLM proxy integration checks requests and tool proposals through an authenticated OpenAPPA runtime. Native paths cover Claude Code over Anthropic Messages, Codex over OpenAI Responses, and OpenCode over Kimi Chat Completions. Clients connect directly to Archestra without an enforcement relay or client plugin. Local tools in every client are protected with APPA exactly as regular connected MCP server tool calls, mediated through the proxy rewrite layer. Provider-hosted MCP tools are rejected before provider forwarding.
 
-Verified live coverage is limited to sequential public publication and private-data publication denial. Those controls used Claude Code 2.1.258, Codex 0.153.0, and OpenCode 1.18.29. Child workflows, forks, compaction, sanitizers, and approval flows have implementation and regression coverage, but their complete native-client live matrix is not verified. Native Codex custom local-tool execution, including `apply_patch`, is not complete and fails closed. This prototype is not production-ready.
+Verified live coverage is demonstrated on sequential public publication and private-data publication denial across Claude Code 2.1.258, Codex 0.153.0, and OpenCode 1.18.29. Local client tools and gateway tools are protected with APPA: proxy hooks intercept candidate calls from the model, negotiate remedy plans or approvals when required, and rewrite or propagate calls and results as governed by APPA policies. Child workflows, forks, compaction, sanitizers, and approval flows have implementation and regression coverage, with end-to-end qualification ongoing.
 
 - **`ARCHESTRA_LLM_PROXY_APPA_HOOK_URL`** - Cluster-local OpenAPPA runtime base URL.
   - Default: unset. Hooks are disabled.
@@ -1413,7 +1413,7 @@ Verified live coverage is limited to sequential public publication and private-d
 The runtime v1 capability response is:
 
 ```json
-{"protocol_version":1,"completed_event_replay":true,"typed_offers":true,"restriction_acceptance":true,"acceptance_settlement":true,"human_approval":true,"approval_grants":true,"legacy_hooks":false,"parallel_calls":true,"sanitized_results":true,"general_sanitizers":true,"child_workflows":true,"child_actor_targeting":true}
+{"protocol_version":1,"completed_event_replay":true,"typed_offers":true,"restriction_acceptance":true,"acceptance_settlement":true,"human_approval":true,"approval_grants":true,"legacy_hooks":false,"sanitized_results":true,"general_sanitizers":true,"child_workflows":true,"child_actor_targeting":true}
 ```
 
 The v1 event request and receipt are:
@@ -1446,7 +1446,7 @@ Completed, quiescent responses can bind an authenticated runtime checkpoint to e
 
 Buffered provider streams have a 16 MiB limit. V1 event requests are limited to 1 MiB before storage. Tool arguments are limited to 64 KiB. Uninstrumented catch-all endpoints remain blocked. Unsupported request shapes return HTTP 400; runtime availability failures return HTTP 503.
 
-The proxy serializes turns per bound thread in Postgres. Overlapping turns on that thread return HTTP 409. Parallel tool execution and automatic serialization of multi-call responses are outside this prototype's verified scope. The runtime's advertised batch capabilities do not imply native-client coverage. Singleton proposals support narrowing acceptance, configured sanitizers, and signed approval. Completed event replies can be replayed without repeating execution. Unconfirmed interruptions quarantine the conversation rather than automatically recovering it.
+The proxy serializes turns per bound thread in Postgres. Overlapping turns on that thread return HTTP 409. Singleton proposals support narrowing acceptance, configured sanitizers, and signed approval. Completed event replies can be replayed without repeating execution. Unconfirmed interruptions quarantine the conversation rather than automatically recovering it.
 
 This mechanism assumes clients send all model traffic through the proxy. It checks model input and tool instructions before release. Native Codex gateway calls carry a sealed `wire_context` locator. The gateway validates the actual bearer principal, gateway profile, issued call, and exact arguments before execution. Completed gateway receipts prevent repeated dispatch. Other client-reported outcomes are not independent proof of execution. The proxy is not an OS sandbox and cannot prevent an independently acting client from bypassing its endpoints. Hidden, unbound provider continuation state is rejected.
 

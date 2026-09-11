@@ -550,7 +550,14 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog({ agents: [newAgent] }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
     });
 
     await agentsPage.goto();
@@ -592,6 +599,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog(),
     });
     await mswControl.use({
@@ -624,7 +632,14 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
+      query: { pinned: "false" },
       body: makeAgentCatalog({ agents: [original] }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agent-catalog",
+      query: { pinned: "true" },
+      body: makeAgentCatalog(),
     });
     await mswControl.use({
       method: "post",

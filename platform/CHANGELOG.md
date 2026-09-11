@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.57](https://github.com/archestra-ai/archestra/compare/platform-v1.3.56...platform-v1.3.57) (2026-09-11)
+
+
+### Bug Fixes
+
+* **github-copilot:** honor account API endpoints (backport release/1.3) ([#7829](https://github.com/archestra-ai/archestra/issues/7829)) ([acda24a](https://github.com/archestra-ai/archestra/commit/acda24a9b645c56a6771f50c5734678ed160d27c))
+* **llm-proxy:** preserve Model Router virtual key attribution ([#7822](https://github.com/archestra-ai/archestra/issues/7822)) ([feb6065](https://github.com/archestra-ai/archestra/commit/feb6065ab48f92050755626673f387b8b8e3a197))
+* **observability:** preserve route categories on context compaction spans (backport release/1.3) ([#7830](https://github.com/archestra-ai/archestra/issues/7830)) ([8e39d45](https://github.com/archestra-ai/archestra/commit/8e39d45e316f3261b62f8bdec00990d737cb054b))
+* **proxy:** keep SSE streams alive while tool calls are withheld (backport [#7810](https://github.com/archestra-ai/archestra/issues/7810)) ([#7811](https://github.com/archestra-ai/archestra/issues/7811)) ([af68b22](https://github.com/archestra-ai/archestra/commit/af68b22dbd851b94ef89036280a9a144204fc3e9))
+* **rbac:** one rule set for role writes, so duplicating a role works (1.3) ([#7809](https://github.com/archestra-ai/archestra/issues/7809)) ([9904831](https://github.com/archestra-ai/archestra/commit/99048310cecfecb13741fd5c2c6eff6e85cd8710))
+
 ## [1.3.56](https://github.com/archestra-ai/archestra/compare/platform-v1.3.55...platform-v1.3.56) (2026-09-10)
 
 

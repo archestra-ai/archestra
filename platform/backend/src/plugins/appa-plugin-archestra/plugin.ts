@@ -6,20 +6,21 @@ import {
   canonicalJsonObject,
 } from "@/routes/proxy/appa-proxy-hook";
 import type { AppaHistoryProtocol } from "@/services/appa-history-codec";
-import type {
-  AppaChildContext,
-  AppaClientAdapter,
-  AppaLifecycleHookCallbacks,
-  AppaPromptContext,
-  AppaSessionHookInstance,
-  AppaSessionInitContext,
-  AppaToolCall,
-  AppaToolCallsContext,
-  AppaToolCallsDecision,
-  AppaToolResult,
-  AppaToolResultContext,
-  AppaToolResultOutcome,
-  AppaTurnEndContext,
+import {
+  type AppaChildContext,
+  type AppaClientAdapter,
+  type AppaLifecycleHookCallbacks,
+  type AppaPromptContext,
+  type AppaSessionHookInstance,
+  type AppaSessionInitContext,
+  type AppaToolCall,
+  type AppaToolCallsContext,
+  type AppaToolCallsDecision,
+  type AppaToolResult,
+  type AppaToolResultContext,
+  type AppaToolResultOutcome,
+  type AppaTurnEndContext,
+  isAppaSpawnTool,
 } from "./types";
 
 /**
@@ -166,14 +167,16 @@ class AppaSessionHookWrapper implements AppaSessionHookInstance {
       const outboundCalls: AppaOutboundToolCall[] = context.toolCalls.map(
         (tc: AppaToolCall) => {
           const rawArgs = JSON.stringify(tc.arguments);
+          const targetName =
+            this.adapter.canonicalizeLocalToolName?.(tc.name) ?? tc.name;
           return {
             id: tc.id,
             emittedName: tc.name,
             emittedArguments: rawArgs,
             emittedArgumentsCanonical: canonicalJsonObject(rawArgs),
-            targetName: tc.name,
+            targetName,
             targetArguments: tc.arguments,
-            spawn: tc.spawn,
+            spawn: tc.spawn ?? isAppaSpawnTool(tc.name),
           };
         },
       );

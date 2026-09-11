@@ -1,9 +1,10 @@
-import type {
-  AppaClientAdapter,
-  AppaProtocol,
-  AppaSessionIdentity,
-  AppaToolCall,
-  AppaToolResult,
+import {
+  type AppaClientAdapter,
+  type AppaProtocol,
+  type AppaSessionIdentity,
+  type AppaToolCall,
+  type AppaToolResult,
+  isAppaSpawnTool,
 } from "../types";
 
 /**
@@ -47,6 +48,17 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     };
   }
 
+  canonicalizeLocalToolName(rawName: string): string {
+    if (
+      rawName.startsWith("mcp/") ||
+      rawName.startsWith("mcp__") ||
+      rawName.startsWith("host/")
+    ) {
+      return rawName;
+    }
+    return `host/claude-code/${rawName}`;
+  }
+
   extractToolCalls(responseBody: unknown): AppaToolCall[] {
     if (!isRecord(responseBody) || !Array.isArray(responseBody.content)) {
       return [];
@@ -54,11 +66,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     const calls: AppaToolCall[] = [];
     for (const block of responseBody.content) {
       if (isRecord(block) && block.type === "tool_use") {
+        const name = String(block.name ?? "");
         calls.push({
           id: String(block.id ?? ""),
-          name: String(block.name ?? ""),
+          name,
           arguments: isRecord(block.input) ? block.input : {},
           raw: block,
+          spawn: isAppaSpawnTool(name),
         });
       }
     }

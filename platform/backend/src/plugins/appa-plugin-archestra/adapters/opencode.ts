@@ -1,9 +1,10 @@
-import type {
-  AppaClientAdapter,
-  AppaProtocol,
-  AppaSessionIdentity,
-  AppaToolCall,
-  AppaToolResult,
+import {
+  type AppaClientAdapter,
+  type AppaProtocol,
+  type AppaSessionIdentity,
+  type AppaToolCall,
+  type AppaToolResult,
+  isAppaSpawnTool,
 } from "../types";
 
 /**
@@ -49,6 +50,17 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     };
   }
 
+  canonicalizeLocalToolName(rawName: string): string {
+    if (
+      rawName.startsWith("mcp:") ||
+      rawName.startsWith("builtin:") ||
+      rawName.startsWith("host/")
+    ) {
+      return rawName;
+    }
+    return `builtin:${rawName}`;
+  }
+
   extractToolCalls(responseBody: unknown): AppaToolCall[] {
     if (!isRecord(responseBody) || !Array.isArray(responseBody.choices)) {
       return [];
@@ -73,11 +85,13 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
               } else if (isRecord(tc.function.arguments)) {
                 args = tc.function.arguments;
               }
+              const name = String(tc.function.name ?? "");
               calls.push({
                 id: String(tc.id ?? ""),
-                name: String(tc.function.name ?? ""),
+                name,
                 arguments: args,
                 raw: tc,
+                spawn: isAppaSpawnTool(name),
               });
             }
           }

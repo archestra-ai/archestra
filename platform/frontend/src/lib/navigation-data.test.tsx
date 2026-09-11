@@ -12,6 +12,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfilesPaginated } from "@/lib/agent.query";
@@ -28,6 +29,7 @@ beforeEach(() => archestraApiClient.setConfig({ baseUrl: origin }));
 afterEach(() => {
   for (const client of clients.splice(0)) client.clear();
   server.resetHandlers();
+  vi.restoreAllMocks();
 });
 afterAll(() => server.close());
 
@@ -155,5 +157,41 @@ describe("navigation data reuse", () => {
     expect(client.getQueryCache().findAll({ queryKey: ["apps"] })).toHaveLength(
       0,
     );
+  });
+
+  it("does not report an Apps request cancelled during navigation", async () => {
+    const { client, wrapper } = setup();
+    client.setQueryData(authQueryKeys.userPermissions(), { app: ["read"] });
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let markAborted: (() => void) | undefined;
+    const aborted = new Promise<void>((resolve) => {
+      markAborted = resolve;
+    });
+    server.use(
+      http.get(`${origin}/api/apps`, async ({ request }) => {
+        markStarted?.();
+        request.signal.addEventListener("abort", () => markAborted?.(), {
+          once: true,
+        });
+        await new Promise(() => {});
+        return HttpResponse.json({ data: [], pagination: { total: 0 } });
+      }),
+    );
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    const query = renderHook(() => useApps({ limit: 100, offset: 0 }), {
+      wrapper,
+    });
+    await started;
+    query.unmount();
+    await aborted;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

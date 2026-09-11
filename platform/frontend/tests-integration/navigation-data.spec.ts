@@ -8,9 +8,16 @@ test("the default Agents view uses its server list through hydration", async ({
   await mswControl.use({
     method: "get",
     url: "/api/agents",
+    query: { pinned: "false" },
     body: makeAgentsList({
       agents: [makeAgent({ name: "Server-rendered agent" })],
     }),
+  });
+  await mswControl.use({
+    method: "get",
+    url: "/api/agents",
+    query: { pinned: "true" },
+    body: makeAgentsList(),
   });
   const clientListRequests: string[] = [];
   page.on("request", (request) => {

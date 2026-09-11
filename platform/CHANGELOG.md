@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.4.0-beta.5](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.4...platform-v1.4.0-beta.5) (2026-09-11)
+
+
+### Features
+
+* **a2a:** add outbound agent delegation ([#7757](https://github.com/archestra-ai/archestra/issues/7757)) ([721c199](https://github.com/archestra-ai/archestra/commit/721c199d2a549420641b24249786f89273403909))
+* **apps:** add card quick actions ([#7795](https://github.com/archestra-ai/archestra/issues/7795)) ([daddbc0](https://github.com/archestra-ai/archestra/commit/daddbc0ad721f3bf7e7dbd6ab33d34e42d728b24))
+* **connect:** install Claude Desktop with subscription reuse ([#7796](https://github.com/archestra-ai/archestra/issues/7796)) ([c1fac52](https://github.com/archestra-ai/archestra/commit/c1fac52ff0237858281717a686e1c068b54679d1))
+
+
+### Bug Fixes
+
+* **agent-runtime:** survive transient completion monitoring failures ([#7813](https://github.com/archestra-ai/archestra/issues/7813)) ([01e38f7](https://github.com/archestra-ai/archestra/commit/01e38f73011093f07d22160541dd13c10db3cb22))
+* **agents:** preserve final task reports in Slack ([#7815](https://github.com/archestra-ai/archestra/issues/7815)) ([0a6f2d2](https://github.com/archestra-ai/archestra/commit/0a6f2d2e5f30eae3a968531430b250e32a2860f0))
+* **connect:** discover Desktop models and remove deprecated MCP configuration ([#7814](https://github.com/archestra-ai/archestra/issues/7814)) ([2eb1260](https://github.com/archestra-ai/archestra/commit/2eb12601239190daed0aaa4091f6e61e8cad613a))
+* **database:** repair columns skipped during stable-to-beta upgrades ([#7819](https://github.com/archestra-ai/archestra/issues/7819)) ([2a9986a](https://github.com/archestra-ai/archestra/commit/2a9986a794308a0a0dbe5b3b63e6aea4a6e440a4))
+* **frontend:** avoid reporting cancelled Apps requests ([#7824](https://github.com/archestra-ai/archestra/issues/7824)) ([9e2e03b](https://github.com/archestra-ai/archestra/commit/9e2e03b82f4f962f79c6b79d26f1de214da2e282))
+* **frontend:** label app and project visibility badges ([#7803](https://github.com/archestra-ai/archestra/issues/7803)) ([81d7b38](https://github.com/archestra-ai/archestra/commit/81d7b389b40b7019a64ed9586d0a5c8fcc9b8d2f))
+* **github-copilot:** honor account API endpoints ([#7828](https://github.com/archestra-ai/archestra/issues/7828)) ([5c985e6](https://github.com/archestra-ai/archestra/commit/5c985e6faf08ce6b87cce71597e1c73757ca78d1))
+* **llm-proxy:** preserve Model Router virtual key attribution ([#7816](https://github.com/archestra-ai/archestra/issues/7816)) ([f32c19a](https://github.com/archestra-ai/archestra/commit/f32c19ab9687b7bf2438f278e8e79b9188b113be))
+* **observability:** preserve route categories on context compaction spans ([#7827](https://github.com/archestra-ai/archestra/issues/7827)) ([93d9f59](https://github.com/archestra-ai/archestra/commit/93d9f5958260299f4b9dfa8092e26e01020ec78c))
+* **proxy:** keep SSE streams alive while tool calls are withheld ([#7810](https://github.com/archestra-ai/archestra/issues/7810)) ([494b363](https://github.com/archestra-ai/archestra/commit/494b3639e33ee1af63207ac05d1f56b76fef6b80))
+* **rbac:** one rule set for role writes, so duplicating a role works ([#7808](https://github.com/archestra-ai/archestra/issues/7808)) ([4a2715f](https://github.com/archestra-ai/archestra/commit/4a2715f0599b0e8e400caf935adfb14f08c7d027))
+
+
+### Performance Improvements
+
+* **frontend:** defer optional syntax and emoji libraries ([#7801](https://github.com/archestra-ai/archestra/issues/7801)) ([1a901e2](https://github.com/archestra-ai/archestra/commit/1a901e2c794ab122da612895d598c012aebc692f))
+* **frontend:** reuse navigation data and prefetch Apps on intent ([#7800](https://github.com/archestra-ai/archestra/issues/7800)) ([42dd3eb](https://github.com/archestra-ai/archestra/commit/42dd3eb6dea4b97d998584cc1a2075d06561c58c))
+
 ## [1.4.0-beta.4](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.3...platform-v1.4.0-beta.4) (2026-09-10)
 
 

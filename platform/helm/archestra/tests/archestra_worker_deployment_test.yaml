@@ -4,6 +4,14 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
+  - it: excludes workers from runtime API egress destinations
+    asserts:
+      - isNull:
+          path: spec.template.metadata.labels["archestra.io/platform-api"]
+      - equal:
+          path: spec.template.metadata.labels["archestra.io/p4-shim-client"]
+          value: "true"
+
   - it: omits the worker deployment when maintenance mode is enabled
     set:
       archestra.env:

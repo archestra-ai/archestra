@@ -6,11 +6,11 @@ import {
   History,
   MessageSquare,
   Pencil,
-  Pin,
   PinOff,
   Plug,
   RotateCcw,
   Sparkles,
+  Star,
   Trash2,
 } from "lucide-react";
 import {
@@ -177,8 +177,8 @@ export function AgentActions({
                 testId: `${E2eTestId.ToggleDefaultAgentButton}-${agent.name}`,
               }
             : {
-                icon: <Pin className="h-4 w-4" />,
-                label: "Pin default",
+                icon: <Star className="h-4 w-4" />,
+                label: "Set as default",
                 tooltip: "Your new chats will start on this agent.",
                 onClick: () => personalDefault.onToggle(agent, true),
                 testId: `${E2eTestId.ToggleDefaultAgentButton}-${agent.name}`,

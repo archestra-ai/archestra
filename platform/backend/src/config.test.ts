@@ -467,6 +467,7 @@ describe("parseAppaProxyHookConfig", () => {
       approvalSigningSecret: undefined,
       autoAcceptRestrictions: false,
       nativeCodexEnabled: false,
+      maxStreamBufferBytes: 16777216,
     });
   });
 

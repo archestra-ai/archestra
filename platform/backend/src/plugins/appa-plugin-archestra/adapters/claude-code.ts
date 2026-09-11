@@ -6,6 +6,7 @@ import {
   type AppaToolResult,
   isAppaSpawnTool,
 } from "../types";
+import { isRecord, readHeader } from "../utils";
 
 /**
  * Client adapter for Claude Code over Anthropic Messages protocol (/v1/messages).
@@ -28,8 +29,10 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     ).toLowerCase();
     return (
       userAgent.includes("claude-code") ||
+      userAgent.includes("claude_code") ||
+      userAgent.includes("claude-cli") ||
       clientApp.includes("claude-code") ||
-      Boolean(context.headers["anthropic-version"])
+      clientApp.includes("claude_code")
     );
   }
 
@@ -132,16 +135,4 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       is_error: admittedResult.isError ?? false,
     };
   }
-}
-
-function readHeader(
-  headers: Record<string, string | string[] | undefined>,
-  name: string,
-): string | undefined {
-  const value = headers[name.toLowerCase()];
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

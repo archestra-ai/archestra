@@ -524,4 +524,124 @@ describe("durable APPA wire frames", () => {
       (await AppaProxyWireModel.listIssuedAliases(scope))[0]?.metadata,
     ).toMatchObject({ argumentsCanonical: finalizedArguments });
   });
+
+  test("enforces duplicate wire alias detection within batch and against session", async () => {
+    const { turn, scope } = await openTurn();
+    const frame = await AppaProxyWireModel.createFrame({
+      ...scope,
+      turnId: turn.turnId,
+      kind: "model_response",
+      protocol: "codex-responses",
+      requestHash: "request-dedup-test",
+      idempotencyKey: "frame-dedup-1",
+      payload: { output: "ok" },
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    // Duplicate wireId within single batch
+    await expect(
+      AppaProxyWireModel.addAliases({
+        ...scope,
+        frameId: frame.id,
+        aliases: [
+          {
+            kind: "call",
+            position: 0,
+            wireId: "call_dup",
+            metadata: { foo: 1 },
+          },
+          {
+            kind: "call",
+            position: 1,
+            wireId: "call_dup",
+            metadata: { foo: 2 },
+          },
+        ],
+      }),
+    ).rejects.toThrow("Duplicate wire alias within batch");
+
+    // Duplicate position within single batch
+    await expect(
+      AppaProxyWireModel.addAliases({
+        ...scope,
+        frameId: frame.id,
+        aliases: [
+          {
+            kind: "call",
+            position: 0,
+            wireId: "call_1",
+            metadata: { foo: 1 },
+          },
+          {
+            kind: "task",
+            position: 0,
+            wireId: "task_1",
+            metadata: { foo: 2 },
+          },
+        ],
+      }),
+    ).rejects.toThrow("Duplicate alias position within batch");
+
+    // First insert succeeds
+    await AppaProxyWireModel.addAliases({
+      ...scope,
+      frameId: frame.id,
+      aliases: [
+        {
+          kind: "call",
+          position: 0,
+          wireId: "call_existing",
+          metadata: { foo: 1 },
+        },
+      ],
+    });
+
+    // Second insert with duplicate wireId across session fails
+    await expect(
+      AppaProxyWireModel.addAliases({
+        ...scope,
+        frameId: frame.id,
+        aliases: [
+          {
+            kind: "call",
+            position: 1,
+            wireId: "call_existing",
+            metadata: { foo: 2 },
+          },
+        ],
+      }),
+    ).rejects.toThrow("Wire alias already exists for session");
+  });
+
+  test("rejects tampered ciphertext when unsealing frame payload", async () => {
+    const { turn, scope } = await openTurn();
+    const frame = await AppaProxyWireModel.createFrame({
+      ...scope,
+      turnId: turn.turnId,
+      kind: "model_response",
+      protocol: "codex-responses",
+      requestHash: "request-tamper-test",
+      idempotencyKey: "frame-tamper-1",
+      payload: { secret: "AUTHENTIC_DATA" },
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    // Verify unseal works initially
+    const authentic = await AppaProxyWireModel.findOwned({
+      ...scope,
+      frameId: frame.id,
+    });
+    expect(authentic?.payload).toEqual({ secret: "AUTHENTIC_DATA" });
+
+    // Tamper with ciphertext in database
+    await db
+      .update(frames)
+      .set({ payloadCiphertext: "tampered:payload:ciphertext" })
+      .where(eq(frames.id, frame.id));
+
+    // Tampered payload fails authentication
+    await expect(
+      AppaProxyWireModel.findOwned({ ...scope, frameId: frame.id }),
+    ).rejects.toThrow();
+  });
 });

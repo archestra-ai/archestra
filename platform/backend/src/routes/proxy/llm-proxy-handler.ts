@@ -2287,10 +2287,14 @@ async function handleStreaming<
             // Bound the whole provider stream, including tool-only chunks that
             // the adapter stores without returning an SSE frame.
             appaStreamBytes += Buffer.byteLength(JSON.stringify(chunk) ?? "");
-            if (appaStreamBytes > 16 * 1024 * 1024) {
+            const maxStreamBytes =
+              config.llmProxy.appaHook?.maxStreamBufferBytes ??
+              16 * 1024 * 1024;
+            if (appaStreamBytes > maxStreamBytes) {
+              const maxMiB = Math.round(maxStreamBytes / (1024 * 1024));
               throw new ApiError(
                 503,
-                "OpenAPPA proxy stream exceeds the 16 MiB prototype limit.",
+                `OpenAPPA proxy stream exceeds the ${maxMiB} MiB limit.`,
               );
             }
             if (
@@ -2555,6 +2559,10 @@ async function handleStreaming<
         heldBatchCommitted = true;
       }
       try {
+        if (reply.raw.destroyed) {
+          await appaHook.quarantineUndeliveredCalls();
+          throw new AppaProxyHookError("unavailable", "outbound");
+        }
         if (!heldBatchCommitted) {
           const effectiveCalls = await appaHook.authorizeOutboundToolCalls(
             appaToolCalls,
@@ -2564,6 +2572,10 @@ async function handleStreaming<
               client: appaNativeClient,
             }),
           );
+          if (reply.raw.destroyed) {
+            await appaHook.quarantineUndeliveredCalls();
+            throw new AppaProxyHookError("unavailable", "outbound");
+          }
           rewrittenToolCalls = effectiveCalls.map((call) => ({
             id: call.id,
             name: call.emittedName,
@@ -2613,7 +2625,18 @@ async function handleStreaming<
           toolInvocationRefusal = appaHookPolicyBlock(appaToolCalls);
           toolCallBlock = toToolCallBlock(toolInvocationRefusal);
         } else {
-          await appaHook.quarantineUndeliveredCalls();
+          try {
+            await appaHook.quarantineUndeliveredCalls();
+          } catch (quarantineError) {
+            logger.error(
+              { error: quarantineError, originalError: error },
+              "Failed to quarantine APPA calls after authorization failure",
+            );
+            throw new ApiError(
+              500,
+              "OpenAPPA proxy failed to guarantee tool admission quarantine.",
+            );
+          }
           throw toAppaHookApiError(error);
         }
       }
@@ -2762,13 +2785,6 @@ async function handleStreaming<
           rewrittenToolCalls && streamAdapter.formatToolCallsSSE
             ? streamAdapter.formatToolCallsSSE(rewrittenToolCalls)
             : streamAdapter.getRawToolCallEvents();
-        if (rewrittenToolCalls) {
-          streamAdapter.state.toolCalls.splice(
-            0,
-            streamAdapter.state.toolCalls.length,
-            ...rewrittenToolCalls,
-          );
-        }
         for (const event of allEvents) {
           writeToClient(event);
         }
@@ -3305,6 +3321,10 @@ async function handleNonStreaming<
           heldBatchCommitted = true;
         }
         try {
+          if (reply.raw.destroyed) {
+            await appaHook.quarantineUndeliveredCalls();
+            throw new AppaProxyHookError("unavailable", "outbound");
+          }
           if (!heldBatchCommitted) {
             const effectiveCalls = await appaHook.authorizeOutboundToolCalls(
               appaToolCalls,
@@ -3314,6 +3334,10 @@ async function handleNonStreaming<
                 client: appaNativeClient,
               }),
             );
+            if (reply.raw.destroyed) {
+              await appaHook.quarantineUndeliveredCalls();
+              throw new AppaProxyHookError("unavailable", "outbound");
+            }
             rewrittenToolCalls = effectiveCalls.map((call) => ({
               id: call.id,
               name: call.emittedName,
@@ -3374,7 +3398,18 @@ async function handleNonStreaming<
           if (error instanceof AppaProxyHookError && error.kind === "denied") {
             toolInvocationRefusal = appaHookPolicyBlock(appaToolCalls);
           } else {
-            await appaHook.quarantineUndeliveredCalls();
+            try {
+              await appaHook.quarantineUndeliveredCalls();
+            } catch (quarantineError) {
+              logger.error(
+                { error: quarantineError, originalError: error },
+                "Failed to quarantine APPA calls after authorization failure",
+              );
+              throw new ApiError(
+                500,
+                "OpenAPPA proxy failed to guarantee tool admission quarantine.",
+              );
+            }
             throw toAppaHookApiError(error);
           }
         }
@@ -4548,17 +4583,17 @@ function toAppaHookApiError(error: unknown): ApiError {
     );
   }
   if (error instanceof AppaProxyHookError) {
-    return new ApiError(
-      error.kind === "unavailable" ? 503 : 403,
-      error.kind === "unavailable"
-        ? "OpenAPPA remote hook did not authorize the request."
-        : "OpenAPPA remote hook denied the request.",
-    );
+    if (error.kind === "unavailable") {
+      return new ApiError(
+        503,
+        "OpenAPPA remote hook did not authorize the request.",
+      );
+    }
+    if (error.kind === "denied") {
+      return new ApiError(403, "OpenAPPA remote hook denied the request.");
+    }
   }
-  return new ApiError(
-    503,
-    "OpenAPPA remote hook did not authorize the request.",
-  );
+  return new ApiError(500, "OpenAPPA proxy enforcement failed unexpectedly.");
 }
 
 /**

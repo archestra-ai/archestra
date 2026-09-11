@@ -126,6 +126,7 @@ export function parseAppaProxyHookConfig(params: {
   maxCallsPerSession?: string | undefined;
   maxSessionsPerOwner?: string | undefined;
   nativeCodexEnabled?: string | undefined;
+  maxStreamBufferBytes?: string | undefined;
 }): AppaProxyHookConfig | undefined {
   const rawUrl = params.url?.trim();
   if (!rawUrl) {
@@ -202,6 +203,9 @@ export function parseAppaProxyHookConfig(params: {
       "ARCHESTRA_LLM_PROXY_APPA_APPROVAL_SIGNING_SECRET requires a separate 32-character secret and runtime token",
     );
   }
+  const maxStreamBufferBytes = params.maxStreamBufferBytes?.trim()
+    ? parsePositiveInt(params.maxStreamBufferBytes, 16 * 1024 * 1024)
+    : 16 * 1024 * 1024;
   return {
     url: url.toString().replace(/\/$/, ""),
     timeoutMs,
@@ -212,6 +216,7 @@ export function parseAppaProxyHookConfig(params: {
     maxCallsPerSession: parseAppaLedgerLimit(params.maxCallsPerSession, 1000),
     maxSessionsPerOwner: parseAppaLedgerLimit(params.maxSessionsPerOwner, 100),
     nativeCodexEnabled,
+    maxStreamBufferBytes,
   };
 }
 
@@ -3542,6 +3547,8 @@ const config = {
         process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_SESSIONS_PER_OWNER,
       nativeCodexEnabled:
         process.env.ARCHESTRA_LLM_PROXY_APPA_NATIVE_CODEX_ENABLED,
+      maxStreamBufferBytes:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_STREAM_BUFFER_BYTES,
     }),
   },
   kb: {

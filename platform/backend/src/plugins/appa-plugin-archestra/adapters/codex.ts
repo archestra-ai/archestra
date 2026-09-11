@@ -6,6 +6,7 @@ import {
   type AppaToolResult,
   isAppaSpawnTool,
 } from "../types";
+import { isRecord, readHeader } from "../utils";
 
 /**
  * Client adapter for Codex over OpenAI Responses protocol (/v1/responses).
@@ -153,16 +154,4 @@ export class AppaCodexAdapter implements AppaClientAdapter {
           : JSON.stringify(admittedResult.content),
     };
   }
-}
-
-function readHeader(
-  headers: Record<string, string | string[] | undefined>,
-  name: string,
-): string | undefined {
-  const value = headers[name.toLowerCase()];
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

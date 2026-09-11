@@ -8,6 +8,8 @@ import type {
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 
+const DEFAULT_APPA_APPROVAL_EXPIRY_MS = 600_000; // 10 minutes default for human review
+
 class AppaApprovalModel {
   static async create(params: {
     organizationId: string;
@@ -18,12 +20,22 @@ class AppaApprovalModel {
     tool: string;
     argumentsSha256: string;
     offerId: string;
+    expiresInMs?: number;
   }) {
     const [approval] = await db
       .insert(schema.appaProxyApprovalsTable)
       .values({
-        ...params,
-        expiresAt: new Date(Date.now() + 120_000),
+        organizationId: params.organizationId,
+        sessionId: params.sessionId,
+        activeTurnId: params.activeTurnId,
+        candidateCallId: params.candidateCallId,
+        rootId: params.rootId,
+        tool: params.tool,
+        argumentsSha256: params.argumentsSha256,
+        offerId: params.offerId,
+        expiresAt: new Date(
+          Date.now() + (params.expiresInMs ?? DEFAULT_APPA_APPROVAL_EXPIRY_MS),
+        ),
       })
       .returning();
     if (!approval) throw new Error("failed to create APPA approval");

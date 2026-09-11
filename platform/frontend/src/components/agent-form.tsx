@@ -869,7 +869,7 @@ function OutboundAgentsEditor({
             emptyMessage="No external A2A agents connected."
             createAction={{
               label: "Manage external agents",
-              href: "/a2a/agents",
+              href: "/agents",
             }}
           />
         )}

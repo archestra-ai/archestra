@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useState } from "react";
 import { useReportSearchInFlight } from "@/lib/hooks/use-is-app-loading";
+import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import { cn } from "@/lib/utils";
 import { DebouncedInput } from "./debounced-input";
 
@@ -19,6 +20,8 @@ type SearchInputProps = {
   value?: string;
   syncQueryParams?: boolean;
   paginationMode?: "offset" | "cursor";
+  /** Optional logical-to-URL adapter shared by a page section. */
+  queryParamsAdapter?: QueryParamsAdapter;
   /**
    * Whether the list this box filters is currently fetching.
    *
@@ -52,6 +55,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       value,
       syncQueryParams = true,
       paginationMode = "offset",
+      queryParamsAdapter,
       isLoading = false,
     }: SearchInputProps,
     ref,
@@ -61,7 +65,8 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
     const pathname = usePathname();
     const [isCommitPending, setIsCommitPending] = useState(false);
 
-    const searchValue = value ?? searchParams.get(paramName) ?? "";
+    const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
+    const searchValue = value ?? activeSearchParams.get(paramName) ?? "";
     const computedPlaceholder =
       objectNamePlural && searchFields?.length
         ? `Search ${objectNamePlural} by ${formatSearchFields(searchFields)}`
@@ -81,6 +86,19 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       (value: string) => {
         onSearchChange?.(value);
         if (!syncQueryParams) return;
+        if (queryParamsAdapter) {
+          queryParamsAdapter.updateQueryParams(
+            paginationMode === "cursor"
+              ? {
+                  [paramName]: value || null,
+                  cursor: null,
+                  page: null,
+                  pageSize: null,
+                }
+              : { [paramName]: value || null, page: "1" },
+          );
+          return;
+        }
         const params = new URLSearchParams(searchParams.toString());
         if (value) {
           params.set(paramName, value);
@@ -104,6 +122,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
         paginationMode,
         paramName,
         pathname,
+        queryParamsAdapter,
         router,
         searchParams,
         syncQueryParams,

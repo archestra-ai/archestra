@@ -40,14 +40,16 @@ test("delegates from a parent agent to an external A2A agent", async ({
   try {
     await resetA2aFixture(request);
 
-    // Connect the remote protocol endpoint through the same routed screen a
-    // user sees. Checking the base URL exercises Agent Card discovery without
+    // Enter through the consolidated Agents page and its shared source
+    // chooser. Checking the base URL exercises Agent Card discovery without
     // creating a half-configured connection.
-    await goToPage(page, "/a2a/agents");
+    await goToPage(page, "/agents");
     await page
-      .getByRole("button", { name: "Connect agent", exact: true })
+      .getByRole("button", { name: "Add Agent", exact: true })
       .first()
       .click();
+    await expect(page).toHaveURL(/\/agents\/new$/);
+    await page.getByRole("button", { name: /Add an External Agent/ }).click();
     await expect(page).toHaveURL(/\/a2a\/agents\/new$/);
     await expect(
       page.getByRole("heading", {

@@ -9,6 +9,7 @@ import {
   permissionDescriptions,
   predefinedPermissionsMap,
   requiredEndpointPermissionsMap,
+  requiredPagePermissionsMap,
 } from "./access-control";
 import {
   type Action,
@@ -158,6 +159,10 @@ describe("access-control", () => {
   });
 
   describe("outbound A2A administration", () => {
+    test("the shared page gate defers the Agent chooser's OR authorization to its server page", () => {
+      expect(requiredPagePermissionsMap["/agents/new"]).toBeUndefined();
+    });
+
     test("credential-bearing configuration mutations require agent settings administration", () => {
       for (const routeId of [
         RouteId.InspectA2aRemoteAgent,

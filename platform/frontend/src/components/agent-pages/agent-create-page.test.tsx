@@ -71,6 +71,22 @@ function mockPermissions({
   } as unknown as ReturnType<typeof useHasPermissions>);
 }
 
+function renderAgentCreatePage({
+  canAddExternalAgent = true,
+  canCreateAgent = true,
+}: {
+  canAddExternalAgent?: boolean;
+  canCreateAgent?: boolean;
+} = {}) {
+  return render(
+    <AgentCreatePage
+      kind="agent"
+      canAddExternalAgent={canAddExternalAgent}
+      canCreateAgent={canCreateAgent}
+    />,
+  );
+}
+
 describe("AgentCreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -89,6 +105,89 @@ describe("AgentCreatePage", () => {
     } as unknown as ReturnType<typeof useRouter>);
   });
 
+  it("hides Popular agents when the Agent runtime is off", () => {
+    renderAgentCreatePage();
+
+    expect(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /add an external agent/i }),
+    ).toHaveTextContent(
+      "Connect an A2A-compatible agent that your agents can use only as a subagent.",
+    );
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "Popular agents" }),
+    ).toBeNull();
+    for (const name of [
+      "Archestra Agent",
+      "Claude Code",
+      "Codex",
+      "OpenCode",
+      "Hermes",
+      "OpenClaw",
+    ]) {
+      expect(
+        screen.queryByRole("button", {
+          name: new RegExp(name, "i"),
+        }),
+      ).toBeNull();
+    }
+    expect(formProps).not.toHaveBeenCalled();
+  });
+
+  it("lets an external-agent manager open the A2A form without Agent create permission", async () => {
+    const user = userEvent.setup();
+    renderAgentCreatePage({
+      canAddExternalAgent: true,
+      canCreateAgent: false,
+    });
+
+    expect(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    ).toHaveAccessibleDescription("Requires permission to create agents.");
+
+    await user.click(
+      screen.getByRole("button", { name: /add an external agent/i }),
+    );
+    expect(push).toHaveBeenCalledWith("/a2a/agents/new");
+    expect(formProps).not.toHaveBeenCalled();
+  });
+
+  it("disables runtime templates for an external-agent manager", () => {
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime" ? true : undefined,
+    );
+    renderAgentCreatePage({
+      canAddExternalAgent: true,
+      canCreateAgent: false,
+    });
+
+    const codexTemplate = screen.getByRole("button", { name: /codex/i });
+    expect(codexTemplate).toBeDisabled();
+    expect(codexTemplate).toHaveAccessibleDescription(
+      "Requires permission to create agents.",
+    );
+  });
+
+  it("keeps the external-agent choice disabled for a regular Agent creator", () => {
+    renderAgentCreatePage({
+      canAddExternalAgent: false,
+      canCreateAgent: true,
+    });
+
+    expect(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    ).toBeEnabled();
+    const externalAgentChoice = screen.getByRole("button", {
+      name: /add an external agent/i,
+    });
+    expect(externalAgentChoice).toBeDisabled();
+    expect(externalAgentChoice).toHaveAccessibleDescription(
+      "Requires permission to view agents and update agent settings.",
+    );
+  });
+
   it("offers maintained Agent templates and prefills the existing create wizard", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
@@ -99,7 +198,7 @@ describe("AgentCreatePage", () => {
           : undefined,
     );
 
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage();
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Popular agents" }),
@@ -154,7 +253,7 @@ describe("AgentCreatePage", () => {
           : undefined,
     );
 
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage();
     await user.click(screen.getByRole("button", { name: /opencode/i }));
 
     expect(formProps).toHaveBeenLastCalledWith(
@@ -183,7 +282,7 @@ describe("AgentCreatePage", () => {
           : undefined,
     );
 
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage();
     await user.click(screen.getByRole("button", { name: /openclaw/i }));
 
     expect(formProps).toHaveBeenLastCalledWith(
@@ -207,7 +306,7 @@ describe("AgentCreatePage", () => {
     vi.mocked(useAppName).mockReturnValue("Acme AI");
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-app-icon.svg");
 
-    const { container } = render(<AgentCreatePage kind="agent" />);
+    const { container } = renderAgentCreatePage();
 
     expect(
       screen.getByRole("button", { name: /acme ai agent/i }),
@@ -240,7 +339,7 @@ describe("AgentCreatePage", () => {
     vi.mocked(useAppName).mockReturnValue("Example AI");
     vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
 
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage();
 
     const template = screen.getByRole("button", {
       name: /example ai agent/i,
@@ -265,7 +364,7 @@ describe("AgentCreatePage", () => {
       feature === "agentRuntime" ? true : undefined,
     );
 
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage();
     await user.click(screen.getByRole("button", { name: /claude code/i }));
 
     expect(formProps).toHaveBeenLastCalledWith(
@@ -340,7 +439,10 @@ describe("AgentCreatePage", () => {
 
   it("lands the created record on its Connect section", async () => {
     const user = userEvent.setup();
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage();
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
     await user.click(screen.getByRole("button", { name: "fire created" }));
     expect(push).toHaveBeenCalledWith("/agents/new-1?section=connect");
   });
@@ -348,7 +450,10 @@ describe("AgentCreatePage", () => {
   it("stays put with a success state when the creator may not read what it made", async () => {
     const user = userEvent.setup();
     mockPermissions({ canRead: false });
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage({ canAddExternalAgent: false });
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
 
     await user.click(screen.getByRole("button", { name: "fire created" }));
     expect(push).not.toHaveBeenCalled();
@@ -369,7 +474,10 @@ describe("AgentCreatePage", () => {
     const user = userEvent.setup();
     // The create lands while the permission check is still in flight.
     mockPermissions({ canRead: undefined, isPending: true });
-    const { rerender } = render(<AgentCreatePage kind="agent" />);
+    const { rerender } = renderAgentCreatePage();
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
     // Neither answer yet: no blind navigation, and no "you cannot see it".
@@ -379,48 +487,98 @@ describe("AgentCreatePage", () => {
     ).toBeNull();
 
     mockPermissions({ canRead: true });
-    rerender(<AgentCreatePage kind="agent" />);
+    rerender(
+      <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
+    );
     expect(push).toHaveBeenCalledWith("/agents/new-1?section=connect");
   });
 
   it("shows the success state when the pending permission settles to a no", async () => {
     const user = userEvent.setup();
     mockPermissions({ canRead: undefined, isPending: true });
-    const { rerender } = render(<AgentCreatePage kind="agent" />);
+    const { rerender } = renderAgentCreatePage();
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
     mockPermissions({ canRead: false });
-    rerender(<AgentCreatePage kind="agent" />);
+    rerender(
+      <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
+    );
     expect(push).not.toHaveBeenCalled();
     expect(
       screen.getByText(/you do not have permission to view it/i),
     ).toBeInTheDocument();
   });
 
-  it("returns to the list on Cancel, asking first when the form is dirty", async () => {
+  it("returns to the source chooser from the scratch form", async () => {
     const user = userEvent.setup();
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage();
 
-    await user.click(screen.getByRole("button", { name: "make dirty" }));
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(push).not.toHaveBeenCalled();
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
+    await user.click(screen.getByRole("button", { name: "Catalog" }));
     expect(
-      screen.getByRole("button", { name: /discard changes/i }),
+      screen.getByRole("button", { name: /add an external agent/i }),
     ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /discard changes/i }));
-    expect(push).toHaveBeenCalledWith("/agents");
+    expect(formProps).toHaveBeenCalled();
   });
 
-  it("asks before the back link discards a dirty form", async () => {
+  it("returns to the source chooser from the top Agents back link", async () => {
     const user = userEvent.setup();
-    render(<AgentCreatePage kind="agent" />);
+    renderAgentCreatePage();
 
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
+    await user.click(screen.getByRole("link", { name: "Agents" }));
+
+    expect(push).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: /add an external agent/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks before returning to the catalog discards a dirty draft", async () => {
+    const user = userEvent.setup();
+    renderAgentCreatePage();
+
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
+    await user.click(screen.getByRole("button", { name: "make dirty" }));
+    await user.click(screen.getByRole("button", { name: "Catalog" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Discard unsaved changes?" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add an external agent/i }),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(
+      screen.getByRole("button", { name: /add an external agent/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks before the top back link returns a dirty form to the catalog", async () => {
+    const user = userEvent.setup();
+    renderAgentCreatePage();
+
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
     await user.click(screen.getByRole("button", { name: "make dirty" }));
     await user.click(screen.getByRole("link", { name: "Agents" }));
     expect(push).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /discard changes/i }));
-    expect(push).toHaveBeenCalledWith("/agents");
+    expect(push).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: /add an external agent/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -233,14 +233,14 @@ describe("external A2A agent routed pages", () => {
       screen.getByLabelText("Agent base URL"),
       remoteAgent.discoveryUrl,
     );
-    await user.click(screen.getByRole("link", { name: "External Agents" }));
+    await user.click(screen.getByRole("link", { name: "Add Agent" }));
 
     expect(
       screen.getByRole("heading", { name: "Discard unsaved changes?" }),
     ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(push).toHaveBeenCalledWith("/a2a/agents");
+    expect(push).toHaveBeenCalledWith("/agents/new");
   });
 
   it.each([

@@ -3,6 +3,188 @@ import { makeAgent, makeAgentsList } from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
+  test("selects and bulk modifies regular and external A2A agents together", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    const regularAgent = makeAgent({
+      id: "regular-agent",
+      name: "Research Agent",
+    });
+    const externalAgent = {
+      id: "external-agent",
+      organizationId: "org-1",
+      name: "Partner Agent",
+      description: "Delegates work to a partner system",
+      discoveryMode: "well_known",
+      discoveryUrl: "https://agent.example.com",
+      agentCard: { name: "Partner Agent" },
+      cardHash: "card-hash",
+      lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
+      createdAt: "2026-09-08T12:00:00.000Z",
+      updatedAt: "2026-09-08T12:00:00.000Z",
+      scope: "org",
+      authorId: "user-1",
+      authorName: "Test User",
+      teams: [],
+      users: [],
+      connection: {
+        id: "connection-1",
+        remoteAgentId: "external-agent",
+        selectedInterface: {
+          url: "https://agent.example.com/a2a",
+          protocolBinding: "JSONRPC",
+          protocolVersion: "1.0",
+        },
+        securityRequirement: null,
+        authType: "none",
+        authConfig: {},
+        enabled: true,
+        lastVerifiedAt: "2026-09-08T12:00:00.000Z",
+        createdAt: "2026-09-08T12:00:00.000Z",
+        updatedAt: "2026-09-08T12:00:00.000Z",
+        hasCredential: false,
+      },
+      toolId: "tool-1",
+      assignmentCount: 1,
+      lastUsedAt: null,
+    };
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents",
+      body: makeAgentsList({ agents: [regularAgent] }),
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/a2a/remote-agents",
+      body: [externalAgent],
+    });
+
+    await agentsPage.goto();
+
+    await expect(agentsPage.rowFor("Research Agent")).toBeVisible();
+    const externalCard = agentsPage.table.getByTestId(
+      "a2a-remote-agent-card-external-agent",
+    );
+    await expect(externalCard).toBeVisible();
+    await expect(externalCard.getByText("A2A", { exact: true })).toBeVisible();
+    await expect(
+      externalCard.getByRole("checkbox", { name: "Select Partner Agent" }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "View as table" }),
+    ).toHaveCount(1);
+
+    await page.getByRole("button", { name: "View as table" }).click();
+    await expect(
+      agentsPage.table.getByRole("row", { name: /Partner Agent.*A2A/ }),
+    ).toBeVisible();
+    await expect(
+      agentsPage.table.getByRole("row", { name: /Research Agent/ }),
+    ).toBeVisible();
+
+    const regularCheckbox = page.getByRole("checkbox", {
+      name: "Select Research Agent",
+    });
+    const externalCheckbox = page.getByRole("checkbox", {
+      name: "Select Partner Agent",
+    });
+    const bulkCount = page
+      .locator('[data-slot="bulk-actions-bar"]')
+      .getByText("2 agents selected");
+    await regularCheckbox.click();
+    await externalCheckbox.click();
+    await expect(bulkCount).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Edit visibility" }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Delete", exact: true }),
+    ).toBeEnabled();
+
+    await mswControl.use({
+      method: "patch",
+      url: "/api/agents/bulk",
+      body: {
+        succeeded: [{ id: regularAgent.id, name: regularAgent.name }],
+        failed: [],
+      },
+    });
+    await mswControl.use({
+      method: "put",
+      url: "/api/a2a/remote-agents/:id",
+      body: externalAgent,
+    });
+    await page.getByRole("button", { name: "Edit visibility" }).click();
+    const visibilityDialog = page.getByRole("dialog", {
+      name: "Edit visibility",
+    });
+    await visibilityDialog.getByRole("button", { name: /Personal/ }).click();
+    await visibilityDialog
+      .getByRole("button", { name: /Organization/ })
+      .click();
+    const regularVisibilityRequest = page.waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/agents/bulk") &&
+        request.method() === "PATCH",
+    );
+    const externalVisibilityRequest = page.waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/a2a/remote-agents/external-agent") &&
+        request.method() === "PUT",
+    );
+    await visibilityDialog.getByRole("button", { name: "Apply" }).click();
+    expect(
+      JSON.parse((await regularVisibilityRequest).postData() ?? "{}"),
+    ).toEqual({
+      ids: [regularAgent.id],
+      scope: "org",
+      teams: [],
+      users: [],
+    });
+    expect(
+      JSON.parse((await externalVisibilityRequest).postData() ?? "{}"),
+    ).toEqual({ scope: "org", teams: [], users: [] });
+    await expect(bulkCount).toBeHidden();
+
+    await regularCheckbox.click();
+    await externalCheckbox.click();
+    await mswControl.use({
+      method: "delete",
+      url: "/api/agents/bulk",
+      body: {
+        succeeded: [{ id: regularAgent.id, name: regularAgent.name }],
+        failed: [],
+      },
+    });
+    await mswControl.use({
+      method: "delete",
+      url: "/api/a2a/remote-agents/:id",
+      body: { success: true },
+    });
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    const regularDeleteRequest = page.waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/agents/bulk") &&
+        request.method() === "DELETE",
+    );
+    const externalDeleteRequest = page.waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/a2a/remote-agents/external-agent") &&
+        request.method() === "DELETE",
+    );
+    await page
+      .getByRole("dialog", { name: "Delete agents" })
+      .getByRole("button", { name: "Delete agents" })
+      .click();
+    expect(JSON.parse((await regularDeleteRequest).postData() ?? "{}")).toEqual(
+      { ids: [regularAgent.id] },
+    );
+    await externalDeleteRequest;
+    await expect(bulkCount).toBeHidden();
+  });
+
   test("can create and delete an agent", async ({
     page,
     agentsPage,
@@ -29,6 +211,18 @@ test.describe("Agents", () => {
     await expect(agentsPage.heading).toBeVisible();
     await agentsPage.createButton.click();
     await page.waitForURL("/agents/new");
+    await expect(
+      page.getByRole("heading", { name: "Popular agents" }),
+    ).toBeHidden();
+    await page.getByRole("button", { name: /Start from scratch/ }).click();
+    await page
+      .locator("#main-content")
+      .getByRole("link", { name: "Agents" })
+      .click();
+    await expect(
+      page.getByRole("button", { name: /Add an External Agent/ }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /Start from scratch/ }).click();
     await page.getByRole("textbox", { name: "Name" }).fill(NAME);
     // Walk to the last step, however many the wizard has — the step list
     // depends on the record's type and grows, and only the last step offers

@@ -3,7 +3,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, CircleCheck, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentForm } from "@/components/agent-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,11 +40,19 @@ import { AgentPageShell } from "./agent-page-shell";
  * everything picked for it together, then lands on the detail page's Connect
  * section — the way the skills wizard collects a draft and creates at the end.
  */
-export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
+export function AgentCreatePage({
+  kind,
+  canAddExternalAgent = false,
+  canCreateAgent = false,
+}: {
+  kind: AgentPageKind;
+  canAddExternalAgent?: boolean;
+  canCreateAgent?: boolean;
+}) {
   const config = AGENT_PAGE_CONFIGS[kind];
   const router = useRouter();
   const runtimeEnabled = useFeature("agentRuntime");
-  const catalogEnabled = kind === "agent" && runtimeEnabled === true;
+  const sourceChooserEnabled = kind === "agent";
   const [sourceSelected, setSourceSelected] = useState(false);
   const [selectedTemplate, setSelectedTemplate] =
     useState<AgentCatalogTemplate | null>(null);
@@ -84,20 +92,33 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
 
   const [isDirty, setIsDirty] = useState(false);
   useBeforeUnloadWhileDirty(isDirty);
-  const leave = useCallback(
+  const closeTargetRef = useRef<"list" | "catalog">("list");
+  const completeClose = useCallback(
     (open: boolean) => {
-      if (!open) router.push(agentListHref(kind));
+      if (open) return;
+      if (closeTargetRef.current === "catalog") {
+        closeTargetRef.current = "list";
+        setSelectedTemplate(null);
+        setSourceSelected(false);
+        setStep(steps[0].id);
+        setIsDirty(false);
+        return;
+      }
+      router.push(agentListHref(kind));
     },
-    [router, kind],
+    [router, kind, steps],
   );
   // Same dirty check the modal used to run on close, now guarding Cancel and
   // the back link.
-  const guard = useUnsavedChangesGuard({ isDirty, onOpenChange: leave });
-  const isChoosingSource = catalogEnabled && !sourceSelected;
+  const guard = useUnsavedChangesGuard({
+    isDirty,
+    onOpenChange: completeClose,
+  });
+  const isChoosingSource = sourceChooserEnabled && !sourceSelected;
   const header = {
     title: `Create ${config.singular}`,
     description: isChoosingSource
-      ? "Choose a maintained Agent template or start from scratch."
+      ? "Choose how you want to add an Agent."
       : selectedTemplate
         ? `${selectedTemplate.name} is prefilled below. Review or change any setting before creating it.`
         : config.createDescription,
@@ -127,7 +148,13 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
       // the success state there is nowhere to go back to.
       backHref={showsUnreadableSuccess ? undefined : agentListHref(kind)}
       backLabel={config.plural}
-      onBackRequest={guard.requestClose}
+      onBackRequest={() => {
+        closeTargetRef.current =
+          sourceChooserEnabled && sourceSelected && !created
+            ? "catalog"
+            : "list";
+        guard.requestClose();
+      }}
       header={header}
     >
       {showsUnreadableSuccess ? (
@@ -162,14 +189,18 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
         </Empty>
       ) : isChoosingSource ? (
         <AgentCatalog
+          canAddExternalAgent={canAddExternalAgent}
+          canCreateAgent={canCreateAgent}
           onStartFromScratch={() => {
             setSelectedTemplate(null);
             setSourceSelected(true);
           }}
+          onAddExternalAgent={() => router.push("/a2a/agents/new")}
           onSelect={(template) => {
             setSelectedTemplate(template);
             setSourceSelected(true);
           }}
+          showPopularAgents={runtimeEnabled === true}
         />
       ) : (
         <AgentForm
@@ -201,14 +232,13 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
                     <ArrowLeft className="h-4 w-4" />
                     <span>{prevStep.title}</span>
                   </Button>
-                ) : catalogEnabled ? (
+                ) : sourceChooserEnabled ? (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      setSelectedTemplate(null);
-                      setSourceSelected(false);
-                      setStep(steps[0].id);
+                      closeTargetRef.current = "catalog";
+                      guard.requestClose();
                     }}
                     disabled={isSaving}
                   >

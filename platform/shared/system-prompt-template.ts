@@ -1,4 +1,4 @@
-import { BUILT_IN_AGENT_IDS } from "./built-in-agents";
+import { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 
 const USER_SYSTEM_PROMPT_CONTEXT_KEY = "user";
 const POLICY_CONFIG_TOOL_CONTEXT_KEY = "tool";

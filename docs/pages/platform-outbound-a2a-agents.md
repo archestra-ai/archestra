@@ -14,9 +14,9 @@ External targets appear in the same **Subagents** configuration panel as local s
 
 ## Connect An External Agent
 
-Go to **Studio → Agents → External Agents**, then select **Connect agent**. Connection setup opens on its own page, matching the create flow for internal agents.
+Go to **Studio → Agents**, select **Add Agent**, then select **Add an External Agent** under **Create your own**. Connection setup opens on its own page, matching the create flow for internal agents.
 
-Only users with the **Agent settings: update** permission—organization administrators by default—can create, change, or remove these credential-bearing connections. Members who can edit an agent can assign connections that a settings manager has approved and that are visible to them.
+Adding an external agent requires both **Agent: read** and **Agent settings: update** permissions—organization administrators have these by default. Users with **Agent settings: update** can change or remove these credential-bearing connections. Members who can edit an agent can assign connections that a settings manager has approved and that are visible to them.
 
 Enter the remote agent's base URL and authentication settings. Then select **Connect agent**. Archestra retrieves the card from `/.well-known/agent-card.json` with the selected bearer token or API key before saving the connection.
 
@@ -35,15 +35,15 @@ Choose who can discover and assign an external A2A agent when you connect or edi
 
 Existing external A2A agents are organization-visible after upgrading, preserving their previous availability. Users with **Agent settings: update** can still manage every external connection because the settings include stored credentials; visibility controls who sees it as assignable and who can assign or invoke it.
 
-Use the visibility filters on the External Agents page to narrow the card or table view by scope, owner, or team.
+Use the filters on the **Agents** page to narrow the shared card or table view by scope, owner, or team. External entries carry an **A2A** badge beside their name.
 
 ## Edit Or Remove An External Agent
 
-Select an external agent card or table row to open its detail page. Settings managers can change its base URL, authentication, display details, or visibility, then select **Save changes**. To pause or resume the connection everywhere without removing its assignments, use **Disable delegation** or **Enable delegation** in the page actions menu. Leave the credential blank when the base URL and authentication stay unchanged. Enter it again when either setting changes.
+On the **Agents** page, select an **A2A** card or table row to open its detail page. Settings managers can change its base URL, authentication, display details, or visibility. You can select several internal and external agents together to change their visibility or delete them. Use **Disable delegation** or **Enable delegation** to pause or resume the connection without removing assignments. Leave the credential blank when the base URL and authentication stay unchanged. Enter it again when either setting changes.
 
 Opening the detail page rechecks Agent Cards discovered from a base URL. The connection section shows an error if the server is unavailable.
 
-The **Edit** action opens the same detail page. To remove a connection, first remove its assignments from internal agents, then open the ellipsis menu and select **Delete**. Removing it also removes its stored credential.
+The **Edit** action opens the same detail page. To remove a connection, open the ellipsis menu and select **Delete**. Removing it also removes its stored credential and subagent assignments.
 
 ## Authentication
 

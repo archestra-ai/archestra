@@ -109,10 +109,15 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     expect(
+      screen
+        .getAllByRole("heading", { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Create your own", "External agents"]);
+    expect(
       screen.getByRole("button", { name: /start from scratch/i }),
     ).toBeEnabled();
     expect(
-      screen.getByRole("button", { name: /add an external agent/i }),
+      screen.getByRole("button", { name: /connect via a2a/i }),
     ).toHaveTextContent(
       "Connect an A2A-compatible agent that your agents can use only as a subagent.",
     );
@@ -147,9 +152,7 @@ describe("AgentCreatePage", () => {
       screen.getByRole("button", { name: /start from scratch/i }),
     ).toHaveAccessibleDescription("Requires permission to create agents.");
 
-    await user.click(
-      screen.getByRole("button", { name: /add an external agent/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /connect via a2a/i }));
     expect(push).toHaveBeenCalledWith("/agents/a2a/new");
     expect(formProps).not.toHaveBeenCalled();
   });
@@ -180,7 +183,7 @@ describe("AgentCreatePage", () => {
       screen.getByRole("button", { name: /start from scratch/i }),
     ).toBeEnabled();
     const externalAgentChoice = screen.getByRole("button", {
-      name: /add an external agent/i,
+      name: /connect via a2a/i,
     });
     expect(externalAgentChoice).toBeDisabled();
     expect(externalAgentChoice).toHaveAccessibleDescription(
@@ -203,6 +206,11 @@ describe("AgentCreatePage", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Popular agents" }),
     ).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("heading", { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Create your own", "Popular agents", "External agents"]);
     for (const name of [
       "Archestra Agent",
       "Claude Code",
@@ -521,7 +529,7 @@ describe("AgentCreatePage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Catalog" }));
     expect(
-      screen.getByRole("button", { name: /add an external agent/i }),
+      screen.getByRole("button", { name: /connect via a2a/i }),
     ).toBeInTheDocument();
     expect(formProps).toHaveBeenCalled();
   });
@@ -537,7 +545,7 @@ describe("AgentCreatePage", () => {
 
     expect(push).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: /add an external agent/i }),
+      screen.getByRole("button", { name: /connect via a2a/i }),
     ).toBeInTheDocument();
   });
 
@@ -555,12 +563,12 @@ describe("AgentCreatePage", () => {
       screen.getByRole("heading", { name: "Discard unsaved changes?" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /add an external agent/i }),
+      screen.queryByRole("button", { name: /connect via a2a/i }),
     ).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(
-      screen.getByRole("button", { name: /add an external agent/i }),
+      screen.getByRole("button", { name: /connect via a2a/i }),
     ).toBeInTheDocument();
   });
 
@@ -578,7 +586,7 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: /discard changes/i }));
     expect(push).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: /add an external agent/i }),
+      screen.getByRole("button", { name: /connect via a2a/i }),
     ).toBeInTheDocument();
   });
 });

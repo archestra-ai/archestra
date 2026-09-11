@@ -162,14 +162,6 @@ export function AgentCatalog({
             disabled={!canCreateAgent}
             disabledReason="Requires permission to create agents."
           />
-          <CatalogSourceCard
-            icon={<Network className="size-5" />}
-            title="Add an External Agent"
-            description="Connect an A2A-compatible agent that your agents can use only as a subagent."
-            onClick={onAddExternalAgent}
-            disabled={!canAddExternalAgent}
-            disabledReason="Requires permission to view agents and update agent settings."
-          />
         </div>
       </div>
 
@@ -198,6 +190,20 @@ export function AgentCatalog({
           </div>
         </div>
       ) : null}
+
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold">External agents</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CatalogSourceCard
+            icon={<Network className="size-5" />}
+            title="Connect via A2A"
+            description="Connect an A2A-compatible agent that your agents can use only as a subagent."
+            onClick={onAddExternalAgent}
+            disabled={!canAddExternalAgent}
+            disabledReason="Requires permission to view agents and update agent settings."
+          />
+        </div>
+      </div>
     </div>
   );
 }

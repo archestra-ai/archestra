@@ -39,18 +39,18 @@ class GithubCopilotTokenManager {
   private bearerCache = new LRUCacheManager<CachedBearer>({
     maxSize: MAX_CACHED_BEARERS,
   });
-  private inFlightExchanges = new Map<string, Promise<string>>();
+  private inFlightExchanges = new Map<string, Promise<CachedBearer>>();
 
   /**
-   * Returns a valid Copilot API bearer for the given GitHub OAuth token,
+   * Returns a valid Copilot bearer and account API endpoint for a GitHub token,
    * exchanging (and caching) it if needed.
    */
-  async getBearerToken(githubToken: string): Promise<string> {
+  async getCredentials(githubToken: string): Promise<CachedBearer> {
     const cacheKey = hashToken(githubToken);
 
     const cached = this.bearerCache.get(cacheKey);
     if (cached && cached.expiresAtMs - REFRESH_BUFFER_MS > Date.now()) {
-      return cached.bearer;
+      return cached;
     }
 
     const inFlight = this.inFlightExchanges.get(cacheKey);
@@ -86,7 +86,7 @@ class GithubCopilotTokenManager {
   private async exchangeToken(
     githubToken: string,
     cacheKey: string,
-  ): Promise<string> {
+  ): Promise<CachedBearer> {
     const response = await fetch(
       config.llm["github-copilot"].tokenExchangeUrl,
       {
@@ -120,6 +120,7 @@ class GithubCopilotTokenManager {
     const payload = (await response.json()) as {
       token?: string;
       expires_at?: number;
+      endpoints?: { api?: string };
     };
     if (!payload.token || typeof payload.expires_at !== "number") {
       throw new ApiError(
@@ -129,13 +130,18 @@ class GithubCopilotTokenManager {
     }
 
     const expiresAtMs = payload.expires_at * 1000;
+    const credentials = {
+      bearer: payload.token,
+      expiresAtMs,
+      apiEndpoint: payload.endpoints?.api,
+    };
     this.bearerCache.set(
       cacheKey,
-      { bearer: payload.token, expiresAtMs },
+      credentials,
       // LRU TTL is a backstop; freshness is enforced via expiresAtMs above.
       Math.max(expiresAtMs - Date.now(), 0),
     );
-    return payload.token;
+    return credentials;
   }
 }
 
@@ -145,7 +151,8 @@ export const githubCopilotTokenManager = new GithubCopilotTokenManager();
 /**
  * Wraps fetch so every Copilot request carries a fresh short-lived bearer
  * (exchanged from the GitHub OAuth token) plus the required editor-identity
- * headers. A 401 on a cached bearer invalidates it and retries exactly once.
+ * headers. Requests to the default host use the account endpoint returned by
+ * the exchange. A 401 refreshes both the bearer and endpoint and retries once.
  *
  * Used by the github-copilot proxy adapter, its /models routes, and the model
  * fetcher (the chat LLM client routes through the local proxy instead, so the
@@ -170,22 +177,27 @@ export function createGithubCopilotFetch(params: {
       return baseFetch(input, init);
     }
 
-    const doFetch = async (bearer: string) => {
-      const headers = new Headers(init?.headers);
+    const doFetch = async (credentials: CachedBearer) => {
+      const headers = new Headers(
+        init?.headers ?? (input instanceof Request ? input.headers : undefined),
+      );
       for (const [name, value] of Object.entries(GITHUB_COPILOT_HEADERS)) {
         headers.set(name, value);
       }
-      headers.set("authorization", `Bearer ${bearer}`);
-      return baseFetch(input, { ...init, headers });
+      headers.set("authorization", `Bearer ${credentials.bearer}`);
+      return baseFetch(
+        resolveCopilotRequestUrl(input, credentials.apiEndpoint),
+        { ...init, headers },
+      );
     };
 
-    let bearer: string;
+    let credentials: CachedBearer;
     try {
-      bearer = await githubCopilotTokenManager.getBearerToken(githubToken);
+      credentials = await githubCopilotTokenManager.getCredentials(githubToken);
     } catch (error) {
       return exchangeErrorResponse(error);
     }
-    const response = await doFetch(bearer);
+    const response = await doFetch(credentials);
 
     // A cached bearer can be rejected before its reported expiry (e.g. seat
     // revoked, token rotated). Re-exchange once; non-replayable bodies are
@@ -194,15 +206,15 @@ export function createGithubCopilotFetch(params: {
       init?.body === undefined || typeof init.body === "string";
     if (response.status === 401 && bodyIsReplayable) {
       await response.body?.cancel();
-      githubCopilotTokenManager.invalidate(githubToken, bearer);
-      let freshBearer: string;
+      githubCopilotTokenManager.invalidate(githubToken, credentials.bearer);
+      let freshCredentials: CachedBearer;
       try {
-        freshBearer =
-          await githubCopilotTokenManager.getBearerToken(githubToken);
+        freshCredentials =
+          await githubCopilotTokenManager.getCredentials(githubToken);
       } catch (error) {
         return exchangeErrorResponse(error);
       }
-      return doFetch(freshBearer);
+      return doFetch(freshCredentials);
     }
 
     return response;
@@ -219,6 +231,7 @@ type FetchLike = (
 interface CachedBearer {
   bearer: string;
   expiresAtMs: number;
+  apiEndpoint?: string;
 }
 
 /** Refresh this long before the bearer's reported expiry. */
@@ -254,4 +267,20 @@ const TOKEN_CACHE_HMAC_KEY = randomBytes(32);
 // keys can't pre-compute lookups against known token formats.
 function hashToken(token: string): string {
   return createHmac("sha256", TOKEN_CACHE_HMAC_KEY).update(token).digest("hex");
+}
+
+/** Use GitHub's account endpoint only for requests to the default API host. */
+function resolveCopilotRequestUrl(
+  input: string | URL | Request,
+  apiEndpoint: string | undefined,
+): string | URL | Request {
+  if (!apiEndpoint) return input;
+  const url = new URL(input instanceof Request ? input.url : input);
+  // Explicit custom base URLs (including GHE and local proxies) take precedence.
+  if (url.origin !== "https://api.githubcopilot.com") return input;
+  const base = new URL(apiEndpoint);
+  base.pathname = `${base.pathname.replace(/\/$/, "")}${url.pathname}`;
+  base.search = url.search;
+  base.hash = "";
+  return input instanceof Request ? new Request(base, input) : base;
 }

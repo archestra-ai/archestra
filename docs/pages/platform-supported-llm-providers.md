@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-09-08
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -706,6 +706,8 @@ Copilot models are also reachable through the model router as `github-copilot:<m
 
 A GitHub Copilot provider key stores a **long-lived GitHub OAuth token** (`gho_`/`ghu_…`) for an account with an active Copilot subscription — not a Copilot API key, which does not exist. Archestra exchanges that token for a short-lived Copilot bearer on every request (cached and refreshed automatically), so clients only ever present the GitHub token.
 
+Archestra uses the account API endpoint returned by GitHub, falling back to `https://api.githubcopilot.com` when absent. A custom base URL takes precedence.
+
 Obtain the token in either way:
 
 - **Sign in with GitHub**: click **Connect** on the **GitHub Copilot** card on **Model Providers**. It runs GitHub's OAuth device flow — you approve a one-time code at `github.com/login/device`, and Archestra stores the resulting token.
@@ -716,7 +718,7 @@ Obtain the token in either way:
 | Variable                                       | Required | Description                                                                                       |
 | ---------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
 | `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY`        | No       | Default GitHub OAuth token for Copilot (can be overridden per conversation/team/org)              |
-| `ARCHESTRA_GITHUB_COPILOT_BASE_URL`            | No       | Copilot API base URL (default: `https://api.githubcopilot.com`; GHE: `https://copilot-api.<domain>`) |
+| `ARCHESTRA_GITHUB_COPILOT_BASE_URL`            | No       | Custom Copilot API base URL; otherwise uses the account endpoint returned by GitHub |
 | `ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL`  | No       | GitHub token-exchange endpoint (default: `https://api.github.com/copilot_internal/v2/token`)      |
 | `ARCHESTRA_GITHUB_COPILOT_DEVICE_AUTH_BASE_URL`| No       | Host for the device-flow sign-in (default: `https://github.com`)                                  |
 | `ARCHESTRA_GITHUB_COPILOT_CLIENT_ID`           | No       | GitHub App client id for the device flow (default: the standard VS Code client id)                |

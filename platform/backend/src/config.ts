@@ -2350,13 +2350,13 @@ const config = {
     /**
      * Selects the platform's own API-serving pods, so a run's egress policy
      * can allow exactly that destination and nothing else. The default is the
-     * label the Helm chart already stamps on both the platform and worker
-     * deployments; override it if your deployment labels them differently, or
-     * when the platform runs outside the cluster.
+     * dedicated label the Helm chart stamps on the platform API deployment.
+     * Override it if your deployment labels API pods differently. Worker pods
+     * are not API destinations.
      */
     platformPodSelector: parseLabelSelector(
       process.env.ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR,
-      { "archestra.io/p4-shim-client": "true" },
+      { "archestra.io/platform-api": "true" },
     ),
     /**
      * Steers Agent Runtime pods onto a dedicated node pool: a key=value list that

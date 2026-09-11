@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-10
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -949,7 +949,8 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
   - Default: unset
 
 - **`ARCHESTRA_AGENT_RUNTIME_PLATFORM_POD_SELECTOR`** - Label selector matching the platform's own API pods, written as `key=value` pairs. Agent Runtime pods get an egress policy allowing exactly that destination. Override it when your deployment labels the platform differently.
-  - Default: `archestra.io/p4-shim-client=true`
+  - Default: `archestra.io/platform-api=true`
+  - Upgrade the Helm chart with the backend; the chart labels API pods automatically. For custom manifests, add this label before upgrading the backend, or configure a matching selector. Existing selector overrides remain supported.
 
 - **`ARCHESTRA_AGENT_RUNTIME_RECONCILE_INTERVAL_SECONDS`** - How often the reconciler syncs run state and applies the lifetime and idle stops.
   - Default: `30`

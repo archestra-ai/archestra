@@ -1204,7 +1204,7 @@ export function ConnectCommandPanel({
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
               <div className="space-y-3 p-5 text-foreground">
-                <Button asChild>
+                <Button asChild variant="outline" size="sm">
                   <a href={result.installerUrl} download>
                     <Download className="size-3.5" />
                     <span>Download installer</span>

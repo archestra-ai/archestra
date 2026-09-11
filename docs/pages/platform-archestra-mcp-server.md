@@ -2400,6 +2400,7 @@ Required RBAC permission: `agent:read`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `agent_ids` | `string[]` | Yes |  |
+| `current_thread_only` | `boolean` | No | Only runs originating in the current messaging thread. Requires messaging context; never falls back to an unfiltered list. |
 | `limit` | `integer` | No |  |
 
 ##### Output

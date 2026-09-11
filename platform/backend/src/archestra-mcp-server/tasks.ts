@@ -532,15 +532,32 @@ const registry = defineArchestraTools([
     title: "List Agent Runs",
     description:
       "List recent runs across one or more accessible Agents for a read-only operations dashboard. " +
-      "Returns status, requester, run links, and originating messaging threads when present.",
+      "Returns status, requester, run links, and originating messaging threads when present. Use current_thread_only to recover runs from the current messaging thread even when no run link was posted.",
     schema: z.object({
       agent_ids: z.array(z.string().uuid()).min(1).max(20),
+      current_thread_only: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Only runs originating in the current messaging thread. Requires messaging context; never falls back to an unfiltered list.",
+        ),
       limit: z.number().int().min(1).max(100).default(50),
     }),
     outputSchema: ListAgentRunsOutputSchema,
     handler: async ({ args, context }) => {
       try {
         const actor = requireActor(context);
+        const thread = args.current_thread_only
+          ? context.chatOpsBindingId && context.chatOpsThreadId
+            ? {
+                bindingId: context.chatOpsBindingId,
+                threadId: context.chatOpsThreadId,
+              }
+            : null
+          : undefined;
+        if (thread === null) {
+          return errorResult("Current messaging thread context is unavailable");
+        }
         const requestedAgentIds = [...new Set(args.agent_ids)];
         const isAgentAdmin = await userHasPermission(
           actor.id,
@@ -567,6 +584,7 @@ const registry = defineArchestraTools([
           agentIds: requestedAgentIds,
           organizationId: actor.organizationId,
           limit: args.limit,
+          thread,
         });
         const runs = rows.map((row) => ({
           task_id: row.taskId,

@@ -321,6 +321,10 @@ chat {agentName}                       ← parent span (SpanKind.SERVER)
 
 The parent span (`route.category=chat`) carries the agent identity and session ID. LLM proxy calls from chat are linked via W3C `traceparent` header propagation, so the LLM spans appear as children rather than independent root traces. MCP tool executions run within the same async context and are automatically parented.
 
+Context compaction emits `context_compaction auto` or `context_compaction manual` spans, including skipped decisions.
+These spans inherit the invoking agent span’s `route.category`, keeping them visible in filtered traces.
+Standalone manual compaction uses `route.category=chat`.
+
 This same unified tracing applies to all agent invocation paths:
 
 | Invocation Path | `route.category` | `archestra.trigger.source` |

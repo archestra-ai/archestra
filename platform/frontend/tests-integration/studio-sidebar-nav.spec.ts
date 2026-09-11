@@ -39,6 +39,7 @@ const STUDIO_NAV = [
   // above it, rather than sitting under MCP: its tools come from MCP servers,
   // from agents and apps, and from traffic between agents and LLMs.
   "Guardrails",
+  "Review",
   "Logs",
   "Settings",
 ];

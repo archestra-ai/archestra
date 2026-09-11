@@ -2,6 +2,16 @@ suite: test archestra platform -- Deployment/Service
 templates:
   - archestra-platform.yaml
 tests:
+  - it: should allow new and existing runtime policies to reach API pods
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["archestra.io/platform-api"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.labels["archestra.io/p4-shim-client"]
+          value: "true"
+
   - it: should create a Service with correct metadata
     documentIndex: 0
     asserts:

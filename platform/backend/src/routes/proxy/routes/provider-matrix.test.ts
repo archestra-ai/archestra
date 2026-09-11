@@ -2113,9 +2113,12 @@ describe("LLM proxy provider matrix", () => {
   const originalVllmEnabled = appConfig.llm.vllm.enabled;
   const originalVllmBaseUrl = appConfig.llm.vllm.baseUrl;
   const originalAzureBaseUrl = appConfig.llm.azure.baseUrl;
+  const originalAppaHook = appConfig.llmProxy.appaHook;
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    // This matrix validates provider adapters, not the APPA trajectory gate.
+    appConfig.llmProxy.appaHook = undefined;
   });
 
   afterEach(async () => {
@@ -2123,6 +2126,7 @@ describe("LLM proxy provider matrix", () => {
     appConfig.llm.vllm.enabled = originalVllmEnabled;
     appConfig.llm.vllm.baseUrl = originalVllmBaseUrl;
     appConfig.llm.azure.baseUrl = originalAzureBaseUrl;
+    appConfig.llmProxy.appaHook = originalAppaHook;
     if (app) {
       await app.close();
     }

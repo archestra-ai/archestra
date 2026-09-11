@@ -2,12 +2,15 @@ import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
+  ResponseCompactParams,
   ResponseCreateParamsNonStreaming,
   ResponseCreateParamsStreaming,
   ResponseFunctionCallArgumentsDeltaEvent,
   ResponseFunctionCallArgumentsDoneEvent,
   ResponseInput,
   ResponseInputItem,
+  ResponseMcpCallArgumentsDeltaEvent,
+  ResponseMcpCallArgumentsDoneEvent,
   ResponseOutputItem,
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
@@ -33,11 +36,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import {
-  ApiError,
-  createStreamAccumulatorState,
-  extractCommonToolCallArguments,
-} from "@/types";
+import { ApiError, createStreamAccumulatorState } from "@/types";
 import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import {
@@ -51,9 +50,18 @@ import { subscriptionAuthRequiredCode } from "./subscription-auth-error";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
 type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
+type OpenAiResponsesCompactRequest = OpenAi.Types.ResponsesCompactRequest;
+type OpenAiResponsesCompactResponse = OpenAi.Types.ResponsesCompactResponse;
 type OpenAiResponsesHeaders = OpenAi.Types.ChatCompletionsHeaders;
 type OpenAiResponsesStreamChunk = OpenAi.Types.ResponseChunk;
 type OpenAiResponseInput = string | ResponseInput | undefined;
+type OpenAiResponsesCompatibleRequest = {
+  model: string;
+  input?: OpenAiResponseInput | null;
+  instructions?: string | null;
+  tools?: unknown[];
+  stream?: boolean | null;
+};
 
 type OpenAiFunctionToolDefinition = {
   type: "function";
@@ -190,15 +198,55 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   },
 };
 
-class OpenAiResponsesRequestAdapter
-  implements LLMRequestAdapter<OpenAiResponsesRequest, OpenAiResponseInput>
+/** The legacy `/responses/compact` endpoint shares proxy policy and auth flow. */
+export const openAiResponsesCompactAdapterFactory: LLMProvider<
+  OpenAiResponsesCompactRequest,
+  OpenAiResponsesCompactResponse,
+  OpenAiResponseInput,
+  OpenAiResponsesStreamChunk,
+  OpenAiResponsesHeaders
+> = {
+  ...openAiResponsesAdapterFactory,
+
+  createRequestAdapter(request) {
+    return new OpenAiResponsesRequestAdapter(request);
+  },
+
+  createResponseAdapter(response) {
+    return new OpenAiResponsesCompactResponseAdapter(response);
+  },
+
+  createStreamAdapter() {
+    // The route schema rejects `stream`; this satisfies the shared provider
+    // interface without exposing an invented compact streaming protocol.
+    return new OpenAiResponsesStreamAdapter() as unknown as LLMStreamAdapter<
+      OpenAiResponsesStreamChunk,
+      OpenAiResponsesCompactResponse
+    >;
+  },
+
+  async execute(client, request) {
+    const openaiClient = client as OpenAIProvider;
+    return (await openaiClient.responses.compact(
+      request as ResponseCompactParams,
+    )) as OpenAiResponsesCompactResponse;
+  },
+
+  async executeStream() {
+    throw new ApiError(400, "Responses compact does not support streaming.");
+  },
+};
+
+class OpenAiResponsesRequestAdapter<
+  TRequest extends OpenAiResponsesCompatibleRequest,
+> implements LLMRequestAdapter<TRequest, OpenAiResponseInput>
 {
   readonly provider = "openai" as const;
-  private request: OpenAiResponsesRequest;
+  private request: TRequest;
   private modifiedModel: string | null = null;
   private toolResultUpdates: Record<string, string> = {};
 
-  constructor(request: OpenAiResponsesRequest) {
+  constructor(request: TRequest) {
     this.request = request;
   }
 
@@ -219,7 +267,7 @@ class OpenAiResponsesRequestAdapter
       return [];
     }
 
-    // Pair function_call_output items with their function_call by call_id so
+    // Pair native tool outputs with their call by call_id so
     // tool results surface as CommonMessage.toolCalls — the shape trusted-data
     // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
     // conversations look tool-free to the evaluator and sanitization is
@@ -239,7 +287,7 @@ class OpenAiResponsesRequestAdapter
     const toolCallsByCallId = getToolCallsByCallId(this.request.input);
 
     return this.request.input.flatMap((item) => {
-      if (!isFunctionCallOutputItem(item)) {
+      if (!isResponsesToolOutputItem(item)) {
         return [];
       }
 
@@ -249,7 +297,7 @@ class OpenAiResponsesRequestAdapter
           id: item.call_id,
           name: toolCall?.name ?? "unknown",
           arguments: toolCall?.arguments,
-          content: item.output,
+          content: stringifyResponseToolOutput(item.output),
           isError: false,
         },
       ];
@@ -262,17 +310,16 @@ class OpenAiResponsesRequestAdapter
     }
 
     return this.request.tools.flatMap((tool) => {
-      if (!isFunctionToolDefinition(tool)) {
-        return [];
+      if (isFunctionToolDefinition(tool)) {
+        return [
+          {
+            name: tool.name,
+            description: tool.description ?? undefined,
+            inputSchema: tool.parameters ?? {},
+          },
+        ];
       }
-
-      return [
-        {
-          name: tool.name,
-          description: tool.description ?? undefined,
-          inputSchema: tool.parameters ?? {},
-        },
-      ];
+      return declaredResponsesMcpTools(tool);
     });
   }
 
@@ -281,10 +328,10 @@ class OpenAiResponsesRequestAdapter
   }
 
   getProviderMessages(): OpenAiResponseInput {
-    return this.request.input;
+    return this.request.input ?? undefined;
   }
 
-  getOriginalRequest(): OpenAiResponsesRequest {
+  getOriginalRequest(): TRequest {
     return this.request;
   }
 
@@ -312,19 +359,19 @@ class OpenAiResponsesRequestAdapter
     return input;
   }
 
-  toProviderRequest(): OpenAiResponsesRequest {
+  toProviderRequest(): TRequest {
     if (!Array.isArray(this.request.input)) {
       return {
         ...this.request,
         model: this.getModel(),
-      };
+      } as TRequest;
     }
 
     return {
       ...this.request,
       model: this.getModel(),
       input: this.request.input.map((item) => {
-        if (!isFunctionCallOutputItem(item)) {
+        if (!isResponsesToolOutputItem(item)) {
           return item;
         }
 
@@ -338,7 +385,7 @@ class OpenAiResponsesRequestAdapter
           output: updatedOutput,
         };
       }) as unknown as ResponseInput,
-    };
+    } as TRequest;
   }
 }
 
@@ -383,16 +430,17 @@ class OpenAiResponsesResponseAdapter
   }
 
   getToolCalls(): CommonToolCall[] {
+    assertNoUnsupportedResponsesToolItems(this.response.output);
     return this.response.output.flatMap((item) => {
-      if (!isResponseFunctionCall(item)) {
+      if (!isResponseNativeToolCall(item)) {
         return [];
       }
 
       return [
         {
-          id: item.call_id,
-          name: item.name,
-          arguments: tryParseJsonObject(item.arguments),
+          id: responseToolCallId(item),
+          name: codexToolName(item),
+          arguments: tryParseJsonObject(responseToolCallArguments(item)),
         },
       ];
     });
@@ -461,6 +509,55 @@ class OpenAiResponsesResponseAdapter
   }
 }
 
+class OpenAiResponsesCompactResponseAdapter
+  implements LLMResponseAdapter<OpenAiResponsesCompactResponse>
+{
+  readonly provider = "openai" as const;
+
+  constructor(private response: OpenAiResponsesCompactResponse) {}
+
+  getId(): string {
+    return this.response.id;
+  }
+
+  getModel(): string {
+    // Compaction responses intentionally omit the model; the handler retains
+    // the request-selected model for interaction and cost attribution.
+    return "";
+  }
+
+  getText(): string {
+    // A compaction item is opaque provider context, never model-visible text.
+    return "";
+  }
+
+  getToolCalls(): CommonToolCall[] {
+    return [];
+  }
+
+  hasToolCalls(): boolean {
+    return false;
+  }
+
+  getUsage(): UsageView {
+    return fromResponsesUsage(this.response.usage);
+  }
+
+  getOriginalResponse(): OpenAiResponsesCompactResponse {
+    return this.response;
+  }
+
+  getFinishReasons(): string[] {
+    return ["compacted"];
+  }
+
+  toRefusalResponse(): OpenAiResponsesCompactResponse {
+    // Compact responses cannot emit tool calls, so the policy-refusal branch is
+    // unreachable. Preserve the upstream wire shape if that invariant changes.
+    return this.response;
+  }
+}
+
 class OpenAiResponsesStreamAdapter
   implements
     LLMStreamAdapter<OpenAiResponsesStreamChunk, OpenAiResponsesResponse>
@@ -468,16 +565,88 @@ class OpenAiResponsesStreamAdapter
   readonly provider = "openai" as const;
   readonly state = createStreamAccumulatorState();
   private completedResponse: OpenAiResponsesResponse | null = null;
+  private completedItems = new Map<
+    string,
+    OpenAiResponsesResponse["output"][number]
+  >();
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so toProviderResponse persists the refusal — not the captured
   // upstream completion or the blocked tool calls.
   private replacedText: string | null = null;
   private toolCallsByItemId = new Map<
     string,
-    { id: string; name: string; arguments: string }
+    {
+      id: string;
+      name: string;
+      arguments: string;
+      originalItem?: Record<string, unknown>;
+    }
   >();
+  private pendingToolSearchEvents = new Map<string, string>();
 
   processChunk(chunk: OpenAiResponsesStreamChunk): ChunkProcessingResult {
+    // Stock Codex emits nameless tool-search bookkeeping. It is not an
+    // executable function call, so hold every added record until its terminal
+    // client-execution discriminator is present and the native bridge can seal
+    // its call/item/argument identity before it reaches the client.
+    if (
+      chunk.type === "response.output_item.added" &&
+      isToolSearchCallBookkeeping(chunk.item)
+    ) {
+      if (chunk.item.execution === "server") {
+        throw unsupportedResponsesToolItemError(chunk.item);
+      }
+      this.pendingToolSearchEvents.set(chunk.item.call_id, toSse(chunk));
+      return { sseData: null, isToolCallChunk: true, isFinal: false };
+    }
+    if (
+      chunk.type === "response.output_item.done" &&
+      isToolSearchCallBookkeeping(chunk.item)
+    ) {
+      if (chunk.item.execution !== "client") {
+        throw unsupportedResponsesToolItemError(chunk.item);
+      }
+      const pending = this.pendingToolSearchEvents.get(chunk.item.call_id);
+      this.pendingToolSearchEvents.delete(chunk.item.call_id);
+      this.completedItems.set(chunk.item.id, chunk.item as never);
+      // Do not add search bookkeeping to `toolCalls`: it must never reach the
+      // APPA executable-call authorization path.
+      return {
+        sseData: [pending, toSse(chunk)].filter(Boolean).join(""),
+        isToolCallChunk: true,
+        isFinal: false,
+      };
+    }
+    if (
+      (chunk.type === "response.output_item.added" ||
+        chunk.type === "response.output_item.done") &&
+      isUnsupportedResponsesToolItem(chunk.item)
+    ) {
+      throw unsupportedResponsesToolItemError(chunk.item);
+    }
+    if (chunk.type === "response.output_item.done") {
+      const item = chunk.item as OpenAiResponsesResponse["output"][number];
+      const key =
+        "id" in item && typeof item.id === "string"
+          ? item.id
+          : `position:${chunk.output_index}`;
+      const previous = this.completedItems.get(key);
+      if (previous && JSON.stringify(previous) !== JSON.stringify(item))
+        throw new Error("Conflicting completed Responses item");
+      this.completedItems.set(key, item);
+      if (item.type === "message") {
+        this.state.text = Array.from(this.completedItems.values())
+          .filter((value) => value.type === "message")
+          .flatMap((value) =>
+            value.type === "message"
+              ? value.content
+                  .filter((part) => part.type === "output_text")
+                  .map((part) => (part.type === "output_text" ? part.text : ""))
+              : [],
+          )
+          .join("");
+      }
+    }
     if (this.state.timing.firstChunkTime === null) {
       this.state.timing.firstChunkTime = Date.now();
     }
@@ -512,6 +681,20 @@ class OpenAiResponsesStreamAdapter
     if (chunk.type === "response.completed") {
       this.completedResponse =
         chunk.response as unknown as OpenAiResponsesResponse;
+      assertNoUnsupportedResponsesToolItems(
+        this.completedResponse.output ?? [],
+      );
+      for (const item of this.completedResponse.output ?? []) {
+        if (!isResponseNativeToolCall(item)) continue;
+        const callId = responseToolCallId(item);
+        this.toolCallsByItemId.set(item.id ?? callId, {
+          id: callId,
+          name: codexToolName(item),
+          arguments: responseToolCallArguments(item),
+          originalItem: item as unknown as Record<string, unknown>,
+        });
+      }
+      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
       this.state.stopReason =
         this.state.toolCalls.length > 0 ? "tool_calls" : "stop";
 
@@ -691,11 +874,16 @@ class OpenAiResponsesStreamAdapter
     const base = this.completedResponse ?? this.toProviderResponse();
     const upstreamOutput = Array.isArray(base.output) ? base.output : [];
     const firstOutputIndex = upstreamOutput.filter(
-      (item) => item.type !== "function_call",
+      (item) => !isResponseNativeToolCall(item),
     ).length;
     let sequence = Date.now();
     const frames = formatResponsesFunctionCallFrames({
-      toolCalls,
+      toolCalls: toolCalls.map((call) => ({
+        ...call,
+        originalItem: Array.from(this.toolCallsByItemId.values()).find(
+          (captured) => captured.id === call.id,
+        )?.originalItem,
+      })),
       firstOutputIndex,
       nextSequenceNumber: () => sequence++,
     });
@@ -720,6 +908,17 @@ class OpenAiResponsesStreamAdapter
   }
 
   toProviderResponse(): OpenAiResponsesResponse {
+    if (
+      this.replacedText === null &&
+      this.completedResponse &&
+      this.completedItems.size > 0 &&
+      this.completedResponse.output.length === 0
+    ) {
+      return {
+        ...this.completedResponse,
+        output: Array.from(this.completedItems.values()),
+      };
+    }
     const outputItems: OpenAiResponsesResponse["output"] = [];
 
     // A refusal does not erase what the model already said: its text streamed
@@ -752,15 +951,28 @@ class OpenAiResponsesStreamAdapter
     }
 
     if (this.replacedText === null) {
+      const originals = new Map(
+        Array.from(this.toolCallsByItemId.values()).map((call) => [
+          call.id,
+          call.originalItem,
+        ]),
+      );
       outputItems.push(
-        ...this.state.toolCalls.map((toolCall) => ({
-          id: toolCall.id,
+        ...(this.state.toolCalls.map((toolCall) => ({
+          ...originals.get(toolCall.id),
           call_id: toolCall.id,
-          type: "function_call" as const,
-          name: toolCall.name,
-          arguments: toolCall.arguments,
+          type:
+            originals.get(toolCall.id)?.type === "custom_tool_call"
+              ? ("custom_tool_call" as const)
+              : ("function_call" as const),
+          name:
+            (originals.get(toolCall.id) as { name?: string } | undefined)
+              ?.name ?? toolCall.name,
+          ...(originals.get(toolCall.id)?.type === "custom_tool_call"
+            ? rewriteCustomToolCallArguments(toolCall.arguments)
+            : { arguments: toolCall.arguments }),
           status: "completed" as const,
-        })),
+        })) as unknown as OpenAiResponsesResponse["output"]),
       );
     }
 
@@ -794,16 +1006,21 @@ class OpenAiResponsesStreamAdapter
   }
 
   private captureToolCallChunk(chunk: OpenAiResponsesStreamChunk): void {
-    if (chunk.type === "response.output_item.added") {
+    if (
+      chunk.type === "response.output_item.added" ||
+      chunk.type === "response.output_item.done"
+    ) {
       const item = chunk.item;
-      if (!isResponseFunctionCall(item)) {
+      if (!isResponseNativeToolCall(item)) {
         return;
       }
 
-      this.toolCallsByItemId.set(item.id ?? item.call_id, {
-        id: item.call_id,
-        name: item.name,
-        arguments: item.arguments,
+      const callId = responseToolCallId(item);
+      this.toolCallsByItemId.set(item.id ?? callId, {
+        id: callId,
+        name: codexToolName(item),
+        arguments: responseToolCallArguments(item),
+        originalItem: item as unknown as Record<string, unknown>,
       });
       this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
       return;
@@ -822,7 +1039,22 @@ class OpenAiResponsesStreamAdapter
       return;
     }
 
+    if (chunk.type === "response.mcp_call_arguments.delta") {
+      const toolCall = this.toolCallsByItemId.get(chunk.item_id) ?? {
+        id: chunk.item_id,
+        name: "",
+        arguments: "",
+      };
+      toolCall.arguments += chunk.delta;
+      this.toolCallsByItemId.set(chunk.item_id, toolCall);
+      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+      return;
+    }
+
     if (chunk.type === "response.function_call_arguments.done") {
+      this.updateToolCallArguments(chunk);
+    }
+    if (chunk.type === "response.mcp_call_arguments.done") {
       this.updateToolCallArguments(chunk);
     }
   }
@@ -830,7 +1062,9 @@ class OpenAiResponsesStreamAdapter
   private updateToolCallArguments(
     chunk:
       | ResponseFunctionCallArgumentsDoneEvent
-      | ResponseFunctionCallArgumentsDeltaEvent,
+      | ResponseFunctionCallArgumentsDeltaEvent
+      | ResponseMcpCallArgumentsDoneEvent
+      | ResponseMcpCallArgumentsDeltaEvent,
   ): void {
     const toolCall = this.toolCallsByItemId.get(chunk.item_id) ?? {
       id: chunk.item_id,
@@ -878,7 +1112,7 @@ function toCommonMessages(
     ];
   }
 
-  if (item.type === "function_call_output") {
+  if (isResponsesToolOutputItem(item)) {
     const toolCall = toolCallsByCallId.get(item.call_id);
     const content =
       typeof item.output === "string"
@@ -946,14 +1180,48 @@ function isFunctionToolDefinition(
   );
 }
 
-function isFunctionCallOutputItem(
+function declaredResponsesMcpTools(tool: unknown): CommonMcpToolDefinition[] {
+  if (
+    !isRecord(tool) ||
+    tool.type !== "mcp" ||
+    typeof tool.server_label !== "string" ||
+    !Array.isArray(tool.allowed_tools)
+  ) {
+    return [];
+  }
+  return tool.allowed_tools.flatMap((name) =>
+    typeof name === "string"
+      ? [
+          {
+            name: `mcp__${tool.server_label}__${name}`,
+            inputSchema: {},
+          },
+        ]
+      : [],
+  );
+}
+
+type ResponsesToolItem = {
+  type?: unknown;
+  call_id?: unknown;
+  name?: unknown;
+  namespace?: unknown;
+  arguments?: unknown;
+  input?: unknown;
+  output?: unknown;
+  id?: unknown;
+  server_label?: unknown;
+};
+
+function isResponsesToolOutputItem(
   item: unknown,
-): item is Extract<ResponseInputItem, { type: "function_call_output" }> {
+): item is ResponsesToolItem & { call_id: string; output: unknown } {
   return (
-    !!item &&
-    typeof item === "object" &&
-    "type" in item &&
-    item.type === "function_call_output"
+    isRecord(item) &&
+    (item.type === "function_call_output" ||
+      item.type === "custom_tool_call_output") &&
+    typeof item.call_id === "string" &&
+    "output" in item
   );
 }
 
@@ -963,16 +1231,125 @@ function isResponseMessage(
   return item.type === "message";
 }
 
-function isResponseFunctionCall(
-  item: ResponseOutputItem | { type?: string },
-): item is Extract<ResponseOutputItem, { type: "function_call" }> {
-  return item.type === "function_call";
+function isResponseNativeToolCall(
+  item: ResponseOutputItem | ResponsesToolItem,
+): item is ResponsesToolItem & {
+  type: "function_call" | "custom_tool_call";
+  call_id?: string;
+  id: string;
+  name: string;
+} {
+  return (
+    (item.type === "function_call" || item.type === "custom_tool_call") &&
+    typeof item.call_id === "string" &&
+    typeof item.name === "string"
+  );
 }
 
-function isResponseInputFunctionCall(
-  item: ResponseInputItem,
-): item is Extract<ResponseInputItem, { type: "function_call" }> {
-  return item.type === "function_call";
+function isUnsupportedResponsesToolItem(item: unknown): boolean {
+  if (isClientToolSearchCall(item)) return false;
+  return (
+    isRecord(item) &&
+    typeof item.type === "string" &&
+    /_call(?:_output)?$/.test(item.type) &&
+    item.type !== "function_call" &&
+    item.type !== "function_call_output" &&
+    item.type !== "custom_tool_call" &&
+    item.type !== "custom_tool_call_output"
+  );
+}
+
+function isToolSearchCallBookkeeping(item: unknown): item is Record<
+  string,
+  unknown
+> & {
+  id: string;
+  call_id: string;
+  type: "tool_search_call";
+  execution?: "client" | "server";
+} {
+  return (
+    isRecord(item) &&
+    item.type === "tool_search_call" &&
+    typeof item.id === "string" &&
+    typeof item.call_id === "string" &&
+    "arguments" in item &&
+    (item.execution === undefined ||
+      item.execution === "client" ||
+      item.execution === "server")
+  );
+}
+
+function isClientToolSearchCall(
+  item: unknown,
+): item is Record<string, unknown> & { call_id: string } {
+  return (
+    isRecord(item) &&
+    item.type === "tool_search_call" &&
+    item.execution === "client" &&
+    typeof item.id === "string" &&
+    typeof item.call_id === "string" &&
+    "arguments" in item
+  );
+}
+
+function assertNoUnsupportedResponsesToolItems(
+  items: readonly unknown[],
+): void {
+  const unsupported = items.find(isUnsupportedResponsesToolItem);
+  if (unsupported) {
+    throw unsupportedResponsesToolItemError(unsupported);
+  }
+}
+
+/**
+ * The Responses item is provider output, so do not expose its contents. The
+ * type and field presence are sufficient to diagnose a protocol mismatch while
+ * keeping unsupported calls fail-closed and retry-safe for client callers.
+ */
+function unsupportedResponsesToolItemError(item: unknown): ApiError {
+  const value = isRecord(item) ? item : {};
+  const type = typeof value.type === "string" ? value.type : "unknown";
+  const fields = [
+    "id",
+    "call_id",
+    "name",
+    "namespace",
+    "server_label",
+    "execution",
+    "arguments",
+    "input",
+    "output",
+  ]
+    .filter((field) => field in value)
+    .sort();
+  const execution =
+    value.execution === "client" || value.execution === "server"
+      ? `; execution: ${value.execution}`
+      : "";
+  return new ApiError(
+    400,
+    `Unsupported Responses tool item (${type}; fields: ${fields.join(",") || "none"}${execution}) cannot bypass policy`,
+  );
+}
+
+/** Preserve Codex's namespace for policy and APPA registry lookup. */
+export function codexToolName(item: {
+  name: string;
+  namespace?: unknown;
+  server_label?: unknown;
+}): string {
+  if (typeof item.server_label === "string" && item.server_label.length > 0) {
+    return `mcp__${item.server_label}__${item.name}`;
+  }
+  if (typeof item.namespace !== "string" || item.namespace.length === 0) {
+    return item.name;
+  }
+  // Codex emits MCP calls as namespace + member. Gateway policy lookup uses
+  // the canonical global MCP spelling rather than a dotted namespace.
+  return item.namespace.startsWith("mcp__")
+    ? `${item.namespace}__${item.name}`
+    : `${item.namespace}.${item.name}`;
 }
 
 function normalizeResponseMessageRole(
@@ -990,11 +1367,13 @@ function isResponsesToolCallChunk(
   | ResponseFunctionCallArgumentsDoneEvent {
   return (
     (chunk.type === "response.output_item.added" &&
-      isResponseFunctionCall(chunk.item)) ||
+      isResponseNativeToolCall(chunk.item)) ||
     (chunk.type === "response.output_item.done" &&
-      isResponseFunctionCall(chunk.item)) ||
+      isResponseNativeToolCall(chunk.item)) ||
     chunk.type === "response.function_call_arguments.delta" ||
-    chunk.type === "response.function_call_arguments.done"
+    chunk.type === "response.function_call_arguments.done" ||
+    chunk.type === "response.mcp_call_arguments.delta" ||
+    chunk.type === "response.mcp_call_arguments.done"
   );
 }
 
@@ -1003,7 +1382,7 @@ function getToolCallsByCallId(
 ): Map<string, { name: string; arguments?: Record<string, unknown> }> {
   return new Map(
     input.flatMap((item) => {
-      if (!isResponseInputFunctionCall(item)) {
+      if (!isResponseInputNativeToolCall(item)) {
         return [];
       }
 
@@ -1011,13 +1390,60 @@ function getToolCallsByCallId(
         [
           item.call_id,
           {
-            name: item.name,
-            arguments: extractCommonToolCallArguments(item.arguments),
+            name: codexToolName(item),
+            arguments: tryParseJsonObject(responseToolCallArguments(item)),
           },
         ] as const,
       ];
     }),
   );
+}
+
+function isResponseInputNativeToolCall(
+  item: ResponseInputItem,
+): item is ResponseInputItem &
+  ResponsesToolItem & {
+    call_id: string;
+    name: string;
+  } {
+  const native = item as unknown as ResponsesToolItem;
+  return (
+    (native.type === "function_call" || native.type === "custom_tool_call") &&
+    typeof native.call_id === "string" &&
+    typeof native.name === "string"
+  );
+}
+
+function responseToolCallArguments(item: ResponsesToolItem): string {
+  if (typeof item.arguments === "string") return item.arguments;
+  if (typeof item.input === "string")
+    return JSON.stringify({ input: item.input });
+  throw new Error(
+    "Native Responses tool call has no supported argument payload",
+  );
+}
+
+function responseToolCallId(item: ResponsesToolItem): string {
+  if (typeof item.call_id === "string") return item.call_id;
+  if (typeof item.id === "string") return item.id;
+  throw new Error("Native Responses tool call has no stable id");
+}
+
+function rewriteCustomToolCallArguments(argumentsText: string) {
+  let input: unknown;
+  try {
+    input = JSON.parse(argumentsText).input;
+  } catch {
+    throw new Error("Custom Responses tool call has invalid rewritten input");
+  }
+  if (typeof input !== "string") {
+    throw new Error("Custom Responses tool call has no string rewritten input");
+  }
+  return { input };
+}
+
+function stringifyResponseToolOutput(output: unknown): string {
+  return typeof output === "string" ? output : JSON.stringify(output);
 }
 
 function tryParseJsonObject(value: string): Record<string, unknown> {

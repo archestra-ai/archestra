@@ -53,6 +53,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "app.deleted": "App deleted",
   "app.bulk_updated": "Apps bulk updated",
   "app.bulk_deleted": "Apps bulk deleted",
+  "appaApproval.decided": "APPA approval decided",
+  "appaQuarantine.acknowledged": "APPA quarantine acknowledged",
+  "appaQuarantine.reconciled": "APPA quarantine reconciled",
   // ChatOps binding
   "chatOpsBinding.created": "ChatOps binding created",
   "chatOpsBinding.updated": "ChatOps binding updated",
@@ -345,6 +348,8 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "agentTool",
   "apiKey",
   "app",
+  "appaApproval",
+  "appaQuarantine",
   "auth",
   "chatOpsBinding",
   "chatOpsConfig",

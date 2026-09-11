@@ -8,6 +8,13 @@ export const RouteId = {
   UpdateA2aRemoteAgent: "updateA2aRemoteAgent",
   DeleteA2aRemoteAgent: "deleteA2aRemoteAgent",
 
+  // OpenAPPA reviewer routes
+  ListAppaApprovals: "listAppaApprovals",
+  GetAppaApproval: "getAppaApproval",
+  DecideAppaApproval: "decideAppaApproval",
+  ListAppaQuarantines: "listAppaQuarantines",
+  GetAppaQuarantine: "getAppaQuarantine",
+  AcknowledgeAppaQuarantine: "acknowledgeAppaQuarantine",
   // Agent Routes
   GetAgents: "getAgents",
   GetAllAgents: "getAllAgents",
@@ -216,6 +223,9 @@ export const RouteId = {
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
   OpenAiResponsesWithDefaultAgent: "openAiResponsesWithDefaultAgent",
   OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
+  OpenAiResponsesCompactWithDefaultAgent:
+    "openAiResponsesCompactWithDefaultAgent",
+  OpenAiResponsesCompactWithAgent: "openAiResponsesCompactWithAgent",
   OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
   OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",

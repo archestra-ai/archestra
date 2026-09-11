@@ -180,6 +180,7 @@ export const InteractionRequestSchema = z.union([
   Microsoft365Copilot.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   OpenAi.API.ResponsesRequestSchema,
+  OpenAi.API.ResponsesCompactRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
   Azure.API.ResponsesRequestSchema,
 ]);
@@ -229,6 +230,7 @@ export const InteractionResponseSchema = z.union([
   Microsoft365Copilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
+  OpenAi.API.ResponsesCompactResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
   InteractionErrorResponseSchema,
@@ -406,7 +408,12 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(OpenAi.API.ResponsesRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(OpenAi.API.ResponsesResponseSchema),
+    response: withErrorResponse(
+      z.union([
+        OpenAi.API.ResponsesResponseSchema,
+        OpenAi.API.ResponsesCompactResponseSchema,
+      ]),
+    ),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

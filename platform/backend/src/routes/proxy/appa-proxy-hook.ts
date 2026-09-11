@@ -1414,8 +1414,10 @@ export class AppaProxyHookSession {
       }
       throw new AppaProxyHookError("denied", stage);
     }
-    if (isPolicyDenialEnvelope(decision))
+    if (isPolicyDenialEnvelope(decision)) {
+      logger.debug({ decision, stage }, "OpenAPPA hook policy denial");
       throw new AppaProxyHookError("denied", stage);
+    }
     throw new AppaProxyHookError("unavailable", stage);
   }
 
@@ -1424,7 +1426,11 @@ export class AppaProxyHookSession {
     let capabilities: Record<string, unknown>;
     try {
       capabilities = await this.runtimeClient().capabilities();
-    } catch {
+    } catch (error) {
+      logger.error(
+        { error },
+        "ensureV1Capabilities runtimeClient().capabilities() failed",
+      );
       throw new AppaProxyHookError("unavailable", "input");
     }
     if (
@@ -1438,6 +1444,10 @@ export class AppaProxyHookSession {
       (capabilities.child_actor_targeting !== undefined &&
         typeof capabilities.child_actor_targeting !== "boolean")
     ) {
+      logger.error(
+        { capabilities },
+        "ensureV1Capabilities capabilities validation failed",
+      );
       throw new AppaProxyHookError("unavailable", "input");
     }
     this.capabilities = {

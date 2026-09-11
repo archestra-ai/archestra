@@ -3,7 +3,7 @@ title: Using Claude Code with a Pro or Max Subscription
 category: Examples
 order: 10
 description: Route Claude Code through Archestra while your Claude subscription keeps paying for inference
-lastUpdated: 2026-08-19
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -31,11 +31,11 @@ Screenshots live in /docs/automated_screenshots/platform-claude-code-example_*.
 Don't restate obvious UI; keep it short.
 -->
 
-## Step 1. Run the connection setup script
+## Step 1. Connect From Claude Code
 
-On the **Connect** page, choose **Claude Code**, check the selections under **Review the setup**, copy the shell command, and run it in your terminal.
+On **Connect**, select **Claude Code** and paste the prompt into your coding client. Review and approve the connection in your browser. Claude Code runs the setup script after approval.
 
-![The Connect page with Claude Code selected, showing the passthrough setup and the one-time command](/docs/automated_screenshots/platform-claude-code-example_connect-page.webp)
+![The Connect page with Claude Code selected and its setup prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
 ![The setup script output after a successful run](/docs/automated_screenshots/platform-claude-code-example_run-connection-script.webp)
 

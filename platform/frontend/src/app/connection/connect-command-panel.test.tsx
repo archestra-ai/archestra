@@ -10,7 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 vi.mock("next/navigation");
 
@@ -21,6 +21,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
+import { ConnectionFlow } from "./connection-flow";
 
 const {
   createSetupMock,
@@ -224,6 +225,76 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("switches between coding prompts and Desktop setup without preparing coding-client scripts", async () => {
+    vi.mocked(useRouter).mockReturnValue({
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(usePathname).mockReturnValue("/connection");
+    const server = setupServer(
+      http.get("http://localhost:9000/api/agents/all", () =>
+        HttpResponse.json([]),
+      ),
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectionFlow llmProxyId="p1" />
+      </QueryClientProvider>,
+    );
+    try {
+      expect(
+        screen.getByRole("heading", { name: "Connect Claude Code" }),
+      ).toBeVisible();
+      for (const label of ["Cursor", "Codex", "Copilot CLI"]) {
+        await user.click(
+          screen.getByRole("button", {
+            name: new RegExp(`${label} logo ${label}`),
+          }),
+        );
+        expect(
+          screen.getByRole("heading", { name: `Connect ${label}` }),
+        ).toBeVisible();
+        expect(
+          screen.getByText(
+            `Read ${window.location.origin}/connect.md and connect ${label}.`,
+          ),
+        ).toBeVisible();
+      }
+      expect(createSetupMock).not.toHaveBeenCalled();
+      await user.click(
+        screen.getByRole("button", {
+          name: /Claude Desktop logo Claude Desktop/,
+        }),
+      );
+      expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
+      expect(
+        screen.getByRole("heading", { name: "Install the connection" }),
+      ).toBeVisible();
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({ clientId: "claude-desktop" }),
+        ),
+      );
+      expect(screen.queryByText(/requires the Claude Code CLI/)).toBeNull();
+      await user.click(
+        screen.getByRole("button", { name: /Claude Code logo Claude Code/ }),
+      );
+      expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
+      expect(
+        screen.queryByRole("heading", { name: "Review the setup" }),
+      ).toBeNull();
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      server.close();
+    }
+  });
+
   it("offers Desktop subscription installation without a configured API key", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({
@@ -250,7 +321,7 @@ describe("ConnectCommandPanel", () => {
       await screen.findByRole("link", { name: "Download installer" }),
     ).toHaveAttribute("href", "https://proxy.example/desktop-installer");
     expect(screen.getByText(COMMAND)).not.toBeVisible();
-    await userEvent.click(screen.getByText("Use terminal instead"));
+    await userEvent.click(screen.getByText("Advanced: terminal setup"));
     expect(screen.getByText(COMMAND)).toBeVisible();
     expect(createKeyMock).not.toHaveBeenCalled();
   });

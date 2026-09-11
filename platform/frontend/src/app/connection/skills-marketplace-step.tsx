@@ -240,19 +240,18 @@ function CredentialNote({
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="border-t pt-4">
       <CollapsibleTrigger asChild>
-        <button
+        <Button
           type="button"
-          className="flex w-full items-center gap-2 text-left text-sm font-medium text-foreground"
+          variant="ghost"
+          size="sm"
+          className="h-auto max-w-full justify-start gap-2 px-0 py-1 text-left text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
           data-testid="skills-marketplace-credential-toggle"
         >
           <ChevronRight
             className={cn("h-4 w-4 transition-transform", open && "rotate-90")}
           />
-          <span>Your client can&apos;t prompt for a password?</span>
-          <span className="font-normal text-muted-foreground">
-            store the credential up front
-          </span>
-        </button>
+          <span>Set up credentials manually</span>
+        </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-3">
         <p className="pb-3 text-[12.5px] text-muted-foreground">
@@ -290,19 +289,18 @@ function ShareLinkSection({ client }: { client: ConnectClient }) {
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="border-t pt-4">
       <CollapsibleTrigger asChild>
-        <button
+        <Button
           type="button"
-          className="flex w-full items-center gap-2 text-left text-sm font-medium text-foreground"
+          variant="ghost"
+          size="sm"
+          className="h-auto max-w-full justify-start gap-2 px-0 py-1 text-left text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
           data-testid="skills-marketplace-share-link-toggle"
         >
           <ChevronRight
             className={cn("h-4 w-4 transition-transform", open && "rotate-90")}
           />
-          <span>Share a snapshot link instead</span>
-          <span className="font-normal text-muted-foreground">
-            for people without an account here
-          </span>
-        </button>
+          <span>Share a snapshot link</span>
+        </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-4">
         <ShareLinkPanel client={client} />
@@ -383,19 +381,26 @@ function CreateLinkPanel({
   }, [createShare, onCreated, ttlId]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        Snapshot {totalSkills} skill
-        {totalSkills === 1 ? null : <span>s</span>} into a single marketplace
-        URL that carries its own token, so it works without an account here. New
-        skills added later won't appear until you refresh the link.
+    <div className="flex flex-col gap-3">
+      <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+        Share {totalSkills} skill
+        {totalSkills === 1 ? null : <span>s</span>} with people who don't have
+        an account. The link includes access and stays unchanged until you
+        refresh it.
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm font-medium" htmlFor="skill-marketplace-ttl">
-          Expiration
+        <label
+          className="text-xs text-muted-foreground"
+          htmlFor="skill-marketplace-ttl"
+        >
+          Expires in
         </label>
         <Select value={ttlId} onValueChange={setTtlId}>
-          <SelectTrigger id="skill-marketplace-ttl" className="w-[200px]">
+          <SelectTrigger
+            id="skill-marketplace-ttl"
+            size="sm"
+            className="w-36 text-xs"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -408,12 +413,14 @@ function CreateLinkPanel({
         </Select>
         <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={handleCreate}
           disabled={createShare.isPending}
           data-testid="skills-marketplace-create"
         >
-          <Share2 className="mr-2 h-4 w-4" />
-          {createShare.isPending ? "Creating…" : "Create marketplace link"}
+          <Share2 className="size-3.5" />
+          <span>{createShare.isPending ? "Creating…" : "Create link"}</span>
         </Button>
       </div>
     </div>

@@ -12,6 +12,7 @@ import config from "@/lib/config/config";
 import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel, isScriptClient } from "./connect-command-panel";
+import { ConnectWithAi } from "./connect-with-ai";
 import {
   type ConnectionBaseUrl,
   resolveAdminDefaultBaseUrl,
@@ -99,10 +100,8 @@ export function ConnectionFlow({
   const selectClient = (id: string) => {
     setClientId(id);
     // Providers vary per client, so clear any bookmarked provider on switch.
-    // Keep ordinary manual setup transient so refresh returns to the prompt.
-    // Explicit client links retain their bookmarkable selection.
     updateUrlParams({
-      ...(urlClientId ? { clientId: id } : {}),
+      clientId: id,
       providerId: null,
     });
   };
@@ -156,6 +155,13 @@ export function ConnectionFlow({
   const urlProviderId = searchParams.get("providerId");
   const urlProvider: SupportedProvider | null =
     urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
+
+  const promptClient =
+    !searchParams.get("connectRequest") &&
+    (client?.id === "claude-code" ||
+      client?.id === "cursor" ||
+      client?.id === "codex" ||
+      client?.id === "copilot-cli");
 
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsVisible = skillsEnabled && marketplaceVisible;
@@ -253,8 +259,14 @@ export function ConnectionFlow({
         </WizardStep>
       )}
 
+      {client && promptClient && (
+        <WizardStep n={2} title={`Connect ${client.label}`} last>
+          <ConnectWithAi client={client} />
+        </WizardStep>
+      )}
+
       {/* Steps 2-3 (script clients) — review, then run the command */}
-      {client && isScriptClient(client.id) && (
+      {client && !promptClient && isScriptClient(client.id) && (
         <ConnectCommandPanel
           client={client}
           mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}

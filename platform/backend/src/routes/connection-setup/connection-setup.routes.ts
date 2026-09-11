@@ -800,6 +800,15 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Fetch-time re-validation + context building (live reads on the
         // default pool — see claim note above; threading a tx through the
         // auth layer and secrets manager is not possible).
+        if (
+          request.headers.accept ===
+            "application/vnd.archestra.desktop-setup+json" &&
+          setup.clientId !== "claude-desktop"
+        )
+          throw new ApiError(
+            400,
+            "Desktop configuration requires a Claude Desktop setup.",
+          );
         const { context, marketplaceRender } = await buildScriptContext(setup);
 
         // Skill-link creation + attach + render commit together: a rendered
@@ -814,7 +823,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // A setup that also delivers plugins still mints a share link: the
           // shared URL serves skills only, and splitting the two would make the
           // script register two marketplaces.
-          if (marketplaceRender && marketplaceRender.pluginIds.length === 0) {
+          // Desktop rejects URL userinfo and requires a pinned revision for
+          // automatic installation, so it uses the snapshot branch below.
+          if (
+            marketplaceRender &&
+            marketplaceRender.pluginIds.length === 0 &&
+            setup.clientId !== "claude-desktop"
+          ) {
             const { rawToken: marketplaceToken } =
               await SkillMarketplaceCredentialModel.create({
                 organizationId: setup.organizationId,
@@ -868,7 +883,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             };
           }
 
-          return renderSetupScript({ ...context, skills });
+          return request.headers.accept ===
+            "application/vnd.archestra.desktop-setup+json"
+            ? JSON.stringify({ ...context, skills })
+            : renderSetupScript({ ...context, skills });
         });
       } catch (error) {
         await ConnectionSetupModel.unclaim(setup.id);
@@ -876,7 +894,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply
-        .header("Content-Type", "text/plain; charset=utf-8")
+        .header(
+          "Content-Type",
+          request.headers.accept ===
+            "application/vnd.archestra.desktop-setup+json"
+            ? "application/json; charset=utf-8"
+            : "text/plain; charset=utf-8",
+        )
         .header("Cache-Control", "no-store")
         .header("X-Content-Type-Options", "nosniff")
         .send(script);

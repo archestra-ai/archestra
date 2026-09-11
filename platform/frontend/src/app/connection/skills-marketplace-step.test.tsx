@@ -314,8 +314,7 @@ describe("SkillsMarketplaceStep", () => {
       expect(
         screen.getByText(
           (_, el) =>
-            el?.tagName === "P" &&
-            /Snapshot 2 skills/i.test(el.textContent ?? ""),
+            el?.tagName === "P" && /Share 2 skills/i.test(el.textContent ?? ""),
         ),
       ).toBeInTheDocument();
     });

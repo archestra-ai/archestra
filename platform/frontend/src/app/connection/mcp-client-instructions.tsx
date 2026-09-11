@@ -102,7 +102,7 @@ export function McpClientInstructions({
                 value={authMethod}
                 onValueChange={(v) => setAuthMethod(v as AuthMethod)}
               >
-                <TabsList>
+                <TabsList size="sm">
                   {tabs.map((t) =>
                     t === "oauth" ? (
                       <TabsTrigger key="oauth" value="oauth">
@@ -152,7 +152,7 @@ export function McpClientInstructions({
           onValueChange={(v) => setAuthMethod(v as AuthMethod)}
           className="-mt-2"
         >
-          <TabsList>
+          <TabsList size="sm">
             {tabs.map((t) =>
               t === "oauth" ? (
                 <TabsTrigger key="oauth" value="oauth">

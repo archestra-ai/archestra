@@ -20,13 +20,18 @@ function Tabs({
 
 function TabsList({
   className,
+  size = "default",
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.List>) {
+}: React.ComponentProps<typeof TabsPrimitive.List> & {
+  size?: "default" | "sm";
+}) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
         "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
+        size === "sm" &&
+          "h-8 gap-0.5 rounded-md p-0.5 [&>[data-slot=tabs-trigger]]:rounded-sm [&>[data-slot=tabs-trigger]]:border-0 [&>[data-slot=tabs-trigger]]:px-2.5 [&>[data-slot=tabs-trigger]]:text-xs [&>[data-slot=tabs-trigger]]:shadow-none [&>[data-state=active]]:bg-background dark:[&>[data-state=active]]:bg-background",
         className,
       )}
       {...props}

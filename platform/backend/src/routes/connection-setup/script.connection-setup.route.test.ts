@@ -144,6 +144,52 @@ describe("GET /api/connection-setups/script/:token", () => {
     });
   }
 
+  test("redeems the Desktop ticket as runtime configuration without packaging subscription credentials", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const skill = await seedSkill({ organizationId, name: "desktop-skill" });
+    const { rawToken } = await createSetup({
+      clientId: "claude-desktop",
+      platform: "macos",
+      baseUrl: "http://localhost:9000/v1",
+      llmProxyId: proxy.id,
+      provider: "anthropic",
+      proxyAuth: "provider-key",
+      skills: { skillIds: [skill.id], ttlDays: 30 },
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+      headers: { accept: "application/vnd.archestra.desktop-setup+json" },
+      remoteAddress: nextRemoteAddress(),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({
+      clientId: "claude-desktop",
+      platform: "macos",
+      proxy: {
+        authMode: "provider-key",
+        provider: "anthropic",
+        virtualKey: null,
+      },
+    });
+    const marketplaceUrl = new URL(response.json().skills.cloneUrl);
+    expect(marketplaceUrl.username).toBe("");
+    expect(marketplaceUrl.pathname).toMatch(
+      /^\/skills\/m\/archestra_skl_.+\/repo\.git$/,
+    );
+    const links = await SkillShareLinkModel.listByOrganization({
+      organizationId,
+    });
+    expect(links).toHaveLength(1);
+    expect(links[0].skills.map((item) => item.id)).toEqual([skill.id]);
+    expect(response.body).not.toContain("sk-ant-");
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+  });
+
   test("404s an unknown token", async () => {
     const response = await fetchScript("archestra_con_does-not-exist-at-all");
     expect(response.statusCode).toBe(404);

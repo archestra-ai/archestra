@@ -3,7 +3,7 @@ title: Runtime Credentials
 category: Administration
 description: Manage reusable secrets for Agent Runtime
 order: 5
-lastUpdated: 2026-09-10
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,7 +16,9 @@ A personal connection belongs to one user. It is available only when that user s
 
 An organization connection is shared by Agents in the organization.
 
-GitHub and Claude Code credential definitions are included for personal use.
+GitHub tokens use custom credential definitions. Existing GitHub connections and Agent bindings are preserved when upgrading.
+
+Claude subscriptions use native sign-in on the Agent instead of a reusable secret. Each user connects their own account. See [Claude Code authentication](/docs/platform-agent-runtime#model-inference-and-mcp-tools).
 
 Administrators can add definitions for other services. Each definition controls which scopes it supports.
 

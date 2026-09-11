@@ -41,6 +41,10 @@ export type AgentRuntimeConfig = {
     description?: string;
     required: boolean;
   }> | null;
+  claudeCode?: {
+    authentication: "provider" | "subscription";
+    model?: string;
+  };
   ttlHours: number | null;
   maxCostUsd: number | null;
   idleTimeoutMinutes: number | null;
@@ -407,7 +411,6 @@ function fromEnvironmentDrafts(
 
 function defaultCredentialEnvironmentKey(key: string): string {
   if (key === "github") return "GITHUB_TOKEN";
-  if (key === "claude-code") return "CLAUDE_CODE_OAUTH_TOKEN";
   return uppercase(key.replace(/[.-]+/g, "_"));
 }
 

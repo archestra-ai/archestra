@@ -12,6 +12,14 @@ fi
 # Prefer that alias so a fresh pod opens directly into the native TUI.
 unset ANTHROPIC_API_KEY
 
+if [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" == "subscription" ]]; then
+  # Authentication belongs to the native CLI. Neither an inherited image
+  # credential nor a previous provider selection may override this account.
+  unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_CUSTOM_HEADERS
+  unset CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
+  unset AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BEDROCK_BASE_URL
+fi
+
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 mcp_config="${runtime_dir}/claude-mcp.json"
 jq -n \
@@ -36,7 +44,7 @@ chmod 0600 "${mcp_config}"
 # was invisible until delegated runs started using the TUI — and then the
 # session sat on the dialog with nobody able to answer, burning the whole run.
 # Merged rather than written, because Claude Code rewrites this file as it runs.
-claude_json="${HOME}/.claude.json"
+claude_json="${CLAUDE_CONFIG_DIR:-${HOME}}/.claude.json"
 workspace="$(pwd)"
 trust_patch="$(jq -n --arg dir "${workspace}" \
   '{hasCompletedOnboarding:true,bypassPermissionsModeAccepted:true,
@@ -56,7 +64,11 @@ args=(
   --strict-mcp-config
 )
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" == "1" ]]; then
-  args+=(--continue)
+  if [[ -s "${runtime_dir}/claude-session-id" ]]; then
+    args+=(--resume "$(cat "${runtime_dir}/claude-session-id")")
+  elif [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" != "subscription" ]]; then
+    args+=(--continue)
+  fi
 fi
 if [[ -n "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" ]]; then
   args+=(--append-system-prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT}")
@@ -100,6 +112,10 @@ cat > "${transcript_hook}" <<'HOOK'
 set -euo pipefail
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 payload="$(cat)"
+native_session_id="$(jq -r '.session_id // empty' <<<"${payload}")"
+if [[ -n "${native_session_id}" ]]; then
+  printf '%s\n' "${native_session_id}" > "${runtime_dir}/claude-session-id"
+fi
 transcript="$(jq -r '.transcript_path // empty' <<<"${payload}")"
 last_assistant_message="$(jq -r '.last_assistant_message | strings // empty' <<<"${payload}")"
 printf '%s\n' '{"hook_event_name":"Stop"}' \
@@ -184,7 +200,7 @@ fi
 HOOK
 chmod 0700 "${transcript_hook}"
 
-jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript_hook}" '{hooks:{
+jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript_hook}" '{skipDangerousModePermissionPrompt:true,hooks:{
   Notification:[{
     matcher:"permission_prompt|idle_prompt|elicitation_dialog|elicitation_complete|elicitation_response|auth_success",
     hooks:[{type:"command",command:$attention_cmd}]

@@ -112,6 +112,8 @@ interface ModelSelectorProps {
   apiKeyId?: string | null;
   /** Whether the model query should be enabled */
   enabled?: boolean;
+  /** Models supplied by a runtime instead of the provider-key catalog. */
+  models?: LlmModel[];
   /**
    * Keep the current (unavailable) model instead of auto-selecting a fallback.
    * Used when the agent pins a per-user-credential model (e.g. GitHub Copilot)
@@ -478,22 +480,34 @@ export const ModelSelector = memo(function ModelSelector({
   variant = "default",
   apiKeyId,
   enabled = true,
+  models: suppliedModels,
   suppressAutoSelect = false,
   fallbackModelName,
   modelFilter,
   unavailableModelHeading,
 }: ModelSelectorProps) {
-  const {
-    modelsByProvider: fetchedModelsByProvider,
-    isLoading,
-    isPlaceholderData,
-  } = useLlmModelsByProvider({
+  const catalogQuery = useLlmModelsByProvider({
     apiKeyId: apiKeyId ?? undefined,
-    enabled,
+    enabled: enabled && suppliedModels === undefined,
   });
+  const fetchedModelsByProvider = useMemo(() => {
+    if (suppliedModels === undefined) return catalogQuery.modelsByProvider;
+    return suppliedModels.reduce(
+      (groups, model) => {
+        groups[model.provider] ??= [];
+        groups[model.provider].push(model);
+        return groups;
+      },
+      {} as Record<SupportedProvider, LlmModel[]>,
+    );
+  }, [suppliedModels, catalogQuery.modelsByProvider]);
+  const isLoading = suppliedModels === undefined && catalogQuery.isLoading;
+  const isPlaceholderData =
+    suppliedModels === undefined && catalogQuery.isPlaceholderData;
   const { data: availableKeys } = useAvailableLlmProviderApiKeys({
     includeKeyId: apiKeyId ?? undefined,
     toastOnError: false,
+    enabled: suppliedModels === undefined,
   });
   const selectedKey = availableKeys?.find((key) => key.id === apiKeyId);
   const selectedCredential =

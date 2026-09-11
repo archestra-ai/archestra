@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
-import { vi } from "vitest";
+import { assert, vi } from "vitest";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { claudeCodeAccountManager } from "@/k8s/agent-runtime/claude-code-account";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   A2AContextModel,
@@ -45,6 +46,18 @@ describe("Agent Runtime routes", () => {
     organizationId = organization.id;
     user = await makeAdmin();
     await makeMember(user.id, organizationId, { role: "admin" });
+    await createRuntimeCredentialDefinition({
+      organizationId,
+      userId: user.id,
+      definition: {
+        key: "github",
+        name: "GitHub PAT",
+        description: "Repository access",
+        icon: "logo:github",
+        allowPersonal: true,
+        allowOrganization: false,
+      },
+    });
     await createRuntimeCredentialDefinition({
       organizationId,
       userId: user.id,
@@ -125,6 +138,156 @@ describe("Agent Runtime routes", () => {
     );
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("audits native sign-in without retaining the authorization code and gates an unsigned user's run", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    assert(agent.runtime);
+    agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "org",
+      runtime: {
+        ...agent.runtime,
+        command: ["archestra-claude-code"],
+        inferenceProtocol: "anthropic",
+        credentials: [],
+        claudeCode: { authentication: "subscription" },
+      },
+    });
+    // Native account state lives in a CLI process and Kubernetes volume.
+    const connectedUser = user.id;
+    let connected = false;
+    vi.spyOn(claudeCodeAccountManager, "status").mockImplementation(
+      async ({ userId }) => ({
+        state:
+          connected && userId === connectedUser ? "connected" : "disconnected",
+      }),
+    );
+    vi.spyOn(claudeCodeAccountManager, "start").mockResolvedValue({
+      state: "starting",
+    });
+    vi.spyOn(claudeCodeAccountManager, "complete").mockImplementation(
+      async ({ userId }) => {
+        expect(userId).toBe(connectedUser);
+        connected = true;
+        return { state: "connected" };
+      },
+    );
+    vi.spyOn(claudeCodeAccountManager, "disconnect").mockImplementation(
+      async () => {
+        connected = false;
+        return { state: "disconnected" };
+      },
+    );
+    const url = `/api/agents/${agent.id}/runtime/claude-code/account`;
+    expect((await app.inject({ method: "POST", url })).statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${url}/complete`,
+          payload: {
+            flowId: crypto.randomUUID(),
+            code: "never-record-native-code",
+          },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await app.inject({ method: "GET", url })).json()).toEqual({
+      state: "connected",
+    });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${agent.id}/runtime/preflight`,
+        })
+      ).json(),
+    ).toMatchObject({ ready: true, configured: ["CLAUDE_CODE_ACCOUNT"] });
+    const owner = user;
+    user = await makeUser();
+    await makeMember(user.id, organizationId);
+    expect((await app.inject({ method: "GET", url })).json()).toEqual({
+      state: "disconnected",
+    });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${agent.id}/runtime/preflight`,
+        })
+      ).json(),
+    ).toMatchObject({
+      ready: false,
+      missing: [{ key: "CLAUDE_CODE_ACCOUNT" }],
+    });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/agents/${agent.id}/runs`,
+          payload: { message: "Hello" },
+        })
+      ).statusCode,
+    ).toBe(409);
+    user = owner;
+    expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(200);
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.resourceId, agent.id),
+          eq(schema.auditLogsTable.action, "agent.updated"),
+        ),
+      );
+    expect(audits).toHaveLength(3);
+    for (const audit of audits) {
+      expect(audit.action).toBe("agent.updated");
+      expect(audit.before).not.toEqual(audit.after);
+    }
+    expect(JSON.stringify(audits)).not.toContain("never-record-native-code");
+  });
+
+  test("does not expose another organization or private Agent's native account", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+  }) => {
+    const privateOwner = await makeUser();
+    const privateAgent = await makeAgent({
+      organizationId,
+      authorId: privateOwner.id,
+      agentType: "agent",
+      scope: "personal",
+      runtime: agent.runtime,
+    });
+    const otherOrganization = await makeOrganization();
+    const outsideAgent = await makeAgent({
+      organizationId: otherOrganization.id,
+      authorId: privateOwner.id,
+      agentType: "agent",
+      scope: "org",
+      runtime: agent.runtime,
+    });
+    user = await makeUser();
+    const status = vi.spyOn(claudeCodeAccountManager, "status");
+    for (const id of [privateAgent.id, outsideAgent.id]) {
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/agents/${id}/runtime/claude-code/account`,
+          })
+        ).statusCode,
+      ).toBe(404);
+    }
+    expect(status).not.toHaveBeenCalled();
   });
 
   test("lists only runs belonging to the selected Agent with their task outcome", async ({

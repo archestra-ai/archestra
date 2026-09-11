@@ -7,6 +7,12 @@ import type { ResolvedAgentRuntime } from "@/types";
 import { claudeCodeAccountManager } from "./claude-code-account";
 import { execAgentRuntimeCommand } from "./exec";
 
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    agentRuntime: { enabled: true },
+  }),
+);
+
 // Only Kubernetes transport and native subprocess execution are substituted.
 vi.mock("@/k8s/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/k8s/shared")>()),

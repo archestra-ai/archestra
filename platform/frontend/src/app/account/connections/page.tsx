@@ -1,6 +1,7 @@
 "use client";
 
 import { Plug, RefreshCw, Unplug } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -93,7 +94,14 @@ export default function AccountConnectionsPage() {
             ))}
             {!definitions.isPending && personalDefinitions.length === 0 && (
               <p className="p-5 text-sm text-muted-foreground">
-                No personal Agent connections are available.
+                An administrator can add a personal credential in{" "}
+                <Link
+                  href="/settings/agents#runtime-credentials"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Runtime credentials
+                </Link>
+                . Then connect it here.
               </p>
             )}
           </div>

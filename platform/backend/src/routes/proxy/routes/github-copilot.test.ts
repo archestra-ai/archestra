@@ -13,6 +13,8 @@
  *     models.id UUID — plus the exchanged bearer and integration headers)
  *   - how the upstream rejection surfaces to the proxy caller
  */
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateText } from "ai";
 import Fastify from "fastify";
 import {
   serializerCompiler,
@@ -277,6 +279,116 @@ describe("GitHub Copilot Responses account routing", () => {
         expect(response.json()).toMatchObject({ model, output: result.output });
     } finally {
       server.events.removeListener("response:mocked", drainResponse);
+      await app.close();
+    }
+  });
+});
+
+describe("GitHub Copilot chat completion compatibility", () => {
+  test("the chat client accepts a completion whose upstream choices omit their indices", async ({
+    makeAgent,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "Copilot Compatibility Agent" });
+    stubTokenExchange();
+    server.use(
+      http.post(COPILOT_CHAT_COMPLETIONS_URL, () =>
+        HttpResponse.json({
+          id: "completion-test",
+          model: "claude-sonnet-5",
+          choices: [
+            {
+              finish_reason: "stop",
+              message: { role: "assistant", content: "Hello from Copilot" },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
+        }),
+      ),
+    );
+    const client = createOpenAI({
+      apiKey: uniqueGithubToken(),
+      baseURL: `http://proxy.test/v1/github-copilot/${agent.id}`,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        const response = await app.inject({
+          method: "POST",
+          url: new URL(request.url).pathname,
+          headers: Object.fromEntries(request.headers),
+          payload: await request.text(),
+        });
+        return new Response(response.body, {
+          status: response.statusCode,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    try {
+      const result = await generateText({
+        model: client.chat("claude-sonnet-5"),
+        prompt: "Hello",
+        maxRetries: 0,
+      });
+      expect(result.text).toBe("Hello from Copilot");
+      expect(result.usage).toMatchObject({ inputTokens: 10, outputTokens: 4 });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("fills missing choice indices while preserving upstream indices and tool calls", async ({
+    makeAgent,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "Copilot Tool Compatibility Agent" });
+    const toolCall = {
+      id: "call_test",
+      type: "function",
+      function: { name: "lookup", arguments: '{"key":"example"}' },
+    };
+    stubTokenExchange();
+    server.use(
+      http.post(COPILOT_CHAT_COMPLETIONS_URL, () =>
+        HttpResponse.json({
+          id: "completion-test",
+          model: "claude-sonnet-5",
+          choices: [
+            {
+              index: 3,
+              finish_reason: "stop",
+              message: { role: "assistant", content: "First" },
+            },
+            {
+              finish_reason: "tool_calls",
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: [toolCall],
+              },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
+        }),
+      ),
+    );
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/chat/completions`,
+        headers: { authorization: `Bearer ${uniqueGithubToken()}` },
+        payload: {
+          model: "claude-sonnet-5",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().choices).toMatchObject([
+        { index: 3 },
+        { index: 1, message: { tool_calls: [toolCall] } },
+      ]);
+    } finally {
       await app.close();
     }
   });

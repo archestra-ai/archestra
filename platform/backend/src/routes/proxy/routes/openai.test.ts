@@ -41,6 +41,7 @@ import { ApiError, type OpenAi } from "@/types";
 import {
   openAiEmbeddingsAdapterFactory,
   openAiResponsesAdapterFactory,
+  openAiResponsesCompactAdapterFactory,
   openaiAdapterFactory,
 } from "../adapters";
 import openAiProxyRoutes from "./openai";
@@ -1090,6 +1091,114 @@ describe("OpenAI Responses proxy", () => {
     expect(response.body).toContain("data: ");
     expect(response.body).toContain('"type":"response.output_text.delta"');
     expect(response.body).toContain("data: [DONE]");
+  });
+});
+
+describe("OpenAI Responses compact proxy", () => {
+  let originalAppaHook = config.llmProxy.appaHook;
+
+  beforeEach(() => {
+    originalAppaHook = config.llmProxy.appaHook;
+    config.llmProxy.appaHook = undefined;
+  });
+
+  afterEach(() => {
+    config.llmProxy.appaHook = originalAppaHook;
+    vi.restoreAllMocks();
+  });
+
+  test("uses the authenticated proxy path and preserves the compact response shape", async ({
+    makeAgent,
+  }) => {
+    const compact = vi.fn(async () => ({
+      id: "resp-compact-test",
+      object: "response.compaction" as const,
+      created_at: Math.floor(Date.now() / 1000),
+      output: [
+        {
+          id: "compaction-item-test",
+          type: "compaction",
+          encrypted_content: "provider-issued-compaction-ciphertext",
+        },
+      ],
+      usage: {
+        input_tokens: 12,
+        output_tokens: 10,
+        total_tokens: 22,
+      },
+    }));
+    vi.spyOn(
+      openAiResponsesCompactAdapterFactory,
+      "createClient",
+    ).mockReturnValue({ responses: { compact } } as never);
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+    const agent = await makeAgent({ name: "Test Compact Responses Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses/compact`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        input: [{ role: "user", content: "Earlier context" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: "resp-compact-test",
+      object: "response.compaction",
+      output: [
+        expect.objectContaining({
+          type: "compaction",
+          encrypted_content: "provider-issued-compaction-ciphertext",
+        }),
+      ],
+    });
+    expect(compact).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-4o" }),
+    );
+  });
+
+  test("rejects streaming compact requests before calling the provider", async ({
+    makeAgent,
+  }) => {
+    const compact = vi.fn();
+    vi.spyOn(
+      openAiResponsesCompactAdapterFactory,
+      "createClient",
+    ).mockReturnValue({ responses: { compact } } as never);
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Test Streaming Compact Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses/compact`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+      },
+      payload: { model: "gpt-4o", stream: true },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(compact).not.toHaveBeenCalled();
   });
 });
 

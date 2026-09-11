@@ -99,4 +99,40 @@ describe("OpenAiResponsesInteraction", () => {
     expect(interaction.getLastUserMessage()).toBe("");
     expect(interaction.mapToUiMessages()).toEqual([]);
   });
+
+  it("renders valid compact output messages while ignoring opaque compaction items", () => {
+    const interaction = new OpenAiResponsesInteraction({
+      type: "openai:responses",
+      model: "gpt-5.6",
+      request: {
+        model: "gpt-5.6",
+        input: [{ role: "user", content: "Continue the work" }],
+      },
+      response: {
+        id: "resp-compact-1",
+        object: "response.compaction",
+        created_at: 1,
+        output: [
+          {
+            type: "compaction",
+            encrypted_content: "opaque-provider-context",
+          },
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "Compaction complete." }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
+      },
+    } as unknown as Interaction);
+
+    expect(interaction.getLastAssistantResponse()).toBe("Compaction complete.");
+    expect(interaction.mapToUiMessages()).toEqual([
+      { role: "user", parts: [{ type: "text", text: "Continue the work" }] },
+      {
+        role: "assistant",
+        parts: [{ type: "text", text: "Compaction complete." }],
+      },
+    ]);
+  });
 });

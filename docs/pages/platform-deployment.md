@@ -1408,8 +1408,126 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS`** - Longest a streaming proxy response goes without a byte before Archestra writes an SSE keep-alive comment.
   - Default: `10000` (10 seconds). Set `0` to turn the keep-alive off.
   - Archestra holds back tool calls until the model turn ends and tool invocation policies have run. A large tool call — a long file write, for example — is a silent stream for the client until then. Streaming clients treat silence as a stalled connection and retry; Claude Code flags a stall after 20 seconds. The keep-alive comment is a valid SSE line that clients ignore, so the connection stays busy without changing the response.
-  - Only applies to `text/event-stream` responses. Bedrock's binary event stream and Ollama's NDJSON stream have no comment syntax and get no keep-alive.
-  - Keep it below the shortest stall timeout of your clients.
+- Only applies to `text/event-stream` responses. Bedrock's binary event stream and Ollama's NDJSON stream have no comment syntax and get no keep-alive.
+- Keep it below the shortest stall timeout of your clients.
+
+### OpenAPPA Proxy Hooks
+
+The experimental LLM proxy integration checks requests and tool proposals through an authenticated OpenAPPA runtime. Native paths cover Claude Code over Anthropic Messages, Codex over OpenAI Responses, and OpenCode over Kimi Chat Completions. Clients connect directly to Archestra without an enforcement relay or client plugin. MCP calls execute through the MCP Gateway with its existing authentication, RBAC, and policies. Provider-hosted MCP tools are rejected before provider forwarding.
+
+Verified live coverage is limited to sequential public publication and private-data publication denial. Those controls used Claude Code 2.1.258, Codex 0.153.0, and OpenCode 1.18.29. Child workflows, forks, compaction, sanitizers, and approval flows have implementation and regression coverage, but their complete native-client live matrix is not verified. Native Codex custom local-tool execution, including `apply_patch`, is not complete and fails closed. This prototype is not production-ready.
+
+- **`ARCHESTRA_LLM_PROXY_APPA_HOOK_URL`** - Cluster-local OpenAPPA runtime base URL.
+  - Default: unset. Hooks are disabled.
+  - Value: an `http://` URL whose host ends in `.svc.cluster.local`, for example `http://appa-runtime.openappa.svc.cluster.local:18787`.
+  - Without a runtime token, the proxy uses the legacy `<URL>/hook` interface. Restrict its network access.
+  - With a runtime token, the proxy uses the authenticated v1 interface described below.
+  - A configured runtime is fail-closed. An unavailable runtime, non-2xx response, malformed response, or unsupported decision blocks the proxy request or prevents tool calls from reaching the client.
+
+- **`ARCHESTRA_LLM_PROXY_APPA_ALLOW_LOOPBACK`** - Allows a development or test backend to reach an authenticated runtime through a local port-forward.
+  - Default: unset. Cluster-local URL validation remains required.
+  - Value: `true` only with `NODE_ENV=development` or `NODE_ENV=test`.
+  - The hook URL must use literal `127.0.0.1` or `[::1]`. Names such as `localhost`, remote addresses, credentials, queries, and fragments are rejected.
+  - A loopback runtime always requires `ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN`. Production only accepts `.svc.cluster.local` URLs.
+
+- **`ARCHESTRA_LLM_PROXY_APPA_HOOK_TIMEOUT_MS`** - Whole-request timeout for one hook event.
+  - Default: `5000`.
+  - Range: `1` to `120000` milliseconds.
+
+- **`ARCHESTRA_LLM_PROXY_APPA_SESSION_HMAC_SECRET`** - Stable private secret for durable APPA session ownership.
+  - Required when `ARCHESTRA_LLM_PROXY_APPA_HOOK_URL` is set.
+  - Use at least 32 random characters.
+  - Keep it stable while APPA sessions remain active.
+
+- **`ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN`** - Opts the runtime into APPA v1.
+  - Default: unset. The proxy uses the legacy `/hook` protocol.
+  - The proxy sends `Authorization: Bearer <token>` to `/proxy/v1/events`.
+  - Each v1 event has a UUID and a SHA-256 receipt for exact request bytes.
+  - The proxy makes at most three attempts for retryable network or 5xx failures, preserving the event ID and bytes.
+  - Explicit uncertain-event responses stop immediately. Completed events return their stored outcome on retry.
+  - A receipt with a different ID or digest fails closed.
+
+- **`ARCHESTRA_LLM_PROXY_APPA_APPROVAL_SIGNING_SECRET`** - Separate key for signed reviewer decisions.
+  - Use at least 32 random characters, different from the runtime transport token.
+  - Match `APPA_PROXY_APPROVAL_SECRET` in the custom runtime.
+  - The approval service signs only authenticated, unexpired decisions bound to the current action.
+
+- **`ARCHESTRA_LLM_PROXY_APPA_MAX_CALLS_PER_SESSION`** - Maximum stored call records per conversation. Default: `1000`.
+- **`ARCHESTRA_LLM_PROXY_APPA_MAX_SESSIONS_PER_OWNER`** - Maximum conversations per profile/credential scope. Default: `100`.
+- **`ARCHESTRA_LLM_PROXY_APPA_NATIVE_CODEX_ENABLED`** - Enables the experimental native Codex tool projection.
+  - Default: `false`.
+  - Standard Responses tool search is bound to issued, encrypted history before discovered gateway tools become available.
+  - The legacy Code Mode path uses a fixed, read-only discovery program. Its broader client coverage remains unverified.
+  - Executable calls remain subject to APPA and proxy policy checks.
+  - Streaming bootstrap and call-ID restoration require the matching source-built runtime and proxy.
+  - Native process handles use persisted aliases. Unknown or closed handles fail closed.
+  - Gateway controls carry persisted correlation fields. These fields cannot replace authenticated operator approval.
+  - Native gateway execution claims are durable. Missing or uncertain receipts quarantine before further inference.
+  - Valid completed receipts replay without dispatching the external tool again.
+  - Input-rewritten MCP argument bindings are finalized atomically before response publication.
+  - Legacy compaction uses `/v1/openai/responses/compact` or its profile-scoped counterpart. Streaming compaction is rejected.
+  - Compaction accepts only owned opaque history and records successor-window lineage before returning output.
+  - Keep this disabled until the experimental client, history, and remedy paths required by your workflow are verified.
+
+The runtime v1 capability response is:
+
+```json
+{"protocol_version":1,"completed_event_replay":true,"typed_offers":true,"restriction_acceptance":true,"acceptance_settlement":true,"human_approval":true,"approval_grants":true,"legacy_hooks":false,"parallel_calls":true,"sanitized_results":true,"general_sanitizers":true,"child_workflows":true,"child_actor_targeting":true}
+```
+
+The v1 event request and receipt are:
+
+```json
+{"event_id":"f4bf3f84-fb77-4e62-aa2f-c9abac0df7d1","event":{"event":"tool_calls","root_id":"archestra-proxy:...","calls":[{"call_id":"call-1","tool":"get_weather","arguments":{"city":"SF"},"spawn":false}]}}
+{"protocol_version":1,"event_id":"f4bf3f84-fb77-4e62-aa2f-c9abac0df7d1","request_sha256":"...","decision":{"decision":"allow_calls","calls":[{"call_id":"call-1","dispatch_id":"opaque-dispatch-id"}]}}
+```
+
+An offer resolution uses a new envelope and event ID:
+
+```json
+{"event":"resolve_offer","root_id":"archestra-proxy:...","offer_id":"offer-1","tool":"get_weather","arguments_sha256":"...","resolution":"accept_restriction"}
+```
+
+- **`ARCHESTRA_LLM_PROXY_APPA_AUTO_ACCEPT_RESTRICTIONS`** - Allows bounded automatic acceptance of v1 restriction offers.
+  - Default: `false`.
+  - Value: `true` accepts only validated restriction offers, with at most three resolution steps.
+  - Sanitizers use a separate typed resolution. This flag cannot grant human approval or arbitrary authority.
+
+Hook-enabled requests require a stable trajectory locator. Native clients use validated session metadata; other supported requests use `X-Archestra-Session-Id`. Conflicting identity hints fail closed. These locators are not authorization credentials. Archestra binds them to the resolved profile, provider, protocol, model, and authenticated credential scope. Raw provider credentials are HMAC-fingerprinted with `ARCHESTRA_LLM_PROXY_APPA_SESSION_HMAC_SECRET`. Archestra does not store the raw credential in the APPA ledger.
+
+Each conversation family keeps a server-generated OpenAPPA `root_id` across turns. Calls also carry a thread-specific execution lane. PostgreSQL binds call IDs, execution arguments, runtime dispatches, and exact replay receipts. Provider history and native wire frames use encrypted storage. Configure retention and access controls for this state and interaction logs. Sessions created before provider/protocol/model binding was introduced fail closed rather than receiving a guessed binding.
+
+The authenticated bridge releases calls only after a matching `allow_calls` batch decision. Admitted results require the matching call ID and a canonical runtime presentation. The proxy replaces tool output before classifiers or the provider receive it. Configured output sanitizers use APPA's confined-result machinery; raw output is never a fallback. Unknown decisions fail closed. Buffered streaming increases time to first token.
+
+Native child correlation combines proxy-issued signed carriers with observed client identity. Parent IDs alone cannot authorize attachment. The runtime supplies the spawn capability and checks child-lane events. These paths remain experimental: complete child execution and return propagation have not passed the native-client live matrix.
+
+Completed, quiescent responses can bind an authenticated runtime checkpoint to exact encrypted history. A new root may fork only from a uniquely matched checkpoint. Unknown history cannot silently start a weaker root. Active tool calls, approvals, and dispatches are not checkpoint grants. Fork and compaction handling still requires full live-client qualification.
+
+Buffered provider streams have a 16 MiB limit. V1 event requests are limited to 1 MiB before storage. Tool arguments are limited to 64 KiB. Uninstrumented catch-all endpoints remain blocked. Unsupported request shapes return HTTP 400; runtime availability failures return HTTP 503.
+
+The proxy serializes turns per bound thread in Postgres. Overlapping turns on that thread return HTTP 409. Parallel tool execution and automatic serialization of multi-call responses are outside this prototype's verified scope. The runtime's advertised batch capabilities do not imply native-client coverage. Singleton proposals support narrowing acceptance, configured sanitizers, and signed approval. Completed event replies can be replayed without repeating execution. Unconfirmed interruptions quarantine the conversation rather than automatically recovering it.
+
+This mechanism assumes clients send all model traffic through the proxy. It checks model input and tool instructions before release. Native Codex gateway calls carry a sealed `wire_context` locator. The gateway validates the actual bearer principal, gateway profile, issued call, and exact arguments before execution. Completed gateway receipts prevent repeated dispatch. Other client-reported outcomes are not independent proof of execution. The proxy is not an OS sandbox and cannot prevent an independently acting client from bypassing its endpoints. Hidden, unbound provider continuation state is rejected.
+
+Outcome status is `success`, `failure`, or `indeterminate`. Known failures receive a bounded runtime notice without raw error details. Indeterminate outcomes stop model forwarding and quarantine the session. Later requests remain blocked. Supported MCP and agent adapters emit correlated outcomes on compatible OpenAI requests. Receipts survive transport retries. These reports do not independently prove whether a remote side effect occurred.
+
+The custom runtime uses `APPA_PROXY_TOKEN` for service authentication. When enabled, legacy `/hook` and `/mcp` controls are disabled. `APPA_PROXY_APPROVAL_SECRET` separately verifies expiring, single-use approval grants. Invalid configured keys, equal keys, and matching chart secret references are rejected. Leave both settings unset only when intentionally using the stock legacy runtime mode.
+
+### OpenAPPA Approvals
+
+The operator page is `/appa-review`. Its queues refresh while the page remains open. Approval decisions require an authenticated user session and profile-scoped permission. API keys and service accounts cannot submit decisions. Approval authority is not exposed as an agent-callable MCP tool.
+
+The reviewer API handles a runtime `human_approval` offer. List records with `GET /api/appa-approvals`, inspect one with `GET /api/appa-approvals/:id`, and decide with `POST /api/appa-approvals/:id/decision`.
+
+```json
+{ "decision": "approve" }
+```
+
+The active proxy request keeps the turn claim while it waits, for at most two minutes. Reviewers need the configured permission and access to the bound profile. They can inspect exact arguments, but cannot change them through the decision endpoint. Approval is audited and signed for the original action. After runtime verification, the original model call is released without regeneration. A timeout, disconnect, cancellation, repeat, or expiry cannot release it. Keep reviewer credentials separate from agent credentials. This service does not itself execute the tool or prove physical-human presence.
+
+Quarantines are available through `GET /api/appa-quarantines` and `GET /api/appa-quarantines/:id`. Details contain bounded action summaries, not arguments, outputs, or runtime credentials. `POST /api/appa-quarantines/:id/acknowledgment` records an investigation acknowledgment or reconciliation. Neither action retries an operation, changes restrictions, or releases quarantine.
+
+### Other LLM Settings
 
 - **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify subscription credentials as subscription usage.
   - Default: `true`

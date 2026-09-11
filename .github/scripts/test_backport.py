@@ -71,6 +71,7 @@ class BackportTests(unittest.TestCase):
         self.git("push", "origin", "main")
         self.pr = {"number": 42, "title": "fix: correct feature", "merged": True,
                    "base": {"ref": "main"}, "merge_commit_sha": sha,
+                   "head": {"repo": {"full_name": "fixture/repository"}},
                    "labels": [{"name": "backport release/1.3"}]}
         self.bot = FakeGitHubBackporter(self.repo, self.pr)
 
@@ -81,6 +82,29 @@ class BackportTests(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-qm", message)
         return self.git("rev-parse", "HEAD")
+
+    def test_fork_and_deleted_source_repositories_are_ineligible(self):
+        for repository in [{"full_name": "contributor/fork"}, None]:
+            with self.subTest(repository=repository):
+                self.pr["head"]["repo"] = repository
+                with self.assertRaisesRegex(ValueError, "branches in this repository"):
+                    self.bot.run(42)
+                with self.assertRaisesRegex(ValueError, "branches in this repository"):
+                    self.bot.run(42, "release/1.3")
+                self.bot.poll()
+                self.assertEqual(self.bot.pulls, [])
+                self.assertEqual(self.bot.comments, [])
+                self.assertEqual(self.git("ls-remote", "--heads", "origin", "refs/heads/backport/*"), "")
+
+    def test_label_before_merge_is_processed_by_later_scan_once(self):
+        self.pr["merged"] = False
+        self.bot.poll()
+        self.assertEqual(self.bot.pulls, [])
+        self.pr["merged"] = True
+        self.bot.poll()
+        self.bot.poll()
+        self.assertEqual(len(self.bot.pulls), 1)
+        self.assertEqual(self.bot.pulls[0]["base"], "release/1.3")
 
     def test_opens_a_backport_with_provenance_without_changing_stable(self):
         stable = self.git("rev-parse", "origin/release/1.3")
@@ -203,6 +227,34 @@ class BackportTests(unittest.TestCase):
 
 
 class WorkflowPolicyTests(unittest.TestCase):
+    def test_event_gate_only_allows_trusted_merged_backport_requests(self):
+        workflow = Path(__file__).parents[1] / "workflows/backport.yml"
+        condition = next(line.split("if: ", 1)[1] for line in workflow.read_text().splitlines()
+                         if line.startswith("    if: "))
+        program = r"""
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const condition = process.argv[1];
+function allowed(eventName, {merged = true, base = 'main', label = 'backport release/1.3', repo = 'archestra-ai/archestra', headRepo = 'archestra-ai/archestra'} = {}) {
+  const github = {repository: repo, event_name: eventName, event: {repository:{default_branch:'main'}}};
+  if (eventName === 'pull_request') {
+    github.event.pull_request = {merged, base:{ref:base}, head:{repo:headRepo === null ? null : {full_name:headRepo}}};
+    github.event.label = {name:label};
+  }
+  return vm.runInNewContext(condition, {github, startsWith:(value, prefix) => value.startsWith(prefix)});
+}
+for (const eventName of ['push', 'schedule', 'workflow_dispatch', 'pull_request']) {
+  assert.equal(allowed(eventName), true, eventName);
+  assert.equal(allowed(eventName, {repo:'contributor/fork'}), false, eventName);
+}
+assert.equal(allowed('pull_request', {merged:false}), false);
+assert.equal(allowed('pull_request', {headRepo:'contributor/fork'}), false);
+assert.equal(allowed('pull_request', {base:'release/1.3'}), false);
+assert.equal(allowed('pull_request', {label:'bug'}), false);
+assert.equal(allowed('pull_request', {label:'not-backport release/1.3'}), false);
+"""
+        subprocess.run(["node", "-e", program, condition], check=True)
+
     def test_backport_prs_run_checks_while_release_bot_prs_remain_exempt(self):
         workflow = Path(__file__).parents[1] / "workflows/on-pull-requests.yml"
         conditions = [line.split("if: ", 1)[1] for line in workflow.read_text().splitlines()

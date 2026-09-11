@@ -7,8 +7,8 @@ use appa_eventlog::{
 };
 use appa_runtime::{api::Runtime, config::Config, hooks, mcp};
 use appa_runtime_api::{
-    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, SpawnRef, ToolOutcome, TrajectoryId,
-    WireDecision,
+    Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnRef, ToolOutcome,
+    TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -53,6 +53,9 @@ struct Input {
     output: Option<String>,
     #[serde(default)]
     outcome: Option<String>,
+    // Host-only field, never part of the model-facing remedy arguments.
+    #[serde(default)]
+    ruling: Option<Ruling>,
 }
 
 fn error(message: impl ToString) -> napi::Error {
@@ -101,6 +104,9 @@ pub async fn initialize_openappa(database_url: String, policy_path: String) -> n
 #[napi(js_name = "dispatchHook")]
 pub async fn dispatch_hook(input: String) -> napi::Result<String> {
     let input: Input = serde_json::from_str(&input).map_err(error)?;
+    if input.ruling.is_some() && input.event != "remedy" {
+        return Err(error("only a remedy execution may carry a host ruling"));
+    }
     for (name, value) in [
         ("organization", &input.organization_id),
         ("caller", &input.caller_id),
@@ -137,11 +143,11 @@ pub async fn dispatch_hook(input: String) -> napi::Result<String> {
                 return Err(error("invalid tool outcome"));
             }
         }
-        "tool_call" => {
+        "tool_call" | "resume_tool_call" => {
             required(&input.operation_id, "operation_id")?;
             proposed(&input)?;
         }
-        "remedy" => {
+        "remedy" | "remedy_review" => {
             required(&input.operation_id, "operation_id")?;
             let _: mcp::ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(&input)?).map_err(error)?;
@@ -307,17 +313,61 @@ impl State {
             .operation_id
             .clone()
             .ok_or_else(|| error("an operation id is required"))?;
-        let request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output });
+        let resumed = input.event == "resume_tool_call";
+        let event = if resumed { "tool_call" } else { &input.event };
+        let request = json!({ "event": event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output, "ruling": input.ruling });
+        if resumed {
+            let (saved, denied) = lookup_operation(pg, &input, &operation)?
+                .ok_or_else(|| error("reviewed call has no original receipt"))?;
+            if saved != request || denied["decision"] != "deny_call" {
+                return Err(error("reviewed call must match the original denied call"));
+            }
+        }
+        let operation = if resumed {
+            format!("{operation}:reviewed")
+        } else {
+            operation
+        };
         let cached = lookup_operation(pg, &input, &operation)?;
         if let Some((saved, decision)) = cached {
+            if input.event == "remedy_review"
+                && saved["event"] == "remedy"
+                && saved["arguments"] == request["arguments"]
+            {
+                return Ok(decision);
+            }
+            // Receipts predating host review have no ruling field.
+            let mut saved = saved;
+            if saved.get("ruling").is_none() {
+                saved["ruling"] = Value::Null;
+            }
             if saved != request {
                 return Err(error("operation id was reused with different input"));
             }
+            if input.event == "tool_call" && decision["decision"] == "deny_call" {
+                if let Some((reviewed_input, reviewed)) =
+                    lookup_operation(pg, &input, &format!("{operation}:reviewed"))?
+                {
+                    if reviewed_input != request {
+                        return Err(error("reviewed call input differs from original"));
+                    }
+                    return Ok(reviewed);
+                }
+            }
             return Ok(decision);
+        }
+        if input.event == "remedy_review" {
+            // A read-only phase releases the native mutex and database lock
+            // before the host waits for a person. The review itself was saved
+            // atomically with the original deny decision.
+            return Ok(json!({"decision": "review", "review": remedy_review(pg, &input)?}));
+        }
+        if input.ruling.is_some() && remedy_review(pg, &input)?.is_empty() {
+            return Err(error("a host ruling requires an issued human-review offer"));
         }
         claim_operation(pg, &input, &root, &operation, &request)?;
         let tx = pg.begin().map_err(error)?;
-        let decision = if input.event == "remedy" {
+        let mut decision = if input.event == "remedy" {
             let call = ProposedCall {
                 tool: appa_runtime_api::CONTROL_TOOL.into(),
                 arguments: input
@@ -331,7 +381,7 @@ impl State {
                     actor: actor.clone(),
                     call,
                     spawn: false,
-                    ruling: None,
+                    ruling: input.ruling,
                 },
             )
             .await;
@@ -344,7 +394,7 @@ impl State {
             }
         } else {
             let event = match input.event.as_str() {
-                "tool_call" => HookEvent::ToolCall {
+                "tool_call" | "resume_tool_call" => HookEvent::ToolCall {
                     actor: actor.clone(),
                     call: proposed(&input)?,
                     spawn: input.spawn,
@@ -369,6 +419,9 @@ impl State {
             };
             wire(&hooks::handle(&self.runtime, event).await)
         };
+        if resumed {
+            decision["reviewed"] = Value::Bool(true);
+        }
         finish_operation(pg, &input, &operation, &decision)?;
         tx.commit().map_err(error)?;
         Ok(decision)
@@ -397,8 +450,30 @@ impl State {
         }
         // Correlation comes from the call actually released by the proxy, even
         // when compaction has removed it from the client's submitted history.
-        let (saved, allowed) = lookup_operation(pg, input, &format!("call:{call_id}"))?
+        let (saved, mut allowed) = lookup_operation(pg, input, &format!("call:{call_id}"))?
             .ok_or_else(|| error("tool result has no previously checked call"))?;
+        if allowed["decision"] == "deny_call" {
+            if let Some((reviewed_input, reviewed)) =
+                lookup_operation(pg, input, &format!("call:{call_id}:reviewed"))?
+            {
+                if reviewed_input != saved {
+                    return Err(error("reviewed call input differs from original"));
+                }
+                allowed = reviewed;
+            }
+        }
+        if allowed["decision"] == "deny_call" {
+            // Denied calls produce policy feedback, never tool data. Ignore
+            // client-supplied output, including claimed success, and do not
+            // apply result hooks or label changes for an unexecuted call.
+            let feedback = allowed["feedback"]
+                .as_str()
+                .unwrap_or("OpenAPPA blocked this tool call");
+            return Ok(json!({
+                "decision": "deny_call",
+                "approved_output": format!("{feedback}\n\nThe tool was not executed. Use an offered remedy if appropriate before retrying; otherwise explain the ruling.")
+            }));
+        }
         if !matches!(
             allowed["decision"].as_str(),
             Some("allow_call" | "pass_control")
@@ -515,6 +590,18 @@ fn lookup_operation(
 ) -> napi::Result<Option<(Value, Value)>> {
     let (input, operation) = (input.clone(), operation.to_owned());
     pg.with_client(move |client| Ok(client.query_opt("SELECT input, decision FROM openappa_operations WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND operation_id=$4 AND status='complete'", &[&input.organization_id,&input.caller_id,&input.session_id,&operation])?.map(|row| (row.get(0), row.get(1))))).map_err(error)
+}
+fn remedy_review(pg: &PostgresStore, input: &Input) -> napi::Result<Vec<Value>> {
+    let args: mcp::ExecuteRemedyPlanArgs =
+        serde_json::from_str(required_arguments(input)?).map_err(error)?;
+    let input = input.clone();
+    pg.with_client(move |client| {
+        let rows = client.query(
+            "SELECT review FROM openappa_operations, jsonb_array_elements(COALESCE(NULLIF(decision->'review', 'null'::jsonb), '[]'::jsonb)) AS review WHERE organization_id=$1 AND caller_id=$2 AND session_id=$3 AND status='complete' AND input->>'event'='tool_call' AND review->>'offer_id'=$4",
+            &[&input.organization_id, &input.caller_id, &input.session_id, &args.offer_id],
+        )?;
+        Ok(rows.into_iter().map(|row| row.get(0)).collect())
+    }).map_err(error)
 }
 fn claim_operation(
     pg: &PostgresStore,

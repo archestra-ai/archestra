@@ -78,7 +78,7 @@ import type {
   ChatToolExecutionClaim,
   UnsafeContextBoundary,
 } from "@/types";
-import { ApiError, agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
@@ -219,8 +219,13 @@ export function buildMcpGatewayTool(params: {
             },
           ],
           (name) => name,
+          ctx.elicitation,
         );
-        if (refusal) throw new ApiError(409, refusal.refusalMessage);
+        if (refusal) {
+          // A policy denial is a tool result, not a provider failure. Returning
+          // it keeps the call in history and lets the model explain the block.
+          return `${refusal.refusalMessage}\n\nThe tool was not executed. Use an offered remedy if appropriate before retrying; otherwise explain the ruling.`;
+        }
       }
       let appaOutcome: ExecutionOutcome = "unknown";
       const output = await executeWithToolSpan({

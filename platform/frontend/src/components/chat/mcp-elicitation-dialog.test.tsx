@@ -47,6 +47,32 @@ const request = {
 };
 
 describe("McpElicitationDialog", () => {
+  it("renders a host approval with exact review text and no freeform response", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(undefined);
+    render(
+      <McpElicitationDialog
+        request={{
+          ...request,
+          presentation: "approval",
+          requestedSchema: { type: "object", properties: {} },
+          message: "To: partner@example.com\nSubject: Demo\nBody: Fictional",
+        }}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Approve action" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onRespond).toHaveBeenCalledWith({
+      id: request.id,
+      action: "accept",
+      content: {},
+    });
+  });
   it("blocks accept when required fields are empty", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn();

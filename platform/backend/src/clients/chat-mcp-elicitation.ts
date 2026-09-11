@@ -30,6 +30,14 @@ export const ChatMcpElicitationResponseSchema = z.object({
 });
 
 type ChatMcpElicitationStreamData = {
+  approval?: {
+    toolName: string;
+    input: unknown;
+    currentTrust?: string;
+    requiredTrust?: string;
+    reason?: string;
+  };
+  presentation?: "approval";
   id: string;
   conversationId: string;
   toolName: string;
@@ -63,6 +71,14 @@ export type ChatMcpElicitationBridge = {
    * of surfacing a fatal chat error.
    */
   elicit: (params: {
+    approval?: {
+      toolName: string;
+      input: unknown;
+      currentTrust?: string;
+      requiredTrust?: string;
+      reason?: string;
+    };
+    presentation?: "approval";
     toolName: string;
     message: string;
     requestedSchema?: unknown;
@@ -86,6 +102,14 @@ export function createChatMcpElicitationBridge({
   // response. Throws when no writer is attached — callers that must degrade
   // gracefully check `writer` first (see `elicit`).
   function sendElicitationRequest(req: {
+    approval?: {
+      toolName: string;
+      input: unknown;
+      currentTrust?: string;
+      requiredTrust?: string;
+      reason?: string;
+    };
+    presentation?: "approval";
     toolName: string;
     message: string;
     mode: "form" | "url";
@@ -100,7 +124,10 @@ export function createChatMcpElicitationBridge({
     const id = randomUUID();
     writer.write({
       type: "data-mcp-elicitation",
+      transient: true,
       data: {
+        ...(req.presentation ? { presentation: req.presentation } : {}),
+        ...(req.approval ? { approval: req.approval } : {}),
         id,
         conversationId,
         toolName: req.toolName,
@@ -150,11 +177,19 @@ export function createChatMcpElicitationBridge({
       };
     },
 
-    async elicit({ toolName, message, requestedSchema }) {
+    async elicit({
+      toolName,
+      message,
+      requestedSchema,
+      presentation,
+      approval,
+    }) {
       if (!writer) {
         return { status: "no_viewer" };
       }
       const result = await sendElicitationRequest({
+        approval,
+        presentation,
         toolName,
         message,
         mode: "form",

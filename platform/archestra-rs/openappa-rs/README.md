@@ -194,3 +194,19 @@ Backend regression coverage lives in
 `backend/src/routes/proxy/llm-proxy-openappa.test.ts`, alongside the existing
 proxy, Chat, gateway, and logging suites. Browser verification and the exact
 observed limitations are recorded in the paired OpenAPPA `summary.md`.
+
+## Prototype follow-up: Chat denials and human review
+
+The prototype branch now includes the reusable Chat fixes from the demo snapshot:
+
+- A denied tool call remains a tool call with its original ID, name and arguments. Its tool result contains the policy ruling, allowing the model loop to explain the outcome.
+- The native binding substitutes authoritative stored feedback for results attributed to denied calls; supplied result text cannot forge a successful execution.
+- Human-review offers open Archestra's inline approval card through a caller- and session-scoped in-process bridge. The ruling travels only through the host channel, outside model-provided arguments.
+- Approved calls resume against an exact-input receipt. Cancellation, denial, mismatched input and replay cannot release an unapproved call.
+- Non-human audience/trust narrowing offers remain visible to the model. They are not automatically accepted, allowing independent work before accepting a restrictive read.
+
+Use the paired `feat/archestra-native-postgres` OpenAPPA branch: its embedded remedy implementation preserves the host ruling when consulting an authority without an MCP request context.
+
+This port does not include the demo tools/outbox migration, audience resolver, GitHub annotator, policy studio, status line, mascot or fixture deployment. It also does not include the separate Claude MCP protocol negotiation workaround.
+
+Validation covers the real Chat tool wrapper's next model step, signed proxy call preservation, scoped review, cancellation/denial, native PostgreSQL receipts, forged-result rejection and deferred narrowing. No browser or live-provider run was performed for this isolated port.

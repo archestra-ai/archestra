@@ -112,6 +112,7 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { registerChatReview } from "@/openappa/chat-review";
 import {
   chatLifecycle,
   chatOpenAppaSession,
@@ -523,6 +524,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // `start` chunk (a pre-`start` data part mints a phantom message).
       const dualLlmAnalysisStream = createDualLlmAnalysisStreamBridge();
       const dualLlmProgressChannel = randomUUID();
+      let unregisterOpenAppaReview = () => {};
       const unsubscribeDualLlmProgress = dualLlmProgressBus.subscribe(
         dualLlmProgressChannel,
         (event) => dualLlmAnalysisStream.handleEvent(event),
@@ -785,6 +787,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           conversationId,
           abortSignal: chatAbortController.signal,
         });
+        if (openappaEnabled()) {
+          unregisterOpenAppaReview = registerChatReview(
+            dualLlmProgressChannel,
+            chatOpenAppaSession(organizationId, user.id, conversationId),
+            chatMcpElicitation,
+          );
+          chatAbortController.signal.addEventListener(
+            "abort",
+            unregisterOpenAppaReview,
+            { once: true },
+          );
+        }
 
         // A project chat prepends the project's instructions to the system
         // prompt. Kicked off as a promise so it runs concurrently with the org
@@ -1894,6 +1908,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
                     unsubscribeDualLlmProgress();
+                    unregisterOpenAppaReview();
 
                     // Splice the turn's collected hook runs into the assistant
                     // message(s) as inline `data-hook-run` parts before persisting,
@@ -2122,6 +2137,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         stopActiveRunPolling();
         unsubscribeDualLlmProgress();
+        unregisterOpenAppaReview();
         await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",

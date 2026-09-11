@@ -80,6 +80,7 @@ import {
   APPA_CALLER_AUTH_HEADER,
   verifyChatIdentity,
 } from "@/openappa/chat-identity";
+import { getChatReview } from "@/openappa/chat-review";
 import {
   checkToolCalls,
   type OpenAppaSession,
@@ -155,6 +156,7 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   openappaSession?: OpenAppaSession;
+  openappaReview?: ReturnType<typeof getChatReview>;
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -1339,6 +1341,10 @@ export async function handleLLMProxy<
 
     const ctx: LLMProxyContext<TRequest> = {
       openappaSession,
+      openappaReview:
+        signedChatCaller && openappaSession
+          ? getChatReview(dualLlmProgressChannel, openappaSession)
+          : undefined,
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
@@ -1791,6 +1797,7 @@ async function handleStreaming<
             ctx.openappaSession,
             rewrittenToolCalls ?? toolCalls,
             canonicalizeToolName,
+            ctx.openappaReview,
           )
         : await utils.toolInvocation.evaluatePolicies(
             normalizeToolCallsForPolicy(
@@ -1823,12 +1830,29 @@ async function handleStreaming<
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
 
-      // The tool-call events were held back, so they are simply dropped and
-      // the client is sent the refusal alone.
+      // Keep external proxy clients on the refusal-only protocol.
       ensureStreamHeaders();
-      const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
-      for (const event of refusalEvents) {
-        reply.raw.write(event);
+      const blockedCall = (rewrittenToolCalls ?? toolCalls).find(
+        (call) => call.id === toolInvocationRefusal.blockedToolCallId,
+      );
+      // Only authenticated in-process Chat may receive the rejected call.
+      // Its tool builder rechecks the persisted denial before any execution,
+      // yielding a tool error to the model so its next step can explain it.
+      if (
+        ctx.openappaReview &&
+        blockedCall &&
+        streamAdapter.formatToolCallsSSE
+      ) {
+        streamAdapter.state.toolCalls.splice(
+          0,
+          streamAdapter.state.toolCalls.length,
+          blockedCall,
+        );
+        for (const event of streamAdapter.formatToolCallsSSE([blockedCall]))
+          reply.raw.write(event);
+      } else {
+        for (const event of streamAdapter.formatCompleteTextSSE(contentMessage))
+          reply.raw.write(event);
       }
 
       recordBlockedToolCallMetrics({
@@ -2266,6 +2290,7 @@ async function handleNonStreaming<
           ctx.openappaSession,
           rewrittenToolCalls ?? toolCalls,
           canonicalizeToolName,
+          ctx.openappaReview,
         )
       : await utils.toolInvocation.evaluatePolicies(
           normalizeToolCallsForPolicy(
@@ -2298,10 +2323,23 @@ async function handleNonStreaming<
         `[${providerName}Proxy] Tool invocation blocked by policy`,
       );
 
-      const refusalResponse = responseAdapter.toRefusalResponse(
-        refusalMessage,
-        contentMessage,
+      const blockedCall = (rewrittenToolCalls ?? toolCalls).find(
+        (call) => call.id === toolInvocationRefusal.blockedToolCallId,
       );
+      const refusalResponse =
+        ctx.openappaReview &&
+        blockedCall &&
+        responseAdapter.withRewrittenToolCalls
+          ? responseAdapter.withRewrittenToolCalls([
+              {
+                ...blockedCall,
+                arguments:
+                  typeof blockedCall.arguments === "string"
+                    ? blockedCall.arguments
+                    : JSON.stringify(blockedCall.arguments),
+              },
+            ])
+          : responseAdapter.toRefusalResponse(refusalMessage, contentMessage);
 
       recordBlockedToolCallMetrics({
         allToolCallNames,

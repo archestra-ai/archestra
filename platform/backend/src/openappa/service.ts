@@ -2,6 +2,7 @@ import { isAgentTool, isSkillTool } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import { getDatabaseConnectionString } from "@/database";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
@@ -31,6 +32,7 @@ const Decision = z.object({
     "context",
     "refuse",
     "mcp_result",
+    "review",
   ]),
   feedback: z.string().optional(),
   reason: z.string().optional(),
@@ -38,6 +40,11 @@ const Decision = z.object({
   text: z.string().optional(),
   approved_output: z.string().optional(),
   result: z.unknown().optional(),
+  offers: z.array(z.object({ offer_id: z.string() })).optional(),
+  reviewed: z.boolean().optional(),
+  review: z
+    .array(z.object({ offer_id: z.string(), text: z.string() }))
+    .optional(),
 });
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
@@ -206,6 +213,7 @@ export async function checkToolCalls(
   session: OpenAppaSession,
   calls: Array<{ id: string; name: string; arguments: string | object }>,
   canonicalize: (name: string) => string,
+  elicitation?: ChatMcpElicitationBridge,
 ): Promise<PolicyBlockResult | null> {
   const normalized = normalizeToolCallsForPolicy(calls, canonicalize);
   for (const [index, call] of calls.entries()) {
@@ -233,18 +241,90 @@ export async function checkToolCalls(
         refusalMessage: feedback,
         contentMessage: feedback,
         reason: feedback,
+        blockedToolCallId: call.id,
         blockedToolName: call.name,
         toolInput: JSON.parse(target.toolCallArgs),
         allToolCallNames: calls.map((call) => call.name),
       };
     }
-    const decision = await dispatch(session, {
+    const event = {
       event: "tool_call",
       operation_id: `call:${call.id}`,
       tool,
       arguments: JSON.parse(target.toolCallArgs),
       spawn: isAgentTool(tool),
-    });
+    };
+    let decision = await dispatch(session, event);
+    // Only human review is automatic; the model must see narrowing offers
+    // before accepting an irreversible audience or trust restriction.
+    const offer =
+      decision.review?.length === 1 ? decision.review[0] : undefined;
+    // The host opens the native human review while the proxy still holds the
+    // tool call. Neither a second user prompt nor a model-issued remedy is
+    // needed, and no tool arguments are released before the decision.
+    if (
+      elicitation &&
+      decision.decision === "deny_call" &&
+      !decision.reviewed &&
+      offer
+    ) {
+      let action: "accept" | "decline" | "cancel" | undefined;
+      const remedy = await executeRemedy(
+        session,
+        `auto:${call.id}`,
+        { offer_id: offer.offer_id },
+        {
+          ...elicitation,
+          async elicit(request) {
+            // These values come from native policy feedback, never model prose.
+            const trustGap = decision.feedback?.match(
+              /^\s*- trust is ([^\n,]+), below the required floor ([^\n]+)$/m,
+            );
+            const reason = trustGap
+              ? undefined
+              : "This action requires your approval under the current policy. Review the exact request below.";
+            const answer = await elicitation.elicit({
+              ...request,
+              approval: {
+                toolName: tool,
+                input: event.arguments,
+                ...(trustGap
+                  ? { currentTrust: trustGap[1], requiredTrust: trustGap[2] }
+                  : {}),
+                reason,
+              },
+            });
+            if (answer.status === "answered") action = answer.result.action;
+            return answer;
+          },
+        },
+      );
+      if (action === "decline" || action === "cancel") {
+        decision = {
+          decision: "deny_call",
+          feedback:
+            action === "decline"
+              ? "Approval declined. The action was not performed."
+              : "Approval cancelled. The action was not performed.",
+        };
+      } else if (remedy.isError) {
+        decision = {
+          decision: "deny_call",
+          feedback: remedy.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n"),
+        };
+      } else {
+        // Re-evaluate the identical call after the remedy. The native boundary
+        // preserves both receipts and returns the reviewed receipt on later
+        // execution/write-boundary checks, including after a restart.
+        decision = await dispatch(session, {
+          ...event,
+          event: "resume_tool_call",
+        });
+      }
+    }
     if (
       decision.decision === "allow_call" ||
       decision.decision === "pass_control"
@@ -268,6 +348,7 @@ export async function checkToolCalls(
       refusalMessage: feedback,
       contentMessage: feedback,
       reason: feedback,
+      blockedToolCallId: call.id,
       blockedToolName: call.name,
       toolInput: JSON.parse(target.toolCallArgs),
       allToolCallNames: calls.map((call) => call.name),
@@ -276,16 +357,7 @@ export async function checkToolCalls(
   return null;
 }
 
-export async function executeRemedy(
-  session: OpenAppaSession,
-  toolCallId: string,
-  args: unknown,
-): Promise<CallToolResult> {
-  const decision = await dispatch(session, {
-    event: "remedy",
-    operation_id: `remedy:${toolCallId}`,
-    arguments: args,
-  });
+function remedyResult(decision: z.infer<typeof Decision>): CallToolResult {
   if (decision.decision !== "mcp_result")
     return {
       isError: true,
@@ -300,4 +372,52 @@ export async function executeRemedy(
   // MCP validation stays at the gateway boundary; this result comes from the
   // existing Rust MCP implementation, including isError and content blocks.
   return decision.result as CallToolResult;
+}
+
+export async function executeRemedy(
+  session: OpenAppaSession,
+  toolCallId: string,
+  args: unknown,
+  elicitation?: ChatMcpElicitationBridge,
+): Promise<CallToolResult> {
+  const prepared = await dispatch(session, {
+    event: "remedy_review",
+    operation_id: `remedy:${toolCallId}`,
+    arguments: args,
+  });
+  // A completed receipt may contain a refusal as well as an MCP result. Return
+  // either without asking again or replaying the remedy with a missing ruling.
+  if (prepared.decision !== "review") return remedyResult(prepared);
+  let ruling: "approve" | "deny" | undefined;
+  if (prepared.review?.length) {
+    const answer = await elicitation?.elicit({
+      presentation: "approval",
+      toolName: OPENAPPA_REMEDY_TOOL,
+      message: prepared.review.map((review) => review.text).join("\n\n"),
+      requestedSchema: { type: "object", properties: {} },
+    });
+    if (
+      !answer ||
+      answer.status === "no_viewer" ||
+      answer.result.action === "cancel"
+    ) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "This remedy needs approval in Archestra Chat. No approval was recorded.",
+          },
+        ],
+      };
+    }
+    ruling = answer.result.action === "accept" ? "approve" : "deny";
+  }
+  const decision = await dispatch(session, {
+    event: "remedy",
+    operation_id: `remedy:${toolCallId}`,
+    arguments: args,
+    ...(ruling ? { ruling } : {}),
+  });
+  return remedyResult(decision);
 }

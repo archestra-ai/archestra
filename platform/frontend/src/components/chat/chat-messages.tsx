@@ -58,6 +58,7 @@ import {
   HookRunChip,
   type HookRunChipData,
 } from "@/components/chat/hook-run-chip";
+import { McpApprovalCard } from "@/components/chat/mcp-approval-card";
 import { McpTaskProvider } from "@/components/chat/mcp-task-context";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -1605,6 +1606,14 @@ export function ChatMessages({
                 toolIconMap={toolIconMap}
               />
             ))}
+            {session?.pendingMcpElicitation?.presentation === "approval" &&
+              session.respondToMcpElicitation && (
+                <McpApprovalCard
+                  request={session.pendingMcpElicitation}
+                  isSubmitting={session.isResolvingMcpElicitation ?? false}
+                  onRespond={session.respondToMcpElicitation}
+                />
+              )}
             <ContextCompactionStatus
               isCompacting={
                 contextCompaction?.isCompacting || isContextCompacting

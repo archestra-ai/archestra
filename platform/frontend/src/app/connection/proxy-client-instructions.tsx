@@ -21,21 +21,8 @@ import {
 } from "@/components/connection/credit-warning-notice";
 import { CopyableCode } from "@/components/copyable-code";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import {
   Select,
   SelectContent,
@@ -53,45 +40,10 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { providerSearchHaystack } from "@/lib/provider-search";
-import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
 import { TerminalBlock } from "./terminal-block";
 import { useUpdateUrlParams } from "./use-update-url-params";
-
-/** Compact provider tile — colored square with a short glyph or letter. */
-const PROVIDER_ICONS: Record<
-  ChatProvider,
-  { bg: string; fg: string; glyph: string }
-> = {
-  openai: { bg: "#10a37f", fg: "#fff", glyph: "◎" },
-  anthropic: { bg: "#D97757", fg: "#fff", glyph: "A" },
-  gemini: {
-    bg: "linear-gradient(135deg, #4285f4 0%, #9b72cb 50%, #d96570 100%)",
-    fg: "#fff",
-    glyph: "✦",
-  },
-  bedrock: { bg: "#232f3e", fg: "#ff9900", glyph: "aws" },
-  azure: { bg: "#0078d4", fg: "#fff", glyph: "▲" },
-  groq: { bg: "#f55036", fg: "#fff", glyph: "G" },
-  cerebras: { bg: "#ff4d1c", fg: "#fff", glyph: "◆" },
-  openrouter: { bg: "#1e1b4b", fg: "#fff", glyph: "↯" },
-  ollama: { bg: "#fff1ea", fg: "#1e1b4b", glyph: "◎" },
-  "ollama-native": { bg: "#fff1ea", fg: "#1e1b4b", glyph: "◎" },
-  vllm: { bg: "#fafaff", fg: "#1e1b4b", glyph: "◇" },
-  cohere: { bg: "#ff7759", fg: "#fff", glyph: "c" },
-  mistral: { bg: "#ff7000", fg: "#fff", glyph: "M" },
-  perplexity: { bg: "#20808d", fg: "#fff", glyph: "✳" },
-  xai: { bg: "#000", fg: "#fff", glyph: "X" },
-  deepseek: { bg: "#4d6bfe", fg: "#fff", glyph: "D" },
-  minimax: { bg: "#0ea5a4", fg: "#fff", glyph: "M" },
-  kimi: { bg: "#0d0d0d", fg: "#fff", glyph: "K" },
-  zhipuai: { bg: "#dc2626", fg: "#fff", glyph: "Z" },
-  "github-copilot": { bg: "#24292f", fg: "#fff", glyph: "gh" },
-  "microsoft-365-copilot": { bg: "#0078d4", fg: "#fff", glyph: "ms" },
-  archestra: { bg: "#000", fg: "#fff", glyph: "A" },
-};
 
 /** Original upstream base URLs — shown struck through next to the proxy URL. */
 const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
@@ -118,17 +70,6 @@ const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
   "microsoft-365-copilot": "https://graph.microsoft.com/beta/",
   archestra: "https://<archestra-host>/v1/model-router/",
 };
-
-/** Matches a provider by the name it renders under, or by one of its aliases. */
-function providerMatchesSearch(
-  provider: ChatProvider,
-  label: string,
-  query: string,
-): boolean {
-  return providerSearchHaystack({ provider, labels: [label] })
-    .toLowerCase()
-    .includes(query.toLowerCase());
-}
 
 interface ProxyClientInstructionsProps {
   client: ConnectClient;
@@ -448,7 +389,7 @@ function GenericProxyInstructions({
             value={authMethod}
             onValueChange={(v) => setAuthMethod(v as GenericAuthMethod)}
           >
-            <TabsList>
+            <TabsList size="sm">
               <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
               <TabsTrigger value="virtual-key" disabled={!offerVirtualKey}>
                 Virtual key
@@ -628,7 +569,7 @@ function ModelRouterInstructions() {
             value={authMethod}
             onValueChange={(v) => setAuthMethod(v as GenericAuthMethod)}
           >
-            <TabsList>
+            <TabsList size="sm">
               <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
               <TabsTrigger value="virtual-key" disabled={!offerVirtualKey}>
                 Virtual key
@@ -702,24 +643,7 @@ function ModelRouterInstructions() {
   );
 }
 
-/** Tab button in the endpoint terminal card — same look as the setup-script card's provider toggler. */
-function endpointTabClass(active: boolean) {
-  return cn(
-    "border-b-2 px-2.5 py-2.5 font-mono text-xs transition-colors",
-    active
-      ? "border-white font-semibold text-white"
-      : "border-transparent text-[#9ca3af] hover:text-white",
-  );
-}
-
-/**
- * The generic client's proxy endpoint card: the same terminal card + provider
- * toggler as "Run the setup script". Tabs switch between the Model Router and
- * provider routes (primary providers inline, the rest behind a searchable "…"
- * — a provider picked there joins the tab row so the selection stays visible);
- * the proxy URL for the active tab renders below. Also used by the admin
- * connect dialog on the proxies table (with a custom caption).
- */
+/** Provider selection and its corresponding proxy endpoint. */
 function GenericEndpointCard({
   baseUrl,
   providers,
@@ -739,28 +663,6 @@ function GenericEndpointCard({
   caption?: React.ReactNode;
 }) {
   const providerCatalog = useModelProviderCatalog();
-  const PRIMARY: ChatProvider[] = [
-    "openai",
-    "anthropic",
-    "gemini",
-    "bedrock",
-    "groq",
-  ];
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const primary = providers.filter((p) => PRIMARY.includes(p));
-  const rest = providers.filter((p) => !PRIMARY.includes(p));
-  const selectedFromRest =
-    selectedProvider && rest.includes(selectedProvider)
-      ? selectedProvider
-      : null;
-  const tabProviders = selectedFromRest
-    ? [...primary, selectedFromRest]
-    : primary;
-  const searchResults = rest.filter((p) =>
-    providerMatchesSearch(p, providerCatalog.label(p), search),
-  );
-
   const label = routerSelected
     ? "OpenAI-compatible"
     : selectedProvider
@@ -802,77 +704,14 @@ function GenericEndpointCard({
           with:
         </div>
       )}
-      <TerminalBlock
-        code={url}
-        rows={rows}
-        header={
-          <div className="flex flex-wrap items-center gap-1 border-b border-[#1f2937] px-3">
-            <button
-              type="button"
-              onClick={onSelectRouter}
-              className={endpointTabClass(routerSelected)}
-            >
-              Model Router
-            </button>
-            {tabProviders.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => onSelectProvider(p)}
-                className={endpointTabClass(selectedProvider === p)}
-              >
-                {providerCatalog.label(p)}
-              </button>
-            ))}
-            {rest.length > (selectedFromRest ? 1 : 0) && (
-              <Popover
-                open={searchOpen}
-                onOpenChange={(open) => {
-                  setSearchOpen(open);
-                  if (!open) setSearch("");
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="More providers"
-                    className={endpointTabClass(false)}
-                  >
-                    …
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      value={search}
-                      onValueChange={setSearch}
-                      placeholder="Search providers..."
-                    />
-                    <CommandList>
-                      <CommandEmpty>No providers found.</CommandEmpty>
-                      <CommandGroup>
-                        {searchResults.map((p) => (
-                          <CommandItem
-                            key={p}
-                            value={p}
-                            onSelect={() => {
-                              onSelectProvider(p);
-                              setSearchOpen(false);
-                              setSearch("");
-                            }}
-                          >
-                            {providerCatalog.label(p)}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
-        }
+      <ProviderPicker
+        providers={providers}
+        supported={providers}
+        selected={selectedProvider}
+        onSelect={onSelectProvider}
+        modelRouter={{ selected: routerSelected, onSelect: onSelectRouter }}
       />
+      <TerminalBlock code={url} rows={rows} />
     </div>
   );
 }
@@ -1221,11 +1060,7 @@ interface ProviderPickerProps {
   providers: ChatProvider[];
   supported: ChatProvider[];
   selected: ChatProvider | null;
-  onSelect: (p: ChatProvider) => void;
-  /**
-   * Render the OpenAI-compatible Model Router as the first segment (generic
-   * clients only — custom clients build per-provider instructions).
-   */
+  onSelect: (provider: ChatProvider) => void;
   modelRouter?: { selected: boolean; onSelect: () => void };
 }
 
@@ -1237,182 +1072,34 @@ function ProviderPicker({
   modelRouter,
 }: ProviderPickerProps) {
   const providerCatalog = useModelProviderCatalog();
-  const PRIMARY: ChatProvider[] = [
-    "openai",
-    "anthropic",
-    "gemini",
-    "bedrock",
-    "groq",
-  ];
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const primary = providers.filter((p) => PRIMARY.includes(p));
-  const rest = providers.filter((p) => !PRIMARY.includes(p));
-  // A provider picked from the "..." search joins the group so the selection
-  // stays visible.
-  const selectedFromRest =
-    selected && rest.includes(selected) ? selected : null;
-  const searchResults = providers.filter((p) =>
-    providerMatchesSearch(p, providerCatalog.label(p), search),
-  );
-
-  const pickFromSearch = (p: ChatProvider) => {
-    onSelect(p);
-    setSearchOpen(false);
-    setSearch("");
-  };
-
   return (
-    <div>
-      <h4 className="pb-3 text-sm font-semibold text-foreground">
-        Select a provider
-      </h4>
-      <ButtonGroup className="flex-wrap">
+    <Select
+      value={
+        modelRouter?.selected ? MODEL_ROUTER_TILE : (selected ?? undefined)
+      }
+      onValueChange={(value) => {
+        if (value === MODEL_ROUTER_TILE) modelRouter?.onSelect();
+        else onSelect(value as ChatProvider);
+      }}
+    >
+      <SelectTrigger aria-label="Provider" size="sm" className="w-full sm:w-64">
+        <SelectValue placeholder="Select a provider" />
+      </SelectTrigger>
+      <SelectContent>
         {modelRouter && (
-          <Button
-            type="button"
-            size="sm"
-            variant={modelRouter.selected ? "secondary" : "outline"}
-            onClick={modelRouter.onSelect}
-            className={cn("gap-2", modelRouter.selected && "font-semibold")}
-          >
-            <span
-              className="flex size-4 shrink-0 items-center justify-center rounded-sm font-mono text-[10px] font-bold"
-              style={{
-                background: "linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)",
-                color: "#fff",
-              }}
-            >
-              ⇄
-            </span>
-            OpenAI compatible Model Router
-          </Button>
+          <SelectItem value={MODEL_ROUTER_TILE}>Model Router</SelectItem>
         )}
-        {primary.map((p) => (
-          <ProviderPickerButton
-            key={p}
-            provider={p}
-            isSupported={supported.includes(p)}
-            isSelected={selected === p}
-            onSelect={onSelect}
-          />
-        ))}
-        {selectedFromRest && (
-          <ProviderPickerButton
-            provider={selectedFromRest}
-            isSupported={supported.includes(selectedFromRest)}
-            isSelected
-            onSelect={onSelect}
-          />
-        )}
-        {rest.length > 0 && (
-          <Popover
-            open={searchOpen}
-            onOpenChange={(open) => {
-              setSearchOpen(open);
-              if (!open) setSearch("");
-            }}
-          >
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                aria-label="More providers"
-                aria-expanded={searchOpen}
-              >
-                …
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-0" align="start">
-              <Command shouldFilter={false}>
-                <CommandInput
-                  value={search}
-                  onValueChange={setSearch}
-                  placeholder="Search providers..."
-                />
-                <CommandList>
-                  <CommandEmpty>No providers found.</CommandEmpty>
-                  <CommandGroup>
-                    {searchResults.map((p) => (
-                      <CommandItem
-                        key={p}
-                        value={p}
-                        onSelect={() => pickFromSearch(p)}
-                        className="justify-between"
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <ProviderGlyph provider={p} />
-                          <span className="truncate">
-                            {providerCatalog.label(p)}
-                          </span>
-                          {!supported.includes(p) && (
-                            <span className="text-[11px] text-muted-foreground">
-                              Not compatible
-                            </span>
-                          )}
-                        </span>
-                        <Check
-                          className={cn(
-                            "h-4 w-4",
-                            selected === p ? "opacity-100" : "opacity-0",
-                          )}
-                        />
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-        )}
-      </ButtonGroup>
-    </div>
-  );
-}
-
-function ProviderPickerButton({
-  provider,
-  isSupported,
-  isSelected,
-  onSelect,
-}: {
-  provider: ChatProvider;
-  isSupported: boolean;
-  isSelected: boolean;
-  onSelect: (p: ChatProvider) => void;
-}) {
-  const providerCatalog = useModelProviderCatalog();
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant={isSelected ? "secondary" : "outline"}
-      onClick={() => onSelect(provider)}
-      className={cn(
-        "gap-2",
-        isSelected && "font-semibold",
-        !isSupported && "opacity-50",
-      )}
-    >
-      <ProviderGlyph provider={provider} />
-      {providerCatalog.label(provider)}
-    </Button>
-  );
-}
-
-function ProviderGlyph({ provider }: { provider: ChatProvider }) {
-  const icon = PROVIDER_ICONS[provider];
-  return (
-    <span
-      className="flex size-4 shrink-0 items-center justify-center rounded-sm font-mono text-[9px] font-bold"
-      style={{ background: icon.bg, color: icon.fg }}
-    >
-      {icon.glyph === "aws" ? (
-        <span className="text-[5px] font-extrabold tracking-tight">aws</span>
-      ) : (
-        icon.glyph
-      )}
-    </span>
+        <LlmProviderSelectItems
+          options={providers.map((provider) => ({
+            value: provider,
+            name: providerCatalog.label(provider),
+            icon: PROVIDER_CONFIG[provider].icon,
+            subtext: supported.includes(provider)
+              ? undefined
+              : "Not compatible",
+          }))}
+        />
+      </SelectContent>
+    </Select>
   );
 }

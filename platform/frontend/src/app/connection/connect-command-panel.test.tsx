@@ -250,7 +250,7 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByRole("heading", { name: "Connect Claude Code" }),
       ).toBeVisible();
-      for (const label of ["Codex", "Copilot CLI"]) {
+      for (const label of ["Cursor", "Codex", "Copilot CLI"]) {
         await user.click(
           screen.getByRole("button", {
             name: new RegExp(`${label} logo ${label}`),

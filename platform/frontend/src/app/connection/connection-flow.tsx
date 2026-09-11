@@ -159,6 +159,7 @@ export function ConnectionFlow({
   const promptClient =
     !searchParams.get("connectRequest") &&
     (client?.id === "claude-code" ||
+      client?.id === "cursor" ||
       client?.id === "codex" ||
       client?.id === "copilot-cli");
 

@@ -10,9 +10,9 @@ lastUpdated: 2026-09-11
 
 ![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-Select your client on the Connection page. Claude Code, Codex, and Copilot CLI show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
+Select your client on the Connection page. Claude Code, Cursor, Codex, and Copilot CLI show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
 
-Claude Desktop, Cursor, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
+Claude Desktop, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
 On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
 
@@ -149,7 +149,7 @@ Set the disable variable to turn the guard off without uninstalling. To remove e
 
 ## Supported Clients
 
-Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
+Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop gets a downloadable installer. n8n and Any Client get instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
 
 ### Claude Code
 

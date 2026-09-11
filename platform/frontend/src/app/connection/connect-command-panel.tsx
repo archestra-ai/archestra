@@ -23,6 +23,8 @@ import {
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -670,11 +672,13 @@ export function ConnectCommandPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {providers.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {providerCatalog.label(p)}
-                </SelectItem>
-              ))}
+              <LlmProviderSelectItems
+                options={providers.map((provider) => ({
+                  value: provider,
+                  name: providerCatalog.label(provider),
+                  icon: PROVIDER_CONFIG[provider].icon,
+                }))}
+              />
             </SelectContent>
           </Select>
         </EditorField>
@@ -690,7 +694,7 @@ export function ConnectCommandPanel({
             value={effectiveProxyAuth}
             onValueChange={handleProxyAuthChange}
           >
-            <TabsList>
+            <TabsList size="sm">
               <TabsTrigger value="provider-key">
                 {client.id === "claude-desktop"
                   ? "Claude subscription"

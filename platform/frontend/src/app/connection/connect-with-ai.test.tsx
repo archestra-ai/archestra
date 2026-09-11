@@ -8,6 +8,7 @@ vi.mock("sonner");
 
 test.each([
   "claude-code",
+  "cursor",
   "codex",
   "copilot-cli",
 ])("copies the deployment prompt for %s", async (id) => {

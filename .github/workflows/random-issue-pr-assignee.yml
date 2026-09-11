@@ -27,6 +27,7 @@ env:
   # (e.g. the task-env pipeline's requester), or are merged as part of a deliberate
   # process rather than reviewed (release-please PRs, opened by archestra-ci[bot], are
   # merged by whoever cuts the release), so skip reviewer auto-assignment.
+  # Backport PRs from the release App still receive reviewers.
   REVIEW_REQUEST_EXEMPT_LOGINS: '["archestra-task-envs[bot]", "archestra-ci[bot]"]'
 
 concurrency:
@@ -185,7 +186,8 @@ jobs:
                     continue;
                   }
 
-                  if (exemptLogins.includes(pr.user.login)) {
+                  if (exemptLogins.includes(pr.user.login) &&
+                      !(pr.user.login === 'archestra-ci[bot]' && pr.head.ref.startsWith('backport/'))) {
                     console.log(`Skipping reviewer request because ${pr.user.login} is exempt from review assignment`);
                     continue;
                   }

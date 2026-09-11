@@ -473,6 +473,14 @@ describe("run tools", () => {
       runs: [{ task_id: original.id }],
       summary: { total: 1 },
     });
+    // Chat sends MCP text content to the model. Structured data alone is not
+    // enough for the model to recover the ID and steer the matching run.
+    const modelText = result.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+    expect(JSON.parse(modelText)).toEqual(result.structuredContent);
+
     expect(
       await AgentRunModel.listDashboard({
         agentIds: [callingAgent.id],

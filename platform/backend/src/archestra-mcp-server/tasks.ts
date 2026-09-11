@@ -617,18 +617,15 @@ const registry = defineArchestraTools([
           return counts;
         }, {});
 
-        return structuredSuccessResult(
-          {
-            runs,
-            summary: {
-              total: runs.length,
-              active: runs.filter((run) => ACTIVE_TASK_STATES.has(run.state))
-                .length,
-              by_state: byState,
-            },
+        return structuredSuccessResult({
+          runs,
+          summary: {
+            total: runs.length,
+            active: runs.filter((run) => ACTIVE_TASK_STATES.has(run.state))
+              .length,
+            by_state: byState,
           },
-          `${runs.length} run(s)`,
-        );
+        });
       } catch (error) {
         return catchError(error, "listing Agent runs");
       }

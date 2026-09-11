@@ -11,7 +11,6 @@ import {
   UuidIdSchema,
 } from "@/types";
 import {
-  AgentDetailOutputSchema,
   ConnectorIdsToolInputSchema,
   CreateBaseToolArgsSchema,
   GetResourceToolArgsSchema,
@@ -20,6 +19,7 @@ import {
   handleGetResource,
   KnowledgeBaseIdsToolInputSchema,
   LabelInputSchema,
+  McpGatewayDetailOutputSchema,
 } from "./agent-resources";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
 
@@ -104,7 +104,7 @@ const registry = defineArchestraTools([
     description:
       "Get a specific MCP gateway by ID or name. When searching by name, only your personal gateways are matched.",
     schema: GetMcpGatewayToolArgsSchema,
-    outputSchema: AgentDetailOutputSchema,
+    outputSchema: McpGatewayDetailOutputSchema,
     async handler({ args, context }) {
       return handleGetResource({
         args,

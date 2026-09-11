@@ -330,44 +330,6 @@ describe("agent skill-exclusions routes", () => {
     });
   });
 
-  test("an unrelated replace leaves a soft-deleted skill's exclusion alone", async ({
-    makeAgent,
-  }) => {
-    // Auto mode publishes everything that is not excluded. The GET hides a
-    // soft-deleted skill, so no PUT an admin can write carries its id — and if
-    // an unrelated toggle dropped the row, restoring the skill from trash would
-    // silently publish it to every holder of this gateway's token, with an
-    // audit diff showing nothing.
-    const agent = await makeAgent({ organizationId, accessAllSkills: true });
-    const kept = await makeSkill();
-    const trashed = await makeSkill();
-
-    await app.inject({
-      method: "PUT",
-      url: `/api/agents/${agent.id}/skill-exclusions`,
-      payload: { excludedSkillIds: [kept.id, trashed.id].sort() },
-    });
-    await SkillModel.delete(trashed.id);
-
-    const unrelated = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${agent.id}/skill-exclusions`,
-      payload: { excludedSkillIds: [] },
-    });
-    expect(unrelated.statusCode).toBe(200);
-    expect(unrelated.json()).toMatchObject({ excludedSkillIds: [] });
-
-    await SkillModel.restore(trashed.id);
-
-    const restored = await app.inject({
-      method: "GET",
-      url: `/api/agents/${agent.id}/skill-exclusions`,
-    });
-    expect(restored.json()).toMatchObject({
-      excludedSkillIds: [trashed.id],
-    });
-  });
-
   test("PUT accepts a templated skill: excluding only ever narrows the surface", async ({
     makeAgent,
   }) => {

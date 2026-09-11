@@ -221,10 +221,11 @@ describe("sandbox tools (runtime enabled)", () => {
       // ...and the command was delegated to it.
       expect(runSpy).toHaveBeenCalledWith({
         sandboxId: sandboxes[0].id,
-        caller: { organizationId, userId },
+        caller: { organizationId, userId, agentId: ctx.agent.id },
         command: "echo hi",
         cwd: undefined,
         timeoutSeconds: undefined,
+        environment: undefined,
       });
     });
 

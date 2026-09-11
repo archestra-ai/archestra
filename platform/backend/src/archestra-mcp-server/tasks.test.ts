@@ -229,6 +229,7 @@ describe("run tools", () => {
     actorUserId: string;
     withTarget: boolean;
     bindingId?: string;
+    threadId?: string;
     prompt?: string;
   }) {
     const a2aContext = await A2AContextModel.create({
@@ -268,7 +269,7 @@ describe("run tools", () => {
             type: "chatops",
             bindingId:
               params.bindingId ?? "9c2b1f60-0000-4000-8000-000000000001",
-            threadId: "1788208728.803109",
+            threadId: params.threadId ?? "1788208728.803109",
           }
         : null,
     });
@@ -440,6 +441,99 @@ describe("run tools", () => {
     ).toMatch(new RegExp(`/chat/runs/${task.id}$`));
   });
 
+  test("recovers an older run only from the trusted current thread before limiting", async () => {
+    const bindingId = crypto.randomUUID();
+    const threadId = "thread-original";
+    const original = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId,
+      threadId,
+    });
+    await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId,
+      threadId: "another-thread",
+    });
+    await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId: crypto.randomUUID(),
+      threadId,
+    });
+    await seedChatopsTask({ actorUserId: actorId, withTarget: false });
+    const result = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id], current_thread_only: true, limit: 1 },
+      { ...context, chatOpsBindingId: bindingId, chatOpsThreadId: threadId },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      runs: [{ task_id: original.id }],
+      summary: { total: 1 },
+    });
+    expect(
+      await AgentRunModel.listDashboard({
+        agentIds: [callingAgent.id],
+        organizationId: crypto.randomUUID(),
+        limit: 100,
+        thread: { bindingId, threadId },
+      }),
+    ).toEqual([]);
+    expect(
+      await AgentRunModel.listDashboard({
+        agentIds: [crypto.randomUUID()],
+        organizationId,
+        limit: 100,
+        thread: { bindingId, threadId },
+      }),
+    ).toEqual([]);
+    const second = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId,
+      threadId,
+    });
+    const multiple = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id], current_thread_only: true },
+      { ...context, chatOpsBindingId: bindingId, chatOpsThreadId: threadId },
+    );
+    expect(multiple.structuredContent).toMatchObject({
+      summary: { total: 2 },
+      runs: [{ task_id: second.id }, { task_id: original.id }],
+    });
+    const empty = await executeArchestraTool(
+      TOOL_LIST_AGENT_RUNS_FULL_NAME,
+      { agent_ids: [callingAgent.id], current_thread_only: true },
+      { ...context, chatOpsBindingId: bindingId, chatOpsThreadId: "no-runs" },
+    );
+    expect(empty.structuredContent).toMatchObject({
+      runs: [],
+      summary: { total: 0 },
+    });
+  });
+
+  test("thread recovery fails closed when either trusted context field is missing", async () => {
+    await seedChatopsTask({ actorUserId: actorId, withTarget: true });
+    for (const messagingContext of [
+      {},
+      { chatOpsBindingId: crypto.randomUUID() },
+      { chatOpsThreadId: "thread" },
+    ]) {
+      const result = await executeArchestraTool(
+        TOOL_LIST_AGENT_RUNS_FULL_NAME,
+        { agent_ids: [callingAgent.id], current_thread_only: true },
+        { ...context, ...messagingContext },
+      );
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(
+        "Current messaging thread context is unavailable",
+      );
+    }
+  });
+
   test("does not reveal runs for an inaccessible Agent", async ({
     makeAgent,
     makeUser,
@@ -454,8 +548,12 @@ describe("run tools", () => {
 
     const result = await executeArchestraTool(
       TOOL_LIST_AGENT_RUNS_FULL_NAME,
-      { agent_ids: [privateAgent.id] },
-      context,
+      { agent_ids: [privateAgent.id], current_thread_only: true },
+      {
+        ...context,
+        chatOpsBindingId: crypto.randomUUID(),
+        chatOpsThreadId: "thread",
+      },
     );
 
     expect(result.isError).toBe(true);

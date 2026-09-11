@@ -7,9 +7,12 @@ import {
   PaginationQuerySchema,
   parseLabelsParam,
   RouteId,
+  TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
@@ -27,6 +30,7 @@ import {
 } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import config from "@/config";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
@@ -38,10 +42,19 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   MemberModel,
+  OrganizationModel,
   ProjectModel,
   TeamModel,
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
+import { listPolicyIndependentAvailableAgentSkills } from "@/services/agent-activation-skill-candidates";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
+import {
+  getAgentSkillActivationAvailability,
+  getPaginatedAgentActivationSkills,
+  projectEffectiveAvailableAgentSkills,
+  projectPolicyIndependentAvailableAgentSkills,
+} from "@/services/agent-activation-skills";
 import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
@@ -59,6 +72,7 @@ import {
 } from "@/services/environments/environment";
 import {
   type Agent,
+  AgentActivationSkillPolicyResponseSchema,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
@@ -80,6 +94,8 @@ import {
   DeleteObjectResponseSchema,
   ImportAgentResponseSchema,
   InsertAgentSchema,
+  PaginatedAgentActivationSkillsResponseSchema,
+  PatchAgentActivationSkillPolicySchema,
   SelectAgentSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -87,7 +103,7 @@ import {
 import {
   AgentVersionMetadataSchema,
   RestoreAgentVersionBodySchema,
-  SelectAgentVersionSchema,
+  SelectPublicAgentVersionSchema,
 } from "@/types/agent-version";
 import { isForeignKeyConstraintError } from "@/utils/db";
 import {
@@ -174,6 +190,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by lifecycle status. Deleted rows require delete permission.",
               ),
+            includeActivationSkillsCount: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val === "true" : val),
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Include the caller-relative activation skill count used by internal-agent cards. Omitted when the caller lacks skill:read.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -205,6 +230,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           labels,
           excludeOtherPersonalAgents,
           status,
+          includeActivationSkillsCount,
           limit,
           offset,
           sortBy,
@@ -238,30 +264,36 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : checker.hasAnyAdminPermission()
         : checker.hasAnyAdminPermission();
 
-      return reply.send(
-        await AgentModel.findAllPaginated(
-          { limit, offset },
-          { sortBy, sortDirection },
-          {
-            name,
-            // agentTypes takes precedence over agentType
-            agentType: agentTypes || permittedTypes ? undefined : agentType,
-            agentTypes: permittedTypes ?? agentTypes,
-            scope,
-            teamIds,
-            // authorIds and excludeAuthorIds are admin-only
-            authorIds: isAdmin ? authorIds : undefined,
-            excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
-            excludeOtherPersonalAgents: isAdmin
-              ? excludeOtherPersonalAgents
-              : undefined,
-            labels: parseLabelsParam(labels),
-            status,
-          },
-          user.id,
-          isAdmin,
-        ),
+      const result = await AgentModel.findAllPaginated(
+        { limit, offset },
+        { sortBy, sortDirection },
+        {
+          name,
+          // agentTypes takes precedence over agentType
+          agentType: agentTypes || permittedTypes ? undefined : agentType,
+          agentTypes: permittedTypes ?? agentTypes,
+          scope,
+          teamIds,
+          // authorIds and excludeAuthorIds are admin-only
+          authorIds: isAdmin ? authorIds : undefined,
+          excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
+          excludeOtherPersonalAgents: isAdmin
+            ? excludeOtherPersonalAgents
+            : undefined,
+          labels: parseLabelsParam(labels),
+          status,
+        },
+        user.id,
+        isAdmin,
       );
+      if (includeActivationSkillsCount) {
+        await populateActivationSkillCounts({
+          agents: result.data,
+          organizationId,
+          userId: user.id,
+        });
+      }
+      return reply.send(result);
     },
   );
 
@@ -507,6 +539,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (agentType === "llm_proxy") {
         throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
       }
+      if (body.activationSkillPolicy) {
+        if (agentType !== "agent") {
+          throw new ApiError(
+            400,
+            "Activation skill policies are available only for internal agents.",
+          );
+        }
+        const skillChecker = await getSkillPermissionChecker({
+          userId: user.id,
+          organizationId,
+        });
+        if (!skillChecker.canRead) {
+          throw new ApiError(403, "Skill read permission is required");
+        }
+      }
 
       // Single DB query for all permission checks on this agent type
       const checker = await getAgentTypePermissionChecker({
@@ -617,6 +664,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId,
         agentType,
       });
+      if (body.activationSkillPolicy) {
+        await agentActivationSkillPolicyService.validatePolicyForDraft({
+          organizationId,
+          userId: user.id,
+          environmentId,
+          policy: body.activationSkillPolicy,
+        });
+      }
 
       // A team-scoped agent with no teams is accessible to nobody (not even its
       // author), so reject it, and reject teams outside this organization.
@@ -651,7 +706,28 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const agent = await AgentModel.create(createData, user.id, {
         defaultExcludedSubagentIds,
+        deferInitialVersionFork: body.activationSkillPolicy !== undefined,
       });
+      if (body.activationSkillPolicy) {
+        try {
+          await agentActivationSkillPolicyService.initializePolicy({
+            agentId: agent.id,
+            organizationId,
+            userId: user.id,
+            policy: body.activationSkillPolicy,
+          });
+        } catch (error) {
+          // Policy initialization is the last fallible step after row creation.
+          // Clean up the not-yet-returned staged agent on any failure rather
+          // than leaving an orphan in the list.
+          await AgentModel.hardDelete(agent.id);
+          throw error;
+        }
+        agent.activationSkillMode = body.activationSkillPolicy.mode;
+        agent.activationSkillPolicyRevision = 1;
+        const fork = await AgentVersionModel.forkIfChangedBestEffort(agent.id);
+        if (fork) agent.latestVersion = fork.version;
+      }
       // We need to re-init metrics with the new label keys in case label keys changed.
       // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
       await initializeObservabilityMetrics();
@@ -702,13 +778,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, query, user, organizationId }, reply) => {
       await requireReadableAgent({ id, userId: user.id, organizationId });
-      return reply.send(
-        await AgentVersionModel.listForAgent({
-          agentId: id,
-          organizationId,
-          pagination: query,
-        }),
-      );
+      const result = await AgentVersionModel.listForAgent({
+        agentId: id,
+        organizationId,
+        pagination: query,
+      });
+      return reply.send({
+        ...result,
+        data: result.data.map((version) => ({
+          ...version,
+          contentHash: AgentVersionModel.computePublicContentHash(
+            version.contentHash,
+          ),
+        })),
+      });
     },
   );
 
@@ -728,7 +811,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // reaching Postgres as an out-of-range bind
           version: z.coerce.number().int().positive().max(2_147_483_647),
         }),
-        response: constructResponseSchema(SelectAgentVersionSchema),
+        response: constructResponseSchema(SelectPublicAgentVersionSchema),
       },
     },
     async ({ params: { id, version }, user, organizationId }, reply) => {
@@ -741,7 +824,29 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!row) {
         throw new ApiError(404, `Agent has no version ${version}`);
       }
-      return reply.send(row);
+      const { activationSkillRules, ...publicSnapshot } = row.snapshot;
+      const snapshot = {
+        ...publicSnapshot,
+        activationSkillRuleCounts: {
+          allowed: activationSkillRules.filter(
+            (rule) => rule.disposition === "allow",
+          ).length,
+          excluded: activationSkillRules.filter(
+            (rule) => rule.disposition === "exclude",
+          ).length,
+        },
+        activationSkillRuleDigest:
+          AgentVersionModel.computeActivationSkillRuleDigest(
+            activationSkillRules,
+          ),
+      };
+      return reply.send({
+        ...row,
+        contentHash: AgentVersionModel.computePublicContentHash(
+          row.contentHash,
+        ),
+        snapshot,
+      });
     },
   );
 
@@ -1335,6 +1440,243 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludedConnectorIds: body.excludedConnectorIds,
         }),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/activation-skills",
+    {
+      schema: {
+        operationId: RouteId.GetAgentActivationSkills,
+        description:
+          "List a paginated, searchable view of effective or policy-eligible skills for an internal agent or draft",
+        tags: ["Agents"],
+        querystring: PaginationQuerySchema.extend({
+          search: z
+            .string()
+            .optional()
+            .describe(
+              "Case-insensitive substring match on skill name, activation name, description, or provider name.",
+            ),
+          agentId: UuidIdSchema.optional().describe(
+            "Existing internal agent to evaluate. Omit to preview a new agent.",
+          ),
+          environmentId: UuidIdSchema.nullable()
+            .optional()
+            .describe(
+              "Environment preview override for a draft or pending edit. Omit to use the saved agent environment, or the Default environment for a new draft.",
+            ),
+          view: z
+            .enum(["effective", "eligible"])
+            .default("effective")
+            .describe(
+              "Effective applies the saved agent policy; eligible lists caller-visible choices for the policy editor.",
+            ),
+        }).refine(
+          ({ agentId, environmentId, view }) =>
+            view === "eligible" ||
+            agentId === undefined ||
+            environmentId === undefined,
+          "Pass agentId or environmentId, not both for the effective view",
+        ),
+        response: constructResponseSchema(
+          PaginatedAgentActivationSkillsResponseSchema,
+        ),
+      },
+    },
+    async (
+      {
+        query: { agentId, environmentId, limit, offset, search, view },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      let enabled: boolean;
+      let resolvedEnvironmentId: string | null;
+
+      if (agentId) {
+        const agent =
+          view === "eligible"
+            ? await requireAgentUpdateAccess({
+                id: agentId,
+                user,
+                organizationId,
+              })
+            : await requireAgentReadAccess({
+                id: agentId,
+                user,
+                organizationId,
+              });
+        if (agent.agentType !== "agent") {
+          throw new ApiError(
+            400,
+            "Activation skills are available only for internal agents.",
+          );
+        }
+        resolvedEnvironmentId =
+          environmentId !== undefined
+            ? environmentId
+            : (agent.environmentId ?? null);
+        if (environmentId !== undefined) {
+          await assertCanAssignEnvironment({
+            environmentId: resolvedEnvironmentId,
+            organizationId,
+            canDeployToRestricted: await userHasPermission(
+              user.id,
+              organizationId,
+              "agent",
+              "deploy-to-restricted",
+            ),
+          });
+        }
+        enabled = await isArchestraToolAvailableToAgent({
+          toolName: archestraMcpBranding.getToolName(
+            TOOL_LOAD_SKILL_SHORT_NAME,
+          ),
+          agentId: agent.id,
+          organizationId,
+          userId: user.id,
+        });
+      } else {
+        const checker = await getAgentTypePermissionChecker({
+          userId: user.id,
+          organizationId,
+        });
+        checker.require("agent", "create");
+        resolvedEnvironmentId = environmentId ?? null;
+        await assertCanAssignEnvironment({
+          environmentId: resolvedEnvironmentId,
+          organizationId,
+          canDeployToRestricted: await userHasPermission(
+            user.id,
+            organizationId,
+            "agent",
+            "deploy-to-restricted",
+          ),
+        });
+        enabled =
+          (await OrganizationModel.getById(organizationId))
+            ?.skillToolsEnabled === true;
+      }
+
+      if (view === "eligible") {
+        const candidates = await listPolicyIndependentAvailableAgentSkills({
+          organizationId,
+          userId: user.id,
+          ...(agentId && environmentId === undefined
+            ? { agentId }
+            : { environmentId: resolvedEnvironmentId }),
+        });
+        const skills = projectPolicyIndependentAvailableAgentSkills(candidates);
+        const normalizedSearch = search?.trim().toLowerCase();
+        const filtered = normalizedSearch
+          ? skills.filter((skill) =>
+              [
+                skill.name,
+                skill.activationName,
+                skill.description,
+                skill.providerName,
+              ].some((field) =>
+                field?.toLowerCase().includes(normalizedSearch),
+              ),
+            )
+          : skills;
+        return reply.send({
+          enabled,
+          ...createPaginatedResult(
+            filtered.slice(offset, offset + limit),
+            filtered.length,
+            { limit, offset },
+          ),
+        });
+      }
+
+      return reply.send(
+        await getPaginatedAgentActivationSkills({
+          enabled,
+          organizationId,
+          userId: user.id,
+          ...(agentId ? { agentId } : { environmentId: resolvedEnvironmentId }),
+          pagination: { limit, offset },
+          search,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/activation-skill-policy",
+    {
+      schema: {
+        operationId: RouteId.GetAgentActivationSkillPolicy,
+        description: "Get an internal agent's skill activation policy",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          AgentActivationSkillPolicyResponseSchema,
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const agent = await requireAgentReadAccess({ id, user, organizationId });
+      if (agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Activation skill policies are available only for internal agents.",
+        );
+      }
+      return reply.send(
+        await agentActivationSkillPolicyService.getPolicy({
+          agentId: id,
+          organizationId,
+          userId: user.id,
+        }),
+      );
+    },
+  );
+
+  fastify.patch(
+    "/api/agents/:id/activation-skill-policy",
+    {
+      schema: {
+        operationId: RouteId.PatchAgentActivationSkillPolicy,
+        description:
+          "Apply a revisioned update to an internal agent's skill activation policy",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        body: PatchAgentActivationSkillPolicySchema,
+        response: constructResponseSchema(
+          AgentActivationSkillPolicyResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      const {
+        params: { id },
+        body,
+        user,
+        organizationId,
+      } = request;
+      const agent = await requireAgentUpdateAccess({
+        id,
+        user,
+        organizationId,
+      });
+      if (agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Activation skill policies are available only for internal agents.",
+        );
+      }
+      const result = await agentActivationSkillPolicyService.patchPolicy({
+        agentId: id,
+        organizationId,
+        userId: user.id,
+        patch: body,
+      });
+      if (!result.changed) request.auditSkip = true;
+      return reply.send(result.policy);
     },
   );
 
@@ -2536,6 +2878,76 @@ function getPermittedAgentTypesForList(params: {
 }
 
 /**
+ * Add the caller-relative activation count requested by internal-agent cards.
+ * Tool reachability is agent-specific; catalog resolution is shared per
+ * represented environment after disabled agents have been removed.
+ */
+async function populateActivationSkillCounts(params: {
+  agents: Agent[];
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  const internalAgents = params.agents.filter(
+    (agent) => agent.agentType === "agent",
+  );
+  if (internalAgents.length === 0) return;
+
+  const skillChecker = await getSkillPermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  if (!skillChecker.canRead) return;
+
+  const availabilityByAgent = await getAgentSkillActivationAvailability({
+    agents: internalAgents,
+    userId: params.userId,
+  });
+  const canActivate = (agent: Agent) =>
+    availabilityByAgent.get(agent.id) === true;
+  const activeAgents = internalAgents.filter(canActivate);
+  const environmentIds = [
+    ...new Set(activeAgents.map((agent) => agent.environmentId ?? null)),
+  ];
+  const [candidateEntries, evaluators] = await Promise.all([
+    Promise.all(
+      environmentIds.map(
+        async (environmentId) =>
+          [
+            environmentId ?? "default",
+            await listPolicyIndependentAvailableAgentSkills({
+              organizationId: params.organizationId,
+              userId: params.userId,
+              environmentId,
+            }),
+          ] as const,
+      ),
+    ),
+    agentActivationSkillPolicyService.getEvaluators(
+      activeAgents.map((agent) => agent.id),
+    ),
+  ]);
+  const candidatesByEnvironment = new Map(candidateEntries);
+  const countsByAgent = new Map(
+    activeAgents.map((agent) => {
+      const evaluator = evaluators.get(agent.id);
+      const candidates =
+        candidatesByEnvironment.get(agent.environmentId ?? "default") ?? [];
+      return [
+        agent.id,
+        projectEffectiveAvailableAgentSkills(
+          candidates,
+          params.userId,
+          evaluator ?? null,
+        ).length,
+      ] as const;
+    }),
+  );
+  for (const agent of internalAgents) {
+    agent.activationSkillsCount = countsByAgent.get(agent.id) ?? 0;
+  }
+}
+
+/**
  * Binding an agent to a restricted environment routes its code sandbox to that
  * environment's isolated runtime, so it is gated by the resource-specific
  * deploy-to-restricted permission for the agent's type — agent or
@@ -2604,7 +3016,7 @@ async function requireAgentReadAccess(params: {
   id: string;
   user: { id: string };
   organizationId: string;
-}): Promise<void> {
+}): Promise<Agent> {
   const { id, user, organizationId } = params;
 
   const agent = await AgentModel.findById(id, user.id, true);
@@ -2631,6 +3043,8 @@ async function requireAgentReadAccess(params: {
       throw new ApiError(404, "Agent not found");
     }
   }
+
+  return agent;
 }
 
 /**
@@ -2644,7 +3058,7 @@ async function requireAgentUpdateAccess(params: {
   id: string;
   user: { id: string };
   organizationId: string;
-}): Promise<void> {
+}): Promise<Agent> {
   const { id, user, organizationId } = params;
 
   const agent = await AgentModel.findById(id, user.id, true);
@@ -2675,6 +3089,7 @@ async function requireAgentUpdateAccess(params: {
     userTeamIds,
     userId: user.id,
   });
+  return agent;
 }
 
 /**

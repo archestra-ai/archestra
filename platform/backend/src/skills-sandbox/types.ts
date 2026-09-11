@@ -11,9 +11,9 @@ export const SKILL_SANDBOX_LIMITS = {
 } as const;
 
 /**
- * Caller identity threaded into the materializing tools so the revocation gate
- * can re-check the caller's `skill:read` on every mounted skill before a
- * container is built.
+ * Caller identity and agent context threaded into the materializing tools so
+ * the revocation gate can re-check the caller's `skill:read` and the current
+ * agent's activation policy on every mounted skill before a container is built.
  *
  * Deliberately absent from {@link UploadFileParams} and
  * {@link MountSkillParams}: those are append-only recipe mutations that build
@@ -25,6 +25,8 @@ export const SKILL_SANDBOX_LIMITS = {
 export interface SandboxCaller {
   userId: string;
   organizationId: string;
+  /** Internal agent whose activation policy governs mounted skill replay. */
+  agentId?: string;
 }
 
 export interface RunCommandParams {

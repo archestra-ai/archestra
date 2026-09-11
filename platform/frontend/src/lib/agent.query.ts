@@ -238,6 +238,7 @@ export function useProfilesPaginated(
     excludeOtherPersonalAgents,
     labels,
     status,
+    includeActivationSkillsCount,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -275,6 +276,7 @@ export function useProfilesPaginated(
         excludeOtherPersonalAgents,
         labels,
         status,
+        includeActivationSkillsCount,
       },
     ],
     queryFn: async () => {
@@ -293,6 +295,7 @@ export function useProfilesPaginated(
           excludeOtherPersonalAgents,
           labels,
           status,
+          includeActivationSkillsCount,
         },
       });
       throwOnApiError(error, { toastOnError: false });

@@ -242,6 +242,10 @@ class SkillModel {
     sourceRepo?: string;
     /** When set, restricts results to these skill IDs (scope filtering). */
     accessibleSkillIds?: string[];
+    /** When set, excludes these skill IDs (agent All-mode blocklist). */
+    excludedSkillIds?: string[];
+    /** Keep only rows that can be served over the MCP skill surface. */
+    publishableOverMcp?: boolean;
     /**
      * When set (null = Default environment), restricts results to skills
      * visible from that environment: strict match, built-in skills exempt.
@@ -288,6 +292,10 @@ class SkillModel {
     search?: string;
     sourceRepo?: string;
     accessibleSkillIds?: string[];
+    /** Same agent-policy exclusion filter as `findByOrganization`. */
+    excludedSkillIds?: string[];
+    /** Same MCP-publication filter as `findByOrganization`. */
+    publishableOverMcp?: boolean;
     /** Same environment-visibility filter as `findByOrganization`. */
     environmentId?: string | null;
     scope?: ResourceVisibilityScope;
@@ -664,7 +672,7 @@ class SkillModel {
           notDeleted(schema.skillsTable),
         ),
       )
-      .orderBy(desc(schema.skillsTable.createdAt));
+      .orderBy(desc(schema.skillsTable.createdAt), desc(schema.skillsTable.id));
   }
 
   /**
@@ -1228,16 +1236,12 @@ class SkillModel {
 
   /**
    * Soft-delete a skill (frees its name for re-use via the partial unique
-   * indexes). Junction rows, files, and versions are kept — reads are
-   * filtered instead.
+   * indexes). Files, versions, and visibility grants are kept for restore, but
+   * agent and gateway bindings are removed: restoring a skill must not silently
+   * republish or re-enable it anywhere.
    */
   static async delete(id: string): Promise<boolean> {
-    const count = await softDelete(
-      db,
-      schema.skillsTable,
-      eq(schema.skillsTable.id, id),
-    );
-    return count > 0;
+    return (await SkillModel.deleteMany([id])) > 0;
   }
 
   /**
@@ -1247,11 +1251,18 @@ class SkillModel {
    */
   static async deleteMany(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0;
-    return await softDelete(
-      db,
-      schema.skillsTable,
-      inArray(schema.skillsTable.id, ids),
-    );
+    const uniqueIds = [...new Set(ids)];
+    return await withDbTransaction(async (tx) => {
+      const count = await softDelete(
+        tx,
+        schema.skillsTable,
+        inArray(schema.skillsTable.id, uniqueIds),
+      );
+      if (count === 0) return 0;
+
+      await SkillModel.removeAgentBindings(uniqueIds, tx);
+      return count;
+    });
   }
 
   /**
@@ -1520,6 +1531,48 @@ class SkillModel {
       environmentIds: environmentIds.map((r) => r.environmentId).sort(),
     };
   }
+
+  private static async removeAgentBindings(
+    skillIds: string[],
+    tx: Transaction,
+  ): Promise<void> {
+    const affectedPolicyAgents = await tx
+      .selectDistinct({
+        agentId: schema.agentActivationSkillRulesTable.agentId,
+      })
+      .from(schema.agentActivationSkillRulesTable)
+      .where(
+        and(
+          eq(schema.agentActivationSkillRulesTable.source, "native"),
+          inArray(schema.agentActivationSkillRulesTable.skillId, skillIds),
+        ),
+      );
+
+    await tx
+      .delete(schema.agentSkillsTable)
+      .where(inArray(schema.agentSkillsTable.skillId, skillIds));
+    await tx
+      .delete(schema.agentExcludedSkillsTable)
+      .where(inArray(schema.agentExcludedSkillsTable.skillId, skillIds));
+    await tx
+      .delete(schema.agentActivationSkillRulesTable)
+      .where(
+        and(
+          eq(schema.agentActivationSkillRulesTable.source, "native"),
+          inArray(schema.agentActivationSkillRulesTable.skillId, skillIds),
+        ),
+      );
+
+    const affectedAgentIds = affectedPolicyAgents.map(({ agentId }) => agentId);
+    if (affectedAgentIds.length > 0) {
+      await tx
+        .update(schema.agentsTable)
+        .set({
+          activationSkillPolicyRevision: sql`${schema.agentsTable.activationSkillPolicyRevision} + 1`,
+        })
+        .where(inArray(schema.agentsTable.id, affectedAgentIds));
+    }
+  }
 }
 
 /**
@@ -1589,6 +1642,8 @@ function buildOrgFilters(params: {
   search?: string;
   sourceRepo?: string;
   accessibleSkillIds?: string[];
+  excludedSkillIds?: string[];
+  publishableOverMcp?: boolean;
   environmentId?: string | null;
   scope?: ResourceVisibilityScope;
   teamIds?: string[];
@@ -1612,6 +1667,10 @@ function buildOrgFilters(params: {
     ...(params.accessibleSkillIds !== undefined
       ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
       : []),
+    ...(params.excludedSkillIds?.length
+      ? [notInArray(schema.skillsTable.id, params.excludedSkillIds)]
+      : []),
+    ...(params.publishableOverMcp ? [publishableSkillPredicate()] : []),
     ...(params.labelFilteredIds !== undefined
       ? [inArray(schema.skillsTable.id, params.labelFilteredIds)]
       : []),

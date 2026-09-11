@@ -645,6 +645,16 @@ const CONFIGURATION_FIELDS: {
     render: (s) => renderBoolean(s.accessAllSubagents),
   },
   {
+    label: "Skill access",
+    render: (s) => (s.activationSkillMode === "all" ? "All" : "Manual"),
+  },
+  {
+    label: "Skill rules",
+    render: (s) =>
+      `${s.activationSkillRuleCounts.allowed} allowed, ${s.activationSkillRuleCounts.excluded} excluded`,
+    identity: (s) => s.activationSkillRuleDigest,
+  },
+  {
     label: "Treat context as untrusted",
     render: (s) => renderBoolean(s.considerContextUntrusted),
   },

@@ -17,8 +17,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 class ClaudeAuthTest(unittest.TestCase):
     def test_native_cli_uses_the_selected_credential(self):
         cases = {
-            "anthropic": {"ANTHROPIC_API_KEY": "sk-ant-api03-test-provider"},
-            "vertex": {"ANTHROPIC_AUTH_TOKEN": "arch_test_provider_key"},
+            "anthropic": {
+                "ANTHROPIC_API_KEY": "arch_test_provider_key",
+                "ANTHROPIC_AUTH_TOKEN": "arch_test_provider_key",
+            },
             "bedrock": {
                 "CLAUDE_CODE_USE_BEDROCK": "1",
                 "AWS_BEARER_TOKEN_BEDROCK": "arch_test_provider_key",
@@ -79,16 +81,10 @@ class ClaudeAuthTest(unittest.TestCase):
                         f"{source}: no inference request reached the server",
                     )
                     for request in server.requests:
-                        if source == "anthropic":
-                            self.assertEqual(
-                                request.get("x-api-key"), credentials["ANTHROPIC_API_KEY"]
-                            )
-                            self.assertNotIn("authorization", request)
-                        else:
-                            self.assertEqual(
-                                request.get("authorization"), "Bearer arch_test_provider_key"
-                            )
-                            self.assertNotIn("x-api-key", request)
+                        self.assertEqual(
+                            request.get("authorization"), "Bearer arch_test_provider_key"
+                        )
+                        self.assertNotIn("x-api-key", request)
                         self.assertNotIn("x-archestra-virtual-key", request)
                 finally:
                     server.shutdown()

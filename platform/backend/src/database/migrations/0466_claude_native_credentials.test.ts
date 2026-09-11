@@ -9,7 +9,7 @@ import {
 import { describe, expect, test } from "@/test";
 
 const migration = fs.readFileSync(
-  new URL("./0465_claude_native_credentials.sql", import.meta.url),
+  new URL("./0466_claude_native_credentials.sql", import.meta.url),
   "utf8",
 );
 

@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useImperativeHandle } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,6 +33,8 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 
+vi.mock("next/navigation");
+
 const {
   pendingSaveChanges,
   ReportedApiError,
@@ -40,6 +43,9 @@ const {
   useAgentSubagentExclusionsMock,
   useAgentKnowledgeSourceExclusionsMock,
   useUpdateAgentKnowledgeSourceExclusionsMock,
+  useAgentActivationSkillsMock,
+  useAgentActivationSkillPolicyMock,
+  usePatchAgentActivationSkillPolicyMock,
   useAgentSkillsMock,
   useAgentSkillExclusionsMock,
   useUpdateAgentSkillsMock,
@@ -197,6 +203,61 @@ const {
     mutateAsync: vi.fn(),
     isPending: false,
   })),
+  useAgentActivationSkillsMock: vi.fn(
+    (): {
+      data: {
+        enabled: boolean;
+        data: unknown[];
+        pagination: {
+          currentPage: number;
+          limit: number;
+          total: number;
+          totalPages: number;
+          hasNext: boolean;
+          hasPrev: boolean;
+        };
+      };
+      isPending: boolean;
+      isFetching: boolean;
+      isError: boolean;
+      isSuccess: boolean;
+    } => ({
+      data: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    }),
+  ),
+  useAgentActivationSkillPolicyMock: vi.fn(() => ({
+    data: {
+      mode: "all",
+      revision: 0,
+      allowedReferences: [],
+      excludedReferences: [],
+      hiddenAllowedCount: 0,
+      hiddenExcludedCount: 0,
+      allowedSkills: [],
+      excludedSkills: [],
+    },
+    isSuccess: true,
+    isError: false,
+  })),
+  usePatchAgentActivationSkillPolicyMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
   useAgentSkillsMock: vi.fn(
     (): {
       data:
@@ -304,6 +365,9 @@ vi.mock("@/lib/agent-knowledge-source-exclusions.query", () => ({
 }));
 
 vi.mock("@/lib/agent-skills.query", () => ({
+  useAgentActivationSkills: useAgentActivationSkillsMock,
+  useAgentActivationSkillPolicy: useAgentActivationSkillPolicyMock,
+  usePatchAgentActivationSkillPolicy: usePatchAgentActivationSkillPolicyMock,
   useAgentSkills: useAgentSkillsMock,
   useAgentSkillExclusions: useAgentSkillExclusionsMock,
   useUpdateAgentSkills: useUpdateAgentSkillsMock,
@@ -863,6 +927,11 @@ beforeEach(() => {
     mutateAsync: vi.fn(),
     isPending: false,
   });
+  vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as never);
+  vi.mocked(usePathname).mockReturnValue("/agents/agent-1");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as ReturnType<typeof useSearchParams>,
+  );
   vi.mocked(useConnectors).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useConnectors>);
@@ -902,6 +971,8 @@ const baseAgent = {
   accessAllTools: false,
   accessAllSubagents: false,
   accessAllSkills: false,
+  activationSkillMode: "all" as const,
+  activationSkillPolicyRevision: 0,
   scope: "personal" as const,
   isDefault: false,
   isPersonalGateway: false,
@@ -1643,7 +1714,7 @@ describe("AgentForm delegation state", () => {
 
     expect(await screen.findByText("off-page-skill")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Remove off-page-skill" }),
+      screen.getByRole("button", { name: /^Remove off-page-skill/ }),
     ).toBeInTheDocument();
   });
 
@@ -1682,7 +1753,7 @@ describe("AgentForm delegation state", () => {
 
     expect(await screen.findByText("regraded-skill")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Remove regraded-skill" }),
+      screen.getByRole("button", { name: /^Remove regraded-skill/ }),
     ).toBeInTheDocument();
   });
 
@@ -1728,6 +1799,42 @@ const skillsModeTab = (name: "All" | "Manual") => {
 
 describe("AgentForm knowledge in Auto mode", () => {
   beforeEach(() => {
+    useAgentActivationSkillPolicyMock.mockReturnValue({
+      data: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+      isSuccess: true,
+      isError: false,
+    });
+    usePatchAgentActivationSkillPolicyMock.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-1" } },
     } as unknown as ReturnType<typeof useSession>);
@@ -1735,6 +1842,103 @@ describe("AgentForm knowledge in Auto mode", () => {
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
     vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(true);
+  });
+
+  it("shows the All/Manual skill policy in the tools step", async () => {
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const section = (
+      await screen.findByRole("heading", { name: "Skills" })
+    ).closest("section") as HTMLElement;
+    expect(within(section).getByRole("tab", { name: "All" })).toBeVisible();
+    expect(within(section).getByRole("tab", { name: "Manual" })).toBeVisible();
+    expect(useAgentActivationSkillsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: baseAgent.id,
+        environmentId: undefined,
+        view: "eligible",
+      }),
+    );
+  });
+
+  it("saves an edited internal-agent skill policy with the agent form", async () => {
+    const skill = {
+      reference: { source: "native" as const, skillId: "skill-1" },
+      name: "incident-response",
+      activationName: "incident-response",
+      description: "Respond to incidents",
+      scope: "org" as const,
+      providerName: null,
+    };
+    const patchPolicy = vi.fn().mockResolvedValue(undefined);
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+    useAgentActivationSkillPolicyMock.mockReturnValue({
+      data: {
+        mode: "all",
+        revision: 4,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+      isSuccess: true,
+      isError: false,
+    });
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [skill],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 1,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
+    usePatchAgentActivationSkillPolicyMock.mockReturnValue({
+      mutateAsync: patchPolicy,
+      isPending: false,
+    });
+    const user = userEvent.setup();
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const section = (
+      await screen.findByRole("heading", { name: "Skills" })
+    ).closest("section") as HTMLElement;
+    await user.click(within(section).getByRole("tab", { name: "Manual" }));
+    await user.click(
+      within(section).getByRole("button", { name: "Add incident-response" }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() =>
+      expect(patchPolicy).toHaveBeenCalledWith({
+        agentId: baseAgent.id,
+        patch: {
+          expectedRevision: 4,
+          mode: "manual",
+          operations: [
+            {
+              op: "add",
+              disposition: "allow",
+              reference: skill.reference,
+            },
+          ],
+        },
+      }),
+    );
   });
 
   it("says what the knowledge field leaves out rather than what it holds", async () => {
@@ -2238,7 +2442,7 @@ describe("AgentForm published skills", () => {
       await screen.findByRole("button", { name: "Add far-away-skill" }),
     );
     expect(
-      screen.getByRole("button", { name: "Remove far-away-skill" }),
+      screen.getByRole("button", { name: /^Remove far-away-skill/ }),
     ).toBeInTheDocument();
 
     await user.clear(search);
@@ -2253,8 +2457,51 @@ describe("AgentForm published skills", () => {
       ),
     );
     expect(
-      screen.getByRole("button", { name: "Remove far-away-skill" }),
+      screen.getByRole("button", { name: /^Remove far-away-skill/ }),
     ).toBeInTheDocument();
+  });
+
+  it("previews the same All-mode skills offered by the exclusion picker", async () => {
+    const user = userEvent.setup();
+    const first = orgSkill(
+      "first-skill",
+      "00000000-0000-4000-8000-0000000000ac",
+    );
+    const second = orgSkill(
+      "second-skill",
+      "00000000-0000-4000-8000-0000000000ad",
+    );
+    useAgentSkillsMock.mockReturnValue({
+      data: { accessAllSkills: true, skillIds: [], skills: [] },
+      isSuccess: true,
+    });
+    useSkillsPaginatedMock.mockReturnValue({
+      data: { data: [first, second] },
+      isFetching: false,
+    });
+
+    render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
+
+    const section = screen
+      .getByRole("heading", { name: "Skills over MCP" })
+      .closest("section") as HTMLElement;
+    expect(
+      within(section).getByRole("button", { name: "View all 2 skills" }),
+    ).toBeVisible();
+
+    await user.click(
+      within(section).getByRole("button", { name: "Disable Skill" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Add first-skill" }),
+    );
+    await user.click(
+      within(section).getByRole("button", { name: "View 1 Skill" }),
+    );
+
+    const table = screen.getByRole("table");
+    expect(within(table).queryByText("first-skill")).toBeNull();
+    expect(within(table).getByText("second-skill")).toBeVisible();
   });
 
   it("writes neither skill set when the save changed nothing about them", async () => {
@@ -2346,6 +2593,42 @@ describe("AgentForm published skills", () => {
 describe("AgentForm LLM permission gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAgentActivationSkillPolicyMock.mockReturnValue({
+      data: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+      isSuccess: true,
+      isError: false,
+    });
+    usePatchAgentActivationSkillPolicyMock.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
     vi.mocked(useHasPermissions).mockImplementation(
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
@@ -2421,6 +2704,42 @@ describe("AgentForm save payload and failure handling", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useAgentActivationSkillPolicyMock.mockReturnValue({
+      data: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+      isSuccess: true,
+      isError: false,
+    });
+    usePatchAgentActivationSkillPolicyMock.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
     vi.mocked(useHasPermissions).mockImplementation(
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
@@ -3956,6 +4275,61 @@ describe("AgentForm save payload and failure handling", () => {
     expect(pendingSaveChanges).toHaveBeenCalledWith({
       agentId: "created-agent",
       resourceLabel: "agent",
+    });
+  });
+
+  it("creates an internal agent with the skill policy staged in the form", async () => {
+    const skill = {
+      reference: { source: "native" as const, skillId: "skill-1" },
+      name: "incident-response",
+      activationName: "incident-response",
+      description: "Respond to incidents",
+      scope: "org" as const,
+      providerName: null,
+    };
+    useAgentActivationSkillsMock.mockReturnValue({
+      data: {
+        enabled: true,
+        data: [skill],
+        pagination: {
+          currentPage: 1,
+          limit: 100,
+          total: 1,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+    });
+    const user = userEvent.setup();
+    render(<AgentForm agentType="agent" />);
+
+    await user.type(
+      screen.getByPlaceholderText("Enter agent name"),
+      "New Agent",
+    );
+    const section = (
+      await screen.findByRole("heading", { name: "Skills" })
+    ).closest("section") as HTMLElement;
+    await user.click(within(section).getByRole("tab", { name: "Manual" }));
+    await user.click(
+      within(section).getByRole("button", {
+        name: "Add incident-response",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      activationSkillPolicy: {
+        mode: "manual",
+        allowedReferences: [skill.reference],
+        excludedReferences: [],
+      },
     });
   });
 

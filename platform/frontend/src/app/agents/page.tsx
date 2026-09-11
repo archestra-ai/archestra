@@ -50,6 +50,7 @@ export default async function AgentsPageServer() {
           sortDirection: DEFAULT_SORT_DIRECTION,
           agentTypes: ["agent"],
           excludeOtherPersonalAgents: true,
+          includeActivationSkillsCount: true,
         },
       }),
       canReadTeams

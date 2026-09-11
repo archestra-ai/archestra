@@ -65,7 +65,7 @@ describe("runHookScript", () => {
     mockRun.mockResolvedValue(ok());
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ requirements: ["requests"] }),
       payload: { hook_event_name: "PreToolUse" },
     });
@@ -108,7 +108,7 @@ describe("runHookScript", () => {
     mockRun.mockResolvedValue(ok());
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ requirements: ["a'b"] }),
       payload: {},
     });
@@ -120,7 +120,7 @@ describe("runHookScript", () => {
     mockRun.mockResolvedValue(ok());
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ fileName: "audit.sh", content: "exit 0" }),
       payload: {},
     });
@@ -139,7 +139,7 @@ describe("runHookScript", () => {
       (
         await runHookScript({
           sandboxId: "s",
-          caller: { userId: "u", organizationId: "o" },
+          caller: { userId: "u", organizationId: "o", agentId: "a" },
           hookFile: hook(),
           payload: {},
         })
@@ -151,7 +151,7 @@ describe("runHookScript", () => {
       (
         await runHookScript({
           sandboxId: "s",
-          caller: { userId: "u", organizationId: "o" },
+          caller: { userId: "u", organizationId: "o", agentId: "a" },
           hookFile: hook(),
           payload: {},
         })
@@ -163,7 +163,7 @@ describe("runHookScript", () => {
       (
         await runHookScript({
           sandboxId: "s",
-          caller: { userId: "u", organizationId: "o" },
+          caller: { userId: "u", organizationId: "o", agentId: "a" },
           hookFile: hook(),
           payload: {},
         })
@@ -177,7 +177,7 @@ describe("runHookScript", () => {
       (
         await runHookScript({
           sandboxId: "s",
-          caller: { userId: "u", organizationId: "o" },
+          caller: { userId: "u", organizationId: "o", agentId: "a" },
           hookFile: hook(),
           payload: {},
         })
@@ -191,7 +191,7 @@ describe("runHookScript", () => {
       (
         await runHookScript({
           sandboxId: "s",
-          caller: { userId: "u", organizationId: "o" },
+          caller: { userId: "u", organizationId: "o", agentId: "a" },
           hookFile: hook(),
           payload: {},
         })
@@ -203,7 +203,7 @@ describe("runHookScript", () => {
     mockRun.mockResolvedValue(ok());
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook(),
       payload: {},
     });
@@ -214,7 +214,7 @@ describe("runHookScript", () => {
     mockRun.mockResolvedValue(ok());
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ requirements: [] }),
       payload: {},
     });
@@ -229,7 +229,7 @@ describe("runHookScript", () => {
     // first fire
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ id: "h1", fileName: "check.py", content: "exit(0)" }),
       payload: {},
     });
@@ -245,7 +245,7 @@ describe("runHookScript", () => {
     // second fire, same hook — dedupeId must be identical
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ id: "h1", fileName: "check.py", content: "exit(0)" }),
       payload: { x: 2 },
     });
@@ -258,7 +258,7 @@ describe("runHookScript", () => {
     // different content → different dedupeId
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ id: "h1", fileName: "check.py", content: "exit(1)" }),
       payload: {},
     });
@@ -269,7 +269,7 @@ describe("runHookScript", () => {
     mockRun.mockResolvedValue(ok());
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ id: "hook-42", fileName: "check.py" }),
       payload: {},
     });
@@ -281,7 +281,7 @@ describe("runHookScript", () => {
     mockRun.mockResolvedValue(ok());
     await runHookScript({
       sandboxId: "s",
-      caller: { userId: "u", organizationId: "o" },
+      caller: { userId: "u", organizationId: "o", agentId: "a" },
       hookFile: hook({ id: "hook-42" }),
       payload: { x: 1 },
     });

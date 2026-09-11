@@ -252,6 +252,7 @@ class AgentRunModel {
     agentIds: string[];
     organizationId: string;
     limit: number;
+    thread?: { bindingId: string; threadId: string };
   }) {
     if (params.agentIds.length === 0) return [];
 
@@ -309,6 +310,18 @@ class AgentRunModel {
       )
       .where(
         and(
+          params.thread
+            ? and(
+                eq(
+                  sql`${schema.agentRunsTable.completionTarget}->>'bindingId'`,
+                  params.thread.bindingId,
+                ),
+                eq(
+                  sql`${schema.agentRunsTable.completionTarget}->>'threadId'`,
+                  params.thread.threadId,
+                ),
+              )
+            : undefined,
           inArray(schema.agentRunsTable.agentId, params.agentIds),
           eq(schema.agentRunsTable.organizationId, params.organizationId),
         ),

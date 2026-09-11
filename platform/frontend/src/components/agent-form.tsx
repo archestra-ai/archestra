@@ -51,6 +51,11 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import {
+  AgentActivationSkillsEditor,
+  type AgentActivationSkillsEditorRef,
+} from "@/components/agent-activation-skills-editor";
+import { AgentActivationSkillsTable } from "@/components/agent-activation-skills-table";
 import { AgentChatAppsEditor } from "@/components/agent-chat-apps";
 import {
   AgentHooksEditor,
@@ -82,6 +87,7 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
+import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
 import { EnvironmentSelector } from "@/components/environment-selector";
@@ -103,6 +109,7 @@ import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
+import { SkillAccessModeEditor } from "@/components/skill-access-mode-editor";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -1109,12 +1116,11 @@ export function AccessLevelSelector({
  * - `configuration`: identity (name, icon, description, environment), who can
  *   use it, and the instruction, suggested prompts and model of an internal
  *   agent.
- * - `tools`: everything the agent reaches — tools and knowledge sources,
- *   subagents, published skills, and hooks.
+ * - `tools`: everything the agent reaches — tools, activation skills,
+ *   knowledge sources, subagents, and hooks.
  * - `advanced`: Agent Runtime, security, passthrough headers, identity
  *   provider, and labels.
- */
-/**
+ *
  * The groups a host can mount independently. `messaging` is a section of its
  * own rather than part of `configuration`: channel assignments save through
  * their own endpoint, so a surface showing only them must not also re-send the
@@ -1486,6 +1492,8 @@ export function AgentForm({
   const agentToolExclusionsEditorRef =
     useRef<AgentToolExclusionsEditorRef>(null);
   const agentHooksEditorRef = useRef<AgentHooksEditorRef>(null);
+  const agentActivationSkillsEditorRef =
+    useRef<AgentActivationSkillsEditorRef>(null);
   // Snapshot of the form's pristine values, captured whenever the form
   // (re)populates from the loaded agent, so we can detect unsaved edits.
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
@@ -1556,6 +1564,8 @@ export function AgentForm({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
+  const [activationSkillsDirty, setActivationSkillsDirty] = useState(false);
+  const [activationSkillsReady, setActivationSkillsReady] = useState(false);
   // Takes the id to write against: on create it is the one the record was just
   // given, which does not exist when the handler is registered.
   const channelAssignmentsSaveRef = useRef<
@@ -1694,6 +1704,8 @@ export function AgentForm({
       ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
       : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
+  const showActivationSkills =
+    showToolsSections && isInternalAgent && !isBuiltIn && !!canReadSkills;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
   const anthropicVertexAiEnabled =
     useFeature("anthropicVertexAiEnabled") === true;
@@ -1804,8 +1816,6 @@ export function AgentForm({
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
-  // Skills moved to Advanced, so they no longer keep this panel alive: a record
-  // with only skills would otherwise mount an empty Tools & Knowledge tab.
   const toolsPanelHasContent = showTools || showsHooks;
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change
@@ -2498,6 +2508,13 @@ export function AgentForm({
       ? description.trim() || null
       : undefined;
 
+    // Create carries the staged policy in the same request as the new agent,
+    // so a Manual agent never exists briefly in the default All mode.
+    const activationSkillPolicy =
+      !agent && showActivationSkills
+        ? agentActivationSkillsEditorRef.current?.getCreatePolicy()
+        : undefined;
+
     setIsSaving(true);
 
     // Persist the published-skill sets, each only when it changed (same
@@ -2661,6 +2678,7 @@ export function AgentForm({
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
             suggestedPrompts: validSuggestedPrompts,
+            ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
           // Omitted, not null, while the field holds no value: the selector
           // hides itself when the org offers no choice, and null would pin the
@@ -2853,8 +2871,12 @@ export function AgentForm({
         });
       }
 
-      // Edit mode only: the create step does not mount the skills editors.
+      // Existing agents save policy changes through the revisioned endpoint.
+      // Create carries the staged policy in the initial agent request above.
       if (agent) {
+        if (showActivationSkills && !readOnly) {
+          await agentActivationSkillsEditorRef.current?.saveChanges();
+        }
         await savePublishedSkills(savedAgentId);
         // Last, so it is true of the whole save: the delegation, subagent and
         // skill writes above can each still be refused, and a toast before
@@ -2936,6 +2958,8 @@ export function AgentForm({
     knowledgeSourceExclusionsLoaded,
     syncKnowledgeSourceExclusions,
     showSkills,
+    showActivationSkills,
+    readOnly,
     skillsLoaded,
     accessAllSkills,
     assignedSkillIds,
@@ -3063,6 +3087,7 @@ export function AgentForm({
     (hasUnsavedChanges(initialSnapshotRef.current, currentSnapshot) ||
       channelAssignmentsDirty ||
       hasPendingToolChanges ||
+      activationSkillsDirty ||
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
         [...selectedDelegationTargetIds].sort(),
@@ -3120,6 +3145,7 @@ export function AgentForm({
     !isSaving &&
     !createAgent.isPending &&
     !updateAgent.isPending &&
+    (!showActivationSkills || readOnly || activationSkillsReady) &&
     !requiresTeamSelection &&
     requiredSubscriptionSatisfied &&
     hasCompleteLlmSelection &&
@@ -3857,6 +3883,33 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
+              {showActivationSkills && (
+                <SettingsSection
+                  title="Skills"
+                  description={
+                    readOnly
+                      ? "Skills available to you through this agent. Visibility shows how each skill is shared."
+                      : "Choose which available skills this agent may load. Skill access for each person is still enforced."
+                  }
+                >
+                  {readOnly ? (
+                    <AgentActivationSkillsTable
+                      key={`${agent?.id ?? "draft"}:${environmentId ?? "default"}`}
+                      agentId={agent?.id}
+                      environmentId={environmentId}
+                    />
+                  ) : (
+                    <AgentActivationSkillsEditor
+                      ref={agentActivationSkillsEditorRef}
+                      agentId={agent?.id}
+                      environmentId={environmentId}
+                      onDirtyChange={setActivationSkillsDirty}
+                      onReadyChange={setActivationSkillsReady}
+                    />
+                  )}
+                </SettingsSection>
+              )}
+
               {/* Section 4: Subagents */}
               {showSubagents && (
                 <SettingsSection
@@ -4070,28 +4123,26 @@ export function AgentForm({
                       <span>Loading published skills…</span>
                     </p>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm text-muted-foreground">
-                          {publishedSkillsSummary({
-                            publishesAll: accessAllSkills,
-                            excludedCount: excludedSkillIds.length,
-                            assignedCount: assignedSkillIds.length,
-                          })}
-                        </p>
-                        <Tabs
-                          value={accessAllSkills ? "auto" : "custom"}
-                          onValueChange={(value) =>
-                            setAccessAllSkills(value === "auto")
-                          }
-                        >
-                          <TabsList>
-                            <TabsTrigger value="auto">All</TabsTrigger>
-                            <TabsTrigger value="custom">Manual</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
-                      {accessAllSkills ? (
+                    <SkillAccessModeEditor
+                      mode={accessAllSkills ? "all" : "manual"}
+                      onModeChange={(mode) =>
+                        setAccessAllSkills(mode === "all")
+                      }
+                      summary={publishedSkillsSummary({
+                        publishesAll: accessAllSkills,
+                        excludedCount: excludedSkillIds.length,
+                        assignedCount: assignedSkillIds.length,
+                      })}
+                      availableSkillsView={
+                        <AvailableSkillsDialog
+                          source={{
+                            kind: "gateway",
+                            skills: orgScopedSkills,
+                            excludedIds: excludedSkillIds,
+                          }}
+                        />
+                      }
+                      allEditor={
                         <div className="space-y-2">
                           <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
                             <li className="flex gap-2">
@@ -4103,7 +4154,7 @@ export function AgentForm({
                             <li className="flex gap-2">
                               <CheckIcon className="mt-px size-3.5 shrink-0" />
                               Team and personal skills are never published
-                              automatically; assign them in Custom instead
+                              automatically; assign them in Manual instead
                             </li>
                           </ul>
                           <div className="space-y-1.5">
@@ -4120,7 +4171,8 @@ export function AgentForm({
                             />
                           </div>
                         </div>
-                      ) : (
+                      }
+                      manualEditor={
                         <div className="space-y-1.5">
                           <p className="pt-1 text-xs text-muted-foreground">
                             Only the skills you assign below are published.
@@ -4139,8 +4191,8 @@ export function AgentForm({
                             isSearching={skillSearchPending}
                           />
                         </div>
-                      )}
-                    </div>
+                      }
+                    />
                   )}
                 </SettingsSection>
               )}

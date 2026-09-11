@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0-beta.7](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.6...platform-v1.4.0-beta.7) (2026-09-11)
+
+
+### Features
+
+* **agents:** expose scoped skills ([#7787](https://github.com/archestra-ai/archestra/issues/7787)) ([6598540](https://github.com/archestra-ai/archestra/commit/6598540e807c33882861ce1ee3160fd5e624aee5))
+
+
+### Bug Fixes
+
+* **agent-runtime:** allow platform Service IPs in runtime egress ([#7847](https://github.com/archestra-ai/archestra/issues/7847)) ([05bda21](https://github.com/archestra-ai/archestra/commit/05bda21b3027c7d7d480cb212ab7e5ce3dbc719e))
+* **agent-runtime:** use a dedicated platform API pod selector ([#7845](https://github.com/archestra-ai/archestra/issues/7845)) ([d0fdaf2](https://github.com/archestra-ai/archestra/commit/d0fdaf218602665a780a6114799701814cd88af6))
+
 ## [1.4.0-beta.6](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.5...platform-v1.4.0-beta.6) (2026-09-11)
 
 

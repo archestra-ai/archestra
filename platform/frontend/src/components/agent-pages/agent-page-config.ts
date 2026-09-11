@@ -36,7 +36,7 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     resource: "agent",
     defaultIconType: "agent",
     createDescription:
-      "Give the agent a name and instructions, then pick the tools and knowledge it can use.",
+      "Give the agent a name and instructions, then review the tools, skills, and knowledge it can use.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`,
   },
@@ -212,7 +212,14 @@ const CONFIGURATION_STEP: AgentSetupStep = {
   id: "configuration",
   title: "Configuration",
 };
-const TOOLS_STEP: AgentSetupStep = { id: "tools", title: "Tools & Knowledge" };
+const TOOLS_STEP: AgentSetupStep = {
+  id: "tools",
+  title: "Tools & Knowledge",
+};
+const TOOLS_SKILLS_STEP: AgentSetupStep = {
+  id: "tools",
+  title: "Tools, Skills & Knowledge",
+};
 const MESSAGING_STEP: AgentSetupStep = {
   id: "messaging",
   title: "Messaging Channels",
@@ -221,8 +228,9 @@ const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
 
 /**
  * The setup wizard's steps for one agent — the same on create and on edit.
- * Configuration is what the record is and who can use it; Tools & Knowledge
- * holds everything the agent reaches; Messaging Channels where it answers;
+ * Configuration is what the record is and who can use it; the Tools step holds
+ * everything the record reaches (and names Skills for internal agents);
+ * Messaging Channels where it answers;
  * Advanced the settings a record rarely needs. Only an `agent` has channels —
  * a gateway or proxy is not something a person messages — so the step is
  * offered for that type alone. A built-in agent is a single-step edit, so its host renders no
@@ -239,7 +247,7 @@ export function getAgentSetupSteps({
   if (builtIn) return [CONFIGURATION_STEP];
   return [
     CONFIGURATION_STEP,
-    TOOLS_STEP,
+    agentType === "agent" ? TOOLS_SKILLS_STEP : TOOLS_STEP,
     ...(agentType === "agent" ? [MESSAGING_STEP] : []),
     ADVANCED_STEP,
   ];

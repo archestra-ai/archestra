@@ -35,6 +35,8 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     accessAllTools: false,
     accessAllSubagents: false,
     accessAllSkills: false,
+    activationSkillMode: "all",
+    activationSkillPolicyRevision: 0,
     builtInAgentConfig: null,
     builtIn: null,
     latestVersion: 0,

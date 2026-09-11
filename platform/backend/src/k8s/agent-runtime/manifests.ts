@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import type * as k8s from "@kubernetes/client-node";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import {
@@ -456,6 +457,7 @@ export function buildAgentRuntimePlatformEgressPolicy(params: {
   platformNamespace: string;
   platformPodLabels: Record<string, string>;
   platformPorts: number[];
+  platformService?: { ips: string[]; port: number };
 }): k8s.V1NetworkPolicy {
   const names = agentRuntimeNames(params.spec.frozenName);
   return {
@@ -492,6 +494,18 @@ export function buildAgentRuntimePlatformEgressPolicy(params: {
             port,
           })),
         },
+        // Some CNIs enforce egress before Service DNAT. Pod selectors cover
+        // endpoint IPs, so the configured Service also needs an exact IP rule.
+        ...(params.platformService?.ips.length
+          ? [
+              {
+                to: params.platformService.ips.map((ip) => ({
+                  ipBlock: { cidr: `${ip}/${isIP(ip) === 6 ? 128 : 32}` },
+                })),
+                ports: [{ protocol: "TCP", port: params.platformService.port }],
+              },
+            ]
+          : []),
         // DNS. Once any egress policy selects a pod, its egress is clamped to
         // the union of the selecting policies — and Agent Runtime pods carry labels no
         // other policy selects, so without this rule the session cannot resolve

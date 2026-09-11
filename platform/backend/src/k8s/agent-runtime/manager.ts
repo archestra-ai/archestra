@@ -83,6 +83,7 @@ import {
   describeAgentRuntimeStartupProgress,
   isSameAgentRuntimeStartupProgress,
 } from "./startup-phase";
+import { buildTmuxSteerCommand } from "./steering";
 import { withTranscriptRecoveryPod } from "./transcript-recovery";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
@@ -713,7 +714,10 @@ class AgentRuntimeManager {
             "-c",
             // `--` stops tmux reading a message beginning with a dash as its
             // own options; Enter is sent separately as the submit.
-            `tmux send-keys -t ${AGENT_RUNTIME_TMUX_SESSION} -l -- ${shellQuote(message)} && tmux send-keys -t ${AGENT_RUNTIME_TMUX_SESSION} Enter`,
+            buildTmuxSteerCommand({
+              session: AGENT_RUNTIME_TMUX_SESSION,
+              message,
+            }),
           ]
         : [
             "/bin/sh",

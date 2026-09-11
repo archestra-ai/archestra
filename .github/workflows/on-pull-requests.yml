@@ -360,12 +360,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref }}
         run: |
           git -c credential.helper= \
               -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' \
               fetch --depth=1 origin \
               "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" \
-              "+refs/heads/release/*:refs/remotes/origin/release/*"
+              "+refs/heads/release/*:refs/remotes/origin/release/*" \
+              ${BASE_BRANCH:+"+refs/heads/${BASE_BRANCH#refs/heads/}:refs/remotes/origin/${BASE_BRANCH#refs/heads/}"} || true
 
       - name: Check migration upgrade paths across release tracks
         env:

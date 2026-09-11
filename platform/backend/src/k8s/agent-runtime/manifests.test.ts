@@ -234,7 +234,7 @@ describe("buildAgentRuntimeSandbox", () => {
 
   it("retains privileged development storage on the workspace volume", () => {
     const unprivileged = buildAgentRuntimeSandbox(SPEC).spec?.podTemplate.spec;
-    expect(unprivileged?.volumes).toEqual([]);
+    expect(unprivileged?.volumes ?? []).toEqual([]);
 
     const privileged = buildAgentRuntimeSandbox({ ...SPEC, privileged: true })
       .spec?.podTemplate.spec;

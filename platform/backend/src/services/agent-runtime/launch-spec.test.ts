@@ -1,7 +1,6 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { assert, vi } from "vitest";
 import config from "@/config";
-import { claudeCodeAccountManager } from "@/k8s/agent-runtime/claude-code-account";
 import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
@@ -10,6 +9,7 @@ import {
   UserCredentialModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type Agent,
@@ -421,7 +421,7 @@ describe("buildAgentRunLaunchSpec", () => {
   test.for([
     false,
     true,
-  ])("uses native account storage without reading legacy tokens or proxying subscription inference (Vertex: %s)", async (vertexEnabled, {
+  ])("uses a managed subscription secret without reading legacy tokens or proxying subscription inference (Vertex: %s)", async (vertexEnabled, {
     makeOrganization,
     makeAdmin,
     makeMember,
@@ -430,10 +430,9 @@ describe("buildAgentRunLaunchSpec", () => {
     makeAgent,
   }) => {
     config.llm.anthropic.vertexAi.enabled = vertexEnabled;
-    vi.mocked(claudeCodeAccountManager.requireConnection).mockResolvedValue({
-      claimName: "private-native-account",
-      label: "archestra.io/claude-account",
-    });
+    vi.mocked(claudeCodeAccountManager.requireConnection).mockResolvedValue(
+      "managed-subscription-token",
+    );
     const setup = await makeConfiguredAgent({
       provider: "anthropic",
       modelId: "claude-opus-4-8",
@@ -486,7 +485,9 @@ describe("buildAgentRunLaunchSpec", () => {
       runMode: "one_shot",
     });
 
-    expect(spec.secretEnv).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      "managed-subscription-token",
+    );
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_API_KEY");
     expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
     expect(spec.secretEnv).not.toHaveProperty("OPENAI_API_KEY");
@@ -494,8 +495,8 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.secretEnv).not.toHaveProperty("ARCHESTRA_VIRTUAL_KEY");
     expect(spec.env).not.toHaveProperty("ANTHROPIC_BASE_URL");
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL).toBe("opus[1m]");
-    expect(spec.env.CLAUDE_CONFIG_DIR).toBe("/opt/claude-account");
-    expect(spec.claudeCodeAccount?.claimName).toBe("private-native-account");
+    expect(spec.env).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(spec.env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(runId);
 
     expect(virtualApiKeyId).toBeNull();

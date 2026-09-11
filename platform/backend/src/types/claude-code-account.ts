@@ -8,7 +8,10 @@ export const ClaudeCodeAccountSchema = z.object({
     "connecting",
     "connected",
     "failed",
+    "expired",
   ]),
+  requiresVaultReference: z.boolean().optional(),
+  expiresAt: z.string().datetime().nullable().optional(),
   flowId: z.string().uuid().optional(),
   authorizationUrl: z
     .string()
@@ -24,6 +27,8 @@ export const ClaudeCodeAccountSchema = z.object({
     })
     .optional(),
 });
+
+export type ClaudeCodeAccountStatus = z.infer<typeof ClaudeCodeAccountSchema>;
 
 export const ClaudeCodeModelsSchema = z.object({
   models: z

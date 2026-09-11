@@ -4,7 +4,7 @@ import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
-import { claudeCodeAccountManager } from "@/k8s/agent-runtime/claude-code-account";
+import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   A2AContextModel,
@@ -18,6 +18,7 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
   cancelDetachedAgentTask,
@@ -159,46 +160,52 @@ describe("Agent Runtime routes", () => {
         claudeCode: { authentication: "subscription" },
       },
     });
-    // Native account state lives in a CLI process and Kubernetes volume.
-    const connectedUser = user.id;
-    let connected = false;
-    vi.spyOn(claudeCodeAccountManager, "status").mockImplementation(
-      async ({ userId }) => ({
-        state:
-          connected && userId === connectedUser ? "connected" : "disconnected",
-      }),
-    );
-    vi.spyOn(claudeCodeAccountManager, "start").mockResolvedValue({
-      state: "starting",
+    vi.spyOn(claudeCodeAccountRuntime, "create").mockResolvedValue(undefined);
+    vi.spyOn(claudeCodeAccountRuntime, "delete").mockResolvedValue(undefined);
+    vi.spyOn(claudeCodeAccountRuntime, "status").mockResolvedValue({
+      state: "connecting",
     });
-    vi.spyOn(claudeCodeAccountManager, "complete").mockImplementation(
-      async ({ userId }) => {
-        expect(userId).toBe(connectedUser);
-        connected = true;
-        return { state: "connected" };
-      },
-    );
-    vi.spyOn(claudeCodeAccountManager, "disconnect").mockImplementation(
-      async () => {
-        connected = false;
-        return { state: "disconnected" };
-      },
-    );
+    vi.spyOn(claudeCodeAccountRuntime, "complete")
+      .mockResolvedValueOnce({ state: "connecting" })
+      .mockResolvedValueOnce({ state: "connecting" })
+      .mockResolvedValue({
+        state: "connected",
+        token: `sk-ant-oat01-${"example".repeat(8)}`,
+        models: [],
+      });
     const url = `/api/agents/${agent.id}/runtime/claude-code/account`;
-    expect((await app.inject({ method: "POST", url })).statusCode).toBe(200);
+    const started = await app.inject({ method: "POST", url });
+    expect(started.statusCode, started.body).toBe(200);
+    const { flowId } = started.json();
     expect(
       (
         await app.inject({
           method: "POST",
           url: `${url}/complete`,
-          payload: {
-            flowId: crypto.randomUUID(),
-            code: "never-record-native-code",
-          },
+          payload: { flowId, code: "never-record-native-code" },
         })
       ).statusCode,
     ).toBe(200);
-    expect((await app.inject({ method: "GET", url })).json()).toEqual({
+    // A pending poll does not produce an empty or misleading audit mutation.
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${url}/complete`,
+          payload: { flowId },
+        })
+      ).json(),
+    ).toMatchObject({ state: "connecting" });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `${url}/complete`,
+          payload: { flowId },
+        })
+      ).json(),
+    ).toMatchObject({ state: "connected" });
+    expect((await app.inject({ method: "GET", url })).json()).toMatchObject({
       state: "connected",
     });
     expect(
@@ -212,7 +219,7 @@ describe("Agent Runtime routes", () => {
     const owner = user;
     user = await makeUser();
     await makeMember(user.id, organizationId);
-    expect((await app.inject({ method: "GET", url })).json()).toEqual({
+    expect((await app.inject({ method: "GET", url })).json()).toMatchObject({
       state: "disconnected",
     });
     expect(
@@ -246,12 +253,13 @@ describe("Agent Runtime routes", () => {
           eq(schema.auditLogsTable.action, "agent.updated"),
         ),
       );
-    expect(audits).toHaveLength(3);
+    expect(audits).toHaveLength(4);
     for (const audit of audits) {
       expect(audit.action).toBe("agent.updated");
       expect(audit.before).not.toEqual(audit.after);
     }
     expect(JSON.stringify(audits)).not.toContain("never-record-native-code");
+    expect(JSON.stringify(audits)).not.toContain("sk-ant-oat");
   });
 
   test("does not expose another organization or private Agent's native account", async ({

@@ -230,9 +230,15 @@ one user's subscription credential with another user.
 
 The **Claude Code** runtime offers two authentication modes: provider billing or a personal Claude subscription.
 
-**Personal Claude subscription** starts the native Claude Code sign-in flow inside the runtime. Each person signs in separately with their own Pro or Max account. Claude Code manages its credentials in private storage for that user, Agent, and Environment. The backend does not receive the subscription token. Existing pasted tokens require a fresh native sign-in.
+**Personal Claude subscription** uses Claude Code's native `setup-token` sign-in. Each person connects their own Pro or Max account. The token stays in your configured secrets backend: encrypted database storage or writable Vault. Connections belong to one user, Agent, and Environment.
 
-Available models come from that authenticated CLI. The model picker appears after sign-in. Its default follows Claude Code's recommended model, including future updates.
+Sign-in runs in a disposable Kubernetes Job with a ten-minute deadline. It does not create a credential volume. Runtime sessions receive the token through their existing Kubernetes Secret.
+
+Tokens generated during sign-in last one year. Reconnect before expiry to keep starting runs. With read-only Vault, generate a token using `claude setup-token` and store it in Vault. Connect its `path#key` reference; token rotation and expiry remain externally managed.
+
+Disconnect prevents new runs from using the connection. Running sessions retain their issued token. Revoke it in Claude to remove provider access. Connections from volume-based versions require signing in again; old account volumes are not migrated or removed.
+
+Available models come from the CLI during sign-in. Reconnecting refreshes the list. The default follows Claude Code's recommended model.
 
 Subscription inference connects directly to Anthropic. It does not pass through the LLM proxy's logging, cost limits, or inference guardrails. MCP calls still use the Agent's gateway and tool policies. Personal Claude accounts cannot fund Archestra Chat or other Agent Runtime harnesses.
 

@@ -13,7 +13,6 @@ import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
-import { claudeCodeAccountManager } from "@/k8s/agent-runtime/claude-code-account";
 import {
   AgentModel,
   LimitModel,
@@ -22,6 +21,7 @@ import {
   TeamTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { archestraMarkWithText } from "@/services/archestra-mark";
 import type {
   AgentRunInput,
@@ -147,7 +147,7 @@ export async function buildAgentRunLaunchSpec(params: {
       "A personal Claude subscription requires a run acting as a signed-in user.",
     );
   }
-  const claudeCodeAccount =
+  const claudeCodeToken =
     usesClaudeCodeSubscription && actorUserId
       ? await claudeCodeAccountManager.requireConnection({
           runtime: params.runtime,
@@ -257,7 +257,6 @@ export async function buildAgentRunLaunchSpec(params: {
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
     ...(usesClaudeCodeSubscription
       ? {
-          CLAUDE_CONFIG_DIR: "/opt/claude-account",
           ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: "subscription",
         }
       : {
@@ -280,6 +279,7 @@ export async function buildAgentRunLaunchSpec(params: {
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
+    ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {
@@ -320,7 +320,6 @@ export async function buildAgentRunLaunchSpec(params: {
       agentRuntimeId: params.runtime.agentId,
       frozenName: constructStableRunName(agent.name, params.taskId),
       runtimeScope: params.runtimeScope,
-      claudeCodeAccount,
       image: params.runtime.image,
       command: params.runtime.command ?? null,
       privileged: params.runtime.privileged,

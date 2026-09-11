@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Drive the unmodified CLI's login; emit status and model metadata only.
+"""Run the native setup-token flow; return its token only to the secrets backend.
 
-Claude owns the credential files. This helper never opens them or exports a
-credential to the control plane. The short-lived authorization code goes only
-to the native login process that created the PKCE request.
+Status responses and errors never include terminal output or credentials.
+All files live in the disposable sign-in Job, never a persistent volume.
 """
 
 import fcntl
@@ -15,52 +14,48 @@ import selectors
 import subprocess
 import sys
 import time
-import uuid
 
 
 def main():
     os.umask(0o077)
     directory.mkdir(mode=0o700, exist_ok=True)
+    Path(os.environ["CLAUDE_CONFIG_DIR"]).mkdir(mode=0o700, exist_ok=True)
     operation = sys.argv[1]
     with (directory / "lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if operation == "status":
+        if operation == "start":
+            if not login_running():
+                run([
+                    "tmux", "new-session", "-d", "-s", session,
+                    "-x", "500", "-y", "40",
+                    "claude setup-token; printf '%s' $? > /tmp/archestra-claude-account/exit-status; sleep 600",
+                ])
             result = status()
-        elif operation == "models":
-            result = {"models": supported_models() if authenticated() else []}
-        elif operation == "start":
-            if authenticated():
-                result = {"state": "connected"}
-            else:
-                if not login_running():
-                    flow_file.write_text(str(uuid.uuid4()))
-                    run([
-                        "tmux", "new-session", "-d", "-s", session,
-                        "-x", "500", "-y", "24",
-                        "timeout 600 claude auth login --claudeai",
-                    ])
-                result = status()
+        elif operation == "status":
+            result = status()
         elif operation == "complete":
-            request = json.loads(sys.stdin.read(8192))
+            request = json.loads(sys.stdin.read(16384))
+            if request.get("flowId") != flow_id:
+                raise ValueError("The sign-in expired")
             code = request.get("code", "").strip()
-            if (
-                not flow_file.exists()
-                or request.get("flowId") != flow_file.read_text()
-                or not login_running()
-                or not code
-                or len(code) > 4096
-                or any(ord(char) < 32 or ord(char) > 126 for char in code)
-            ):
-                raise ValueError("The sign-in expired. Start again.")
-            run(["tmux", "load-buffer", "-b", session, "-"], input=code)
-            run(["tmux", "paste-buffer", "-d", "-b", session, "-t", session])
-            run(["tmux", "send-keys", "-t", session, "Enter"])
-            result = {"state": "connecting", "flowId": request["flowId"]}
-        elif operation == "logout":
-            run(["tmux", "kill-session", "-t", session], check=False)
-            run(["claude", "auth", "logout"])
-            flow_file.unlink(missing_ok=True)
-            result = {"state": "disconnected"}
+            if code and not submitted.exists():
+                if (len(code) > 4096 or any(ord(char) < 32 or ord(char) > 126 for char in code) or not login_running()):
+                    raise ValueError("Invalid authorization code")
+                run(["tmux", "load-buffer", "-b", session, "-"], input=code)
+                run(["tmux", "paste-buffer", "-d", "-b", session, "-t", session])
+                run(["tmux", "send-keys", "-t", session, "Enter"])
+                submitted.touch(mode=0o600)
+            token = captured_token()
+            if token:
+                result = {"state": "connected", "token": token, "models": supported_models(token)}
+            else:
+                result = {"state": "failed" if exit_file.exists() else "connecting"}
+        elif operation == "models":
+            request = json.loads(sys.stdin.read(16384))
+            token = request.get("token", "")
+            if not TOKEN.fullmatch(token):
+                raise ValueError("Invalid subscription token")
+            result = {"state": "connected", "models": supported_models(token)}
         else:
             raise ValueError("Unknown account operation")
     print(json.dumps(result))
@@ -68,48 +63,57 @@ def main():
 
 def run(command, **kwargs):
     kwargs.setdefault("check", True)
-    return subprocess.run(
-        command, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        timeout=20, **kwargs,
-    )
-
-
-def authenticated():
-    result = run(["claude", "auth", "status", "--json"], check=False)
-    account = json.loads(result.stdout)
-    # Never report a provider API key or an injected OAuth token as a native
-    # account connection. The account pod has no provider credentials.
-    return account.get("loggedIn") is True and account.get("authMethod") == "claude.ai"
+    return subprocess.run(command, text=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, timeout=20, **kwargs)
 
 
 def login_running():
     return run(["tmux", "has-session", "-t", session], check=False).returncode == 0
 
 
-def status():
-    if authenticated():
-        return {"state": "connected"}
+def pane():
     if not login_running():
-        return {"state": "failed" if flow_file.exists() else "disconnected"}
-    captured = run(["tmux", "capture-pane", "-p", "-J", "-t", session]).stdout
-    # Only return the native authorization URL. Never pass through arbitrary
-    # terminal output, account details, or CLI diagnostics.
-    match = re.search(
-        r"https://(?:claude\.com/cai|claude\.ai)/oauth/authorize\?[^\s\x1b]+",
-        captured,
-    )
-    result = {"state": "starting", "flowId": flow_file.read_text()}
+        return ""
+    text = run(["tmux", "capture-pane", "-p", "-J", "-S", "-", "-t", session]).stdout
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+
+
+def captured_token():
+    tokens = set(TOKEN.findall(pane()))
+    if len(tokens) > 1:
+        raise ValueError("Ambiguous subscription credential")
+    return next(iter(tokens), None)
+
+
+def status():
+    captured = pane()
+    if TOKEN.search(captured):
+        return {"state": "connecting", "flowId": flow_id}
+    if exit_file.exists() or not login_running():
+        return {"state": "failed"}
+    if submitted.exists():
+        return {"state": "connecting", "flowId": flow_id}
+    match = re.search(r"https://(?:claude\.com/cai|claude\.ai)/oauth/authorize\?[^\s\x1b]+", captured)
     if match:
-        result.update(state="awaiting_code", authorizationUrl=match.group(0))
-    return result
+        return {"state": "awaiting_code", "flowId": flow_id, "authorizationUrl": match.group(0)}
+    return {"state": "starting", "flowId": flow_id}
 
 
-def supported_models():
+def cli_environment(token):
+    env = os.environ.copy()
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_OAUTH_REFRESH_TOKEN"):
+        env.pop(key, None)
+    env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+    return env
+
+
+def supported_models(token):
     process = subprocess.Popen(
         ["claude", "--print", "--input-format", "stream-json",
          "--output-format", "stream-json", "--verbose", "--tools", "",
          "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
          "--setting-sources", ""],
+        env=cli_environment(token),
         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
     )
@@ -156,14 +160,16 @@ def supported_models():
             process.wait()
 
 
+TOKEN = re.compile(r"sk-ant-oat[0-9]+-[A-Za-z0-9_-]{32,8192}")
 directory = Path("/tmp/archestra-claude-account")
-flow_file = directory / "flow-id"
+submitted = directory / "submitted"
+exit_file = directory / "exit-status"
+flow_id = os.environ.get("ARCHESTRA_AGENT_RUNTIME_CLAUDE_FLOW_ID", "")
 session = "archestra-claude-login"
 
 if __name__ == "__main__":
     try:
         main()
     except Exception:
-        # Provider/subprocess exceptions may contain credential-bearing output.
         print(json.dumps({"state": "failed"}))
         sys.exit(1)

@@ -13,11 +13,14 @@ fi
 unset ANTHROPIC_API_KEY
 
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" == "subscription" ]]; then
-  # Authentication belongs to the native CLI. Neither an inherited image
-  # credential nor a previous provider selection may override this account.
+  # The personal setup-token is injected from the configured secrets backend.
+  # Provider credentials must never override subscription billing.
   unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_CUSTOM_HEADERS
-  unset CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
+  : "${CLAUDE_CODE_OAUTH_TOKEN:?Reconnect your Claude Code account}"
+  unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
   unset AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BEDROCK_BASE_URL
+else
+  unset CLAUDE_CODE_OAUTH_TOKEN
 fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"

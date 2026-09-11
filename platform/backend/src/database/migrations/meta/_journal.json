@@ -3270,6 +3270,13 @@
       "when": 1789160011569,
       "tag": "0466_claude_native_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 467,
+      "version": "7",
+      "when": 1789165468903,
+      "tag": "0467_brown_nightshade",
+      "breakpoints": true
     }
   ]
 }

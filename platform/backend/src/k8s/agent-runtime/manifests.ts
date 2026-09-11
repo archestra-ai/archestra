@@ -231,39 +231,10 @@ export function buildAgentRuntimeSandbox(
         : {}),
       podTemplate: {
         metadata: {
-          labels: {
-            ...labels,
-            ...(spec.claudeCodeAccount
-              ? {
-                  [spec.claudeCodeAccount.label]:
-                    spec.claudeCodeAccount.claimName,
-                }
-              : {}),
-          },
+          labels,
         },
         spec: {
           restartPolicy: "Never",
-          ...(spec.claudeCodeAccount
-            ? {
-                // ReadWriteOnce storage supports several pods on the same node.
-                // Keep this user's native CLI sessions beside its account pod.
-                affinity: {
-                  podAffinity: {
-                    requiredDuringSchedulingIgnoredDuringExecution: [
-                      {
-                        labelSelector: {
-                          matchLabels: {
-                            [spec.claudeCodeAccount.label]:
-                              spec.claudeCodeAccount.claimName,
-                          },
-                        },
-                        topologyKey: "kubernetes.io/hostname",
-                      },
-                    ],
-                  },
-                },
-              }
-            : {}),
           // A dedicated Agent Runtime pool keeps heavy privileged runs from
           // pressuring the platform's own nodes. The selector's pairs double
           // as tolerations so a pool tainted with the same key=value admits
@@ -320,16 +291,6 @@ export function buildAgentRuntimeSandbox(
               ],
             },
           ],
-          volumes: spec.claudeCodeAccount
-            ? [
-                {
-                  name: "claude-account",
-                  persistentVolumeClaim: {
-                    claimName: spec.claudeCodeAccount.claimName,
-                  },
-                },
-              ]
-            : [],
           containers: [
             {
               name: AGENT_RUNTIME_CONTAINER_NAME,
@@ -381,14 +342,6 @@ export function buildAgentRuntimeSandbox(
                   subPath: "runtime",
                 },
                 { name: "workspace", mountPath: "/home/node", subPath: "home" },
-                ...(spec.claudeCodeAccount
-                  ? [
-                      {
-                        name: "claude-account",
-                        mountPath: "/opt/claude-account",
-                      },
-                    ]
-                  : []),
                 ...(spec.privileged
                   ? // Keep nested development containers, images and volumes on
                     // the same durable disk as the workspace. A Pod replacement

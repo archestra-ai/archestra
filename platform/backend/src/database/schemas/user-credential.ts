@@ -1,5 +1,6 @@
 import {
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -35,14 +36,19 @@ const userCredentialsTable = pgTable(
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     /**
-     * Declaration key this satisfies, and the environment variable name the
-     * value is injected under (e.g. `CLAUDE_CODE_OAUTH_TOKEN`).
+     * Environment variable declaration key, or a reserved internal connection
+     * key. Internal keys cannot be declared as runtime environment variables.
      */
     key: text("key").notNull(),
     /** Reference into the secrets manager; the value is never stored here. */
     secretId: uuid("secret_id")
       .notNull()
       .references(() => secretsTable.id, { onDelete: "cascade" }),
+    /** Non-secret connection metadata, such as expiry and native model discovery. */
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

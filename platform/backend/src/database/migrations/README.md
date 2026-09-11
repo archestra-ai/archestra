@@ -5,11 +5,37 @@ recorded timestamp. It does not look for gaps by filename or SQL hash. A backpor
 can therefore make a later stable-to-beta upgrade silently skip beta migrations,
 even when both journals are individually ordered.
 
+## The prefix rule
+
+Every deployed stable version must upgrade cleanly to the next stable patch, to
+any later beta, and to the next stable line. The rule that guarantees this: a
+stable branch's migration history must remain a timestamp-ordered prefix of
+main's, matching migrations by SQL content so renamed backports count. Only
+backport a migration when every earlier main migration is already present on
+the stable branch. While the rule holds, an upgrade from any stable release
+applies exactly the remaining suffix of main's history in canonical order, so
+schema and data migrations converge with every other upgrade path.
+
+A backport that skips earlier main migrations violates the rule, and the
+cross-track check rejects it. Forward repairs exist to recover gaps that
+already shipped, not to make such backports acceptable.
+
 PR validation and release creation run `.github/scripts/check-migration-upgrades.py`.
 The check compares stable release branches (`release/X.Y`) with main, and checks
 upgrades within the target release line. SQL hashes recognize identical migrations
 backported under different filenames. It rejects skipped migrations, absent source
 SQL, and timestamp changes that would replay already-applied SQL.
+
+## Released-tag upgrade replay
+
+The static check proves journal compatibility; it cannot prove the SQL actually
+converges. `backend/scripts/migration-tag-upgrades.test.mjs` replays the latest
+release tag of every active stable branch with the real Drizzle migrator,
+upgrades the resulting database to the worktree's history, and requires schema
+convergence with a fresh install, no duplicate applied migrations, and survival
+of pre-existing data. Tags are discovered per stable branch, so new stable lines
+join the matrix automatically. Fetch `refs/tags/platform-v*` before running
+locally; CI fetches them in the pull-request workflow.
 
 Run from `platform/` after fetching the relevant refs:
 
@@ -19,11 +45,14 @@ python3 ../.github/scripts/check-migration-upgrades.py --source-ref platform-v1.
 pnpm --dir backend test:migration-upgrades
 ```
 
-When backporting a migration, preserve its SQL and timestamp. Preserving the
-timestamp alone is not sufficient: earlier beta-only migrations may still be
-skipped. The cross-track check must pass before publishing the backport. Land any
-required forward repair on main first. Keep this guard in the active stable
-branch's PR and release workflows too.
+## Backporting a migration
+
+Preserve the migration's SQL and timestamp, and confirm the prefix rule holds:
+every earlier main migration must already be on the stable branch. The
+cross-track check must pass before publishing the backport. Keep this guard in
+the active stable branch's PR and release workflows too.
+
+## Repairing an already-shipped gap
 
 For an already-shipped gap, generate a new custom migration with a timestamp
 newer than both tracks. Make the repair idempotent and preserve existing data.

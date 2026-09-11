@@ -121,6 +121,7 @@ type ModelRouterUserProviderKey = Awaited<
 type ModelRouterVirtualKeyAuth = {
   authMethod: "virtual_key";
   organizationId: string;
+  virtualKeyId: string;
   virtualKeyScope: ResourceVisibilityScope;
   virtualKeyAuthorId: string | null;
   providerApiKeysByProvider: Map<
@@ -916,6 +917,7 @@ async function getModelRouterAuth(
     return {
       authMethod: "virtual_key",
       organizationId: resolved.virtualKey.organizationId,
+      virtualKeyId: resolved.virtualKey.id,
       virtualKeyScope: resolved.virtualKey.scope,
       virtualKeyAuthorId: resolved.virtualKey.authorId,
       providerApiKeysByProvider: new Map(
@@ -1023,12 +1025,21 @@ async function applyModelRouterAuthOverride(params: {
     authenticated: true,
     source: "model_router",
     authMethod: params.auth.authMethod,
+    virtualKeyId:
+      params.auth.authMethod === "virtual_key"
+        ? params.auth.virtualKeyId
+        : undefined,
     authenticatedApp:
       params.auth.authMethod === "oauth_user"
         ? (params.auth.oauthClient ?? undefined)
         : params.auth.oauthClient,
     userId:
-      params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
+      params.auth.authMethod === "oauth_user"
+        ? params.auth.userId
+        : params.auth.authMethod === "virtual_key" &&
+            params.auth.virtualKeyScope === "personal"
+          ? (params.auth.virtualKeyAuthorId ?? undefined)
+          : undefined,
   };
 }
 

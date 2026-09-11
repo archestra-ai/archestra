@@ -22,7 +22,7 @@ permissions: {}
 
 env:
   ASSIGNEE_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","piercypixel"]'
-  CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk","piercypixel","arsenyinfo"]'
+  CORE_TEAM_LOGINS: '["joeyorlando","iskhakov","Konstantinov-Innokentii","Matvey-Kuk","piercypixel","arsenyinfo","xdrdak"]'
   # PRs opened by these bot accounts already have an owner shepherding them
   # (e.g. the task-env pipeline's requester), or are merged as part of a deliberate
   # process rather than reviewed (release-please PRs, opened by archestra-ci[bot], are

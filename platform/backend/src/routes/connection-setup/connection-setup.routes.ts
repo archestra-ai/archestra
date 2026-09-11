@@ -800,6 +800,15 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Fetch-time re-validation + context building (live reads on the
         // default pool — see claim note above; threading a tx through the
         // auth layer and secrets manager is not possible).
+        if (
+          request.headers.accept ===
+            "application/vnd.archestra.desktop-setup+json" &&
+          setup.clientId !== "claude-desktop"
+        )
+          throw new ApiError(
+            400,
+            "Desktop configuration requires a Claude Desktop setup.",
+          );
         const { context, marketplaceRender } = await buildScriptContext(setup);
 
         // Skill-link creation + attach + render commit together: a rendered
@@ -868,7 +877,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             };
           }
 
-          return renderSetupScript({ ...context, skills });
+          return request.headers.accept ===
+            "application/vnd.archestra.desktop-setup+json"
+            ? JSON.stringify({ ...context, skills })
+            : renderSetupScript({ ...context, skills });
         });
       } catch (error) {
         await ConnectionSetupModel.unclaim(setup.id);
@@ -876,7 +888,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply
-        .header("Content-Type", "text/plain; charset=utf-8")
+        .header(
+          "Content-Type",
+          request.headers.accept ===
+            "application/vnd.archestra.desktop-setup+json"
+            ? "application/json; charset=utf-8"
+            : "text/plain; charset=utf-8",
+        )
         .header("Cache-Control", "no-store")
         .header("X-Content-Type-Options", "nosniff")
         .send(script);

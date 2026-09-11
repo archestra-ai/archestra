@@ -1126,14 +1126,8 @@ export function ConnectCommandPanel({
         <div className="flex flex-col gap-3">
           {client.id === "claude-desktop" && (
             <p className="text-sm text-muted-foreground">
-              Install Claude Desktop, Node.js 18+, and Python 3.9+ first.
-              {hasProxy && effectiveProxyAuth === "provider-key" && (
-                <span>
-                  {" "}
-                  Subscription sign-in also requires the Claude Code CLI.
-                </span>
-              )}
-              <span> Finish active Desktop tasks before running setup.</span>
+              Only Claude Desktop is needed. Finish active Desktop tasks before
+              setup restarts the app.
             </p>
           )}
           <output
@@ -1159,7 +1153,7 @@ export function ConnectCommandPanel({
           <div
             className={cn(
               "overflow-hidden rounded-xl border",
-              connectRequest
+              connectRequest || client.id === "claude-desktop"
                 ? "bg-card"
                 : "border-[#1f2937] bg-[#0d1117] shadow-lg",
             )}
@@ -1205,22 +1199,26 @@ export function ConnectCommandPanel({
                 platform={setupPlatform}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
-              <div className="space-y-3 p-4 text-zinc-100">
-                <Button asChild variant="outline" size="sm" className="text-xs">
+              <div className="space-y-3 p-5 text-foreground">
+                <Button asChild>
                   <a href={result.installerUrl} download>
                     <Download className="size-3.5" />
                     <span>Download installer</span>
                   </a>
                 </Button>
-                <p className="max-w-xl text-xs leading-relaxed text-zinc-400">
-                  Open in Claude Desktop and confirm Install. Setup runs in a
-                  terminal and restarts Desktop. Valid subscription tokens are
-                  reused automatically.
+                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                  Open in Claude Desktop and confirm Install. Your browser
+                  guides you through subscription sign-in and restarting
+                  Desktop. No terminal or developer tools needed.
                 </p>
-                <details className="text-xs text-zinc-400">
+                <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer">
-                    Use terminal instead
+                    Advanced: terminal setup
                   </summary>
+                  <p className="mt-2">
+                    The terminal option requires Python 3.9+ and Claude Code for
+                    subscription sign-in.
+                  </p>
                   <SetupCommandLine
                     command={result.command}
                     pending={false}

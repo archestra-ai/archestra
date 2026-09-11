@@ -3,19 +3,16 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-10
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ![The Connection page with a copyable coding-agent prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-The Connection page provides a prompt for your coding agent.
-Your agent prepares the connection; you review and approve it in your browser.
+Select your client on the Connection page. Claude Code, Codex, and Copilot CLI show a setup prompt. Your agent prepares the connection; you review and approve it in your browser.
 
-**Other ways to connect** opens manual setup for Claude Desktop, Cursor, n8n, and other clients.
-Refreshing returns to the prompt.
-Client-specific links still open their setup instructions directly.
+Claude Desktop, Cursor, n8n, and other clients show their setup instructions. Your selected client stays in the URL when you refresh or share the page.
 
 On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place. Plugins declare whether they support macOS/Linux, Windows, or both; the review includes only plugins compatible with the selected operating system and names incompatible plugins that were skipped.
 

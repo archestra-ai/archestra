@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import JSZip from "jszip";
 import sharp from "sharp";
 import type { ConnectionSetupPlatform } from "@/types";
-import { CLIENT_CONNECTION_INSTALLER } from "./client-connection-installer";
+import { DESKTOP_CONNECTION_INSTALLER } from "./connection-desktop-installer";
 
 export async function buildDesktopInstallerBundle(params: {
   origin: string;
@@ -61,7 +61,7 @@ export async function buildDesktopInstallerBundle(params: {
       platform: params.platform,
     }),
   );
-  zip.file("connect.cjs", CLIENT_CONNECTION_INSTALLER);
+  zip.file("connect.cjs", DESKTOP_CONNECTION_INSTALLER);
   zip.file("server.cjs", DESKTOP_SETUP_SERVER);
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
@@ -73,7 +73,7 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const readline = require('node:readline');
-const { execFile } = require('node:child_process');
+const DesktopInstaller = require('./connect.cjs');
 const setup = require('./setup.json');
 let status = 'Starting the reviewed setup...';
 const tools = [{name:'setup_status',description:'Show this one-time Desktop installation status. This tool does not run or retry installation.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,openWorldHint:false}}];
@@ -93,14 +93,17 @@ setTimeout(() => {
   const platform = {darwin:'macos',win32:'windows',linux:'linux'}[process.platform];
   if (!platform || ((platform === 'windows') !== (setup.platform === 'windows'))) { status = 'This installer is for another operating system. Choose your OS on Connect and download again.'; return; }
   const id = crypto.createHash('sha256').update(setup.rawToken).digest('hex');
-  // Desktop starts multiple MCP processes. Atomic creation permits only one terminal.
+  // Desktop starts multiple MCP processes. Atomic creation permits only one setup browser.
   const lock = path.join(os.tmpdir(), 'desktop-setup-' + id);
   try { fs.mkdirSync(lock, {mode:0o700}); }
-  catch (error) { status = error.code === 'EEXIST' ? 'Setup was already started. Check its Terminal window, or generate a new installer on Connect.' : 'Could not prepare setup. Run the terminal command from Connect.'; return; }
-  execFile('node', [path.join(__dirname,'connect.cjs'),'--url',setup.origin,'--client','claude-desktop','--setup-token',setup.rawToken], {timeout:15000}, (error) => {
-    status = error ? 'Could not open setup. Install Node.js 18+, then generate a new installer or use the terminal command on Connect.' : 'Setup opened in Terminal. Finish any sign-in there. Desktop restarts after inference is verified. You can uninstall this setup helper afterward.';
-    fs.writeFileSync(path.join(lock,'status.txt'),status,{mode:0o600});
+  catch (error) { status = error.code === 'EEXIST' ? 'Setup was already started. Check its browser tab, or generate a new installer on Connect.' : 'Could not prepare setup. Download a new installer from Connect.'; return; }
+  // Electron utility processes cannot be relaunched as standalone Node. Keep
+  // setup inside the runtime Desktop already provided to this extension.
+  new DesktopInstaller(setup).start().catch(() => {
+    status = 'Could not open setup. Download a new installer from Connect and try again.';
   });
+  status = 'Setup opened in your browser. Complete sign-in and restart Desktop there.';
+  fs.writeFileSync(path.join(lock,'status.txt'),status,{mode:0o600});
 }, 1000);
 `;
 

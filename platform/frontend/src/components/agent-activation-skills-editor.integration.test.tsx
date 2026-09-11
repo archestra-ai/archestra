@@ -306,9 +306,7 @@ describe("AgentActivationSkillsEditor", () => {
       await screen.findByText(/Skill discovery is not enabled/i),
     ).toBeVisible();
     expect(screen.getByRole("tab", { name: "All" })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Disable Skill" }),
-    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Disable Skill" })).toBeVisible();
   });
 
   it("keeps a dirty draft after a revision conflict refetches the policy", async () => {

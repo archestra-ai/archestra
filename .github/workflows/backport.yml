@@ -25,6 +25,7 @@ concurrency:
 
 jobs:
   backport:
+    name: Open requested backport PRs
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

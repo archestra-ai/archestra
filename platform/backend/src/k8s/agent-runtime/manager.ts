@@ -75,6 +75,7 @@ import {
   type AgentRuntimeEgressPolicyObject,
   buildAgentRuntimeEnvironmentEgressPolicies,
 } from "./network-policy";
+import { resolvePlatformServiceDestination } from "./platform-service";
 import {
   type AgentRuntimeStartupProgress,
   type AgentRuntimeStartupProgressReporter,
@@ -173,6 +174,12 @@ class AgentRuntimeManager {
         platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
         platformPodLabels: config.agentRuntime.platformPodSelector,
         platformPorts: [config.api.port],
+        platformService: await resolvePlatformServiceDestination({
+          coreApi: clients.coreApi,
+          baseUrl: config.agentRuntime.platformBaseUrl,
+          runtimeNamespace: withOwner.namespace,
+          platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
+        }),
       }),
     );
 
@@ -1160,6 +1167,12 @@ class AgentRuntimeManager {
         platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
         platformPodLabels: config.agentRuntime.platformPodSelector,
         platformPorts: [config.api.port],
+        platformService: await resolvePlatformServiceDestination({
+          coreApi: clients.coreApi,
+          baseUrl: config.agentRuntime.platformBaseUrl,
+          runtimeNamespace: spec.namespace,
+          platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
+        }),
       }),
     );
     // Policies are additive. Leaving an old allow policy of a different kind

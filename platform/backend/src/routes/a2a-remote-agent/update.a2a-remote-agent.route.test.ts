@@ -4,12 +4,21 @@ import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentToolModel from "@/models/agent-tool";
 import { secretManager } from "@/secrets-manager";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { afterEach, describe, expect, test, useRouteTestApp } from "@/test";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
-import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
+import {
+  makeAgentCard,
+  startA2aDiscoveryFixture,
+} from "./a2a-remote-agent.test-helpers";
 
 describe("PUT /api/a2a/remote-agents/:id", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
+  let closeFixture: (() => Promise<void>) | undefined;
+
+  afterEach(async () => {
+    await closeFixture?.();
+    closeFixture = undefined;
+  });
 
   test("atomically replaces a connection credential without mutating it in place", async () => {
     const created = await ctx.app.inject({
@@ -118,6 +127,113 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
       organizationId: ctx.organizationId,
     });
     expect(after?.connection.secretId).toBe(before?.connection.secretId);
+  });
+
+  test("reuses the stored credential when refreshing a protected Agent Card", async () => {
+    const fixture = await startA2aDiscoveryFixture("bearer");
+    closeFixture = fixture.close;
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "well_known", url: fixture.baseUrl },
+        auth: { type: "bearer", credential: "fixture-bearer-token" },
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const before = await A2aRemoteAgentModel.findByIdForOrganization({
+      id: created.json().id,
+      organizationId: ctx.organizationId,
+    });
+
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/a2a/remote-agents/${created.json().id}`,
+      payload: {
+        source: { type: "well_known", url: `${fixture.baseUrl}/` },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: "Deterministic A2A Test Agent",
+      discoveryMode: "well_known",
+      discoveryUrl: `${fixture.baseUrl}/`,
+      connection: { authType: "bearer", hasCredential: true },
+    });
+    const after = await A2aRemoteAgentModel.findByIdForOrganization({
+      id: created.json().id,
+      organizationId: ctx.organizationId,
+    });
+    expect(after?.connection.secretId).toBe(before?.connection.secretId);
+    expect(JSON.stringify(response.json())).not.toContain(
+      "fixture-bearer-token",
+    );
+    expect(await fixture.requests()).toHaveLength(2);
+  });
+
+  test("requires a replacement credential before changing an authenticated discovery source", async () => {
+    const originalFixture = await startA2aDiscoveryFixture("bearer");
+    const changedFixture = await startA2aDiscoveryFixture("bearer");
+    closeFixture = async () => {
+      await Promise.all([originalFixture.close(), changedFixture.close()]);
+    };
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "well_known", url: originalFixture.baseUrl },
+        auth: { type: "bearer", credential: "fixture-bearer-token" },
+      },
+    });
+    expect(created.statusCode).toBe(200);
+
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/a2a/remote-agents/${created.json().id}`,
+      payload: {
+        source: { type: "well_known", url: changedFixture.baseUrl },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        message:
+          "A replacement credential is required when changing the Agent Card discovery source",
+      },
+    });
+    expect(await changedFixture.requests()).toEqual([]);
+  });
+
+  test("allows an unauthenticated connection to change discovery source", async () => {
+    const fixture = await startA2aDiscoveryFixture("none");
+    closeFixture = fixture.close;
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+      },
+    });
+    expect(created.statusCode).toBe(200);
+
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/a2a/remote-agents/${created.json().id}`,
+      payload: {
+        source: { type: "well_known", url: fixture.baseUrl },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      discoveryMode: "well_known",
+      discoveryUrl: fixture.baseUrl,
+      connection: { authType: "none", hasCredential: false },
+    });
+    expect(await fixture.requests()).toHaveLength(1);
   });
 
   test("adopts an author when a migrated organization row becomes personal", async () => {

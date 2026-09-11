@@ -3,7 +3,7 @@ title: External Agents
 category: Agents
 order: 13
 description: Connect external Agent2Agent systems and use them as subagents
-lastUpdated: 2026-09-09
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,9 +18,9 @@ Go to **Studio → Agents → External Agents**, then select **Connect agent**. 
 
 Only users with the **Agent settings: update** permission—organization administrators by default—can create, change, or remove these credential-bearing connections. Members who can edit an agent can assign connections that a settings manager has approved and that are visible to them.
 
-Enter the remote agent's base URL. Archestra discovers its Agent Card from `/.well-known/agent-card.json` and shows the detected agent beside the field.
+Enter the remote agent's base URL and authentication settings. Then select **Connect agent**. Archestra retrieves the card from `/.well-known/agent-card.json` with the selected bearer token or API key before saving the connection.
 
-Discovery checks media modes, required extensions, and the supported protocol interface. Saving checks the selected authentication scheme against the card. It does not send a task or validate the credential. The connection is marked verified only after a successful delegation.
+Connection validates media modes, required extensions, the protocol interface, and the selected authentication scheme. Select **Check Agent Card** to run the same validation without saving. Neither action sends a task. The connection is marked verified only after a successful delegation.
 
 Archestra supports A2A 1.x endpoints over JSON-RPC and HTTP+JSON. The selected endpoint is pinned from the validated card.
 
@@ -39,7 +39,7 @@ Use the visibility filters on the External Agents page to narrow the card or tab
 
 ## Edit Or Remove An External Agent
 
-Select an external agent card or table row to open its detail page. Settings managers can change its base URL, authentication, display details, or visibility, then select **Save changes**. To pause or resume the connection everywhere without removing its assignments, use **Disable delegation** or **Enable delegation** in the page actions menu. Leave the credential blank to keep the stored secret.
+Select an external agent card or table row to open its detail page. Settings managers can change its base URL, authentication, display details, or visibility, then select **Save changes**. To pause or resume the connection everywhere without removing its assignments, use **Disable delegation** or **Enable delegation** in the page actions menu. Leave the credential blank when the base URL and authentication stay unchanged. Enter it again when either setting changes.
 
 Opening the detail page rechecks Agent Cards discovered from a base URL. The connection section shows an error if the server is unavailable.
 
@@ -47,7 +47,7 @@ The **Edit** action opens the same detail page. To remove a connection, first re
 
 ## Authentication
 
-A connection can use no authentication, a bearer token, or an API key header. The connection record stores a secret reference, not the credential value, and public A2A responses expose only whether a credential is configured. This is the same shared secrets system used for LLM provider keys, MCP server credentials, knowledge connectors, and agent runtime credentials; depending on the deployment, it uses encrypted database storage or the configured Vault integration.
+A connection can use no authentication, a bearer token, or an API key header. The Agent Card check uses this authentication when the card is protected. The connection record stores a secret reference, not the credential value, and public A2A responses expose only whether a credential is configured. This is the same shared secrets system used for LLM provider keys, MCP server credentials, knowledge connectors, and agent runtime credentials; depending on the deployment, it uses encrypted database storage or the configured Vault integration.
 
 The chosen method must satisfy one security requirement advertised by the card. A bearer-protected card needs a bearer token, for example.
 

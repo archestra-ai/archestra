@@ -38,15 +38,19 @@ const MAX_A2A_RESPONSE_BYTES = 5 * 1024 * 1024;
 const A2A_REQUEST_TIMEOUT_MS = 30_000;
 const SUPPORTED_BINDINGS = new Set(["JSONRPC", "HTTP+JSON"]);
 
-export async function inspectA2aRemoteAgent(
-  input: InspectA2aRemoteAgentRequest,
-): Promise<A2aRemoteAgentInspection> {
-  const card = await resolveAgentCard(input.source);
+export async function inspectA2aRemoteAgent(params: {
+  input: InspectA2aRemoteAgentRequest;
+  organizationId: string;
+}): Promise<A2aRemoteAgentInspection> {
+  const auth = await resolveInspectionAuth(params);
+  const card = await resolveAgentCard(params.input.source, auth);
   return inspectResolvedCard({
     card,
-    authType: input.auth?.type,
+    authType: params.input.auth?.type,
     apiKeyHeader:
-      input.auth?.type === "api_key" ? input.auth.headerName : undefined,
+      params.input.auth?.type === "api_key"
+        ? params.input.auth.headerName
+        : undefined,
   });
 }
 
@@ -81,7 +85,10 @@ export async function createA2aRemoteAgent(params: {
   input: CreateA2aRemoteAgentRequest;
 }): Promise<PublicA2aRemoteAgent> {
   const input = CreateA2aRemoteAgentRequestSchema.parse(params.input);
-  const inspection = await inspectA2aRemoteAgent(input);
+  const inspection = await inspectA2aRemoteAgent({
+    input,
+    organizationId: params.organizationId,
+  });
   const visibility = await resolveVisibility({
     organizationId: params.organizationId,
     scope:
@@ -172,6 +179,16 @@ export async function updateA2aRemoteAgent(params: {
     users: params.input.users ?? existingVisibility.userIds,
   });
   const source = params.input.source ?? sourceFromStored(existing.remoteAgent);
+  const changesAuthenticatedDiscoverySource =
+    params.input.source !== undefined &&
+    existing.connection.authType !== "none" &&
+    !sameDiscoverySource(params.input.source, existing.remoteAgent);
+  if (changesAuthenticatedDiscoverySource && params.input.auth === undefined) {
+    throw new ApiError(
+      400,
+      "A replacement credential is required when changing the Agent Card discovery source",
+    );
+  }
   const authType = params.input.auth?.type ?? existing.connection.authType;
   const apiKeyHeader =
     params.input.auth?.type === "api_key"
@@ -180,7 +197,11 @@ export async function updateA2aRemoteAgent(params: {
         ? existing.connection.authConfig.headerName
         : undefined;
   const card = params.input.source
-    ? await resolveAgentCard(source)
+    ? await resolveAgentCard(
+        source,
+        params.input.auth ??
+          (await authenticatedDiscoveryFromStored(existing.connection)),
+      )
     : (existing.remoteAgent.agentCard as unknown as AgentCard);
   const inspection = inspectResolvedCard({ card, authType, apiKeyHeader });
   const nextName = params.input.name ?? existing.remoteAgent.name;
@@ -379,8 +400,13 @@ async function requireRemoteAgent(params: {
   return row;
 }
 
-async function resolveAgentCard(source: A2aRemoteAgentSource) {
-  const resolver = new DefaultAgentCardResolver({ fetchImpl: safeA2aFetch });
+async function resolveAgentCard(
+  source: A2aRemoteAgentSource,
+  auth?: AuthenticatedA2aDiscovery,
+) {
+  const resolver = new DefaultAgentCardResolver({
+    fetchImpl: buildDiscoveryFetch(auth),
+  });
   try {
     if (source.type === "inline_card") {
       return resolver.normalizeAgentCard(source.agentCard);
@@ -388,18 +414,183 @@ async function resolveAgentCard(source: A2aRemoteAgentSource) {
     if (source.type === "card_url") {
       return await resolver.resolve(source.url, "");
     }
-    const baseUrl = new URL(source.url);
-    const basePath = baseUrl.pathname.replace(/\/+$/, "");
-    baseUrl.pathname = `${basePath}/.well-known/agent-card.json`;
-    baseUrl.search = "";
-    baseUrl.hash = "";
-    return await resolver.resolve(baseUrl.href, "");
+    return await resolver.resolve(wellKnownAgentCardUrl(source.url).href, "");
   } catch (error) {
     throw new ApiError(
       400,
       `Unable to resolve the A2A Agent Card: ${safeErrorMessage(error)}`,
     );
   }
+}
+
+async function resolveInspectionAuth(params: {
+  input: InspectA2aRemoteAgentRequest;
+  organizationId: string;
+}): Promise<AuthenticatedA2aDiscovery | undefined> {
+  const { auth, remoteAgentId } = params.input;
+  if (!auth || auth.type === "none") return auth;
+  if (auth.credential !== undefined) {
+    return auth.type === "bearer"
+      ? { type: "bearer", credential: auth.credential }
+      : {
+          type: "api_key",
+          headerName: auth.headerName,
+          credential: auth.credential,
+        };
+  }
+  if (!remoteAgentId) {
+    throw new ApiError(
+      400,
+      "A saved outbound A2A agent is required when reusing a credential",
+    );
+  }
+  const existing = await requireRemoteAgent({
+    id: remoteAgentId,
+    organizationId: params.organizationId,
+  });
+  assertStoredAuthReuseCompatible(existing.connection, auth);
+  if (!sameDiscoverySource(params.input.source, existing.remoteAgent)) {
+    throw new ApiError(
+      400,
+      "Stored credential cannot be reused for a different Agent Card discovery source",
+    );
+  }
+  return {
+    ...auth,
+    credential: await readStoredCredential(existing.connection.secretId),
+  };
+}
+
+async function authenticatedDiscoveryFromStored(connection: {
+  authType: A2aConnectionAuthType;
+  authConfig: { headerName?: string };
+  secretId: string | null;
+}): Promise<AuthenticatedA2aDiscovery> {
+  if (connection.authType === "none") return { type: "none" };
+  const credential = await readStoredCredential(connection.secretId);
+  if (connection.authType === "bearer") {
+    return { type: "bearer", credential };
+  }
+  const headerName = connection.authConfig.headerName;
+  if (!headerName) {
+    throw new ApiError(400, "Stored outbound A2A API-key header is missing");
+  }
+  return { type: "api_key", headerName, credential };
+}
+
+async function readStoredCredential(secretId: string | null): Promise<string> {
+  if (!secretId) {
+    throw new ApiError(400, "Stored outbound A2A credential is missing");
+  }
+  const stored = await secretManager().getSecret(secretId);
+  const secret = stored?.secret as Record<string, unknown> | null;
+  const credential = secret?.credential;
+  if (typeof credential !== "string" || !credential) {
+    throw new ApiError(400, "Stored outbound A2A credential is unreadable");
+  }
+  return credential;
+}
+
+function assertStoredAuthReuseCompatible(
+  connection: {
+    authType: A2aConnectionAuthType;
+    authConfig: { headerName?: string };
+  },
+  auth:
+    | { type: "bearer"; credential?: string }
+    | { type: "api_key"; headerName: string; credential?: string },
+): void {
+  const sameType = connection.authType === auth.type;
+  const sameApiKeyHeader =
+    auth.type !== "api_key" ||
+    connection.authConfig.headerName?.toLowerCase() ===
+      auth.headerName.toLowerCase();
+  if (!sameType || !sameApiKeyHeader) {
+    throw new ApiError(
+      400,
+      "Stored credential does not match the requested authentication configuration",
+    );
+  }
+}
+
+function buildDiscoveryFetch(auth?: AuthenticatedA2aDiscovery): typeof fetch {
+  if (!auth || auth.type === "none") return safeA2aFetch;
+  const headerName = auth.type === "bearer" ? "authorization" : auth.headerName;
+  const headerValue =
+    auth.type === "bearer" ? `Bearer ${auth.credential}` : auth.credential;
+
+  return async (input, init) => {
+    let headers: Headers;
+    try {
+      headers = new Headers(
+        input instanceof Request ? input.headers : undefined,
+      );
+      new Headers(init?.headers).forEach((value, name) => {
+        headers.set(name, value);
+      });
+      headers.set(headerName, headerValue);
+    } catch {
+      throw new Error("A2A authentication header is invalid");
+    }
+    return safeA2aFetch(input, { ...init, headers });
+  };
+}
+
+type AuthenticatedA2aDiscovery =
+  | { type: "none" }
+  | { type: "bearer"; credential: string }
+  | { type: "api_key"; headerName: string; credential: string };
+
+function sameDiscoverySource(
+  requested: A2aRemoteAgentSource,
+  stored: {
+    discoveryMode: "well_known" | "card_url" | "inline_card";
+    discoveryUrl: string | null;
+    agentCard: Record<string, unknown>;
+  },
+): boolean {
+  const storedSource = sourceFromStored(stored);
+  const requestedKey = canonicalDiscoverySource(requested);
+  const storedKey = canonicalDiscoverySource(storedSource);
+  return requestedKey !== null && requestedKey === storedKey;
+}
+
+function canonicalDiscoverySource(source: A2aRemoteAgentSource): string | null {
+  try {
+    if (source.type === "well_known") {
+      return `well_known:${wellKnownAgentCardUrl(source.url).href}`;
+    }
+    if (source.type === "card_url") {
+      const cardUrl = new URL(source.url);
+      cardUrl.hash = "";
+      return `card_url:${cardUrl.href}`;
+    }
+    const resolver = new DefaultAgentCardResolver({ fetchImpl: safeA2aFetch });
+    const normalized = resolver.normalizeAgentCard(source.agentCard);
+    return `inline_card:${stableStringify(normalized)}`;
+  } catch {
+    return null;
+  }
+}
+
+function wellKnownAgentCardUrl(rawUrl: string): URL {
+  const baseUrl = new URL(rawUrl);
+  const basePath = baseUrl.pathname.replace(/\/+$/, "");
+  baseUrl.pathname = `${basePath}/.well-known/agent-card.json`;
+  baseUrl.search = "";
+  baseUrl.hash = "";
+  return baseUrl;
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (!isRecord(value)) return JSON.stringify(value) ?? "null";
+  return `{${Object.entries(value)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+    .join(",")}}`;
 }
 
 function inspectResolvedCard(params: {

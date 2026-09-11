@@ -292,7 +292,7 @@ function DetailShell({
 function FormSkeleton() {
   return (
     <SettingsSectionGroup>
-      {["Agent Card", "Authentication", "Details", "Access"].map((title) => (
+      {["Connection", "Details", "Access"].map((title) => (
         <SettingsSection key={title} title={title}>
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />

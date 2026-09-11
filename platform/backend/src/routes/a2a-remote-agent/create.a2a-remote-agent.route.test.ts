@@ -2,12 +2,21 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import { secretManager } from "@/secrets-manager";
-import { describe, expect, test, useRouteTestApp } from "@/test";
+import { afterEach, describe, expect, test, useRouteTestApp } from "@/test";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
-import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
+import {
+  makeAgentCard,
+  startA2aDiscoveryFixture,
+} from "./a2a-remote-agent.test-helpers";
 
 describe("POST /api/a2a/remote-agents", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
+  let closeFixture: (() => Promise<void>) | undefined;
+
+  afterEach(async () => {
+    await closeFixture?.();
+    closeFixture = undefined;
+  });
 
   test("persists a credential-backed connection without exposing credential material", async () => {
     const response = await ctx.app.inject({
@@ -63,6 +72,37 @@ describe("POST /api/a2a/remote-agents", () => {
     });
     expect(auditSnapshot).not.toHaveProperty("secretId");
     expect(JSON.stringify(auditSnapshot)).not.toContain("a2a-super-secret");
+  });
+
+  test("uses configured authentication while discovering the card to save", async () => {
+    const fixture = await startA2aDiscoveryFixture("api-key");
+    closeFixture = fixture.close;
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "well_known", url: fixture.baseUrl },
+        auth: {
+          type: "api_key",
+          headerName: "X-API-Key",
+          credential: "fixture-api-key",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: "Deterministic A2A Test Agent",
+      discoveryMode: "well_known",
+      discoveryUrl: fixture.baseUrl,
+      connection: {
+        authType: "api_key",
+        authConfig: { headerName: "X-API-Key" },
+        hasCredential: true,
+      },
+    });
+    expect(JSON.stringify(response.json())).not.toContain("fixture-api-key");
   });
 
   test("round-trips team visibility and rejects invalid team audiences", async ({

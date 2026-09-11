@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.0-beta.6](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.5...platform-v1.4.0-beta.6) (2026-09-11)
+
+
+### Bug Fixes
+
+* **a2a:** authenticate and validate agent connections ([#7836](https://github.com/archestra-ai/archestra/issues/7836)) ([20a984a](https://github.com/archestra-ai/archestra/commit/20a984a5e5eaf66d9c8bdc73342eeeb8afed49a6))
+* **frontend:** clarify inaccessible log sessions ([#7839](https://github.com/archestra-ai/archestra/issues/7839)) ([988fba3](https://github.com/archestra-ai/archestra/commit/988fba347ba0cc7eb07c799dd324279b1b28d443))
+* **github-copilot:** repair follow-up and nonstreaming inference ([#7842](https://github.com/archestra-ai/archestra/issues/7842)) ([42098f1](https://github.com/archestra-ai/archestra/commit/42098f158b7d9f646145c0ada001777d71b761a8))
+
 ## [1.4.0-beta.5](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.4...platform-v1.4.0-beta.5) (2026-09-11)
 
 

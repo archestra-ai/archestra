@@ -869,7 +869,24 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     }) => {
       const client = createOpenAI({ apiKey, baseURL, headers, fetch });
       return requiresResponsesApi(supportedEndpoints)
-        ? client.responses(modelName)
+        ? wrapLanguageModel({
+            model: client.responses(modelName),
+            middleware: {
+              specificationVersion: "v3",
+              transformParams: async ({ params }) => ({
+                ...params,
+                providerOptions: {
+                  ...params.providerOptions,
+                  openai: {
+                    ...params.providerOptions?.openai,
+                    // Copilot cannot resolve stored output-item references.
+                    // Send the conversation contents on every turn instead.
+                    store: false,
+                  },
+                },
+              }),
+            },
+          })
         : client.chat(modelName);
     },
     defaultBaseUrl: config.llm["github-copilot"].baseUrl,

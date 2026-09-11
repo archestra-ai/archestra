@@ -60,6 +60,7 @@ describe("AppaPluginArchestra", () => {
           name: "Bash",
           arguments: { command: "ls -la" },
           raw: expect.any(Object),
+          spawn: false,
         },
       ]);
     });
@@ -144,6 +145,7 @@ describe("AppaPluginArchestra", () => {
           name: "exec_command",
           arguments: { cmd: "pwd" },
           raw: expect.any(Object),
+          spawn: false,
         },
       ]);
     });
@@ -220,8 +222,84 @@ describe("AppaPluginArchestra", () => {
           name: "read_file",
           arguments: { path: "foo.txt" },
           raw: expect.any(Object),
+          spawn: false,
         },
       ]);
+    });
+
+    test("canonicalizes local tool names into canonical APPA namespaces", () => {
+      expect(adapter.canonicalizeLocalToolName("read_file")).toBe(
+        "builtin:read_file",
+      );
+      expect(adapter.canonicalizeLocalToolName("builtin:already")).toBe(
+        "builtin:already",
+      );
+      expect(adapter.canonicalizeLocalToolName("mcp:custom/tool")).toBe(
+        "mcp:custom/tool",
+      );
+    });
+  });
+
+  describe("canonicalizeLocalToolName and spawn detection across adapters", () => {
+    test("claude-code projects local tools and detects subagent spawns", () => {
+      const claude = new AppaClaudeCodeAdapter();
+      expect(claude.canonicalizeLocalToolName("Bash")).toBe(
+        "host/claude-code/Bash",
+      );
+      expect(claude.canonicalizeLocalToolName("mcp__gw__read")).toBe(
+        "mcp__gw__read",
+      );
+
+      const calls = claude.extractToolCalls({
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Agent",
+            input: { prompt: "sub-task" },
+          },
+          {
+            type: "tool_use",
+            id: "t2",
+            name: "Bash",
+            input: { command: "uptime" },
+          },
+        ],
+      });
+      expect(calls[0].spawn).toBe(true);
+      expect(calls[1].spawn).toBe(false);
+    });
+
+    test("codex projects function names and detects subagent spawns", () => {
+      const codex = new AppaCodexAdapter();
+      expect(codex.canonicalizeLocalToolName("functions.exec_command")).toBe(
+        "builtin:exec_command",
+      );
+      expect(codex.canonicalizeLocalToolName("write_file")).toBe(
+        "builtin:write_file",
+      );
+      expect(codex.canonicalizeLocalToolName("builtin:exec")).toBe(
+        "builtin:exec",
+      );
+
+      const calls = codex.extractToolCalls({
+        output: [
+          {
+            type: "function_call",
+            call_id: "c1",
+            name: "spawn_agent",
+            arguments: "{}",
+          },
+          {
+            type: "function_call",
+            call_id: "c2",
+            name: "exec_command",
+            arguments: "{}",
+          },
+        ],
+      });
+      expect(calls[0].spawn).toBe(true);
+      expect(calls[1].spawn).toBe(false);
     });
   });
 });

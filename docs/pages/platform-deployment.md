@@ -919,21 +919,7 @@ Upgrading from a chart that ran the included engine leaves its cache volume behi
 
 ### Agent Runtime
 
-Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_*`. Install the upstream Agent Sandbox controller before enabling it:
-
-```sh
-kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
-kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
-kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
-```
-
-Use Linux nodes and a storage class with dynamic volume provisioning. For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve workspaces after node loss. Runtime workloads need access to the image registry, DNS, and the platform API. Install the Helm chart's runtime permissions in each execution namespace.
-
-Privileged workloads require deployment approval, an Agent override, and compatible cluster admission policies. Use a dedicated node pool; your cloud provider may restrict privileged containers. Ordinary coding clients do not require privilege.
-
-For local development, set `ARCHESTRA_AGENT_RUNTIME_ENABLED=true` in `platform/.env` and run `tilt up`. Tilt installs the controller and checks storage readiness.
-
-Upgrade the Helm chart together with the backend. Older volume-based Claude connections require fresh sign-in. Existing account volumes are not migrated or removed automatically.
+Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_*`. See [Cluster Prerequisites](/docs/platform-agent-runtime#cluster-prerequisites) for controller installation, storage, and privileged workload setup. Configure deployment defaults below; individual Agents can override supported run settings.
 
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`

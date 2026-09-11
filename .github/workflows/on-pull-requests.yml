@@ -247,7 +247,7 @@ jobs:
   # same-named twin would mask real failures on merge_group. The guard only
   # bites on pull_request events: on merge_group, github.event.pull_request
   # is null and the first clause short-circuits, so queue validation runs
-  # unchanged.
+  # unchanged. Backport PRs from the same App run normal checks.
   #
   # EXCEPTION: platform-lint-and-unit-tests must still run on release-please
   # PRs — it auto-commits the regenerated docs/openapi.json version bump onto
@@ -382,6 +382,9 @@ jobs:
           pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
 
+      - name: Test backport automation
+        run: python3 ../.github/scripts/test_backport.py
+
       # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
       # brand instead of resolving the deployment's app name. Occurrences that
       # legitimately name the vendor carry an inline `white-label-ok:` reason.
@@ -496,7 +499,7 @@ jobs:
   platform-rust-checks:
     name: Platform Rust Checks
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
@@ -559,7 +562,7 @@ jobs:
   ai-labs-rust-checks:
     name: AI Labs Rust Checks
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
@@ -623,7 +626,7 @@ jobs:
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/8)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup and the cargo build (~3-3.5 min/shard in
@@ -730,7 +733,7 @@ jobs:
     # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
     # gate must skip too — with plain always() it would run and fail on the
     # shards' "skipped" result.
-    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
     needs: [backend-unit-tests]
     permissions: {}
     steps:
@@ -747,7 +750,7 @@ jobs:
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
     permissions:
@@ -880,7 +883,7 @@ jobs:
   frontend-integration-tests-gate:
     name: Frontend Integration Tests (MSW)
     runs-on: ubuntu-latest
-    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
     needs: [frontend-integration-tests]
     permissions: {}
     steps:

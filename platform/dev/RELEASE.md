@@ -15,18 +15,44 @@ Archestra uses two release pipelines:
 ## Ship A Stable Fix
 
 1. [ ] Land the fix on `main` first. The fix ships automatically in the next beta.
-2. [ ] Create a backport branch from the active stable branch (`release/X.Y`):
-   ```bash
-   git checkout -b backport/fix-name origin/release/X.Y
-   git cherry-pick -x <main-commit-sha>
-   ```
-3. [ ] Open a PR targeting `release/X.Y`. Confirm tests pass and merge.
+2. [ ] Add the label `backport release/X.Y` for each configured target (for example, `backport release/1.3`).
+   - The label can be added before or after the main PR merges. The workflow checks requests every five minutes.
+   - **Open Backport PRs** cherry-picks the merged commit with `-x` and opens a separate PR per target.
+   - The automation opens PRs; it never merges them or approves stable publication.
+3. [ ] Review each generated backport PR, confirm its checks pass, then add it to that branch's merge queue.
    - Only include necessary bug fixes. Do not include new features, refactors, or schema migrations.
-   - If an unreleased candidate branch (such as `release/1.4`) also needs the fix, repeat step 2 for that candidate branch.
+   - Conflicts and schema changes produce a manual-action comment instead of a pushed backport.
    - Never merge `main` into a release branch.
    - Review the migration compatibility check. A green result does not permit schema migrations in a stable fix.
 4. [ ] Merge the generated release-please patch PR on `release/X.Y` (for example, `1.3.52`).
 5. [ ] Complete **Test And Approve Stable** below.
+
+### Backport Targets And Recovery
+
+`.github/backport-targets.json` is the explicit list of branches that accept automatic backport requests.
+Add each new stable or candidate branch there, and create its `backport release/X.Y` label.
+Remove retired branches from that list when making them read-only.
+The workflow always runs trusted automation from the default branch, including manual retries.
+
+Use **Open Backport PRs → Run workflow** to retry a merged main PR.
+Supply its number and, optionally, one configured target branch.
+An existing backport PR, including a closed PR, is not duplicated or reopened.
+Label requests remain discoverable after workflow outages. Remove the request label when abandoning a backport.
+An existing backport branch is never force-pushed or reset.
+A push that succeeded before PR creation failed can resume if its source provenance matches.
+
+For conflicts, create a manual branch from the release target and resolve the cherry-pick:
+
+```bash
+git checkout -b backport/fix-name origin/release/X.Y
+git cherry-pick -x <main-commit-sha>
+```
+
+Open a PR against `release/X.Y` and complete the same review and release checks.
+A schema migration is not eligible for automatic backporting; prepare a stable fix without it.
+
+The workflow uses the existing release GitHub App token so generated PRs trigger CI.
+Backport PRs receive the usual reviewer assignment and run checks even though the release App authored them.
 
 ## Migration Compatibility Across Release Tracks
 

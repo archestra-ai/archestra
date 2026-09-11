@@ -13,7 +13,9 @@ import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SourceBadge } from "@/components/source-badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,9 +61,14 @@ export default function SessionDetailPage({
     });
 
   // Fetch session metadata (profile name, user names, etc.)
-  const { data: sessionResponse } = useInteractionSessions({
+  const {
+    data: sessionResponse,
+    isLoadingError: sessionLoadingError,
+    refetch: refetchSession,
+  } = useInteractionSessions({
     sessionId: sessionId,
     limit: 1,
+    toastOnError: false,
   });
 
   const interactions = interactionsResponse?.data ?? [];
@@ -130,6 +137,45 @@ export default function SessionDetailPage({
       )
     : [];
   const conversationChatErrors = lastMainRequest?.chatErrors ?? [];
+
+  const unavailableSession =
+    sessionResponse !== undefined && sessionResponse.data.length === 0;
+
+  if (sessionLoadingError) {
+    return (
+      <PageLayout
+        title="Session"
+        backLink={
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load this session"
+          onRetry={() => refetchSession()}
+        />
+      </PageLayout>
+    );
+  }
+
+  if (unavailableSession) {
+    return (
+      <PageLayout
+        title="Session unavailable"
+        documentTitle="Session unavailable"
+        backLink={
+          <PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>
+        }
+      >
+        <Alert variant="destructive">
+          <AlertTitle>Session unavailable</AlertTitle>
+          <AlertDescription>
+            You do not have permission to view this session, or it no longer
+            exists.
+          </AlertDescription>
+        </Alert>
+      </PageLayout>
+    );
+  }
 
   // The session's own numbers, as one wrapping row under the header. Labels
   // drop the "Total" every one of them used to carry: the page is a single

@@ -40,10 +40,6 @@ kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-syst
 
 The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
 
-### Local Development With Tilt
-
-Set `ARCHESTRA_AGENT_RUNTIME_ENABLED=true` in `platform/.env`, then run `tilt up`. Tilt installs the pinned controller and checks storage readiness. Your local cluster needs a default storage class with dynamic provisioning.
-
 ### Provider Setup
 
 | Cluster | Setup |

@@ -159,3 +159,125 @@ describe("GitHub Copilot proxy — upstream model rejection (T-959)", () => {
     expect(response.body).toContain("The requested model is not supported.");
   });
 });
+
+describe("GitHub Copilot Responses account routing", () => {
+  test.for([
+    false,
+    true,
+  ])("completes a Responses request at the exchanged API endpoint (stream=%s)", async (stream, {
+    makeAgent,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    const agent = await makeAgent({ name: "Copilot Responses Agent" });
+    const model = "gpt-5.3-codex";
+    const text = "Hello from Copilot";
+    const result = {
+      id: "resp_test",
+      object: "response",
+      created_at: 123,
+      model,
+      status: "completed",
+      output: [
+        {
+          id: "msg_test",
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text, annotations: [] }],
+        },
+      ],
+      usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
+    };
+    let upstreamCalls = 0;
+    // Drain MSW's response clone so the SDK can cancel its SSE reader when
+    // the proxy stops at response.completed without waiting on the other tee.
+    const drainResponse = ({ response }: { response: Response }) => {
+      void response.arrayBuffer();
+    };
+    server.events.on("response:mocked", drainResponse);
+    server.use(
+      http.get(COPILOT_TOKEN_EXCHANGE_URL, () =>
+        HttpResponse.json({
+          token: "copilot-responses-bearer",
+          expires_at: Math.floor(Date.now() / 1000) + 1800,
+          endpoints: { api: "https://api.business.githubcopilot.com" },
+        }),
+      ),
+      http.post("https://api.githubcopilot.com/responses", () =>
+        HttpResponse.json(
+          {
+            error: { message: "", type: "api_not_found_error" },
+          },
+          { status: 404 },
+        ),
+      ),
+      http.post(
+        "https://api.business.githubcopilot.com/responses",
+        async ({ request }) => {
+          upstreamCalls++;
+          expect(request.headers.get("authorization")).toBe(
+            "Bearer copilot-responses-bearer",
+          );
+          expect(request.headers.get("copilot-integration-id")).toBe(
+            "vscode-chat",
+          );
+          expect(await request.json()).toMatchObject({ model, stream });
+          if (!stream) return HttpResponse.json(result);
+          const events = [
+            {
+              type: "response.created",
+              response: { ...result, status: "in_progress", output: [] },
+            },
+            {
+              type: "response.output_item.added",
+              output_index: 0,
+              item: { ...result.output[0], content: [] },
+            },
+            {
+              type: "response.output_text.delta",
+              output_index: 0,
+              content_index: 0,
+              item_id: "msg_test",
+              delta: text,
+            },
+            {
+              type: "response.output_item.done",
+              output_index: 0,
+              item: result.output[0],
+            },
+            { type: "response.completed", response: result },
+          ];
+          return new HttpResponse(
+            events
+              .map(
+                (event) =>
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              )
+              .join(""),
+            {
+              headers: { "content-type": "text/event-stream" },
+            },
+          );
+        },
+      ),
+    );
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/github-copilot/${agent.id}/responses`,
+        headers: { authorization: `Bearer ${uniqueGithubToken()}` },
+        payload: { model, input: "Hello", stream },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain(text);
+      expect(upstreamCalls).toBe(1);
+      if (stream) expect(response.body).toContain("response.completed");
+      else
+        expect(response.json()).toMatchObject({ model, output: result.output });
+    } finally {
+      server.events.removeListener("response:mocked", drainResponse);
+      await app.close();
+    }
+  });
+});

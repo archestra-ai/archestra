@@ -19,9 +19,11 @@ function uniqueGithubToken(): string {
 function exchangeResponse(params?: {
   token?: string;
   expiresInSeconds?: number;
+  apiEndpoint?: string;
 }): Response {
   return Response.json({
     token: params?.token ?? "copilot-bearer",
+    endpoints: { api: params?.apiEndpoint },
     expires_at:
       Math.floor(Date.now() / 1000) + (params?.expiresInSeconds ?? 1800),
   });
@@ -31,13 +33,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("githubCopilotTokenManager.getBearerToken", () => {
+describe("githubCopilotTokenManager.getCredentials", () => {
   test("exchanges the GitHub token with the token scheme and editor headers", async () => {
     const githubToken = uniqueGithubToken();
     const fetchMock = vi.fn().mockResolvedValue(exchangeResponse());
     vi.stubGlobal("fetch", fetchMock);
 
-    const bearer = await githubCopilotTokenManager.getBearerToken(githubToken);
+    const bearer = await getBearerToken(githubToken);
 
     expect(bearer).toBe("copilot-bearer");
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -51,8 +53,8 @@ describe("githubCopilotTokenManager.getBearerToken", () => {
     const fetchMock = vi.fn().mockResolvedValue(exchangeResponse());
     vi.stubGlobal("fetch", fetchMock);
 
-    await githubCopilotTokenManager.getBearerToken(githubToken);
-    await githubCopilotTokenManager.getBearerToken(githubToken);
+    await getBearerToken(githubToken);
+    await getBearerToken(githubToken);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -68,8 +70,8 @@ describe("githubCopilotTokenManager.getBearerToken", () => {
       .mockResolvedValueOnce(exchangeResponse({ token: "fresh" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await githubCopilotTokenManager.getBearerToken(githubToken);
-    const bearer = await githubCopilotTokenManager.getBearerToken(githubToken);
+    await getBearerToken(githubToken);
+    const bearer = await getBearerToken(githubToken);
 
     expect(bearer).toBe("fresh");
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -87,8 +89,8 @@ describe("githubCopilotTokenManager.getBearerToken", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const [first, second] = [
-      githubCopilotTokenManager.getBearerToken(githubToken),
-      githubCopilotTokenManager.getBearerToken(githubToken),
+      getBearerToken(githubToken),
+      getBearerToken(githubToken),
     ];
     resolveExchange(exchangeResponse());
 
@@ -105,11 +107,9 @@ describe("githubCopilotTokenManager.getBearerToken", () => {
       .mockResolvedValueOnce(exchangeResponse());
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(
-      githubCopilotTokenManager.getBearerToken(githubToken),
-    ).rejects.toThrow(ApiError);
+    await expect(getBearerToken(githubToken)).rejects.toThrow(ApiError);
 
-    const bearer = await githubCopilotTokenManager.getBearerToken(githubToken);
+    const bearer = await getBearerToken(githubToken);
     expect(bearer).toBe("copilot-bearer");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -121,9 +121,7 @@ describe("githubCopilotTokenManager.getBearerToken", () => {
       vi.fn().mockResolvedValue(new Response("forbidden", { status: 403 })),
     );
 
-    await expect(
-      githubCopilotTokenManager.getBearerToken(githubToken),
-    ).rejects.toMatchObject({
+    await expect(getBearerToken(githubToken)).rejects.toMatchObject({
       statusCode: 401,
       message: expect.stringContaining("Copilot subscription"),
     });
@@ -136,9 +134,9 @@ describe("githubCopilotTokenManager.getBearerToken", () => {
       vi.fn().mockResolvedValue(Response.json({ unexpected: true })),
     );
 
-    await expect(
-      githubCopilotTokenManager.getBearerToken(githubToken),
-    ).rejects.toMatchObject({ statusCode: 502 });
+    await expect(getBearerToken(githubToken)).rejects.toMatchObject({
+      statusCode: 502,
+    });
   });
 
   test("invalidate() with a stale bearer keeps an already-refreshed entry", async () => {
@@ -148,14 +146,10 @@ describe("githubCopilotTokenManager.getBearerToken", () => {
       .mockResolvedValueOnce(exchangeResponse({ token: "fresh" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    expect(await githubCopilotTokenManager.getBearerToken(githubToken)).toBe(
-      "fresh",
-    );
+    expect(await getBearerToken(githubToken)).toBe("fresh");
     // A concurrent 401 handler that used an older bearer must not evict it.
     githubCopilotTokenManager.invalidate(githubToken, "stale");
-    expect(await githubCopilotTokenManager.getBearerToken(githubToken)).toBe(
-      "fresh",
-    );
+    expect(await getBearerToken(githubToken)).toBe("fresh");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -167,17 +161,54 @@ describe("githubCopilotTokenManager.getBearerToken", () => {
       .mockResolvedValueOnce(exchangeResponse({ token: "second" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    expect(await githubCopilotTokenManager.getBearerToken(githubToken)).toBe(
-      "first",
-    );
+    expect(await getBearerToken(githubToken)).toBe("first");
     githubCopilotTokenManager.invalidate(githubToken);
-    expect(await githubCopilotTokenManager.getBearerToken(githubToken)).toBe(
-      "second",
-    );
+    expect(await getBearerToken(githubToken)).toBe("second");
   });
 });
 
 describe("createGithubCopilotFetch", () => {
+  test.each([
+    [
+      "https://api.githubcopilot.com/responses",
+      "https://api.business.githubcopilot.com/responses",
+    ],
+    [
+      "https://api.githubcopilot.com/chat/completions",
+      "https://api.business.githubcopilot.com/chat/completions",
+    ],
+    [
+      "https://api.githubcopilot.com/models?limit=10",
+      "https://api.business.githubcopilot.com/models?limit=10",
+    ],
+    [
+      "https://copilot-api.example.com/responses",
+      "https://copilot-api.example.com/responses",
+    ],
+    [
+      "http://localhost:8080/copilot/responses",
+      "http://localhost:8080/copilot/responses",
+    ],
+  ])("routes %s using the account endpoint while preserving custom URLs", async (input, expected) => {
+    const githubToken = uniqueGithubToken();
+    const exchangeMock = vi.fn().mockResolvedValue(
+      exchangeResponse({
+        apiEndpoint: "https://api.business.githubcopilot.com/",
+      }),
+    );
+    vi.stubGlobal("fetch", exchangeMock);
+    const innerFetch = vi.fn().mockImplementation(async (url, init) => {
+      expect(String(url)).toBe(expected);
+      expect(init.headers.get("authorization")).toBe("Bearer copilot-bearer");
+      return new Response("ok");
+    });
+    const copilotFetch = createGithubCopilotFetch({ githubToken, innerFetch });
+    await copilotFetch(input);
+    await copilotFetch(input);
+    expect(exchangeMock).toHaveBeenCalledTimes(1);
+    expect(innerFetch).toHaveBeenCalledTimes(2);
+  });
+
   test("injects the exchanged bearer and Copilot headers into requests", async () => {
     const githubToken = uniqueGithubToken();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(exchangeResponse()));
@@ -191,7 +222,8 @@ describe("createGithubCopilotFetch", () => {
     });
 
     expect(innerFetch).toHaveBeenCalledTimes(1);
-    const [, init] = innerFetch.mock.calls[0];
+    const [url, init] = innerFetch.mock.calls[0];
+    expect(url).toBe("https://api.githubcopilot.com/chat/completions");
     const headers = init.headers as Headers;
     expect(headers.get("authorization")).toBe("Bearer copilot-bearer");
     expect(headers.get("copilot-integration-id")).toBe("vscode-chat");
@@ -203,8 +235,18 @@ describe("createGithubCopilotFetch", () => {
     const githubToken = uniqueGithubToken();
     const exchangeMock = vi
       .fn()
-      .mockResolvedValueOnce(exchangeResponse({ token: "stale" }))
-      .mockResolvedValueOnce(exchangeResponse({ token: "fresh" }));
+      .mockResolvedValueOnce(
+        exchangeResponse({
+          token: "stale",
+          apiEndpoint: "https://api.individual.githubcopilot.com",
+        }),
+      )
+      .mockResolvedValueOnce(
+        exchangeResponse({
+          token: "fresh",
+          apiEndpoint: "https://api.business.githubcopilot.com",
+        }),
+      );
     vi.stubGlobal("fetch", exchangeMock);
 
     const innerFetch = vi
@@ -223,6 +265,12 @@ describe("createGithubCopilotFetch", () => {
     expect(innerFetch).toHaveBeenCalledTimes(2);
     const retryHeaders = innerFetch.mock.calls[1][1].headers as Headers;
     expect(retryHeaders.get("authorization")).toBe("Bearer fresh");
+    expect(String(innerFetch.mock.calls[0][0])).toBe(
+      "https://api.individual.githubcopilot.com/chat/completions",
+    );
+    expect(String(innerFetch.mock.calls[1][0])).toBe(
+      "https://api.business.githubcopilot.com/chat/completions",
+    );
   });
 
   test("does not retry a 401 when the body is not replayable", async () => {
@@ -284,3 +332,7 @@ describe("createGithubCopilotFetch", () => {
     expect(init).toBeUndefined();
   });
 });
+
+async function getBearerToken(githubToken: string): Promise<string> {
+  return (await githubCopilotTokenManager.getCredentials(githubToken)).bearer;
+}

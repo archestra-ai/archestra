@@ -33,7 +33,6 @@ test.describe("Skills marketplace step on /connection", () => {
     try {
       await goToPage(page, "/connection");
       await page.waitForLoadState("domcontentloaded");
-      await page.getByRole("button", { name: "Other ways to connect" }).click();
 
       // Pick "Any Client" so the generic (client-agnostic) snippets render, and
       // the "Install shared skills" step expands so the share-link disclosure

@@ -28,9 +28,8 @@ export async function createLlmProviderApiKey(
   ).toBeVisible();
 
   if (params.providerOptionName) {
-    // The picker is a searchable popover: its options are buttons, and each
-    // one's accessible name repeats the provider (the icon's alt text, then
-    // the label) — so callers pass "OpenAI OpenAI", not "OpenAI".
+    // The picker is a searchable popover whose option buttons are named
+    // after the provider; decorative icons do not add to the accessible name.
     await page.getByRole("combobox", { name: "Provider" }).click();
     await page.getByRole("button", { name: params.providerOptionName }).click();
   }

@@ -82,6 +82,16 @@ class BackportTests(unittest.TestCase):
         self.git("commit", "-qm", message)
         return self.git("rev-parse", "HEAD")
 
+    def test_label_before_merge_is_processed_by_later_scan_once(self):
+        self.pr["merged"] = False
+        self.bot.poll()
+        self.assertEqual(self.bot.pulls, [])
+        self.pr["merged"] = True
+        self.bot.poll()
+        self.bot.poll()
+        self.assertEqual(len(self.bot.pulls), 1)
+        self.assertEqual(self.bot.pulls[0]["base"], "release/1.3")
+
     def test_opens_a_backport_with_provenance_without_changing_stable(self):
         stable = self.git("rev-parse", "origin/release/1.3")
         self.bot.run(42)
@@ -203,6 +213,33 @@ class BackportTests(unittest.TestCase):
 
 
 class WorkflowPolicyTests(unittest.TestCase):
+    def test_event_gate_only_allows_trusted_merged_backport_requests(self):
+        workflow = Path(__file__).parents[1] / "workflows/backport.yml"
+        condition = next(line.split("if: ", 1)[1] for line in workflow.read_text().splitlines()
+                         if line.startswith("    if: "))
+        program = r"""
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const condition = process.argv[1];
+function allowed(eventName, {merged = true, base = 'main', label = 'backport release/1.3', repo = 'archestra-ai/archestra'} = {}) {
+  const github = {repository: repo, event_name: eventName, event: {repository:{default_branch:'main'}}};
+  if (eventName === 'pull_request_target') {
+    github.event.pull_request = {merged, base:{ref:base}, head:{repo:{full_name:'contributor/fork'}}};
+    github.event.label = {name:label};
+  }
+  return vm.runInNewContext(condition, {github, startsWith:(value, prefix) => value.startsWith(prefix)});
+}
+for (const eventName of ['push', 'schedule', 'workflow_dispatch', 'pull_request_target']) {
+  assert.equal(allowed(eventName), true, eventName);
+  assert.equal(allowed(eventName, {repo:'contributor/fork'}), false, eventName);
+}
+assert.equal(allowed('pull_request_target', {merged:false}), false);
+assert.equal(allowed('pull_request_target', {base:'release/1.3'}), false);
+assert.equal(allowed('pull_request_target', {label:'bug'}), false);
+assert.equal(allowed('pull_request_target', {label:'not-backport release/1.3'}), false);
+"""
+        subprocess.run(["node", "-e", program, condition], check=True)
+
     def test_backport_prs_run_checks_while_release_bot_prs_remain_exempt(self):
         workflow = Path(__file__).parents[1] / "workflows/on-pull-requests.yml"
         conditions = [line.split("if: ", 1)[1] for line in workflow.read_text().splitlines()

@@ -35,7 +35,9 @@ gitGraph
 
 1. [ ] Land the fix on `main` first. The fix ships automatically in the next beta.
 2. [ ] Add the label `backport release/X.Y` for each configured target (for example, `backport release/1.3`).
-   - The label can be added before or after the main PR merges. The workflow checks requests every five minutes.
+   - Add the label before or after the main PR merges.
+   - Pushes to `main` and backport labels added after merge trigger processing without waiting for the scheduled scan.
+   - A five-minute schedule retries outstanding requests. GitHub can delay scheduled runs; the interval is not a delivery guarantee.
    - **Open Backport PRs** cherry-picks the merged commit with `-x` and opens a separate PR per target.
    - The automation opens PRs; it never merges them or approves stable publication.
 3. [ ] Review each generated backport PR, confirm its checks pass, then add it to that branch's merge queue.
@@ -52,6 +54,8 @@ gitGraph
 Add each new stable or candidate branch there, and create its `backport release/X.Y` label.
 Remove retired branches from that list when making them read-only.
 The workflow always runs trusted automation from the default branch, including manual retries.
+Label events only run for merged PRs targeting the default branch.
+Each automatic run scans all outstanding labels, so overlapping triggers can share one job.
 
 Use **Open Backport PRs → Run workflow** to retry a merged main PR.
 Supply its number and, optionally, one configured target branch.

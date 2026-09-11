@@ -23,8 +23,13 @@ import {
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { MemberModel, TeamModel, UserModel } from "@/models";
+import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
+import { selectEffectiveNativeSkills } from "@/services/agent-activation-skills";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
-import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
+import {
+  buildSkillCatalogPrompt,
+  listAccessibleCatalogSkills,
+} from "@/skills/skill-catalog-prompt";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
   SKILL_SANDBOX_HOME,
@@ -189,7 +194,11 @@ export async function buildAgentSystemPrompt(params: {
   // opencode), but only when the agent can actually load them.
   const skillCatalogPrompt =
     archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME) in mcpTools
-      ? await buildSkillCatalogPrompt({ organizationId, userId, agentId })
+      ? await buildEffectiveNativeSkillCatalogPrompt({
+          organizationId,
+          userId,
+          agentId,
+        })
       : null;
 
   // Scope file-handling guidance to what the agent can actually do: emit it only
@@ -235,6 +244,29 @@ export async function buildAgentSystemPrompt(params: {
       .filter(Boolean)
       .join("\n\n") || undefined
   );
+}
+
+async function buildEffectiveNativeSkillCatalogPrompt(params: {
+  organizationId: string;
+  userId?: string;
+  agentId?: string;
+}) {
+  const candidates = await listAccessibleCatalogSkills(params);
+  const policyEvaluator = params.agentId
+    ? await agentActivationSkillPolicyService.getEvaluator(params.agentId)
+    : null;
+  const available = policyEvaluator
+    ? candidates.filter((skill) =>
+        policyEvaluator.isReferenceAllowed({
+          source: "native",
+          skillId: skill.id,
+        }),
+      )
+    : candidates;
+  return buildSkillCatalogPrompt({
+    ...params,
+    catalogSkills: selectEffectiveNativeSkills(available, params.userId),
+  });
 }
 
 // ===== Internal helpers =====

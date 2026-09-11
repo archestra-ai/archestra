@@ -172,8 +172,9 @@ export async function resolveDynamicToolByUiResource(params: {
  *   isBuiltInFeatureEnabled);
  * - query_knowledge_sources additionally requires at least one knowledge
  *   connector the user can access and this agent has not excluded.
- * The caller (executeArchestraTool) has already enforced the tool's RBAC
- * permission; this adds the dynamic-access gates on top.
+ * This is reachability, not authorization: callers must enforce the tool's
+ * RBAC permission separately (executeArchestraTool does so before this gate).
+ * @public — exported so focused tests can pin the dynamic-access contract.
  */
 export async function isDynamicallyAvailableArchestraTool(params: {
   toolName: string;
@@ -217,6 +218,39 @@ export async function isDynamicallyAvailableArchestraTool(params: {
         environmentId: ctx.agentEnvironmentId,
       })
     : true;
+}
+
+/**
+ * Whether a built-in is reachable through either an active explicit assignment
+ * or the same Auto-mode relaxation used by execution. This is the canonical
+ * agent-level reachability check for discovery and execution/assignment gates;
+ * it does not enforce tool RBAC, so every caller must do that first.
+ */
+export async function isArchestraToolAvailableToAgent(params: {
+  toolName: string;
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
+  exclusionSets?: AgentToolExclusionSets;
+}): Promise<boolean> {
+  const shortName = archestraMcpBranding.getToolShortName(params.toolName);
+  if (shortName == null) return false;
+
+  const exclusionSets =
+    params.exclusionSets ??
+    (await agentToolExclusionsService.getActiveExclusionSets(params.agentId));
+  const assignedTools = await ToolModel.getMcpToolsByAgent(params.agentId);
+  if (
+    assignedTools.some(
+      (tool) =>
+        archestraMcpBranding.getToolShortName(tool.name) === shortName &&
+        !isToolRowExcluded(tool, exclusionSets),
+    )
+  ) {
+    return true;
+  }
+
+  return isDynamicallyAvailableArchestraTool({ ...params, exclusionSets });
 }
 
 /**

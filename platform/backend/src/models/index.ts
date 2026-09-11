@@ -14,6 +14,7 @@ export { default as A2aRemoteAgentTeamModel } from "./a2a-remote-agent-team";
 export { default as A2aRemoteAgentUserModel } from "./a2a-remote-agent-user";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
+export { default as AgentActivationSkillRuleModel } from "./agent-activation-skill-rule";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
 export { default as AgentExcludedConnectorModel } from "./agent-excluded-connector";
 export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";

@@ -2,6 +2,7 @@ import type { IncomingEmailSecurityMode } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -17,6 +18,7 @@ import type {
   MissingCredentialBehavior,
   ToolExposureMode,
 } from "@/types/agent";
+import type { AgentActivationSkillMode } from "@/types/agent-activation-skill-policy";
 import type { AgentRuntime } from "@/types/agent-runtime";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
@@ -185,6 +187,23 @@ const agentsTable = softDeletablePgTable(
     accessAllSkills: boolean("access_all_skills").notNull().default(false),
 
     /**
+     * Which caller-visible skills an internal agent may activate. `all`
+     * preserves the historical behavior and applies exact-reference
+     * exclusions; `manual` permits only exact-reference allow rules. This is
+     * deliberately separate from `accessAllSkills`, which controls gateway
+     * publication rather than internal-agent activation.
+     */
+    activationSkillMode: text("activation_skill_mode")
+      .$type<AgentActivationSkillMode>()
+      .notNull()
+      .default("all"),
+
+    /** Compare-and-set revision for activation-skill policy edits. */
+    activationSkillPolicyRevision: integer("activation_skill_policy_revision")
+      .notNull()
+      .default(0),
+
+    /**
      * "Auto" subagent mode (vs "Custom"): whether this agent may delegate to
      * any internal agent the *calling user* can access (team/scope visibility),
      * beyond the explicitly-configured delegation targets. Mirrors
@@ -232,6 +251,10 @@ const agentsTable = softDeletablePgTable(
     index("agents_environment_id_idx").on(table.environmentId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
+    check(
+      "agents_activation_skill_mode_check",
+      sql`${table.activationSkillMode} IN ('all', 'manual')`,
+    ),
     uniqueIndex("agents_personal_gateway_per_member_idx")
       .on(table.organizationId, table.authorId)
       .where(

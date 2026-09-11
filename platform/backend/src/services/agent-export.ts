@@ -5,8 +5,8 @@ import {
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { AgentModel } from "@/models";
-import type { Agent } from "@/types";
+import { AgentActivationSkillRuleModel, AgentModel } from "@/models";
+import { type Agent, ApiError } from "@/types";
 import type { AgentExportPayload } from "@/types/agent-export";
 
 /**
@@ -22,6 +22,15 @@ import type { AgentExportPayload } from "@/types/agent-export";
 export async function serializeAgentForExport(
   agent: Agent,
 ): Promise<AgentExportPayload> {
+  const activationSkillRules = await AgentActivationSkillRuleModel.findByAgent(
+    agent.id,
+  );
+  if (agent.activationSkillMode !== "all" || activationSkillRules.length > 0) {
+    throw new ApiError(
+      422,
+      "Agents with a customized skill activation policy cannot be exported by the version 1 format",
+    );
+  }
   const [
     toolReferences,
     delegationReferences,

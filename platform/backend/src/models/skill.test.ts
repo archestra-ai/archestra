@@ -38,6 +38,26 @@ function skillInput(overrides: Partial<InsertSkill>): InsertSkill {
   };
 }
 
+async function agentBindingCounts(skillId: string) {
+  const assignments = await db
+    .select()
+    .from(schema.agentSkillsTable)
+    .where(eq(schema.agentSkillsTable.skillId, skillId));
+  const exclusions = await db
+    .select()
+    .from(schema.agentExcludedSkillsTable)
+    .where(eq(schema.agentExcludedSkillsTable.skillId, skillId));
+  const activationRules = await db
+    .select()
+    .from(schema.agentActivationSkillRulesTable)
+    .where(eq(schema.agentActivationSkillRulesTable.skillId, skillId));
+  return {
+    assignments: assignments.length,
+    exclusions: exclusions.length,
+    activationRules: activationRules.length,
+  };
+}
+
 describe("SkillModel name uniqueness by scope", () => {
   test("two users can each own a personal skill with the same name", async ({
     makeOrganization,
@@ -758,6 +778,77 @@ describe("SkillModel soft delete", () => {
       .from(schema.skillsTable)
       .where(eq(schema.skillsTable.id, skill.id));
     expect(raw?.deletedAt).toBeInstanceOf(Date);
+  });
+
+  test("delete() removes agent and gateway bindings without restoring them", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    const internalAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
+    const removed = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "removed-binding" }),
+      files: [],
+    });
+    const kept = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "kept-binding" }),
+      files: [],
+    });
+    if (!removed || !kept) throw new Error("seed failed");
+
+    await db.insert(schema.agentSkillsTable).values(
+      [removed.id, kept.id].map((skillId) => ({
+        agentId: gateway.id,
+        skillId,
+      })),
+    );
+    await db.insert(schema.agentExcludedSkillsTable).values(
+      [removed.id, kept.id].map((skillId) => ({
+        agentId: gateway.id,
+        skillId,
+      })),
+    );
+    await db.insert(schema.agentActivationSkillRulesTable).values(
+      [removed.id, kept.id].map((skillId) => ({
+        agentId: internalAgent.id,
+        disposition: "allow" as const,
+        source: "native" as const,
+        skillId,
+      })),
+    );
+
+    expect(await SkillModel.delete(removed.id)).toBe(true);
+
+    expect(await agentBindingCounts(removed.id)).toEqual({
+      assignments: 0,
+      exclusions: 0,
+      activationRules: 0,
+    });
+    expect(await agentBindingCounts(kept.id)).toEqual({
+      assignments: 1,
+      exclusions: 1,
+      activationRules: 1,
+    });
+
+    const [policyState] = await db
+      .select({ revision: schema.agentsTable.activationSkillPolicyRevision })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, internalAgent.id));
+    expect(policyState?.revision).toBe(1);
+
+    expect(await SkillModel.restore(removed.id)).toBe(true);
+    expect(await agentBindingCounts(removed.id)).toEqual({
+      assignments: 0,
+      exclusions: 0,
+      activationRules: 0,
+    });
   });
 
   test("delete() is idempotent", async ({ makeOrganization }) => {

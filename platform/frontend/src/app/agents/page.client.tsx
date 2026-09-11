@@ -211,6 +211,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   } = useProfilesPaginated({
     limit: pageSize,
     offset,
+    includeActivationSkillsCount: true,
     initialData: initialData?.agents ?? undefined,
     initialDataExcludeOtherPersonalAgents: true,
     ...listFilters,

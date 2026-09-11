@@ -1,6 +1,11 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AgentActivationSkillReferenceSchema } from "./agent-activation-skill";
+import {
+  AgentActivationSkillModeSchema,
+  AgentActivationSkillRuleDispositionSchema,
+} from "./agent-activation-skill-policy";
 
 /**
  * Canonical, hashable payload of an agent version — the agent's *config only*.
@@ -34,6 +39,15 @@ export const AgentConfigSnapshotSchema = z.object({
   missingCredentialBehavior: z.string().default("allow"),
   accessAllTools: z.boolean(),
   accessAllSubagents: z.boolean(),
+  activationSkillMode: AgentActivationSkillModeSchema.default("all"),
+  activationSkillRules: z
+    .array(
+      z.object({
+        disposition: AgentActivationSkillRuleDispositionSchema,
+        reference: AgentActivationSkillReferenceSchema,
+      }),
+    )
+    .default([]),
   /** Header NAMES only (no values) — safe to capture verbatim. */
   passthroughHeaders: z.array(z.string()),
   incomingEmailEnabled: z.boolean(),
@@ -92,6 +106,29 @@ export const SelectAgentVersionSchema = createSelectSchema(
 );
 
 export type AgentVersion = z.infer<typeof SelectAgentVersionSchema>;
+
+/**
+ * Read projection for version history. Exact activation-skill references stay
+ * in the private snapshot because restore needs them, but are not part of the
+ * agent-read API: some may name skills the current reader cannot see.
+ */
+export const PublicAgentConfigSnapshotSchema = AgentConfigSnapshotSchema.omit({
+  activationSkillRules: true,
+}).extend({
+  activationSkillRuleCounts: z.object({
+    allowed: z.number().int().nonnegative(),
+    excluded: z.number().int().nonnegative(),
+  }),
+  /** Server-keyed marker that prevents offline testing of guessed rule sets. */
+  activationSkillRuleDigest: z.string().length(64),
+});
+
+export const SelectPublicAgentVersionSchema = createSelectSchema(
+  schema.agentVersionsTable,
+  { snapshot: PublicAgentConfigSnapshotSchema },
+);
+
+export type PublicAgentVersion = z.infer<typeof SelectPublicAgentVersionSchema>;
 
 /**
  * List projection of a version: everything but the heavy `snapshot` payload,

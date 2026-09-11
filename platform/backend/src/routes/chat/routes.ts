@@ -992,6 +992,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               messages: messagesWithExternalSkill,
               organizationId,
               userId: user.id,
+              agentId: conversation.agentId ?? undefined,
               conversationId,
               provider,
               model: selectedModel,

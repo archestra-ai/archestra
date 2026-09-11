@@ -6,6 +6,8 @@ export * from "./a2a-task";
 export * from "./a2a-task-approval-request";
 export * from "./account";
 export * from "./agent";
+export * from "./agent-activation-skill";
+export * from "./agent-activation-skill-policy";
 export * from "./agent-connector-assignment";
 export * from "./agent-export";
 export * from "./agent-knowledge-base";

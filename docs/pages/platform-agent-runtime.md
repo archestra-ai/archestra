@@ -501,7 +501,7 @@ gateway and sends the run headers described above.
 
 ## Delegate Work
 
-Give the coordinator Agent access to the specialist under **Tools & Knowledge → Subagents**. The coordinator delegates through the specialist's ordinary Agent tool. If the specialist has Agent Runtime configured, Archestra automatically turns that delegation into a durable task in its dedicated runtime and returns immediately. There is no separate invocation syntax.
+Give the coordinator Agent access to the specialist under **Tools, Skills & Knowledge → Subagents**. The coordinator delegates through the specialist's ordinary Agent tool. If the specialist has Agent Runtime configured, Archestra automatically turns that delegation into a durable task in its dedicated runtime and returns immediately. There is no separate invocation syntax.
 
 Assign `start_run` when the coordinator should choose a target by Agent ID
 instead of using a specialist's Agent tool. Any gateway that can start a run
@@ -529,7 +529,7 @@ These tools use Archestra's A2A task state machine underneath. A client that sup
 ### Messaging channels
 
 Assign a foreground coordinator Agent to the channel and give it access to one
-or more specialist Agents under **Tools & Knowledge → Subagents**. Users send
+or more specialist Agents under **Tools, Skills & Knowledge → Subagents**. Users send
 ordinary messages. The coordinator's instructions determine which requests it
 handles directly and when it delegates to a specialist. If that specialist has
 Agent Runtime configured, the ordinary delegation starts a durable task

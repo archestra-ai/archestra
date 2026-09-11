@@ -24,6 +24,8 @@ export interface AssignmentComboboxItem {
   id: string;
   name: string;
   description?: string;
+  /** Search-only aliases such as a provider or runtime activation name. */
+  searchText?: string;
   badge?: string;
   sortRank?: number;
   disabled?: boolean;
@@ -274,12 +276,13 @@ export function AssignmentCombobox({
 function getSearchMatchScore(item: AssignmentComboboxItem, query: string) {
   const name = item.name.toLowerCase();
   const description = item.description?.toLowerCase() ?? "";
+  const searchText = item.searchText?.toLowerCase() ?? "";
 
   if (name === query) return 5;
   if (name.startsWith(query)) return 4;
   if (name.includes(query)) return 3;
   if (description.startsWith(query)) return 2;
-  if (description.includes(query)) return 1;
+  if (description.includes(query) || searchText.includes(query)) return 1;
   return 0;
 }
 

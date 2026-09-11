@@ -128,6 +128,7 @@ test.describe("studio sidebar navigation", () => {
     await expect(active).toHaveText(/^LLM Proxy/);
 
     await page.goto("/a2a/agents/new");
+    await expect(page).toHaveURL(/\/agents\/a2a\/new$/);
     await expect(active).toHaveText(/^Agents/);
     await expect(
       page.getByRole("link", { name: /^External Agents/ }),

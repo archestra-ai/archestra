@@ -150,7 +150,7 @@ describe("AgentCreatePage", () => {
     await user.click(
       screen.getByRole("button", { name: /add an external agent/i }),
     );
-    expect(push).toHaveBeenCalledWith("/a2a/agents/new");
+    expect(push).toHaveBeenCalledWith("/agents/a2a/new");
     expect(formProps).not.toHaveBeenCalled();
   });
 

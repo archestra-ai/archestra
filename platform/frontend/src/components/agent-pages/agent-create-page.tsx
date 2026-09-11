@@ -20,6 +20,7 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
+import { a2aRemoteAgentNewHref } from "@/lib/a2a-remote-agent-route";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { AgentCatalog, type AgentCatalogTemplate } from "./agent-catalog";
@@ -195,7 +196,7 @@ export function AgentCreatePage({
             setSelectedTemplate(null);
             setSourceSelected(true);
           }}
-          onAddExternalAgent={() => router.push("/a2a/agents/new")}
+          onAddExternalAgent={() => router.push(a2aRemoteAgentNewHref())}
           onSelect={(template) => {
             setSelectedTemplate(template);
             setSourceSelected(true);

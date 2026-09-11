@@ -2185,7 +2185,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
-  "/a2a/agents": { agent: ["read"] },
+  "/agents/a2a": { agent: ["read"] },
   "/messaging-channels": { agentTrigger: ["read"] },
   "/messaging-channels/slack": { agentTrigger: ["read"] },
   "/messaging-channels/ms-teams": { agentTrigger: ["read"] },

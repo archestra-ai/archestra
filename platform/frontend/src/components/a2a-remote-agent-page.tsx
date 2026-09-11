@@ -34,6 +34,7 @@ import {
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
+import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
   useA2aRemoteAgent,
   useCreateA2aRemoteAgent,
@@ -43,7 +44,6 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 
 const CREATE_BACK_HREF = "/agents/new";
-const DETAIL_BASE_HREF = "/a2a/agents";
 const LIST_HREF = "/agents";
 
 export function CreateA2aRemoteAgentPage() {
@@ -83,7 +83,7 @@ export function CreateA2aRemoteAgentPage() {
                 },
                 {
                   onSuccess: (agent) => {
-                    if (agent) router.push(`${DETAIL_BASE_HREF}/${agent.id}`);
+                    if (agent) router.push(a2aRemoteAgentDetailHref(agent.id));
                   },
                 },
               );

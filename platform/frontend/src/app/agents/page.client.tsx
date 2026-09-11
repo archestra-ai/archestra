@@ -83,6 +83,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
+import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
   type A2aRemoteAgent,
   useA2aRemoteAgents,
@@ -649,7 +650,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   };
 
   const openExternalAgent = (agent: A2aRemoteAgent) =>
-    router.push(`/a2a/agents/${agent.id}`);
+    router.push(a2aRemoteAgentDetailHref(agent.id));
 
   const renderExternalAgentActions = (agent: A2aRemoteAgent) => (
     <A2aRemoteAgentActions
@@ -670,7 +671,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           icon={<AgentIcon size={20} />}
           title={
             <span className="flex min-w-0 items-center gap-2">
-              <Link href={`/a2a/agents/${agent.id}`} className="truncate">
+              <Link
+                href={a2aRemoteAgentDetailHref(agent.id)}
+                className="truncate"
+              >
                 {agent.name}
               </Link>
               <Badge variant="secondary" className="shrink-0">
@@ -787,7 +791,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <AgentNameCell
               name={agent.name}
               icon={<AgentIcon size={20} />}
-              href={`/a2a/agents/${agent.id}`}
+              href={a2aRemoteAgentDetailHref(agent.id)}
               description={agent.description || "External A2A agent"}
               extraBadges={<Badge variant="secondary">A2A</Badge>}
             />

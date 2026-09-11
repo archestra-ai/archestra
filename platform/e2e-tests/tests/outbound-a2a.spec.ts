@@ -50,7 +50,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
       .click();
     await expect(page).toHaveURL(/\/agents\/new$/);
     await page.getByRole("button", { name: /Add an External Agent/ }).click();
-    await expect(page).toHaveURL(/\/a2a\/agents\/new$/);
+    await expect(page).toHaveURL(/\/agents\/a2a\/new$/);
     await expect(
       page.getByRole("heading", {
         name: "Connect external A2A agent",
@@ -75,7 +75,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
     const createdResponse = await createRemoteResponse;
     expect(createdResponse.ok()).toBe(true);
     remoteAgent = (await createdResponse.json()) as RemoteAgent;
-    await expect(page).toHaveURL(new RegExp(`/a2a/agents/${remoteAgent.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/agents/a2a/${remoteAgent.id}$`));
     await expect(
       page.getByRole("heading", { name: remoteName, level: 1 }),
     ).toBeVisible({ timeout: 15_000 });

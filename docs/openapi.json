@@ -61849,7 +61849,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "List a paginated, searchable view of the skills the current user can activate through an internal agent, or preview for an unsaved agent in an environment\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "description": "List a paginated, searchable view of effective or policy-eligible skills for an internal agent or draft\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -61903,7 +61903,7 @@
             "in": "query",
             "name": "environmentId",
             "required": false,
-            "description": "Environment for a new-agent preview. Omit for the Default environment."
+            "description": "Environment preview override for a draft or pending edit. Omit to use the saved agent environment, or the Default environment for a new draft."
           },
           {
             "schema": {
@@ -62097,7 +62097,7 @@
                     },
                     "enabled": {
                       "type": "boolean",
-                      "description": "Whether load_skill is available for this agent or draft; when false, data is empty."
+                      "description": "Whether load_skill is available for this agent or draft. Effective results are empty when false; eligible policy-editor previews may still contain candidates."
                     }
                   },
                   "required": [

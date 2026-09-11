@@ -519,7 +519,7 @@ export const updateAgentKnowledgeSourceExclusions = <ThrowOnError extends boolea
 });
 
 /**
- * List a paginated, searchable view of the skills the current user can activate through an internal agent, or preview for an unsaved agent in an environment
+ * List a paginated, searchable view of effective or policy-eligible skills for an internal agent or draft
  *
  * Authentication:
  *

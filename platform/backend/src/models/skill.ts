@@ -1236,16 +1236,12 @@ class SkillModel {
 
   /**
    * Soft-delete a skill (frees its name for re-use via the partial unique
-   * indexes). Junction rows, files, and versions are kept — reads are
-   * filtered instead.
+   * indexes). Files, versions, and visibility grants are kept for restore, but
+   * agent and gateway bindings are removed: restoring a skill must not silently
+   * republish or re-enable it anywhere.
    */
   static async delete(id: string): Promise<boolean> {
-    const count = await softDelete(
-      db,
-      schema.skillsTable,
-      eq(schema.skillsTable.id, id),
-    );
-    return count > 0;
+    return (await SkillModel.deleteMany([id])) > 0;
   }
 
   /**
@@ -1255,11 +1251,18 @@ class SkillModel {
    */
   static async deleteMany(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0;
-    return await softDelete(
-      db,
-      schema.skillsTable,
-      inArray(schema.skillsTable.id, ids),
-    );
+    const uniqueIds = [...new Set(ids)];
+    return await withDbTransaction(async (tx) => {
+      const count = await softDelete(
+        tx,
+        schema.skillsTable,
+        inArray(schema.skillsTable.id, uniqueIds),
+      );
+      if (count === 0) return 0;
+
+      await SkillModel.removeAgentBindings(uniqueIds, tx);
+      return count;
+    });
   }
 
   /**
@@ -1527,6 +1530,48 @@ class SkillModel {
       ...row,
       environmentIds: environmentIds.map((r) => r.environmentId).sort(),
     };
+  }
+
+  private static async removeAgentBindings(
+    skillIds: string[],
+    tx: Transaction,
+  ): Promise<void> {
+    const affectedPolicyAgents = await tx
+      .selectDistinct({
+        agentId: schema.agentActivationSkillRulesTable.agentId,
+      })
+      .from(schema.agentActivationSkillRulesTable)
+      .where(
+        and(
+          eq(schema.agentActivationSkillRulesTable.source, "native"),
+          inArray(schema.agentActivationSkillRulesTable.skillId, skillIds),
+        ),
+      );
+
+    await tx
+      .delete(schema.agentSkillsTable)
+      .where(inArray(schema.agentSkillsTable.skillId, skillIds));
+    await tx
+      .delete(schema.agentExcludedSkillsTable)
+      .where(inArray(schema.agentExcludedSkillsTable.skillId, skillIds));
+    await tx
+      .delete(schema.agentActivationSkillRulesTable)
+      .where(
+        and(
+          eq(schema.agentActivationSkillRulesTable.source, "native"),
+          inArray(schema.agentActivationSkillRulesTable.skillId, skillIds),
+        ),
+      );
+
+    const affectedAgentIds = affectedPolicyAgents.map(({ agentId }) => agentId);
+    if (affectedAgentIds.length > 0) {
+      await tx
+        .update(schema.agentsTable)
+        .set({
+          activationSkillPolicyRevision: sql`${schema.agentsTable.activationSkillPolicyRevision} + 1`,
+        })
+        .where(inArray(schema.agentsTable.id, affectedAgentIds));
+    }
   }
 }
 

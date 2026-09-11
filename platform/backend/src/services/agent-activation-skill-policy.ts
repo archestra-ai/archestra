@@ -87,10 +87,7 @@ class AgentActivationSkillPolicyService {
     return buildEditorResponse({
       state: snapshot,
       rules: snapshot.rules,
-      skills: projectPolicyIndependentAvailableAgentSkills(
-        candidates,
-        params.userId,
-      ),
+      skills: projectPolicyIndependentAvailableAgentSkills(candidates),
     });
   }
 
@@ -170,16 +167,9 @@ class AgentActivationSkillPolicyService {
       ) {
         return false;
       }
-      const removals = stored.filter((rule) => !targetKeys.has(ruleKey(rule)));
-      const additions = target.filter((rule) => !storedKeys.has(ruleKey(rule)));
-      await AgentActivationSkillRuleModel.removeRules({
+      await AgentActivationSkillRuleModel.replaceRules({
         agentId: params.agentId,
-        rules: removals,
-        tx,
-      });
-      await AgentActivationSkillRuleModel.addRules({
-        agentId: params.agentId,
-        rules: additions,
+        rules: target,
         tx,
       });
       await AgentModel.setActivationSkillPolicyState({
@@ -289,8 +279,7 @@ class AgentActivationSkillPolicyService {
         tx,
       );
       if (!state) throw new ApiError(404, "Agent not found");
-      await AgentActivationSkillRuleModel.removeAllForAgent(params.agentId, tx);
-      await AgentActivationSkillRuleModel.addRules({
+      await AgentActivationSkillRuleModel.replaceRules({
         agentId: params.agentId,
         rules: params.rules,
         tx,

@@ -16,10 +16,12 @@ export function AgentActivationSkillsTable({
   agentId,
   environmentId,
   view,
+  excludedIds = [],
 }: {
   agentId?: string;
   environmentId?: string | null;
   view?: "effective" | "eligible";
+  excludedIds?: string[];
 }) {
   const [search, setSearch] = useState("");
   const [pagination, setPagination] = useState({
@@ -63,17 +65,24 @@ export function AgentActivationSkillsTable({
     );
   }
 
+  const excluded = new Set(excludedIds);
+
   return (
     <AvailableSkillsTable
-      rows={data.data.map((skill: AgentActivationSkill) => ({
-        id: agentActivationSkillReferenceKey(skill.reference),
-        name: skill.name,
-        description: skill.description,
-        scope: skill.scope,
-        source: skill.reference.source,
-        providerName: skill.providerName,
-      }))}
-      total={data.pagination.total}
+      rows={data.data
+        .filter(
+          (skill) =>
+            !excluded.has(agentActivationSkillReferenceKey(skill.reference)),
+        )
+        .map((skill: AgentActivationSkill) => ({
+          id: agentActivationSkillReferenceKey(skill.reference),
+          name: skill.name,
+          description: skill.description,
+          scope: skill.scope,
+          source: skill.reference.source,
+          providerName: skill.providerName,
+        }))}
+      total={Math.max(0, data.pagination.total - excludedIds.length)}
       pagination={pagination}
       onPaginationChange={setPagination}
       search={search}

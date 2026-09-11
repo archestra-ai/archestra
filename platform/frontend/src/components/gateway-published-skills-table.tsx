@@ -1,23 +1,17 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
 import { useCallback, useState } from "react";
-import {
-  AvailableSkillsMessageTable,
-  AvailableSkillsTable,
-} from "@/components/available-skills-table";
+import type { EditableSkill } from "@/components/agent-skills-editor";
+import { AvailableSkillsTable } from "@/components/available-skills-table";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useSkillsPaginated } from "@/lib/skills/skill.query";
 
-type SkillRow = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
-
-/** Server-filtered skills eligible for All mode on a saved or draft gateway. */
+/** The effective All-mode set from the gateway's exclusion picker. */
 export function GatewayPublishedSkillsTable({
-  gatewayId,
-  environmentId,
+  skills,
+  excludedIds,
 }: {
-  gatewayId?: string;
-  environmentId?: string | null;
+  skills: EditableSkill[];
+  excludedIds: string[];
 }) {
   const [search, setSearch] = useState("");
   const [pagination, setPagination] = useState({
@@ -25,19 +19,15 @@ export function GatewayPublishedSkillsTable({
     pageSize: DEFAULT_TABLE_LIMIT,
   });
   const normalizedSearch = search.trim();
-  const { data, isPending, isFetching, isError } = useSkillsPaginated(
-    {
-      forAgentId: gatewayId,
-      mcpGatewayEnvironment: environmentId ?? "default",
-      limit: pagination.pageSize,
-      offset: pagination.pageIndex * pagination.pageSize,
-      search: normalizedSearch || undefined,
-      sortBy: "name",
-      sortDirection: "asc",
-      agentSkillView: "eligible",
-    },
-    { toastOnError: false },
-  );
+  const excluded = new Set(excludedIds);
+  const matchingSkills = skills.filter((skill) => {
+    if (excluded.has(skill.id)) return false;
+    if (!normalizedSearch) return true;
+    const searchable = `${skill.name} ${skill.description ?? ""}`.toLowerCase();
+    return searchable.includes(normalizedSearch.toLowerCase());
+  });
+  const offset = pagination.pageIndex * pagination.pageSize;
+  const page = matchingSkills.slice(offset, offset + pagination.pageSize);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -46,39 +36,26 @@ export function GatewayPublishedSkillsTable({
     );
   }, []);
 
-  if (isPending) {
-    return (
-      <AvailableSkillsMessageTable>Loading skills…</AvailableSkillsMessageTable>
-    );
-  }
-  if (isError || !data) {
-    return (
-      <AvailableSkillsMessageTable tone="error">
-        Could not load skills. Close and reopen this view to try again.
-      </AvailableSkillsMessageTable>
-    );
-  }
-
   return (
     <AvailableSkillsTable
-      rows={data.data.map(toAvailableSkillRow)}
-      total={data.pagination?.total ?? data.data.length}
+      rows={page.map(toAvailableSkillRow)}
+      total={matchingSkills.length}
       pagination={pagination}
       onPaginationChange={setPagination}
       search={search}
       onSearchChange={handleSearchChange}
-      isFetching={isFetching}
-      emptyMessage="No skills are eligible for All mode in this gateway's environment."
+      isFetching={false}
+      emptyMessage="No skills are published by All mode."
     />
   );
 }
 
-function toAvailableSkillRow(skill: SkillRow) {
+function toAvailableSkillRow(skill: EditableSkill) {
   return {
     id: skill.id,
     name: skill.name,
-    description: skill.description,
-    scope: skill.scope,
+    description: skill.description ?? "",
+    scope: "org" as const,
     source: "native" as const,
     providerName: null,
   };

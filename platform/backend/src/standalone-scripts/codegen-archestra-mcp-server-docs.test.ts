@@ -50,11 +50,16 @@ describe("codegen-archestra-mcp-server-docs", () => {
     const schema = z.toJSONSchema(
       z.object({
         reference: z.discriminatedUnion("source", [
-          z.object({ source: z.literal("native"), skillId: z.string() }),
+          z.object({
+            source: z.literal("native"),
+            skillId: z.string(),
+            label: z.string().describe("Native label."),
+          }),
           z.object({
             source: z.literal("external_mcp"),
             mcpServerId: z.string(),
             uri: z.string(),
+            label: z.string().describe("External label."),
           }),
         ]),
       }),
@@ -73,6 +78,7 @@ describe("codegen-archestra-mcp-server-docs", () => {
           name: "`reference.source`",
           type: '`"native" \\| "external_mcp"`',
           required: "Yes",
+          description: "",
         }),
         expect.objectContaining({
           name: "`reference.skillId`",
@@ -85,6 +91,11 @@ describe("codegen-archestra-mcp-server-docs", () => {
         expect.objectContaining({
           name: "`reference.uri`",
           required: 'When `source="external_mcp"`',
+        }),
+        expect.objectContaining({
+          name: "`reference.label`",
+          description:
+            'When `source="native"`: Native label. When `source="external_mcp"`: External label.',
         }),
       ]),
     );

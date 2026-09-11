@@ -604,6 +604,29 @@ function renderUnionObjectProperties(
     const isDiscriminator = entries.every(
       ({ schema }) => schema.const !== undefined,
     );
+    const description = isDiscriminator
+      ? entries
+          .filter(({ schema }) => schema.description)
+          .map(
+            ({ schema }) =>
+              `${JSON.stringify(schema.const)}: ${schema.description}`,
+          )
+          .join(" ")
+      : descriptions.length <= 1
+        ? (descriptions[0] ?? "")
+        : Array.from(
+            new Set(
+              entries.flatMap(({ schema, variant }) => {
+                if (!schema.description) return [];
+                const condition = formatVariantCondition(variant);
+                return [
+                  condition
+                    ? `When ${condition}: ${schema.description}`
+                    : schema.description,
+                ];
+              }),
+            ),
+          ).join(" ");
 
     return {
       name: `\`${prefix}.${key}\``,
@@ -613,13 +636,7 @@ function renderUnionObjectProperties(
         : variantConditions.length > 0
           ? `When ${variantConditions.join(" or ")}`
           : "No",
-      description: isDiscriminator
-        ? entries
-            .map(({ schema }) =>
-              `${JSON.stringify(schema.const)}: ${schema.description ?? ""}`.trim(),
-            )
-            .join(" ")
-        : descriptions.join(" "),
+      description,
     };
   });
 }

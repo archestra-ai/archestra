@@ -31,9 +31,9 @@ export type AgentActivationSkillReference = z.infer<
 >;
 
 /**
- * One skill the current principal can activate through an internal agent.
- * `name` is the declared display name; `activationName` is the exact
- * collision-resolved reference accepted by `load_skill`.
+ * One caller-visible skill projected for internal-agent activation or policy
+ * editing. `name` is the declared display name; `activationName` is the exact
+ * collision-resolved reference accepted by `load_skill` when policy allows it.
  */
 export const AgentActivationSkillSchema = z.object({
   reference: AgentActivationSkillReferenceSchema,
@@ -63,7 +63,7 @@ export const PaginatedAgentActivationSkillsResponseSchema =
     enabled: z
       .boolean()
       .describe(
-        "Whether load_skill is available for this agent or draft; when false, data is empty.",
+        "Whether load_skill is available for this agent or draft. Effective results are empty when false; eligible policy-editor previews may still contain candidates.",
       ),
   });
 

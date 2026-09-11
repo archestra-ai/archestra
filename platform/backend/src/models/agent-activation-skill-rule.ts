@@ -147,34 +147,19 @@ class AgentActivationSkillRuleModel {
       .onConflictDoNothing();
   }
 
-  static async removeRules(params: {
+  static async replaceRules(params: {
     agentId: string;
     rules: AgentActivationSkillPolicyRule[];
-    tx?: Transaction;
+    tx: Transaction;
   }): Promise<void> {
-    for (const rule of params.rules) {
-      await (params.tx ?? db)
-        .delete(schema.agentActivationSkillRulesTable)
-        .where(
-          and(
-            eq(schema.agentActivationSkillRulesTable.agentId, params.agentId),
-            eq(
-              schema.agentActivationSkillRulesTable.disposition,
-              rule.disposition,
-            ),
-            referencePredicate(rule.reference),
-          ),
-        );
-    }
-  }
-
-  static async removeAllForAgent(
-    agentId: string,
-    tx?: Transaction,
-  ): Promise<void> {
-    await (tx ?? db)
+    await params.tx
       .delete(schema.agentActivationSkillRulesTable)
-      .where(eq(schema.agentActivationSkillRulesTable.agentId, agentId));
+      .where(eq(schema.agentActivationSkillRulesTable.agentId, params.agentId));
+    await AgentActivationSkillRuleModel.addRules({
+      agentId: params.agentId,
+      rules: params.rules,
+      tx: params.tx,
+    });
   }
 }
 
@@ -194,34 +179,6 @@ function referenceToColumns(reference: AgentActivationSkillReference) {
         pluginId: reference.pluginId,
         skillPath: reference.skillPath,
       };
-  }
-}
-
-function referencePredicate(reference: AgentActivationSkillReference) {
-  switch (reference.source) {
-    case "native":
-      return and(
-        eq(schema.agentActivationSkillRulesTable.source, reference.source),
-        eq(schema.agentActivationSkillRulesTable.skillId, reference.skillId),
-      );
-    case "external_mcp":
-      return and(
-        eq(schema.agentActivationSkillRulesTable.source, reference.source),
-        eq(
-          schema.agentActivationSkillRulesTable.mcpServerId,
-          reference.mcpServerId,
-        ),
-        eq(schema.agentActivationSkillRulesTable.uri, reference.uri),
-      );
-    case "plugin":
-      return and(
-        eq(schema.agentActivationSkillRulesTable.source, reference.source),
-        eq(schema.agentActivationSkillRulesTable.pluginId, reference.pluginId),
-        eq(
-          schema.agentActivationSkillRulesTable.skillPath,
-          reference.skillPath,
-        ),
-      );
   }
 }
 

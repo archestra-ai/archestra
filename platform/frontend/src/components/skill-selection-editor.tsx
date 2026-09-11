@@ -1,19 +1,16 @@
 "use client";
 
 import { BookOpen, X } from "lucide-react";
-import type { ReactNode } from "react";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export interface SkillSelectionItem extends AssignmentComboboxItem {
   id: string;
   name: string;
-  chipBadge?: ReactNode;
   removeLabel?: string;
 }
 
@@ -75,14 +72,6 @@ export function SkillSelectionEditor({
             />
             {skill.icon ?? <BookOpen className="h-3 w-3 shrink-0" />}
             <span className="truncate font-medium">{skill.name}</span>
-            {skill.chipBadge && (
-              <Badge
-                variant="secondary"
-                className="max-w-24 shrink truncate px-1.5 py-0 font-normal"
-              >
-                {skill.chipBadge}
-              </Badge>
-            )}
           </div>
           <Button
             type="button"
@@ -100,6 +89,7 @@ export function SkillSelectionEditor({
         items={items}
         selectedIds={selectedIds}
         onToggle={handleToggle}
+        label={tone === "exclude" ? "Disable Skill" : undefined}
         onSearchChange={onSearchChange}
         isSearching={isSearching}
         placeholder={placeholder}

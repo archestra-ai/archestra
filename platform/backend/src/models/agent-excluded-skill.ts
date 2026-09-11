@@ -1,16 +1,16 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AssignedSkill } from "@/types";
-import { assignedSkillColumns, liveSkillIdsQuery } from "./agent-skill";
+import { assignedSkillColumns } from "./agent-skill";
 
 /**
  * Data access for per-agent single-skill exclusions (Auto skill mode).
  * Pure CRUD — exposure rules live in services/agent-skill-resolution.ts.
  *
- * Skill deletion is a soft delete that keeps exclusion rows, so every read here
- * joins `skills` and filters `notDeleted`, and the replace deletes only live
- * rows (see {@link liveSkillIdsQuery}).
+ * Reads still join `skills` and filter `notDeleted` as a defensive boundary,
+ * while skill deletion transactionally removes these bindings so restore never
+ * re-applies an exclusion that no longer exists in the agent configuration.
  */
 class AgentExcludedSkillModel {
   static async findSkillIdsByAgent(
@@ -20,9 +20,8 @@ class AgentExcludedSkillModel {
     const rows = await (tx ?? db)
       .select({ skillId: schema.agentExcludedSkillsTable.skillId })
       .from(schema.agentExcludedSkillsTable)
-      // Skill deletion is a soft delete that keeps exclusion rows; filtering
-      // here keeps deleted ids out of the GET response, which the PUT
-      // round-trip would otherwise 404 on (`findByIds` skips deleted rows).
+      // Keep the live-skill join as a defensive boundary even though repository
+      // deletion removes exclusions in the same transaction.
       .innerJoin(
         schema.skillsTable,
         eq(schema.agentExcludedSkillsTable.skillId, schema.skillsTable.id),
@@ -90,12 +89,8 @@ class AgentExcludedSkillModel {
   /**
    * Full replace of the agent's excluded skill set.
    *
-   * Deletes only rows whose skill is live: a soft-deleted skill's exclusion is
-   * hidden from the caller, so a replace must leave it exactly as it found it
-   * (see {@link liveSkillIdsQuery}) — otherwise toggling any unrelated
-   * exclusion would silently re-publish that skill once it is restored from
-   * trash. Callers that need the replace serialized against concurrent ones
-   * take `AgentModel.lockRowForUpdate` first.
+   * Callers that need the replace serialized against concurrent ones take
+   * `AgentModel.lockRowForUpdate` first.
    */
   static async replaceExclusions(
     params: { agentId: string; skillIds: string[] },
@@ -104,15 +99,7 @@ class AgentExcludedSkillModel {
     const run = async (tx: Transaction) => {
       await tx
         .delete(schema.agentExcludedSkillsTable)
-        .where(
-          and(
-            eq(schema.agentExcludedSkillsTable.agentId, params.agentId),
-            inArray(
-              schema.agentExcludedSkillsTable.skillId,
-              liveSkillIdsQuery(),
-            ),
-          ),
-        );
+        .where(eq(schema.agentExcludedSkillsTable.agentId, params.agentId));
 
       if (params.skillIds.length > 0) {
         await tx

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
@@ -27,34 +27,13 @@ export const assignedSkillColumns = {
 } as const;
 
 /**
- * Live (non-soft-deleted) skill ids, as a subquery for scoping the junction
- * tables' full-replace deletes.
- *
- * The write-side twin of the `notDeleted` join every read in these junction
- * models applies. A soft-deleted skill's junction row is invisible to every
- * read, so a full replace assembled from what the caller could see must not
- * destroy it. Unscoped, any unrelated replace wipes that row, and restoring the
- * skill from trash then silently changes what the gateway publishes — with an
- * audit diff that shows nothing, because the row was never in either snapshot.
- * Scoping the delete is what makes both models' "deletion keeps junction rows"
- * claim true on the write path too.
- */
-export function liveSkillIdsQuery() {
-  return db
-    .select({ id: schema.skillsTable.id })
-    .from(schema.skillsTable)
-    .where(notDeleted(schema.skillsTable));
-}
-
-/**
  * Data access for explicit per-agent skill assignments (Custom skill mode).
  * Pure CRUD — exposure rules live in services/agent-skill-resolution.ts and
  * assignment validation in the route layer.
  *
- * Skill deletion is a soft delete that keeps junction rows, so every read here
- * joins `skills` and filters `notDeleted` — a dangling assignment must never
- * resurface a deleted skill (or its id) on any surface — and every replace
- * deletes only live rows (see {@link liveSkillIdsQuery}).
+ * Reads still join `skills` and filter `notDeleted` as a defensive boundary,
+ * while skill deletion transactionally removes these bindings so restore never
+ * republishes a skill without an explicit new assignment.
  */
 class AgentSkillModel {
   static async findSkillIdsByAgent(
@@ -201,11 +180,9 @@ class AgentSkillModel {
    * partial write can never leave the gateway exposing a half-applied
    * selection.
    *
-   * Deletes only rows whose skill is live: a soft-deleted skill's assignment is
-   * hidden from the caller, so a replace must leave it exactly as it found it
-   * (see {@link liveSkillIdsQuery}). Callers that need the replace serialized
-   * against concurrent ones take `AgentModel.lockRowForUpdate` first — the lock
-   * belongs to the transaction, not to this statement.
+   * Callers that need the replace serialized against concurrent ones take
+   * `AgentModel.lockRowForUpdate` first — the lock belongs to the transaction,
+   * not to this statement.
    */
   static async replaceAssignments(
     params: { agentId: string; skillIds: string[] },
@@ -214,12 +191,7 @@ class AgentSkillModel {
     const run = async (tx: Transaction) => {
       await tx
         .delete(schema.agentSkillsTable)
-        .where(
-          and(
-            eq(schema.agentSkillsTable.agentId, params.agentId),
-            inArray(schema.agentSkillsTable.skillId, liveSkillIdsQuery()),
-          ),
-        );
+        .where(eq(schema.agentSkillsTable.agentId, params.agentId));
 
       if (params.skillIds.length > 0) {
         await tx

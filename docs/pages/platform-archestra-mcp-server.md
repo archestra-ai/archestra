@@ -2554,9 +2554,9 @@ Required RBAC permission: `sandbox:execute`
 |-----------|------|----------|-------------|
 | `path` | `string` | Yes | Destination path inside the container — absolute under /skills or /home/sandbox, or relative to the sandbox's working directory. |
 | `source` | `object` | Yes | Where the file bytes come from. One of four shapes, each tagged by a `type`: a chat attachment (`{"type":"chat_attachment","attachmentId"\|"filename":...}`), inline base64 (`{"type":"base64","dataBase64":...}`), inline text (`{"type":"text","text":"print(1)"}`), or a file from the user's persistent files (`{"type":"my_file","filename":...}`, found via search_files). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead. |
-| `source.type` | `"chat_attachment" \| "base64" \| "text" \| "my_file"` | Yes | "chat_attachment": "base64": "text": "my_file": |
+| `source.type` | `"chat_attachment" \| "base64" \| "text" \| "my_file"` | Yes |  |
 | `source.attachmentId` | `string` | No | Id of an attachment in the current conversation. The bytes are copied directly and never enter your context. |
-| `source.filename` | `string` | No | Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins. Exact filename of a persistent file (when you have no id). |
+| `source.filename` | `string` | No | When `type="chat_attachment"`: Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins. When `type="my_file"`: Exact filename of a persistent file (when you have no id). |
 | `source.dataBase64` | `string` | When `type="base64"` | Base64-encoded file bytes. |
 | `source.mimeType` | `string` | No |  |
 | `source.originalName` | `string` | No |  |
@@ -2719,9 +2719,9 @@ Required RBAC permission: `file:manage`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `from` | `object` | Yes | Where the bytes come from: {"type":"chat_file","id"\|"filename"} \| {"type":"chat_attachment","attachmentId"\|"filename"} \| {"type":"app_file","id"\|"filename"}. |
-| `from.type` | `"chat_file" \| "chat_attachment" \| "app_file"` | Yes | "chat_file": "chat_attachment": "app_file": |
-| `from.id` | `string` | No | File id from search_files. File id in the app's store. |
-| `from.filename` | `string` | No | Filename instead of `id`; ambiguous names rejected. Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins. Filename instead of `id`. |
+| `from.type` | `"chat_file" \| "chat_attachment" \| "app_file"` | Yes |  |
+| `from.id` | `string` | No | When `type="chat_file"`: File id from search_files. When `type="app_file"`: File id in the app's store. |
+| `from.filename` | `string` | No | When `type="chat_file"`: Filename instead of `id`; ambiguous names rejected. When `type="chat_attachment"`: Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins. When `type="app_file"`: Filename instead of `id`. |
 | `from.attachmentId` | `string` | No | Id of an attachment uploaded to THIS conversation. |
 | `to` | `object` | Yes | Where the copy lands. |
 | `to.scope` | `"chat" \| "app"` | Yes | "app" = the open app's per-viewer store; "chat" = this chat's files (the project's files when this chat belongs to a project). |

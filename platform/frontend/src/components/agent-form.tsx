@@ -4071,8 +4071,8 @@ export function AgentForm({
                         <AvailableSkillsDialog
                           source={{
                             kind: "gateway",
-                            gatewayId: agent?.id,
-                            environmentId,
+                            skills: orgScopedSkills,
+                            excludedIds: excludedSkillIds,
                           }}
                         />
                       }

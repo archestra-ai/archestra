@@ -14,7 +14,7 @@ interface SkillCatalogContext {
   organizationId: string;
   userId?: string;
   agentId?: string;
-  /** Explicit preview for an agent draft that has not been persisted yet. */
+  /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
 }
 

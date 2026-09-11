@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -121,7 +121,7 @@ describe("AgentActivationSkillsEditor", () => {
     expect(
       screen.getByRole("button", { name: /^Remove incident-response/ }),
     ).toBeVisible();
-    expect(screen.queryByText("Skill library")).toBeNull();
+    expect(screen.queryByText("Organization · skill-1")).toBeNull();
 
     await user.click(screen.getByRole("tab", { name: "All" }));
     expect(
@@ -168,15 +168,23 @@ describe("AgentActivationSkillsEditor", () => {
     renderEditor();
 
     await user.click(
-      await screen.findByRole("button", { name: "View all 2 skills" }),
+      await screen.findByRole("button", { name: "Disable Skill" }),
     );
+    await user.click(await screen.findByText("incident-response"));
+    await user.click(
+      await screen.findByRole("button", { name: "View 1 Skill" }),
+    );
+    const dialog = screen.getByRole("dialog");
     expect(
-      screen.getByRole("heading", { name: "Skills available in All mode" }),
+      within(dialog).getByRole("heading", {
+        name: "Skills available in All mode",
+      }),
     ).toBeVisible();
     expect(
-      screen.getByRole("columnheader", { name: "Visibility" }),
+      within(dialog).getByRole("columnheader", { name: "Visibility" }),
     ).toBeVisible();
-    expect(screen.getByText("Research Server")).toBeVisible();
+    expect(within(dialog).queryByText("incident-response")).toBeNull();
+    expect(within(dialog).getByText("Research Server")).toBeVisible();
   });
 
   it("distinguishes same-named skill-library choices by scope and exact identity", async () => {
@@ -298,7 +306,9 @@ describe("AgentActivationSkillsEditor", () => {
       await screen.findByText(/Skill discovery is not enabled/i),
     ).toBeVisible();
     expect(screen.getByRole("tab", { name: "All" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Add" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Disable Skill" }),
+    ).toBeVisible();
   });
 
   it("keeps a dirty draft after a revision conflict refetches the policy", async () => {
@@ -429,9 +439,18 @@ describe("AgentActivationSkillsEditor", () => {
         const environmentId = new URL(request.url).searchParams.get(
           "environmentId",
         );
-        return HttpResponse.json(
-          catalog(environmentId === "env-a" ? [nativeSkill] : [externalSkill]),
+        const response = catalog(
+          environmentId === "env-a" ? [nativeSkill] : [externalSkill],
         );
+        if (environmentId === "env-b") {
+          response.pagination = {
+            ...response.pagination,
+            total: 101,
+            totalPages: 2,
+            hasNext: true,
+          };
+        }
+        return HttpResponse.json(response);
       }),
     );
 
@@ -486,6 +505,80 @@ describe("AgentActivationSkillsEditor", () => {
       allowedReferences: [],
       excludedReferences: [],
     });
+  });
+
+  it("drops only staged rules after an existing agent changes environment", async () => {
+    const savedSkill = {
+      ...nativeSkill,
+      reference: { source: "native" as const, skillId: "skill-saved" },
+      name: "saved-skill",
+      activationName: "saved-skill",
+    };
+    server.use(
+      http.get(POLICY_URL, () =>
+        HttpResponse.json({
+          mode: "manual",
+          revision: 2,
+          allowedReferences: [savedSkill.reference],
+          excludedReferences: [],
+          hiddenAllowedCount: 0,
+          hiddenExcludedCount: 0,
+          allowedSkills: [savedSkill],
+          excludedSkills: [],
+        }),
+      ),
+      http.get(CATALOG_URL, ({ request }) => {
+        const environmentId = new URL(request.url).searchParams.get(
+          "environmentId",
+        );
+        return HttpResponse.json(
+          catalog(
+            environmentId === "env-a"
+              ? [savedSkill, nativeSkill]
+              : [externalSkill],
+          ),
+        );
+      }),
+    );
+
+    function ExistingEnvironmentHarness() {
+      const [environmentId, setEnvironmentId] = useState("env-a");
+      return (
+        <>
+          <AgentActivationSkillsEditor
+            agentId={AGENT_ID}
+            environmentId={environmentId}
+          />
+          <button type="button" onClick={() => setEnvironmentId("env-b")}>
+            Change environment
+          </button>
+        </>
+      );
+    }
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ExistingEnvironmentHarness />
+      </QueryClientProvider>,
+    );
+    await user.click(await screen.findByRole("button", { name: "Add" }));
+    await user.click(await screen.findByText("incident-response"));
+    await user.click(
+      screen.getByRole("button", { name: "Change environment" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /^Remove incident-response/ }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.getByRole("button", { name: /^Remove saved-skill/ }),
+    ).toBeVisible();
   });
 
   it("shows a server-side search failure instead of an empty result", async () => {

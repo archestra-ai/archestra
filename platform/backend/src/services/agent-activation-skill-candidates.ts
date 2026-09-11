@@ -15,7 +15,7 @@ export interface SkillAvailabilityContext {
   organizationId: string;
   userId?: string;
   agentId?: string;
-  /** Explicit environment preview for an agent that has not been created. */
+  /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
 }
 

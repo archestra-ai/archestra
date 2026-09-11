@@ -104,37 +104,33 @@ export const AgentActivationSkillsEditor = forwardRef<
   }, [agentId, policyQuery.data]);
 
   useEffect(() => {
-    if (
-      agentId ||
-      candidatesQuery.isFetching ||
-      !candidatesQuery.isSuccess ||
-      candidatesQuery.data?.pagination.hasNext ||
-      reconciledEnvironment.current === (environmentId ?? null)
-    ) {
-      return;
-    }
-    const visibleKeys = new Set(
-      (candidatesQuery.data?.data ?? []).map((skill) =>
-        agentActivationSkillReferenceKey(skill.reference),
-      ),
+    if (reconciledEnvironment.current === (environmentId ?? null)) return;
+    const savedAllowedKeys = new Set(
+      synchronizedPolicy.current?.allowedReferences.map(
+        agentActivationSkillReferenceKey,
+      ) ?? [],
     );
+    const savedExcludedKeys = new Set(
+      synchronizedPolicy.current?.excludedReferences.map(
+        agentActivationSkillReferenceKey,
+      ) ?? [],
+    );
+    const wasAlreadySaved = (
+      reference: AgentActivationSkillReference,
+      savedKeys: Set<string>,
+    ) => savedKeys.has(agentActivationSkillReferenceKey(reference));
     setDraft((current) => ({
       ...current,
       allowedReferences: current.allowedReferences.filter((reference) =>
-        visibleKeys.has(agentActivationSkillReferenceKey(reference)),
+        wasAlreadySaved(reference, savedAllowedKeys),
       ),
       excludedReferences: current.excludedReferences.filter((reference) =>
-        visibleKeys.has(agentActivationSkillReferenceKey(reference)),
+        wasAlreadySaved(reference, savedExcludedKeys),
       ),
     }));
+    setDiscardUnavailable([]);
     reconciledEnvironment.current = environmentId ?? null;
-  }, [
-    agentId,
-    candidatesQuery.data,
-    candidatesQuery.isFetching,
-    candidatesQuery.isSuccess,
-    environmentId,
-  ]);
+  }, [environmentId]);
 
   const policyReady = !agentId || policyQuery.isSuccess;
   const candidatesReady = candidatesQuery.isSuccess;
@@ -188,6 +184,9 @@ export const AgentActivationSkillsEditor = forwardRef<
       agentActivationSkillReferenceKey(skill.reference),
       skill.reference,
     ]),
+  );
+  const visibleExcludedIds = excludedIds.filter((id) =>
+    referencesByKey.has(id),
   );
 
   const updateReferences = (
@@ -345,7 +344,12 @@ export const AgentActivationSkillsEditor = forwardRef<
         })}
         availableSkillsView={
           <AvailableSkillsDialog
-            source={{ kind: "agent", agentId, environmentId }}
+            source={{
+              kind: "agent",
+              agentId,
+              environmentId,
+              excludedIds: visibleExcludedIds,
+            }}
           />
         }
         allEditor={
@@ -468,7 +472,7 @@ function toSelectionItem(skill: AgentActivationSkill): SkillSelectionItem {
   const activationIdentity =
     skill.activationName === skill.name ? null : skill.activationName;
   const exactIdentity = selectionIdentity(skill);
-  const chipBadge = [skillScopeLabel(skill.scope), exactIdentity]
+  const identityLabel = [skillScopeLabel(skill.scope), exactIdentity]
     .filter(Boolean)
     .join(" · ");
   return {
@@ -486,8 +490,7 @@ function toSelectionItem(skill: AgentActivationSkill): SkillSelectionItem {
     ]
       .filter(Boolean)
       .join(" · "),
-    chipBadge,
-    removeLabel: `Remove ${skill.name} (${chipBadge})`,
+    removeLabel: `Remove ${skill.name} (${identityLabel})`,
     icon: <BookOpen className="h-3.5 w-3.5 shrink-0" />,
   };
 }

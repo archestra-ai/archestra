@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=agent_activation_skill_rules is created empty in this migration, so its foreign key, unique indexes, and ordinary index validate/build before any writer can insert data. ON DELETE CASCADE is intentional because policy rules have no meaning after their owning agent is permanently deleted. The two agents columns are constant-default metadata additions on PostgreSQL 11+ and preserve existing behavior (All mode, revision zero); the mode check is added in the same migration and the application accepts only 'all' or 'manual'.
+-- drizzle-migration-linter: reason=agent_activation_skill_rules is created empty in this migration, so its foreign key, unique indexes, and ordinary index validate/build before any writer can insert data. ON DELETE CASCADE is intentional because policy rules have no meaning after their owning agent is permanently deleted. The two agents columns are constant-default metadata additions on PostgreSQL 11+ and preserve existing behavior (All mode, revision zero). The mode check is installed NOT VALID, then validated without holding the ADD CONSTRAINT access-exclusive lock for the existing-row scan.
 CREATE TABLE "agent_activation_skill_rules" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"agent_id" uuid NOT NULL,
@@ -28,4 +28,5 @@ CREATE INDEX "agent_activation_skill_rules_agent_id_idx" ON "agent_activation_sk
 CREATE UNIQUE INDEX "agent_activation_skill_rules_native_uidx" ON "agent_activation_skill_rules" USING btree ("agent_id","disposition","skill_id") WHERE "agent_activation_skill_rules"."source" = 'native';--> statement-breakpoint
 CREATE UNIQUE INDEX "agent_activation_skill_rules_external_mcp_uidx" ON "agent_activation_skill_rules" USING btree ("agent_id","disposition","mcp_server_id","uri") WHERE "agent_activation_skill_rules"."source" = 'external_mcp';--> statement-breakpoint
 CREATE UNIQUE INDEX "agent_activation_skill_rules_plugin_uidx" ON "agent_activation_skill_rules" USING btree ("agent_id","disposition","plugin_id","skill_path") WHERE "agent_activation_skill_rules"."source" = 'plugin';--> statement-breakpoint
-ALTER TABLE "agents" ADD CONSTRAINT "agents_activation_skill_mode_check" CHECK ("agents"."activation_skill_mode" IN ('all', 'manual'));
+ALTER TABLE "agents" ADD CONSTRAINT "agents_activation_skill_mode_check" CHECK ("agents"."activation_skill_mode" IN ('all', 'manual')) NOT VALID;--> statement-breakpoint
+ALTER TABLE "agents" VALIDATE CONSTRAINT "agents_activation_skill_mode_check";

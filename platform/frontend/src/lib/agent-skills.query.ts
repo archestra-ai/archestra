@@ -50,9 +50,7 @@ export function useAgentActivationSkills(params: {
 }) {
   return useQuery({
     queryKey: [
-      "agents",
-      params.agentId ?? "draft",
-      "activation-skills",
+      ...agentActivationSkillsQueryKeyPrefix(params.agentId),
       params.view ?? "effective",
       params.environmentId ?? "default",
       params.limit,
@@ -117,7 +115,7 @@ export function usePatchAgentActivationSkillPolicy() {
         queryKey: agentActivationSkillPolicyQueryKey(agentId),
       });
       queryClient.invalidateQueries({
-        queryKey: ["agents", agentId, "activation-skills"],
+        queryKey: agentActivationSkillsQueryKeyPrefix(agentId),
       });
     },
   });
@@ -217,13 +215,17 @@ export function useUpdateAgentSkillExclusions() {
 // === internal ===
 
 function agentSkillsQueryKey(agentId: string) {
-  return ["agents", agentId, "skills"] as const;
+  return ["skills", "agent-assignments", agentId] as const;
 }
 
 function agentSkillExclusionsQueryKey(agentId: string) {
-  return ["agents", agentId, "skill-exclusions"] as const;
+  return ["skills", "agent-exclusions", agentId] as const;
 }
 
 function agentActivationSkillPolicyQueryKey(agentId: string) {
-  return ["agents", agentId, "activation-skill-policy"] as const;
+  return ["skills", "agent-activation-policy", agentId] as const;
+}
+
+function agentActivationSkillsQueryKeyPrefix(agentId?: string) {
+  return ["skills", "agent-activation", agentId ?? "draft"] as const;
 }

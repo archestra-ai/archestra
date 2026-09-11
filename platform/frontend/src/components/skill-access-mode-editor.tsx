@@ -26,7 +26,7 @@ export function SkillAccessModeEditor({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        <div className="flex flex-col items-start gap-0.5 text-sm text-muted-foreground">
           <p>{summary}</p>
           {mode === "all" && availableSkillsView}
         </div>

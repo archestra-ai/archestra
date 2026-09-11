@@ -300,15 +300,6 @@ const registry = defineArchestraTools([
       if (!resolved) {
         return unknownSkillError(args.name);
       }
-      if (
-        context.agent.id !== undefined &&
-        !(await agentActivationSkillPolicyService.isReferenceAllowed({
-          agentId: context.agent.id,
-          reference: getAvailableAgentSkillReference(resolved),
-        }))
-      ) {
-        return unknownSkillError(args.name);
-      }
       if (resolved.source === "plugin") {
         const pluginSkill = resolved.skill;
         const live = await getPluginSkill({
@@ -318,18 +309,6 @@ const registry = defineArchestraTools([
           userId: ctx.userId,
         });
         if (!live) return unknownSkillError(args.name);
-        if (
-          !(await agentActivationSkillPolicyService.isReferenceAllowed({
-            agentId: context.agent.id,
-            reference: {
-              source: "plugin",
-              pluginId: live.pluginId,
-              skillPath: live.skillPath,
-            },
-          }))
-        ) {
-          return unknownSkillError(args.name);
-        }
         if (args.path !== undefined && args.path !== "") {
           return readPluginSkillFile(live, args.path, resolved.activationName);
         }
@@ -537,9 +516,19 @@ const registry = defineArchestraTools([
         return errorResult(`A skill named "${parsed.name}" already exists.`);
       }
 
+      const availableThroughAgent =
+        context.agent.id === undefined ||
+        (await agentActivationSkillPolicyService.isReferenceAllowed({
+          agentId: context.agent.id,
+          reference: { source: "native", skillId: skill.id },
+        }));
       return successResult(
-        `Created skill "${skill.name}". It is a personal skill, now ` +
-          "available to you via list_skills and as a chat slash-command.",
+        availableThroughAgent
+          ? `Created skill "${skill.name}". It is a personal skill, now ` +
+              "available to you via list_skills and as a chat slash-command."
+          : `Created skill "${skill.name}". It is a personal skill, but this ` +
+              "agent's skill policy does not allow it. Add it to the agent's " +
+              "Manual skill list before using it here.",
       );
     },
   }),
@@ -1093,7 +1082,9 @@ async function listSkillCatalog(
     : "";
   if (catalog === null && externalCatalog === "" && pluginCatalog === "") {
     return successResult(
-      "No skills are available in this organization. Skills can be added under Agents → Skills.",
+      agentId
+        ? "No skills are available through this agent. Check its skill policy and environment, and verify that you can access the skill you need."
+        : "No skills are available in this organization. Skills can be added under Agents → Skills.",
     );
   }
   return successResult(

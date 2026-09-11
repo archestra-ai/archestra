@@ -2461,6 +2461,49 @@ describe("AgentForm published skills", () => {
     ).toBeInTheDocument();
   });
 
+  it("previews the same All-mode skills offered by the exclusion picker", async () => {
+    const user = userEvent.setup();
+    const first = orgSkill(
+      "first-skill",
+      "00000000-0000-4000-8000-0000000000ac",
+    );
+    const second = orgSkill(
+      "second-skill",
+      "00000000-0000-4000-8000-0000000000ad",
+    );
+    useAgentSkillsMock.mockReturnValue({
+      data: { accessAllSkills: true, skillIds: [], skills: [] },
+      isSuccess: true,
+    });
+    useSkillsPaginatedMock.mockReturnValue({
+      data: { data: [first, second] },
+      isFetching: false,
+    });
+
+    render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
+
+    const section = screen
+      .getByRole("heading", { name: "Skills over MCP" })
+      .closest("section") as HTMLElement;
+    expect(
+      within(section).getByRole("button", { name: "View all 2 skills" }),
+    ).toBeVisible();
+
+    await user.click(
+      within(section).getByRole("button", { name: "Disable Skill" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Add first-skill" }),
+    );
+    await user.click(
+      within(section).getByRole("button", { name: "View 1 Skill" }),
+    );
+
+    const table = screen.getByRole("table");
+    expect(within(table).queryByText("first-skill")).toBeNull();
+    expect(within(table).getByText("second-skill")).toBeVisible();
+  });
+
   it("writes neither skill set when the save changed nothing about them", async () => {
     // Re-sending an unchanged set produces a spurious no-op audit record.
     const user = userEvent.setup();

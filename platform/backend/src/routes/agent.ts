@@ -1449,7 +1449,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentActivationSkills,
         description:
-          "List a paginated, searchable view of the skills the current user can activate through an internal agent, or preview for an unsaved agent in an environment",
+          "List a paginated, searchable view of effective or policy-eligible skills for an internal agent or draft",
         tags: ["Agents"],
         querystring: PaginationQuerySchema.extend({
           search: z
@@ -1464,7 +1464,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId: UuidIdSchema.nullable()
             .optional()
             .describe(
-              "Environment for a new-agent preview. Omit for the Default environment.",
+              "Environment preview override for a draft or pending edit. Omit to use the saved agent environment, or the Default environment for a new draft.",
             ),
           view: z
             .enum(["effective", "eligible"])
@@ -1568,10 +1568,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? { agentId }
             : { environmentId: resolvedEnvironmentId }),
         });
-        const skills = projectPolicyIndependentAvailableAgentSkills(
-          candidates,
-          user.id,
-        );
+        const skills = projectPolicyIndependentAvailableAgentSkills(candidates);
         const normalizedSearch = search?.trim().toLowerCase();
         const filtered = normalizedSearch
           ? skills.filter((skill) =>

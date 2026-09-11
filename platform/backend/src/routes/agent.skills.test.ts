@@ -845,45 +845,6 @@ describe("agent skills routes", () => {
     expect(roundTrip.statusCode).toBe(200);
   });
 
-  test("an unrelated replace leaves a soft-deleted skill's assignment alone", async ({
-    makeAgent,
-  }) => {
-    // The GET hides a soft-deleted skill, so no PUT an admin can write carries
-    // its id. If the replace deleted by agent alone it would drop that row too,
-    // and restoring the skill from trash would silently UN-publish it — a
-    // change no audit diff records, because the row is in neither snapshot.
-    const agent = await makeAgent({ organizationId });
-    const kept = await makeSkill();
-    const trashed = await makeSkill();
-
-    await app.inject({
-      method: "PUT",
-      url: `/api/agents/${agent.id}/skills`,
-      payload: {
-        accessAllSkills: false,
-        skillIds: [kept.id, trashed.id].sort(),
-      },
-    });
-    await SkillModel.delete(trashed.id);
-
-    // An unrelated edit: the admin drops the one assignment they can still see.
-    const unrelated = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${agent.id}/skills`,
-      payload: { accessAllSkills: false, skillIds: [] },
-    });
-    expect(unrelated.statusCode).toBe(200);
-    expect(unrelated.json()).toMatchObject({ skillIds: [] });
-
-    await SkillModel.restore(trashed.id);
-
-    const restored = await app.inject({
-      method: "GET",
-      url: `/api/agents/${agent.id}/skills`,
-    });
-    expect(restored.json()).toMatchObject({ skillIds: [trashed.id] });
-  });
-
   test("GET keeps an assignment whose skill later left the environment", async ({
     makeAgent,
   }) => {

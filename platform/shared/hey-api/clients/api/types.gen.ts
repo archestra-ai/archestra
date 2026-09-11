@@ -17393,7 +17393,7 @@ export type GetAgentActivationSkillsData = {
          */
         agentId?: string;
         /**
-         * Environment for a new-agent preview. Omit for the Default environment.
+         * Environment preview override for a draft or pending edit. Omit to use the saved agent environment, or the Default environment for a new draft.
          */
         environmentId?: string | null;
         /**
@@ -17544,7 +17544,7 @@ export type GetAgentActivationSkillsResponses = {
             hasPrev: boolean;
         };
         /**
-         * Whether load_skill is available for this agent or draft; when false, data is empty.
+         * Whether load_skill is available for this agent or draft. Effective results are empty when false; eligible policy-editor previews may still contain candidates.
          */
         enabled: boolean;
     };

@@ -47,7 +47,6 @@ type ProjectableAgentSkill =
  */
 export function projectPolicyIndependentAvailableAgentSkills(
   candidates: PolicyIndependentAvailableAgentSkill[],
-  _userId: string | undefined,
 ): AgentActivationSkill[] {
   const nativeSkills = candidates
     .filter((candidate) => candidate.source === "native")

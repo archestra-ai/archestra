@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AgentActivationSkillsTable } from "@/components/agent-activation-skills-table";
+import type { EditableSkill } from "@/components/agent-skills-editor";
 import { GatewayPublishedSkillsTable } from "@/components/gateway-published-skills-table";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,18 +13,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAgentActivationSkills } from "@/lib/agent-skills.query";
-import { useSkillsPaginated } from "@/lib/skills/skill.query";
 
 type AvailableSkillsSource =
   | {
       kind: "agent";
       agentId?: string;
       environmentId?: string | null;
+      excludedIds: string[];
     }
   | {
       kind: "gateway";
-      gatewayId?: string;
-      environmentId?: string | null;
+      skills: EditableSkill[];
+      excludedIds: string[];
     };
 
 /** The shared “View all N skills” discovery affordance for both policy editors. */
@@ -41,32 +42,22 @@ export function AvailableSkillsDialog({
     view: "eligible",
     enabled: source.kind === "agent",
   });
-  const gatewayCount = useSkillsPaginated(
-    {
-      forAgentId: source.kind === "gateway" ? source.gatewayId : undefined,
-      mcpGatewayEnvironment:
-        source.kind === "gateway"
-          ? (source.environmentId ?? "default")
-          : undefined,
-      limit: 1,
-      offset: 0,
-      sortBy: "name",
-      sortDirection: "asc",
-      agentSkillView: "eligible",
-    },
-    {
-      enabled: source.kind === "gateway",
-      toastOnError: false,
-    },
-  );
   const count =
     source.kind === "agent"
-      ? agentCount.data?.pagination.total
-      : gatewayCount.data?.pagination?.total;
+      ? agentCount.data
+        ? Math.max(
+            0,
+            agentCount.data.pagination.total - source.excludedIds.length,
+          )
+        : undefined
+      : source.skills.filter((skill) => !source.excludedIds.includes(skill.id))
+          .length;
   const label =
     count === undefined
       ? "View all skills"
-      : `View all ${count} ${count === 1 ? "skill" : "skills"}`;
+      : count === 1
+        ? "View 1 Skill"
+        : `View all ${count} skills`;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -82,9 +73,9 @@ export function AvailableSkillsDialog({
         <DialogHeader>
           <DialogTitle>Skills available in All mode</DialogTitle>
           <DialogDescription>
-            This read-only list shows the skills eligible for All mode after
-            access, environment, and publication filters. Any exclusions
-            configured in All mode still apply.
+            {source.kind === "agent"
+              ? "This read-only list shows skills available after access, environment, and policy filters."
+              : "This read-only list shows organization skills published by All mode after exclusions."}
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
@@ -93,11 +84,12 @@ export function AvailableSkillsDialog({
               agentId={source.agentId}
               environmentId={source.environmentId}
               view="eligible"
+              excludedIds={source.excludedIds}
             />
           ) : (
             <GatewayPublishedSkillsTable
-              gatewayId={source.gatewayId}
-              environmentId={source.environmentId}
+              skills={source.skills}
+              excludedIds={source.excludedIds}
             />
           )}
         </div>

@@ -216,10 +216,19 @@ describe("skill tool execution", () => {
     );
 
     expect(textOf(catalog)).not.toContain('name="pdf-processing"');
+    expect(textOf(catalog)).toContain("skill policy");
     expect(directLoad.isError).toBe(true);
     expect(textOf(directLoad)).toContain(
       'No skill named "pdf-processing" exists',
     );
+
+    const created = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: manifest("new-personal-skill") },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    expect(textOf(created)).toContain("skill policy does not allow it");
   });
 
   test("policy filtering happens before native same-name precedence", async () => {

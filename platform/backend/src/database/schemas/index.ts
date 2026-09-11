@@ -62,6 +62,7 @@ export { default as agentExcludedSubagentsTable } from "./agent-excluded-subagen
 export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
+export { default as agentPinsTable } from "./agent-pin";
 export { default as agentRunsTable } from "./agent-run";
 export { default as agentRunInputsTable } from "./agent-run-input";
 export {

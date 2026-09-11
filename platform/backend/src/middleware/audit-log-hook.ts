@@ -326,9 +326,11 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   },
 
   // Per-user UI state / onboarding — personal preference, not an access change
-  // (userOnboardingSeenItemsTable / projectPinsTable / appPinsTable are
+  // (userOnboardingSeenItemsTable / projectPinsTable / appPinsTable /
+  // agentPinsTable are
   // audited:false in AUDIT_DECISIONS).
   { kind: "prefix", value: "/api/onboarding" },
+  { kind: "route", value: "/api/agents/:id/pin" },
   { kind: "route", value: "/api/apps/:appId/pin" },
   { kind: "route", value: "/api/apps/external/:mcpServerId/pin" },
   { kind: "route", value: "/api/mcp_server/:id/alert-mutes/:kind" },

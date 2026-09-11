@@ -50,6 +50,7 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     knowledgeBaseIds: [],
     connectorIds: [],
     suggestedPrompts: [],
+    pinnedAt: null,
     ...overrides,
   };
 }

@@ -300,6 +300,8 @@ describe("registerAuditLogHook", () => {
 
     // Route-pattern (":id/suffix") denylist entries — a variable id sits before
     // a static suffix, so a concrete-URL prefix would over-match the parent.
+    app.put("/api/agents/:id/pin", async () => ({ ok: true }));
+    app.delete("/api/agents/:id/pin", async () => ({ ok: true }));
     app.delete("/api/apps/:appId/pin", async () => ({ ok: true }));
     app.post("/api/apps/:appId/diagnostics", async () => ({ ok: true }));
     // The audited parent under the same prefix must NOT be silenced.
@@ -955,6 +957,18 @@ describe("registerAuditLogHook", () => {
       await app.inject({
         method: "DELETE",
         url: "/api/apps/00000000-0000-0000-0000-0000000000aa/pin",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test.each([
+      "PUT",
+      "DELETE",
+    ] as const)("%s /api/agents/:id/pin writes zero rows (route-pattern denylist entry)", async (method) => {
+      await app.inject({
+        method,
+        url: "/api/agents/00000000-0000-0000-0000-0000000000aa/pin",
       });
       await settle();
       expect(await getRows()).toHaveLength(0);

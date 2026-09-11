@@ -15,6 +15,8 @@ export const RouteId = {
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
+  PinAgent: "pinAgent",
+  UnpinAgent: "unpinAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
   GetLlmProxy: "getLlmProxy",
   UpdateLlmProxy: "updateLlmProxy",

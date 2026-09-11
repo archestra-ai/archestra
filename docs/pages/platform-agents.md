@@ -171,6 +171,12 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
 - removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
 
+## Organizing Agents
+
+Use **Pin** in an agent's overflow menu to move it into the **Pinned** section. Pins are personal and do not change anyone else's list. The most recently pinned agent appears first.
+
+List pins only organize the **Agents** page. They do not change which agent starts a new chat. Use **Set as default** for that behavior.
+
 ## Default Agents
 
 Which agent a new chat starts on — one opened from the composer, an app opened in chat, or any other chat reached without naming an agent — is decided in this order:

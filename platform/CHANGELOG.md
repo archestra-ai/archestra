@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.58](https://github.com/archestra-ai/archestra/compare/platform-v1.3.57...platform-v1.3.58) (2026-09-11)
+
+
+### Bug Fixes
+
+* **frontend:** clarify inaccessible log sessions (backport release/1.3) ([#7841](https://github.com/archestra-ai/archestra/issues/7841)) ([b77d2a3](https://github.com/archestra-ai/archestra/commit/b77d2a307ee9aa8f1e5091c6d1c6a3bd00b59d15))
+* **github-copilot:** repair follow-up and nonstreaming inference (backport release/1.3) ([#7844](https://github.com/archestra-ai/archestra/issues/7844)) ([87f429c](https://github.com/archestra-ai/archestra/commit/87f429cd61fe022e6516c71d054ea3d4829a8c45))
+
 ## [1.3.57](https://github.com/archestra-ai/archestra/compare/platform-v1.3.56...platform-v1.3.57) (2026-09-11)
 
 

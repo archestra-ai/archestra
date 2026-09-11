@@ -144,15 +144,14 @@ behavior, not exactly-once execution of arbitrary external services.
 dispatch, schemas, and branding. It is implicit protocol support, like existing
 run controls. The native gate checks the control call and the existing Rust MCP
 implementation validates the offer against the authenticated actor. Registered
-remote authorities and sanitizers work. Interactive MCP elicitation has no
-embedded bridge yet and returns the runtime's existing no-answer behavior.
+remote authorities and sanitizers work. In authenticated Chat, human-review
+offers open the native approval card and pass the host ruling to embedded
+remedy execution. Narrowing offers remain model decisions.
 
-The proxy's existing refusal response ends the model step. The offered remedy
-is saved in Chat and becomes model context on the next user turn; automatic
-same-turn remedy continuation is not implemented. Native feedback may suggest
-a child as an alternative, but Chat delegation is explicitly refused until a
-complete child-return adapter exists. The native boundary contains the existing
-child hook plumbing, not a finished Chat child lifecycle.
+Chat represents denials as tool results and can continue within the same turn.
+External proxy clients retain the refusal-response behavior. Native feedback
+may suggest a child as an alternative, but Chat delegation is explicitly
+refused until a complete child-return adapter exists.
 
 Locked chats are refused while enabled because the new native tables do not
 yet use their browser-held encryption keys. Only approved text is returned to

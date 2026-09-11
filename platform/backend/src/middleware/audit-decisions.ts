@@ -87,6 +87,11 @@ export const AUDIT_DECISIONS = {
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
+  agentPinsTable: {
+    audited: false,
+    reason:
+      "per-user pin on an agent; personal preference, not an access change",
+  },
   a2aRemoteAgentsTable: { audited: true, model: A2aRemoteAgentModel },
   a2aRemoteAgentTeamsTable: {
     audited: false,

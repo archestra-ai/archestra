@@ -42,6 +42,8 @@ const {
   getLabelValues,
   getMemberDefaultAgent,
   updateMemberDefaultAgent,
+  pinAgent,
+  unpinAgent,
 } = archestraApiSdk;
 
 /**
@@ -220,11 +222,19 @@ export function useProfilesPaginated(
     initialData?: archestraApiTypes.GetAgentsResponses["200"];
     /** Scope of the server seed; never reuse it for a different visibility filter. */
     initialDataExcludeOtherPersonalAgents?: boolean;
+    /** Pin slice of the server seed; never reuse it for the other list section. */
+    initialDataPinned?: boolean;
+    /** Page size used to produce the server seed. */
+    initialDataLimit?: number;
+    enabled?: boolean;
   },
 ) {
   const {
     initialData,
     initialDataExcludeOtherPersonalAgents,
+    initialDataPinned,
+    initialDataLimit,
+    enabled,
     limit,
     offset,
     sortBy,
@@ -239,6 +249,7 @@ export function useProfilesPaginated(
     labels,
     status,
     includeActivationSkillsCount,
+    pinned,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -255,9 +266,11 @@ export function useProfilesPaginated(
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
+    pinned === initialDataPinned &&
     labels === undefined &&
     status === undefined &&
-    (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
+    (limit === undefined ||
+      limit === (initialDataLimit ?? DEFAULT_TABLE_LIMIT));
 
   return useQuery({
     queryKey: [
@@ -277,6 +290,7 @@ export function useProfilesPaginated(
         labels,
         status,
         includeActivationSkillsCount,
+        pinned,
       },
     ],
     queryFn: async () => {
@@ -296,17 +310,41 @@ export function useProfilesPaginated(
           labels,
           status,
           includeActivationSkillsCount,
+          pinned,
         },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;
     },
     initialData: useInitialData ? initialData : undefined,
+    enabled,
     // The list pages restore their last rows on refresh and swap in the fresh
     // page when it lands, so a reload lands on a filled table rather than an
     // empty one. Keyed by the full filter set, so a restored page only ever
     // shows the rows that belong to the filters in the URL.
     meta: PERSISTED_QUERY_META,
+  });
+}
+
+/** Pin/unpin an agent for the current user (personal — toggle by `pinned`). */
+export function usePinAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
+      const { error } = pinned
+        ? await pinAgent({ path: { id } })
+        : await unpinAgent({ path: { id } });
+      if (error) {
+        reportApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok) => {
+      if (!ok) return;
+      // Both list slices move: the row leaves one section and enters the other.
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
   });
 }
 

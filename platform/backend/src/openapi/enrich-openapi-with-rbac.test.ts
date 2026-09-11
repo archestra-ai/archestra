@@ -85,6 +85,12 @@ describe("enrichOpenApiWithRbac", () => {
             description: "Get agent by ID",
           },
         },
+        "/api/agents/{id}/pin": {
+          put: {
+            operationId: RouteId.PinAgent,
+            description: "Pin agent",
+          },
+        },
       },
     };
 
@@ -110,6 +116,21 @@ describe("enrichOpenApiWithRbac", () => {
       "Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
     );
     expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
+
+    const pinOperation = enriched.paths["/api/agents/{id}/pin"].put as {
+      description?: string;
+      "x-required-permissions"?: {
+        kind: "dynamic" | "none" | "static";
+        note?: string;
+        permissions: string[];
+      };
+    };
+    expect(pinOperation["x-required-permissions"]).toEqual({
+      kind: "dynamic",
+      note: expect.stringContaining("caller's visibility"),
+      permissions: [],
+    });
+    expect(pinOperation.description).toContain("`agent:read`");
   });
 
   it("documents row-level log scope alongside the static permission", () => {

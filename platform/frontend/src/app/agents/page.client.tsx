@@ -88,6 +88,7 @@ import {
   useDeleteProfile,
   useExportAgent,
   usePermanentlyDeleteProfile,
+  usePinAgent,
   useProfilesPaginated,
   useRestoreProfile,
   useUpdateDefaultAgentId,
@@ -110,6 +111,7 @@ import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+  pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
   teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
@@ -178,6 +180,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | "active"
     | "deleted"
     | null;
+  const isDeletedView = statusFromUrl === "deleted";
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
@@ -214,7 +217,28 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     includeActivationSkillsCount: true,
     initialData: initialData?.agents ?? undefined,
     initialDataExcludeOtherPersonalAgents: true,
+    initialDataPinned: isDeletedView ? undefined : false,
+    pinned: isDeletedView ? undefined : false,
     ...listFilters,
+  });
+  const {
+    data: pinnedAgentsResponse,
+    isPending: isPinnedPending,
+    isFetching: isPinnedFetching,
+    isLoadingError: isPinnedAgentsLoadError,
+    refetch: refetchPinnedAgents,
+  } = useProfilesPaginated({
+    limit: 100,
+    offset: 0,
+    includeActivationSkillsCount: true,
+    initialData: initialData?.pinnedAgents ?? undefined,
+    initialDataExcludeOtherPersonalAgents: true,
+    initialDataPinned: true,
+    initialDataLimit: 100,
+    enabled: !isDeletedView,
+    pinned: true,
+    ...listFilters,
+    status: undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
@@ -323,16 +347,27 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     [setPagination],
   );
 
-  const agents = agentsResponse?.data || [];
+  const pinnedAgents = isDeletedView ? [] : pinnedAgentsResponse?.data || [];
+  const unpinnedAgents = agentsResponse?.data || [];
+  const agents = isDeletedView
+    ? unpinnedAgents
+    : [...pinnedAgents, ...unpinnedAgents];
 
   const pagination = agentsResponse?.pagination;
-  const showLoading = (isPending || isFetching) && agents.length === 0;
-  const isDeletedView = statusFromUrl === "deleted";
+  const totalAgents = isDeletedView
+    ? (pagination?.total ?? 0)
+    : (pagination?.total ?? 0) + (pinnedAgentsResponse?.pagination.total ?? 0);
+  const showLoading =
+    (isPending ||
+      isFetching ||
+      (!isDeletedView && (isPinnedPending || isPinnedFetching))) &&
+    agents.length === 0;
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteProfiles();
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const bulkVisibility = useBulkUpdateProfileVisibility();
+  const pinAgent = usePinAgent();
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
   // another page drop out of both the count and the request. The trash view
@@ -414,6 +449,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         onPermanentlyDelete={setPermanentlyDeletingAgent}
         onClone={setCloningAgent}
         onConvertToSkill={setConvertingAgent}
+        onTogglePin={(target) =>
+          pinAgent.mutate({ id: target.id, pinned: !target.pinnedAt })
+        }
         personalDefault={
           agent.agentType === "agent" &&
           !agent.builtIn &&
@@ -562,7 +600,136 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     },
   ];
 
-  if (isAgentsLoadError) {
+  const pinnedColumns = columns.map((column) =>
+    column.id === "name"
+      ? { ...column, header: "Name", enableSorting: false }
+      : column,
+  );
+
+  const renderAgentSection = ({
+    title,
+    rows,
+    pagination: sectionPagination,
+    forceTable = false,
+    sortable = true,
+  }: {
+    title?: string;
+    rows: AgentData[];
+    pagination?: { pageIndex: number; pageSize: number; total: number };
+    forceTable?: boolean;
+    sortable?: boolean;
+  }) => (
+    <section className="space-y-3">
+      {title ? (
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h2>
+      ) : null}
+      <TableCardViewContent
+        forceTable={forceTable}
+        cards={
+          <TableCardList
+            itemCount={rows.length}
+            isLoading={showLoading}
+            emptyIcon={Bot}
+            emptyMessage="No agents found"
+            hasActiveFilters={hasActiveFilters}
+            filteredEmptyMessage="No agents match your filters"
+            onClearFilters={clearFilters}
+            pagination={sectionPagination}
+            onPaginationChange={
+              sectionPagination ? handlePaginationChange : undefined
+            }
+          >
+            {rows.map((agent) => (
+              <TableCard
+                key={agent.id}
+                icon={<AgentIcon icon={agent.icon} size={20} />}
+                title={
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <Link
+                      href={agentDetailHref("agent", agent.id)}
+                      className="truncate"
+                    >
+                      {agent.name}
+                    </Link>
+                    <LabelTags labels={agent.labels} />
+                  </span>
+                }
+                description={agent.description}
+                actions={renderAgentActions(agent)}
+                onNavigate={
+                  isDeletedView
+                    ? undefined
+                    : () => router.push(agentDetailHref("agent", agent.id))
+                }
+                {...cardSelection(agent)}
+                selectionLabel={`Select ${agent.name}`}
+                footer={<AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <ResourceVisibilityBadge
+                    scope={agent.scope}
+                    teams={agent.teams}
+                    users={agent.users}
+                    authorId={agent.authorId}
+                    authorName={agent.authorName}
+                    currentUserId={currentUserId}
+                    showSelfAsMe
+                  />
+                  {effectiveDefault?.agentId === agent.id ? (
+                    <DefaultAgentTag source={effectiveDefault.source} />
+                  ) : null}
+                  <AgentAccessBadges agent={agent} />
+                </div>
+              </TableCard>
+            ))}
+          </TableCardList>
+        }
+        table={
+          <DataTable
+            columns={sortable ? columns : pinnedColumns}
+            data={rows}
+            isLoading={showLoading}
+            getRowId={(row) => row.id}
+            rowSelection={effectiveRowSelection}
+            onRowSelectionChange={onRowSelectionChange}
+            rangeSelection={rangeSelection}
+            hideSelectedCount
+            sorting={sortable ? sorting : []}
+            onSortingChange={sortable ? handleSortingChange : undefined}
+            manualSorting
+            manualPagination
+            pagination={sectionPagination}
+            onPaginationChange={
+              sectionPagination ? handlePaginationChange : undefined
+            }
+            // Trashed rows have no page to open — Restore and permanent delete
+            // stay row actions.
+            onRowClick={
+              isDeletedView
+                ? undefined
+                : (row, event) =>
+                    openRowOnPlainClick(event, () =>
+                      router.push(agentDetailHref("agent", row.id)),
+                    )
+            }
+            emptyIcon={Bot}
+            emptyMessage="No agents found"
+            hasActiveFilters={hasActiveFilters}
+            filteredEmptyMessage={
+              isDeletedView
+                ? "No deleted agents found."
+                : "No agents match your filters"
+            }
+            onClearFilters={clearFilters}
+          />
+        }
+      />
+    </section>
+  );
+
+  if (isAgentsLoadError || (!isDeletedView && isPinnedAgentsLoadError)) {
     return (
       <PageLayout
         title="Agents"
@@ -575,7 +742,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       >
         <QueryLoadError
           title="Couldn't load your agents"
-          onRetry={() => refetchAgents()}
+          onRetry={() => {
+            refetchAgents();
+            if (!isDeletedView) refetchPinnedAgents();
+          }}
         />
       </PageLayout>
     );
@@ -620,7 +790,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                 search={
                   <SearchInput
-                    isLoading={isFetching}
+                    isLoading={isFetching || isPinnedFetching}
                     objectNamePlural="agents"
                     searchFields={["name"]}
                     paramName="name"
@@ -653,7 +823,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onClear={clearSelection}
               busy={bulkDelete.isPending || isFetchingAllMatching}
               selectAllMatching={{
-                total: pagination?.total ?? 0,
+                total: totalAgents,
                 pageFullySelected:
                   agents.length > 0 && pageSelection.length === agents.length,
                 active: allMatchingSelected,
@@ -683,115 +853,35 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               </PermissionButton>
             </BulkActions>
 
-            <div data-testid={E2eTestId.AgentsTable}>
-              <TableCardViewContent
-                forceTable={isDeletedView}
-                cards={
-                  <TableCardList
-                    itemCount={agents.length}
-                    isLoading={showLoading}
-                    emptyIcon={Bot}
-                    emptyMessage="No agents found"
-                    hasActiveFilters={hasActiveFilters}
-                    filteredEmptyMessage="No agents match your filters"
-                    onClearFilters={clearFilters}
-                    pagination={{
+            <div data-testid={E2eTestId.AgentsTable} className="space-y-6">
+              {!isDeletedView && pinnedAgents.length > 0
+                ? renderAgentSection({
+                    title: "Pinned",
+                    rows: pinnedAgents,
+                    sortable: false,
+                  })
+                : null}
+              {isDeletedView
+                ? renderAgentSection({
+                    rows: unpinnedAgents,
+                    pagination: {
                       pageIndex,
                       pageSize,
                       total: pagination?.total ?? 0,
-                    }}
-                    onPaginationChange={handlePaginationChange}
-                  >
-                    {agents.map((agent) => (
-                      <TableCard
-                        key={agent.id}
-                        icon={<AgentIcon icon={agent.icon} size={20} />}
-                        title={
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            <Link
-                              href={agentDetailHref("agent", agent.id)}
-                              className="truncate"
-                            >
-                              {agent.name}
-                            </Link>
-                            <LabelTags labels={agent.labels} />
-                          </span>
-                        }
-                        description={agent.description}
-                        actions={renderAgentActions(agent)}
-                        onNavigate={
-                          isDeletedView
-                            ? undefined
-                            : () =>
-                                router.push(agentDetailHref("agent", agent.id))
-                        }
-                        {...cardSelection(agent)}
-                        selectionLabel={`Select ${agent.name}`}
-                        footer={
-                          <AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />
-                        }
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ResourceVisibilityBadge
-                            scope={agent.scope}
-                            teams={agent.teams}
-                            users={agent.users}
-                            authorId={agent.authorId}
-                            authorName={agent.authorName}
-                            currentUserId={currentUserId}
-                            showSelfAsMe
-                          />
-                          {effectiveDefault?.agentId === agent.id ? (
-                            <DefaultAgentTag source={effectiveDefault.source} />
-                          ) : null}
-                          <AgentAccessBadges agent={agent} />
-                        </div>
-                      </TableCard>
-                    ))}
-                  </TableCardList>
-                }
-                table={
-                  <DataTable
-                    columns={columns}
-                    data={agents}
-                    isLoading={showLoading}
-                    getRowId={(row) => row.id}
-                    rowSelection={effectiveRowSelection}
-                    onRowSelectionChange={onRowSelectionChange}
-                    rangeSelection={rangeSelection}
-                    hideSelectedCount
-                    sorting={sorting}
-                    onSortingChange={handleSortingChange}
-                    manualSorting={true}
-                    manualPagination={true}
-                    pagination={{
-                      pageIndex,
-                      pageSize,
-                      total: pagination?.total ?? 0,
-                    }}
-                    onPaginationChange={handlePaginationChange}
-                    // Trashed rows have no page to open — Restore and permanent
-                    // delete stay row actions.
-                    onRowClick={
-                      isDeletedView
-                        ? undefined
-                        : (row, event) =>
-                            openRowOnPlainClick(event, () =>
-                              router.push(agentDetailHref("agent", row.id)),
-                            )
-                    }
-                    emptyIcon={Bot}
-                    emptyMessage="No agents found"
-                    hasActiveFilters={hasActiveFilters}
-                    filteredEmptyMessage={
-                      isDeletedView
-                        ? "No deleted agents found."
-                        : "No agents match your filters"
-                    }
-                    onClearFilters={clearFilters}
-                  />
-                }
-              />
+                    },
+                    forceTable: true,
+                  })
+                : unpinnedAgents.length > 0 || pinnedAgents.length === 0
+                  ? renderAgentSection({
+                      title: "Agents",
+                      rows: unpinnedAgents,
+                      pagination: {
+                        pageIndex,
+                        pageSize,
+                        total: pagination?.total ?? 0,
+                      },
+                    })
+                  : null}
             </div>
 
             {bulkVisibilityOpen && (

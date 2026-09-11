@@ -768,6 +768,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAllAgents]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
+  // Agent type and instance visibility are dynamic and checked by PinAgent's
+  // handler. Unpin is deliberately ungated beyond authentication so a stale
+  // pin can be cleared after access is lost.
+  [RouteId.PinAgent]: {},
+  [RouteId.UnpinAgent]: {},
   [RouteId.CreateAgent]: {},
   [RouteId.CloneAgent]: {},
   [RouteId.UpdateAgent]: {},

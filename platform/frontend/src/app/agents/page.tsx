@@ -24,9 +24,11 @@ export const dynamic = "force-dynamic";
 export default async function AgentsPageServer() {
   let initialData: {
     agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+    pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
     teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
   } = {
     agents: null,
+    pinnedAgents: null,
     teams: [],
   };
   try {
@@ -40,34 +42,53 @@ export default async function AgentsPageServer() {
       data: { data: [] },
       error: undefined,
     };
-    const [agentsResponse, teamsResponse] = await Promise.all([
-      archestraApiSdk.getAgents({
-        headers,
-        query: {
-          limit: DEFAULT_TABLE_LIMIT,
-          offset: 0,
-          sortBy: DEFAULT_SORT_BY,
-          sortDirection: DEFAULT_SORT_DIRECTION,
-          agentTypes: ["agent"],
-          excludeOtherPersonalAgents: true,
-          includeActivationSkillsCount: true,
-        },
-      }),
-      canReadTeams
-        ? archestraApiSdk.getTeams({
-            headers,
-            query: { limit: 100, offset: 0 },
-          })
-        : Promise.resolve(emptyTeamsResponse),
-    ]);
+    const [agentsResponse, pinnedAgentsResponse, teamsResponse] =
+      await Promise.all([
+        archestraApiSdk.getAgents({
+          headers,
+          query: {
+            limit: DEFAULT_TABLE_LIMIT,
+            offset: 0,
+            sortBy: DEFAULT_SORT_BY,
+            sortDirection: DEFAULT_SORT_DIRECTION,
+            agentTypes: ["agent"],
+            excludeOtherPersonalAgents: true,
+            includeActivationSkillsCount: true,
+            pinned: false,
+          },
+        }),
+        archestraApiSdk.getAgents({
+          headers,
+          query: {
+            limit: 100,
+            offset: 0,
+            sortBy: DEFAULT_SORT_BY,
+            sortDirection: DEFAULT_SORT_DIRECTION,
+            agentTypes: ["agent"],
+            excludeOtherPersonalAgents: true,
+            includeActivationSkillsCount: true,
+            pinned: true,
+          },
+        }),
+        canReadTeams
+          ? archestraApiSdk.getTeams({
+              headers,
+              query: { limit: 100, offset: 0 },
+            })
+          : Promise.resolve(emptyTeamsResponse),
+      ]);
     if (agentsResponse.error) {
       handleApiError(agentsResponse.error);
+    }
+    if (pinnedAgentsResponse.error) {
+      handleApiError(pinnedAgentsResponse.error);
     }
     if (teamsResponse.error) {
       handleApiError(teamsResponse.error);
     }
     initialData = {
       agents: agentsResponse.data || null,
+      pinnedAgents: pinnedAgentsResponse.data || null,
       teams: teamsResponse.data?.data ?? [],
     };
   } catch (error) {

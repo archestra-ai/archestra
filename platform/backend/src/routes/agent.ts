@@ -35,6 +35,7 @@ import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
+  AgentPinModel,
   AgentTeamModel,
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
@@ -76,6 +77,7 @@ import {
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
+  AgentListItemSchema,
   type AgentRuntime,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -199,6 +201,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Include the caller-relative activation skill count used by internal-agent cards. Omitted when the caller lacks skill:read.",
               ),
+            pinned: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val === "true" : val),
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Filter by the current user's pins. Pinned results are ordered by newest pin first; unpinned results keep the requested sort.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -213,7 +224,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ] as const),
           ),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAgentSchema),
+          createPaginatedResponseSchema(AgentListItemSchema),
         ),
       },
     },
@@ -231,6 +242,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeOtherPersonalAgents,
           status,
           includeActivationSkillsCount,
+          pinned,
           limit,
           offset,
           sortBy,
@@ -282,6 +294,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : undefined,
           labels: parseLabelsParam(labels),
           status,
+          pinned,
         },
         user.id,
         isAdmin,
@@ -294,6 +307,43 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
       return reply.send(result);
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.PinAgent,
+        description:
+          "Pin an agent for the current user. Personal — does not affect other members. Any user who can read the agent may pin it.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireReadableAgent({ id, userId: user.id, organizationId });
+      await AgentPinModel.pin({ userId: user.id, agentId: id });
+      return reply.send({ ok: true as const });
+    },
+  );
+
+  fastify.delete(
+    "/api/agents/:id/pin",
+    {
+      schema: {
+        operationId: RouteId.UnpinAgent,
+        description:
+          "Remove the current user's pin on an agent. Idempotent and intentionally has no visibility check so stale pins can still be cleared.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, user }, reply) => {
+      await AgentPinModel.unpin({ userId: user.id, agentId: id });
+      return reply.send({ ok: true as const });
     },
   );
 

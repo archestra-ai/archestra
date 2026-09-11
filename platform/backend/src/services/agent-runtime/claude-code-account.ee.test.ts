@@ -2,6 +2,7 @@ import { SecretsManagerType } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import { UserCredentialModel } from "@/models";
 import SecretModel from "@/models/secret";
@@ -14,6 +15,7 @@ import { claudeCodeAccountManager as manager } from "./claude-code-account";
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 const server = useMswServer();
 beforeEach(() => {
+  vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
   config.enterpriseFeatures.core = true;
   vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_ADDR", "http://vault.example.test");
   vi.stubEnv("ARCHESTRA_HASHICORP_VAULT_TOKEN", "example-vault-token");

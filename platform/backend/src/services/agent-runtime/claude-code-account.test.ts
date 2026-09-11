@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import { OrganizationModel, UserCredentialModel } from "@/models";
 import SecretModel from "@/models/secret";
@@ -7,9 +8,10 @@ import { beforeEach, describe, expect, test } from "@/test";
 import type { ResolvedAgentRuntime } from "@/types";
 import { claudeCodeAccountManager as manager } from "./claude-code-account";
 
-// Only the disposable Kubernetes/CLI process is replaced. All connection,
+// Only Kubernetes availability and the disposable CLI process are replaced. All connection,
 // verification, encryption, and secret operations use the real database.
 beforeEach(() => {
+  vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
   vi.spyOn(claudeCodeAccountRuntime, "create").mockResolvedValue(undefined);
   vi.spyOn(claudeCodeAccountRuntime, "delete").mockResolvedValue(undefined);
   vi.spyOn(claudeCodeAccountRuntime, "status").mockResolvedValue({

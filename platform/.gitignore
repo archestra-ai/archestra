@@ -58,6 +58,8 @@ pids
 
 # OS crash dumps
 core
+!backend/src/clients/appa-runtime/generated/core/
+!backend/src/clients/appa-runtime/generated/core/**
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

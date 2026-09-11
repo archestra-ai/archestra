@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated runtime
-lastUpdated: "2026-09-09"
+lastUpdated: "2026-09-11"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -189,6 +189,8 @@ Cilium `CiliumNetworkPolicy`, GKE `FQDNNetworkPolicy`, or AWS
 internet CIDR-exception, and floor behavior as MCP server pods and code sandboxes. DNS and the
 Archestra control plane remain reachable so the run can use the LLM
 proxy and MCP gateway.
+
+For a Kubernetes Service URL, runtime policies allow its exact ClusterIPs and configured port. This supports network plugins that enforce policy before translating Service addresses to pod addresses. The rest of the private network remains governed by the Environment policy.
 
 Continuations refresh the current Environment policy before starting the next turn.
 Obsolete policy types are removed, including when a suspended workspace resumes.

@@ -20,12 +20,11 @@ Starting a new stable branch adds configuration steps. It uses the same stable p
 ## Backporting Fixes
 
 1. Land fixes on `main` first. Fixes on `main` ship automatically in the next beta release.
-2. Backport fixes to the active stable branch (`release/X.Y`):
-   - Branch from `origin/release/X.Y`.
-   - Use `git cherry-pick -x <main-commit-sha>`.
-   - Include only necessary bug fixes. Do not include features, refactors, or schema changes.
-3. If an unreleased candidate branch also needs the fix, open a separate backport PR targeting that branch.
-4. Never merge `main` directly into `release/X.Y` or candidate branches.
+2. Read `.github/backport-targets.json` and apply `backport release/X.Y` labels to the source PR for the configured targets. Labels work before or after merge. **Open Backport PRs** creates separate `cherry-pick -x` PRs; it never merges or approves a release.
+3. Monitor the resulting backport PRs and their checks. Review the release-specific diff before queueing them under the user's merge authorization.
+4. On conflicts, use the manual `cherry-pick -x` procedure in `platform/dev/RELEASE.md`. Include only necessary fixes; no features, refactors, or schema changes. Never merge `main` into release or candidate branches.
+5. Retry API failures through **Open Backport PRs** workflow dispatch. Existing PRs are not duplicated or reopened, and existing branches are not overwritten. Investigate an unexpected existing branch instead of deleting it.
+6. During stable cutover, update the configured targets and their labels to include the new branch and remove the retired line. The automation's source of truth is the default branch.
 
 ## Cutting A New Stable Line End To End
 

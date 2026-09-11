@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 class ClaudeAuthTest(unittest.TestCase):
     def test_native_cli_uses_the_selected_credential(self):
         cases = {
-            "subscription": {"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-test-subscription"},
+            "anthropic": {"ANTHROPIC_API_KEY": "sk-ant-api03-test-provider"},
             "vertex": {"ANTHROPIC_AUTH_TOKEN": "arch_test_provider_key"},
             "bedrock": {
                 "CLAUDE_CODE_USE_BEDROCK": "1",
@@ -57,10 +57,6 @@ class ClaudeAuthTest(unittest.TestCase):
                     "ANTHROPIC_BEDROCK_BASE_URL": origin,
                     **credentials,
                 }
-                if source == "subscription":
-                    env["ANTHROPIC_CUSTOM_HEADERS"] = (
-                        "X-Archestra-Virtual-Key: arch_test_passthrough"
-                    )
                 try:
                     process = subprocess.Popen(
                         ["archestra-claude-code"],
@@ -82,18 +78,18 @@ class ClaudeAuthTest(unittest.TestCase):
                         server.requests,
                         f"{source}: no inference request reached the server",
                     )
-                    expected_token = credentials.get(
-                        "CLAUDE_CODE_OAUTH_TOKEN", "arch_test_provider_key"
-                    )
                     for request in server.requests:
-                        self.assertEqual(
-                            request.get("authorization"), f"Bearer {expected_token}"
-                        )
-                        self.assertNotIn("x-api-key", request)
-                        self.assertEqual(
-                            request.get("x-archestra-virtual-key"),
-                            "arch_test_passthrough" if source == "subscription" else None,
-                        )
+                        if source == "anthropic":
+                            self.assertEqual(
+                                request.get("x-api-key"), credentials["ANTHROPIC_API_KEY"]
+                            )
+                            self.assertNotIn("authorization", request)
+                        else:
+                            self.assertEqual(
+                                request.get("authorization"), "Bearer arch_test_provider_key"
+                            )
+                            self.assertNotIn("x-api-key", request)
+                        self.assertNotIn("x-archestra-virtual-key", request)
                 finally:
                     server.shutdown()
                     server.server_close()

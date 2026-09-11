@@ -14082,6 +14082,10 @@ export type GetAgentsResponses = {
                     description?: string;
                     required: boolean;
                 }> | null;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
                 ttlHours: number | null;
                 maxCostUsd?: number | null;
                 idleTimeoutMinutes: number | null;
@@ -14217,6 +14221,10 @@ export type CreateAgentData = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -14381,6 +14389,10 @@ export type CreateAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -14623,6 +14635,10 @@ export type GetAllAgentsResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -14916,6 +14932,10 @@ export type GetDefaultMcpGatewayResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -15201,6 +15221,10 @@ export type ImportAgentResponses = {
                     description?: string;
                     required: boolean;
                 }> | null;
+                claudeCode?: {
+                    authentication: 'provider' | 'subscription';
+                    model?: string;
+                };
                 ttlHours: number | null;
                 maxCostUsd?: number | null;
                 idleTimeoutMinutes: number | null;
@@ -15499,6 +15523,10 @@ export type GetAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -15625,6 +15653,10 @@ export type UpdateAgentData = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -15791,6 +15823,10 @@ export type UpdateAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -16258,6 +16294,10 @@ export type RestoreAgentVersionResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -16474,6 +16514,10 @@ export type CloneAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -18017,6 +18061,10 @@ export type RestoreAgentResponses = {
                 description?: string;
                 required: boolean;
             }> | null;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
             ttlHours: number | null;
             maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
@@ -19054,6 +19102,446 @@ export type GetAgentRuntimePreflightResponses = {
 };
 
 export type GetAgentRuntimePreflightResponse = GetAgentRuntimePreflightResponses[keyof GetAgentRuntimePreflightResponses];
+
+export type DisconnectClaudeCodeAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/account';
+};
+
+export type DisconnectClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectClaudeCodeAccountError = DisconnectClaudeCodeAccountErrors[keyof DisconnectClaudeCodeAccountErrors];
+
+export type DisconnectClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed';
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type DisconnectClaudeCodeAccountResponse = DisconnectClaudeCodeAccountResponses[keyof DisconnectClaudeCodeAccountResponses];
+
+export type GetClaudeCodeAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/account';
+};
+
+export type GetClaudeCodeAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetClaudeCodeAccountError = GetClaudeCodeAccountErrors[keyof GetClaudeCodeAccountErrors];
+
+export type GetClaudeCodeAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed';
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type GetClaudeCodeAccountResponse = GetClaudeCodeAccountResponses[keyof GetClaudeCodeAccountResponses];
+
+export type StartClaudeCodeSignInData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/account';
+};
+
+export type StartClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartClaudeCodeSignInError = StartClaudeCodeSignInErrors[keyof StartClaudeCodeSignInErrors];
+
+export type StartClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed';
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type StartClaudeCodeSignInResponse = StartClaudeCodeSignInResponses[keyof StartClaudeCodeSignInResponses];
+
+export type CompleteClaudeCodeSignInData = {
+    body: {
+        flowId: string;
+        code: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/account/complete';
+};
+
+export type CompleteClaudeCodeSignInErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteClaudeCodeSignInError = CompleteClaudeCodeSignInErrors[keyof CompleteClaudeCodeSignInErrors];
+
+export type CompleteClaudeCodeSignInResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed';
+        flowId?: string;
+        authorizationUrl?: string;
+    };
+};
+
+export type CompleteClaudeCodeSignInResponse = CompleteClaudeCodeSignInResponses[keyof CompleteClaudeCodeSignInResponses];
+
+export type GetClaudeCodeModelsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/runtime/claude-code/models';
+};
+
+export type GetClaudeCodeModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetClaudeCodeModelsError = GetClaudeCodeModelsErrors[keyof GetClaudeCodeModelsErrors];
+
+export type GetClaudeCodeModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        models: Array<{
+            value: string;
+            displayName: string;
+            description: string;
+        }>;
+    };
+};
+
+export type GetClaudeCodeModelsResponse = GetClaudeCodeModelsResponses[keyof GetClaudeCodeModelsResponses];
 
 export type DeleteAgentRuntimeCredentialData = {
     body?: never;

@@ -49,23 +49,12 @@ export function getAgentCatalogTemplates(
       id: "claude-code",
       name: "Claude Code",
       icon: "/model-logos/anthropic.svg",
-      description: `Anthropic's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      description: `Anthropic's coding agent with personal Claude sign-in or provider billing, connected to the ${appName} MCP gateway.`,
       platformName: appName,
       image: image(archestraImage, "claude-code"),
       command: ["archestra-claude-code"],
       inferenceProtocol: "anthropic",
       steerMode: "tmux_keys",
-      additionalCredentials: [
-        {
-          key: "CLAUDE_CODE_OAUTH_TOKEN",
-          credentialId: "claude-code",
-          scope: "per_user",
-          label: "Claude Code subscription token",
-          description:
-            "A personal Claude subscription token used only by Claude Code background tasks.",
-          required: true,
-        },
-      ],
     }),
     template({
       id: "codex",
@@ -248,9 +237,6 @@ function template(params: {
   inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
   steerMode: "pipe" | "tmux_keys";
   requiredSubscriptionKind?: SubscriptionCredentialKind;
-  additionalCredentials?: NonNullable<
-    NonNullable<AgentFormInitialValues["runtime"]>["credentials"]
-  >;
 }): AgentCatalogTemplate {
   return {
     id: params.id,
@@ -273,18 +259,10 @@ function template(params: {
         privileged: false,
         resources: null,
         environment: null,
-        credentials: [
-          {
-            key: "GITHUB_TOKEN",
-            credentialId: "github",
-            scope: "per_user",
-            label: "GitHub token",
-            description:
-              "Used to clone repositories and push changes from background tasks.",
-            required: false,
-          },
-          ...(params.additionalCredentials ?? []),
-        ],
+        credentials: [],
+        ...(params.id === "claude-code" && {
+          claudeCode: { authentication: "subscription" as const },
+        }),
         ttlHours: null,
         maxCostUsd: null,
         idleTimeoutMinutes: null,

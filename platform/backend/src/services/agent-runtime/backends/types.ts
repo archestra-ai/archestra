@@ -39,6 +39,8 @@ export type AgentRunLaunchSpec = {
   /** Durable workspace PVC, including nested Docker storage for privileged runtimes. */
   workspaceStorageSize?: string;
   workspaceStorageClass?: string;
+  /** Native CLI-owned account storage; never contains control-plane secrets. */
+  claudeCodeAccount?: { claimName: string; label: string };
   /**
    * Steers the pod onto a dedicated node pool: applied verbatim as the pod's
    * nodeSelector, with one matching NoSchedule toleration per entry. Empty

@@ -156,6 +156,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  "/api/agents/:id/runtime/claude-code/account": {
+    resourceType: "agent",
+    action: "agent.updated",
+    onlyWhenChanged: true,
+  },
+  "/api/agents/:id/runtime/claude-code/account/complete": {
+    resourceType: "agent",
+    action: "agent.updated",
+    onlyWhenChanged: true,
+  },
   "/api/runtime-credentials": {
     resourceType: "runtimeCredential",
     fetchById: (id, orgId) =>

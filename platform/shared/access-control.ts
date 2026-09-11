@@ -698,6 +698,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // runs and manage one's own declared credentials; shared credential writes
   // additionally enforce Agent update + scope ownership inside the route.
   [RouteId.GetAgentRuntimePreflight]: { agent: ["read"] },
+  [RouteId.GetClaudeCodeAccount]: { agent: ["read"] },
+  [RouteId.StartClaudeCodeSignIn]: { agent: ["read"] },
+  [RouteId.CompleteClaudeCodeSignIn]: { agent: ["read"] },
+  [RouteId.DisconnectClaudeCodeAccount]: { agent: ["read"] },
+  [RouteId.GetClaudeCodeModels]: { agent: ["read"] },
   [RouteId.SetAgentRuntimeCredential]: { agent: ["read"] },
   [RouteId.DeleteAgentRuntimeCredential]: { agent: ["read"] },
   [RouteId.ListRuntimeCredentials]: { agent: ["read"] },

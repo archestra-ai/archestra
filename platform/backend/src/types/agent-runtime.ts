@@ -1,4 +1,4 @@
-import { AGENT_RUN_ATTACH_PHASES } from "@archestra/shared";
+import { AGENT_RUN_ATTACH_PHASES, ApiError } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -156,6 +156,29 @@ export type MissingAgentRuntimeCredential = z.infer<
 export const AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE =
   "AGENT_RUNTIME_CREDENTIALS_REQUIRED";
 
+/**
+ * Raised when a session cannot start only because the person it would act as
+ * has not supplied credentials the Agent declares. Carries the list so every
+ * surface can name exactly what to add instead of reporting an opaque failure.
+ */
+export class AgentRuntimeCredentialsRequiredError extends ApiError {
+  readonly code = AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE;
+  readonly agentId: string;
+  readonly missing: MissingAgentRuntimeCredential[];
+
+  constructor(agentId: string, missing: MissingAgentRuntimeCredential[]) {
+    super(
+      409,
+      `This Agent's Agent Runtime needs credentials you have not set up yet: ${missing
+        .map((entry) => entry.label)
+        .join(", ")}`,
+    );
+    this.name = "AgentRuntimeCredentialsRequiredError";
+    this.agentId = agentId;
+    this.missing = missing;
+  }
+}
+
 // ===================== Agent Runtime configuration =====================
 
 export const AgentRuntimeEnvironmentEntrySchema = z.object({
@@ -178,6 +201,13 @@ export const AgentRuntimeSchema = z.object({
   resources: AgentRuntimeResourcesSchema.nullable(),
   environment: z.array(AgentRuntimeEnvironmentEntrySchema).nullable(),
   credentials: z.array(AgentRuntimeCredentialDeclarationSchema).nullable(),
+  /** Native Claude account authentication and its CLI-published model alias. */
+  claudeCode: z
+    .object({
+      authentication: z.enum(["provider", "subscription"]),
+      model: z.string().trim().min(1).max(256).optional(),
+    })
+    .optional(),
   ttlHours: z
     .number()
     .int()

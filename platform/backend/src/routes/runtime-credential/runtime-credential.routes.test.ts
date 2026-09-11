@@ -5,6 +5,7 @@ import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, User } from "@/types";
 
@@ -21,6 +22,18 @@ describe("Runtime credential routes", () => {
     organizationId = organization.id;
     user = await makeAdmin();
     await makeMember(user.id, organizationId, { role: "admin" });
+    await createRuntimeCredentialDefinition({
+      organizationId,
+      userId: user.id,
+      definition: {
+        key: "github",
+        name: "GitHub PAT",
+        description: "Repository access",
+        icon: "logo:github",
+        allowPersonal: true,
+        allowOrganization: false,
+      },
+    });
     agent = await makeAgent({
       organizationId,
       authorId: user.id,
@@ -78,7 +91,7 @@ describe("Runtime credential routes", () => {
     await app.close();
   });
 
-  test("lists built-ins and tracks a personal connection without exposing its value", async () => {
+  test("lists custom credentials and tracks a personal connection without exposing its value", async () => {
     const initial = await app.inject({
       method: "GET",
       url: "/api/runtime-credentials",
@@ -88,7 +101,7 @@ describe("Runtime credential routes", () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: "github",
-          builtIn: true,
+          builtIn: false,
           personalConfigured: false,
           organizationConfigured: false,
         }),
@@ -163,7 +176,7 @@ describe("Runtime credential routes", () => {
         .json<Array<{ key: string }>>()
         .slice(0, 2)
         .map(({ key }) => key),
-    ).toEqual(["claude-code", "github"]);
+    ).toEqual(["github", "gitlab-pat"]);
     expect(listed.json()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

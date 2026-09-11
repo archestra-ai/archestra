@@ -8,12 +8,12 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
-  VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
+import { claudeCodeAccountManager } from "@/k8s/agent-runtime/claude-code-account";
 import {
   AgentModel,
   LimitModel,
@@ -26,10 +26,9 @@ import { archestraMarkWithText } from "@/services/archestra-mark";
 import type {
   AgentRunInput,
   EffectiveNetworkPolicy,
-  MissingAgentRuntimeCredential,
   ResolvedAgentRuntime,
 } from "@/types";
-import { AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE, ApiError } from "@/types";
+import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
 import { resolveAgentRuntimeCredentials } from "./credentials";
@@ -42,29 +41,6 @@ import {
   AGENT_RUNTIME_STEER_FIFO,
   constructStableRunName,
 } from "./runtime-contract";
-
-/**
- * Raised when a session cannot start only because the person it would act as
- * has not supplied credentials the Agent declares. Carries the list so every
- * surface can name exactly what to add instead of reporting an opaque failure.
- */
-class AgentRuntimeCredentialsRequiredError extends ApiError {
-  readonly code = AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE;
-  readonly agentId: string;
-  readonly missing: MissingAgentRuntimeCredential[];
-
-  constructor(agentId: string, missing: MissingAgentRuntimeCredential[]) {
-    super(
-      409,
-      `This Agent's Agent Runtime needs credentials you have not set up yet: ${missing
-        .map((entry) => entry.label)
-        .join(", ")}`,
-    );
-    this.name = "AgentRuntimeCredentialsRequiredError";
-    this.agentId = agentId;
-    this.missing = missing;
-  }
-}
 
 /**
  * Everything a runtime backend needs to carry one A2A task, resolved for
@@ -95,7 +71,7 @@ export async function buildAgentRunLaunchSpec(params: {
   runMode: "interactive" | "one_shot";
   inputFiles?: AgentRunInput[];
   imagePullSecrets?: string[];
-}): Promise<{ spec: AgentRunLaunchSpec; virtualApiKeyId: string }> {
+}): Promise<{ spec: AgentRunLaunchSpec; virtualApiKeyId: string | null }> {
   const platformBaseUrl = config.agentRuntime.platformBaseUrl.replace(
     /\/+$/,
     "",
@@ -143,56 +119,46 @@ export async function buildAgentRunLaunchSpec(params: {
       "The Agent for this Agent Runtime run no longer exists",
     );
   }
-  const { llm, selectedModel } = await preflightAgentRuntimeModelCompatibility({
-    runtime: params.runtime,
-    agent,
-    organizationId: params.organizationId,
-    userId: actorUserId ?? "system",
-  });
+  const { llm, selectedModel, usesClaudeCodeSubscription } =
+    await preflightAgentRuntimeModelCompatibility({
+      runtime: params.runtime,
+      agent,
+      organizationId: params.organizationId,
+      userId: actorUserId ?? "system",
+    });
 
   const claudeCodeCloudProvider = getClaudeCodeCloudProvider({
     runtime: params.runtime,
     provider: llm.selectedProvider,
   });
   const isClaudeCodeBedrock = claudeCodeCloudProvider === "bedrock";
-  const claudeCodeSubscriptionToken =
-    credentials.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
-  const usesClaudeCodeSubscription = Boolean(claudeCodeSubscriptionToken);
   const isClaudeCodeRuntime =
     params.runtime.command?.[0] === "archestra-claude-code";
   const isCodexRuntime = params.runtime.command?.[0] === "archestra-codex";
-  if (
-    isClaudeCodeRuntime &&
-    !claudeCodeCloudProvider &&
-    !usesClaudeCodeSubscription
-  ) {
-    throw new ApiError(
-      409,
-      "Connect your Claude Code subscription before starting this Agent. The maintained Claude Code runtime never falls back to usage-based API billing.",
-    );
-  }
-  if (usesClaudeCodeSubscription && !isClaudeCodeRuntime) {
+  if (credentials.env.CLAUDE_CODE_OAUTH_TOKEN) {
     throw new ApiError(
       409,
       "A Claude Code subscription token can only be injected into the Claude Code catalog runtime.",
     );
   }
-  // Most runtimes receive a standard virtual key mapped to the provider/model
-  // selected on the Agent. The resolver substitutes the acting user's own
-  // matching subscription (for example ChatGPT/Codex) when the selected key
-  // belongs to somebody else, so connecting once covers chat and run.
-  //
-  // Claude Code subscriptions are intentionally narrower. The official CLI
-  // keeps its own OAuth token and sends it through the Anthropic proxy; a
-  // passthrough virtual key in a separate header authenticates and attributes
-  // that request without turning the OAuth token into a generic provider key.
+  if (usesClaudeCodeSubscription && !actorUserId) {
+    throw new ApiError(
+      409,
+      "A personal Claude subscription requires a run acting as a signed-in user.",
+    );
+  }
+  const claudeCodeAccount =
+    usesClaudeCodeSubscription && actorUserId
+      ? await claudeCodeAccountManager.requireConnection({
+          runtime: params.runtime,
+          userId: actorUserId,
+          runtimeScope: params.runtimeScope,
+        })
+      : undefined;
+  // Subscription inference stays inside the native CLI and goes directly to
+  // Anthropic. Only provider-billed runs receive a proxy virtual key.
   const virtualKey = usesClaudeCodeSubscription
-    ? await VirtualApiKeyModel.create({
-        organizationId: params.organizationId,
-        name: `agent-run-${params.taskId.slice(0, 8)}`,
-        keyType: "passthrough",
-        ...virtualKeyVisibility(params.actor),
-      })
+    ? null
     : await createProviderBackedVirtualKey({
         organizationId: params.organizationId,
         actor: params.actor,
@@ -202,7 +168,8 @@ export async function buildAgentRunLaunchSpec(params: {
         agentLlmApiKeyId: agent.llmApiKeyId,
         requiredSubscriptionKind: isCodexRuntime ? "chatgpt" : null,
       });
-  if (params.runtime.maxCostUsd) {
+  const virtualKeyValue = virtualKey?.value ?? "";
+  if (params.runtime.maxCostUsd && virtualKey) {
     try {
       await LimitModel.create({
         entityType: "virtual_key",
@@ -288,8 +255,15 @@ export async function buildAgentRunLaunchSpec(params: {
     ),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ARCHESTRA_LLM_PROXY_PROTOCOL: params.runtime.inferenceProtocol,
-    OPENAI_BASE_URL: modelRouterUrl,
-    ANTHROPIC_BASE_URL: anthropicUrl,
+    ...(usesClaudeCodeSubscription
+      ? {
+          CLAUDE_CONFIG_DIR: "/opt/claude-account",
+          ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH: "subscription",
+        }
+      : {
+          OPENAI_BASE_URL: modelRouterUrl,
+          ANTHROPIC_BASE_URL: anthropicUrl,
+        }),
     ...(isClaudeCodeBedrock
       ? {
           CLAUDE_CODE_USE_BEDROCK: "1",
@@ -306,15 +280,15 @@ export async function buildAgentRunLaunchSpec(params: {
   });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
-    ARCHESTRA_VIRTUAL_KEY: virtualKey.value,
+    ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
       ? {
           // Both the Archestra runtime-agent and bring-your-own CLIs read the
           // provider variables, so the standard virtual key is presented in
           // each native shape. The upstream provider secret stays server-side.
-          ANTHROPIC_API_KEY: virtualKey.value,
-          ANTHROPIC_AUTH_TOKEN: virtualKey.value,
-          OPENAI_API_KEY: virtualKey.value,
+          ANTHROPIC_API_KEY: virtualKeyValue,
+          ANTHROPIC_AUTH_TOKEN: virtualKeyValue,
+          OPENAI_API_KEY: virtualKeyValue,
         }
       : {}),
     ...(agent.systemPrompt
@@ -325,30 +299,28 @@ export async function buildAgentRunLaunchSpec(params: {
     ...(task ? { ARCHESTRA_AGENT_RUNTIME_TASK: task } : {}),
     ...withNativeClientCredentialAliases(credentials.env),
     ...(isClaudeCodeBedrock
-      ? { AWS_BEARER_TOKEN_BEDROCK: virtualKey.value }
+      ? { AWS_BEARER_TOKEN_BEDROCK: virtualKeyValue }
       : {}),
-    ...(params.runtime.command?.[0] === "archestra-claude-code"
+    ...(isClaudeCodeRuntime && !usesClaudeCodeSubscription
       ? {
           // Claude Code accepts only one custom-header variable. Keep run
           // correlation on both auth paths, and add the passthrough identity
           // only when the CLI supplies its own subscription credential.
           [CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY]: claudeCodeCustomHeaders({
             taskId: params.taskId,
-            passthroughVirtualKey: usesClaudeCodeSubscription
-              ? virtualKey.value
-              : null,
           }),
         }
       : {}),
   };
 
   return {
-    virtualApiKeyId: virtualKey.virtualKey.id,
+    virtualApiKeyId: virtualKey?.virtualKey.id ?? null,
     spec: {
       taskId: params.taskId,
       agentRuntimeId: params.runtime.agentId,
       frozenName: constructStableRunName(agent.name, params.taskId),
       runtimeScope: params.runtimeScope,
+      claudeCodeAccount,
       image: params.runtime.image,
       command: params.runtime.command ?? null,
       privileged: params.runtime.privileged,
@@ -396,6 +368,8 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "CLAUDE_CODE_USE_BEDROCK",
   "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
   "CLAUDE_CODE_OAUTH_TOKEN",
+  "CLAUDE_CONFIG_DIR",
+  "ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH",
   "OPENAI_API_KEY",
   "OPENAI_BASE_URL",
   "ARCHESTRA_AGENT_RUNTIME_AGENT_ID",
@@ -417,16 +391,10 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_VIRTUAL_KEY",
 ]);
 
-function claudeCodeCustomHeaders(params: {
-  taskId: string;
-  passthroughVirtualKey: string | null;
-}): string {
+function claudeCodeCustomHeaders(params: { taskId: string }): string {
   return [
     `${RUN_ID_HEADER}: ${params.taskId}`,
     `${SESSION_ID_HEADER}: ${params.taskId}`,
-    ...(params.passthroughVirtualKey
-      ? [`${VIRTUAL_KEY_HEADER}: ${params.passthroughVirtualKey}`]
-      : []),
   ].join("\n");
 }
 

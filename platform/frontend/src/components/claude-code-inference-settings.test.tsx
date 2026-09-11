@@ -1,80 +1,223 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { ClaudeCodeInferenceSettings } from "./claude-code-inference-settings";
 
-Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
-Element.prototype.setPointerCapture = vi.fn();
-Element.prototype.releasePointerCapture = vi.fn();
-Element.prototype.scrollIntoView = vi.fn();
+vi.mock("sonner");
 
-describe("Claude Code inference settings", () => {
-  it.each([
-    false,
-    true,
-  ])("changes the billing and credential controls when switching providers (Vertex: %s)", async (vertexEnabled) => {
-    const user = userEvent.setup();
-    function Settings() {
-      const [provider, setProvider] = useState<"anthropic" | "bedrock">(
-        "anthropic",
-      );
-      return (
-        <ClaudeCodeInferenceSettings
-          provider={provider}
-          vertexEnabled={vertexEnabled}
-          availableProviders={["anthropic", "bedrock"]}
-          onProviderChange={setProvider}
-          apiKeySelector={<button type="button">Provider connection</button>}
-          modelSelector={<button type="button">Selected model</button>}
-          subscriptionCredential={
-            <button type="button">Connect subscription</button>
-          }
-        />
-      );
-    }
-    render(<Settings />);
-    expect(
-      screen.getByRole("combobox", { name: "Pay with" }),
-    ).toHaveTextContent(
-      vertexEnabled ? "Google Cloud (Vertex AI)" : "Claude subscription",
+const origin = "http://localhost:9000";
+const accountUrl = `${origin}/api/agents/agent-1/runtime/claude-code/account`;
+const modelsUrl = `${origin}/api/agents/agent-1/runtime/claude-code/models`;
+const server = setupServer();
+let connected = false;
+let signInStarted = false;
+const pendingSignIn = {
+  state: "awaiting_code",
+  flowId: "00000000-0000-4000-8000-000000000001",
+  authorizationUrl: "https://claude.ai/oauth/authorize?state=test",
+};
+let modelRequests = 0;
+let client: QueryClient;
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeEach(() => {
+  // JSDOM has no scrolling implementation; the real command menu calls it.
+  Element.prototype.scrollIntoView = vi.fn();
+  archestraApiClient.setConfig({ baseUrl: origin });
+  connected = false;
+  signInStarted = false;
+  modelRequests = 0;
+  client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  server.use(
+    http.get(`${origin}/api/auth/get-session`, () => HttpResponse.json(null)),
+    http.get(accountUrl, () =>
+      HttpResponse.json(
+        connected
+          ? { state: "connected" }
+          : signInStarted
+            ? pendingSignIn
+            : { state: "disconnected" },
+      ),
+    ),
+    http.get(modelsUrl, () => {
+      modelRequests++;
+      return HttpResponse.json({
+        models: [
+          {
+            value: "runtime-choice",
+            displayName: "Runtime model",
+            description: "Discovered from this CLI",
+          },
+        ],
+      });
+    }),
+    http.post(accountUrl, () => {
+      signInStarted = true;
+      return HttpResponse.json(pendingSignIn);
+    }),
+    http.post(`${accountUrl}/complete`, async ({ request }) => {
+      expect(await request.json()).toEqual({
+        flowId: "00000000-0000-4000-8000-000000000001",
+        code: "native-authorization-code",
+      });
+      connected = true;
+      signInStarted = false;
+      return HttpResponse.json({ state: "connected" });
+    }),
+    http.delete(accountUrl, () => {
+      connected = false;
+      signInStarted = false;
+      return HttpResponse.json({ state: "disconnected" });
+    }),
+  );
+});
+afterEach(() => {
+  server.resetHandlers();
+  client.clear();
+});
+afterAll(() => {
+  server.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+
+describe("Claude Code authentication", () => {
+  it("discovers models only after native authentication and removes them on disconnect", async () => {
+    // A cached provider catalog must never populate the native account picker.
+    client.setQueryData(
+      ["llm-models", null],
+      [
+        {
+          id: "unrelated-api-model",
+          provider: "anthropic",
+          displayName: "API catalog model",
+        },
+      ],
     );
-    if (vertexEnabled) {
-      expect(
-        screen.queryByRole("button", { name: "Connect subscription" }),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Provider connection" }),
-      ).toBeVisible();
-      expect(
-        screen.getByText(/subscription token is not sent or required/),
-      ).toBeVisible();
-    } else {
-      expect(
-        screen.getByRole("button", { name: "Connect subscription" }),
-      ).toBeVisible();
-      expect(
-        screen.queryByRole("button", { name: "Provider connection" }),
-      ).not.toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Model catalog" }));
-      expect(
-        screen.getByRole("button", { name: "Provider connection" }),
-      ).toBeVisible();
-    }
-    await user.click(screen.getByRole("combobox", { name: "Pay with" }));
-    await user.click(screen.getByRole("option", { name: "Amazon Bedrock" }));
+    render(
+      <QueryClientProvider client={client}>
+        <Settings />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled(),
+    );
+    expect(modelRequests).toBe(0);
+    expect(screen.queryByText("API catalog model")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "Pay with" }),
-    ).toHaveTextContent("Amazon Bedrock");
-    expect(
-      screen.queryByRole("button", { name: "Connect subscription" }),
+      screen.queryByRole("button", { name: "Provider key" }),
     ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with Claude" }),
+    );
+    await screen.findByLabelText("Authorization code");
+    expect(modelRequests).toBe(0);
+    fireEvent.change(screen.getByLabelText("Authorization code"), {
+      target: { value: "native-authorization-code" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Complete sign-in" }));
+    await screen.findByText("Signed in for you");
+    await waitFor(() => expect(modelRequests).toBe(1));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Select model|default/i }),
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Runtime model/ }),
+    );
+    expect(screen.getByRole("button", { name: /Runtime model/ })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    await screen.findByRole("button", { name: "Sign in with Claude" });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
-      screen.queryByRole("button", { name: "Model catalog" }),
+      screen.queryByRole("button", { name: /Runtime model/ }),
     ).not.toBeInTheDocument();
+    expect(modelRequests).toBe(1);
+  });
+
+  it("switches to provider billing without treating Vertex configuration as a personal sign-in", async () => {
+    render(
+      <QueryClientProvider client={client}>
+        <Settings vertexEnabled />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Sign in to use this agent.");
+    fireEvent.click(
+      screen.getByRole("radio", { name: /API key or cloud provider/ }),
+    );
+    expect(screen.getByRole("button", { name: "Provider key" })).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Provider connection" }),
+      screen.getByRole("button", { name: "Provider model" }),
     ).toBeVisible();
-    expect(screen.getByText(/cloud provider billing/)).toBeVisible();
+    expect(
+      screen.getByText(/Google Cloud \(Vertex AI\) billing/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Personal Claude subscription/ }),
+    );
+    await screen.findByText("Sign in to use this agent.");
+    expect(modelRequests).toBe(0);
+  });
+
+  it("keeps the model picker hidden when account discovery fails", async () => {
+    server.use(
+      http.get(accountUrl, () =>
+        HttpResponse.json(
+          { error: { message: "Runtime unavailable" } },
+          { status: 503 },
+        ),
+      ),
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <Settings />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Could not check connection");
+    expect(modelRequests).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByText("Could not check Claude Code");
+    expect(
+      screen.queryByRole("button", { name: "Sign in with Claude" }),
+    ).not.toBeInTheDocument();
   });
 });
+
+function Settings({ vertexEnabled = false }: { vertexEnabled?: boolean }) {
+  const [authentication, setAuthentication] = useState<
+    "provider" | "subscription"
+  >("subscription");
+  const [model, setModel] = useState<string>();
+  return (
+    <ClaudeCodeInferenceSettings
+      agentId="agent-1"
+      authentication={authentication}
+      onAuthenticationChange={setAuthentication}
+      model={model}
+      onModelChange={setModel}
+      provider="anthropic"
+      vertexEnabled={vertexEnabled}
+      apiKeySelector={<button type="button">Provider key</button>}
+      modelSelector={<button type="button">Provider model</button>}
+    />
+  );
+}

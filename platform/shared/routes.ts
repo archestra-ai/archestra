@@ -473,6 +473,11 @@ export const RouteId = {
 
   // Agent Runtime
   GetAgentRuntimePreflight: "getAgentRuntimePreflight",
+  GetClaudeCodeAccount: "getClaudeCodeAccount",
+  StartClaudeCodeSignIn: "startClaudeCodeSignIn",
+  CompleteClaudeCodeSignIn: "completeClaudeCodeSignIn",
+  DisconnectClaudeCodeAccount: "disconnectClaudeCodeAccount",
+  GetClaudeCodeModels: "getClaudeCodeModels",
   SetAgentRuntimeCredential: "setAgentRuntimeCredential",
   DeleteAgentRuntimeCredential: "deleteAgentRuntimeCredential",
   ListRuntimeCredentials: "listRuntimeCredentials",

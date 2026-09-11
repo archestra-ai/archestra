@@ -2256,6 +2256,13 @@ export function AgentForm({
   // that effective model locally before allowing a create or runtime change.
   const effectiveLlmModelRow =
     selectedLlmModelRow ?? organizationDefaultModel.model;
+  const usesClaudeSubscription =
+    isClaudeCodeRuntime &&
+    (runtime?.claudeCode?.authentication === "subscription" ||
+      (!runtime?.claudeCode &&
+        (selectedApiKey?.provider ?? effectiveLlmModelRow?.provider) !==
+          "bedrock" &&
+        !anthropicVertexAiEnabled));
   const effectiveRuntimeModelCompatibility =
     runtime && effectiveLlmModelRow
       ? getAgentRuntimeModelCompatibility({
@@ -2269,15 +2276,16 @@ export function AgentForm({
       : null;
   const runtimeHasLocalChanges =
     JSON.stringify(runtime) !== JSON.stringify(agent?.runtime ?? null);
-  const runtimeModelIncompatibility = !runtime
-    ? null
-    : effectiveRuntimeModelCompatibility
-      ? effectiveRuntimeModelCompatibility.compatible
-        ? null
-        : effectiveRuntimeModelCompatibility.message
-      : !runtimeHasLocalChanges
-        ? (runtimePreflight.data?.incompatible ?? null)
-        : null;
+  const runtimeModelIncompatibility =
+    !runtime || usesClaudeSubscription
+      ? null
+      : effectiveRuntimeModelCompatibility
+        ? effectiveRuntimeModelCompatibility.compatible
+          ? null
+          : effectiveRuntimeModelCompatibility.message
+        : !runtimeHasLocalChanges
+          ? (runtimePreflight.data?.incompatible ?? null)
+          : null;
 
   // Pairing a no-tools model (e.g. Microsoft 365 Copilot) with a tooled
   // agent is allowed — chat omits the tools for that model — but the user
@@ -2582,6 +2590,8 @@ export function AgentForm({
               }),
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
+                ...(isClaudeCodeRuntime &&
+                  runtimeHasLocalChanges && { runtime }),
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
@@ -2947,6 +2957,8 @@ export function AgentForm({
     agentRuntimeEnabled,
     runtime,
     channelAssignmentsDirty,
+    isClaudeCodeRuntime,
+    runtimeHasLocalChanges,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -3271,9 +3283,9 @@ export function AgentForm({
                   {showsModelControl && (
                     <div className="space-y-2">
                       <Label>
-                        {isClaudeCodeRuntime ? "Inference" : "Model"}
+                        {isClaudeCodeRuntime ? "Authentication" : "Model"}
                       </Label>
-                      {cannotReadLlmConfiguration ? (
+                      {cannotReadLlmConfiguration && !isClaudeCodeRuntime ? (
                         <Alert>
                           <AlertDescription className="text-sm text-muted-foreground">
                             You do not have permission to view LLM API keys or
@@ -3340,48 +3352,53 @@ export function AgentForm({
                             ))}
                           {isClaudeCodeRuntime ? (
                             <ClaudeCodeInferenceSettings
+                              agentId={agent?.id ?? ""}
+                              authentication={
+                                usesClaudeSubscription
+                                  ? "subscription"
+                                  : "provider"
+                              }
+                              onAuthenticationChange={(authentication) => {
+                                if (!runtime) return;
+                                setAgentRuntime({
+                                  ...runtime,
+                                  claudeCode: {
+                                    ...runtime.claudeCode,
+                                    authentication,
+                                  },
+                                  credentials:
+                                    runtime.credentials?.filter(
+                                      ({ key }) =>
+                                        key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                                    ) ?? null,
+                                });
+                                if (authentication === "subscription")
+                                  handleLlmApiKeyChange(null);
+                              }}
+                              model={runtime?.claudeCode?.model}
+                              onModelChange={(model) => {
+                                if (!runtime) return;
+                                setAgentRuntime({
+                                  ...runtime,
+                                  claudeCode: {
+                                    authentication: "subscription",
+                                    model,
+                                  },
+                                  credentials:
+                                    runtime.credentials?.filter(
+                                      ({ key }) =>
+                                        key !== "CLAUDE_CODE_OAUTH_TOKEN",
+                                    ) ?? null,
+                                });
+                              }}
                               provider={
                                 selectedApiKey?.provider ??
                                 effectiveLlmModelRow?.provider ??
                                 null
                               }
                               vertexEnabled={anthropicVertexAiEnabled}
-                              availableProviders={availableApiKeys.map(
-                                (key) => key.provider,
-                              )}
-                              onProviderChange={(provider) => {
-                                const key = availableApiKeys.find(
-                                  (candidate) =>
-                                    candidate.provider === provider,
-                                );
-                                if (key) {
-                                  cancelPendingCreatedKeySelection();
-                                  handleLlmApiKeyChange(key.id);
-                                }
-                              }}
                               apiKeySelector={providerKeyControl}
                               modelSelector={modelControl}
-                              subscriptionCredential={
-                                agent?.runtime && runtime ? (
-                                  <AgentRuntimeCredentialCard
-                                    agentId={agent.id}
-                                    credentials={(
-                                      agent.runtime.credentials ?? []
-                                    ).filter(
-                                      ({ key }) =>
-                                        key === "CLAUDE_CODE_OAUTH_TOKEN",
-                                    )}
-                                    sectionId="inference-credential"
-                                    title="Claude subscription"
-                                    description="Connect the account that pays for your runs."
-                                  />
-                                ) : (
-                                  <p className="text-sm text-muted-foreground">
-                                    Save this agent to connect your Claude
-                                    subscription.
-                                  </p>
-                                )
-                              }
                             />
                           ) : (
                             <div className="flex flex-wrap items-center gap-2">

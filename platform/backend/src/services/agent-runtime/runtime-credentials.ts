@@ -31,7 +31,6 @@ export async function listRuntimeCredentialDefinitions(params: {
       .map(({ credentialId }) => credentialId),
   );
   return [
-    ...BUILT_IN_DEFINITIONS,
     ...custom.map((definition) => ({
       key: definition.key,
       name: definition.name,
@@ -59,6 +58,12 @@ export async function createRuntimeCredentialDefinition(params: {
   userId: string;
   definition: InsertRuntimeCredentialDefinition;
 }) {
+  if (params.definition.key === "claude-code") {
+    throw new ApiError(
+      400,
+      "Claude Code accounts connect through native sign-in on the Agent.",
+    );
+  }
   assertExactlyOneScopeAllowed({
     allowPersonal: params.definition.allowPersonal ?? true,
     allowOrganization: params.definition.allowOrganization ?? false,
@@ -96,9 +101,6 @@ export async function updateRuntimeCredentialDefinition(params: {
   key: string;
   definition: UpdateRuntimeCredentialDefinition;
 }) {
-  if (isBuiltInDefinition(params.key)) {
-    throw new ApiError(400, "Built-in credentials cannot be edited");
-  }
   const current = await RuntimeCredentialDefinitionModel.find(params);
   if (!current) throw new ApiError(404, "Credential not found");
   const updated = await RuntimeCredentialDefinitionModel.update(params);
@@ -110,9 +112,6 @@ export async function deleteRuntimeCredentialDefinition(params: {
   organizationId: string;
   key: string;
 }) {
-  if (isBuiltInDefinition(params.key)) {
-    throw new ApiError(400, "Built-in credentials cannot be deleted");
-  }
   if (await RuntimeCredentialDefinitionModel.isUsedByAgent(params)) {
     throw new ApiError(
       409,
@@ -202,43 +201,12 @@ type Definition = {
   allowOrganization: boolean;
 };
 
-const BUILT_IN_DEFINITIONS: readonly Definition[] = [
-  {
-    key: "github",
-    name: "GitHub PAT",
-    description:
-      "A GitHub personal access token for repository access. Create one in GitHub Developer settings.",
-    icon: "logo:github",
-    builtIn: true,
-    allowPersonal: true,
-    allowOrganization: false,
-  },
-  {
-    key: "claude-code",
-    name: "Claude Code subscription",
-    description:
-      "A personal subscription token created by the official Claude Code client. Run claude setup-token on your machine to get the value.",
-    icon: "logo:anthropic",
-    builtIn: true,
-    allowPersonal: true,
-    allowOrganization: false,
-  },
-] as const;
-
 async function findRuntimeCredentialDefinition(params: {
   organizationId: string;
   key: string;
 }): Promise<Definition | null> {
-  const builtIn = BUILT_IN_DEFINITIONS.find(
-    (definition) => definition.key === params.key,
-  );
-  if (builtIn) return builtIn;
   const custom = await RuntimeCredentialDefinitionModel.find(params);
   return custom ? { ...custom, builtIn: false } : null;
-}
-
-function isBuiltInDefinition(key: string): boolean {
-  return BUILT_IN_DEFINITIONS.some((definition) => definition.key === key);
 }
 
 function assertExactlyOneScopeAllowed(definition: {

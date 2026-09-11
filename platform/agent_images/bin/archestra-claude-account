@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Drive the unmodified CLI's login; emit status and model metadata only.
+
+Claude owns the credential files. This helper never opens them or exports a
+credential to the control plane. The short-lived authorization code goes only
+to the native login process that created the PKCE request.
+"""
+
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import selectors
+import subprocess
+import sys
+import time
+import uuid
+
+
+def main():
+    os.umask(0o077)
+    directory.mkdir(mode=0o700, exist_ok=True)
+    operation = sys.argv[1]
+    with (directory / "lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if operation == "status":
+            result = status()
+        elif operation == "models":
+            result = {"models": supported_models() if authenticated() else []}
+        elif operation == "start":
+            if authenticated():
+                result = {"state": "connected"}
+            else:
+                if not login_running():
+                    flow_file.write_text(str(uuid.uuid4()))
+                    run([
+                        "tmux", "new-session", "-d", "-s", session,
+                        "-x", "500", "-y", "24",
+                        "timeout 600 claude auth login --claudeai",
+                    ])
+                result = status()
+        elif operation == "complete":
+            request = json.loads(sys.stdin.read(8192))
+            code = request.get("code", "").strip()
+            if (
+                not flow_file.exists()
+                or request.get("flowId") != flow_file.read_text()
+                or not login_running()
+                or not code
+                or len(code) > 4096
+                or any(ord(char) < 32 or ord(char) > 126 for char in code)
+            ):
+                raise ValueError("The sign-in expired. Start again.")
+            run(["tmux", "load-buffer", "-b", session, "-"], input=code)
+            run(["tmux", "paste-buffer", "-d", "-b", session, "-t", session])
+            run(["tmux", "send-keys", "-t", session, "Enter"])
+            result = {"state": "connecting", "flowId": request["flowId"]}
+        elif operation == "logout":
+            run(["tmux", "kill-session", "-t", session], check=False)
+            run(["claude", "auth", "logout"])
+            flow_file.unlink(missing_ok=True)
+            result = {"state": "disconnected"}
+        else:
+            raise ValueError("Unknown account operation")
+    print(json.dumps(result))
+
+
+def run(command, **kwargs):
+    kwargs.setdefault("check", True)
+    return subprocess.run(
+        command, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        timeout=20, **kwargs,
+    )
+
+
+def authenticated():
+    result = run(["claude", "auth", "status", "--json"], check=False)
+    account = json.loads(result.stdout)
+    # Never report a provider API key or an injected OAuth token as a native
+    # account connection. The account pod has no provider credentials.
+    return account.get("loggedIn") is True and account.get("authMethod") == "claude.ai"
+
+
+def login_running():
+    return run(["tmux", "has-session", "-t", session], check=False).returncode == 0
+
+
+def status():
+    if authenticated():
+        return {"state": "connected"}
+    if not login_running():
+        return {"state": "failed" if flow_file.exists() else "disconnected"}
+    captured = run(["tmux", "capture-pane", "-p", "-J", "-t", session]).stdout
+    # Only return the native authorization URL. Never pass through arbitrary
+    # terminal output, account details, or CLI diagnostics.
+    match = re.search(
+        r"https://(?:claude\.com/cai|claude\.ai)/oauth/authorize\?[^\s\x1b]+",
+        captured,
+    )
+    result = {"state": "starting", "flowId": flow_file.read_text()}
+    if match:
+        result.update(state="awaiting_code", authorizationUrl=match.group(0))
+    return result
+
+
+def supported_models():
+    process = subprocess.Popen(
+        ["claude", "--print", "--input-format", "stream-json",
+         "--output-format", "stream-json", "--verbose", "--tools", "",
+         "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+         "--setting-sources", ""],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        process.stdin.write(json.dumps({
+            "type": "control_request", "request_id": "runtime-models",
+            "request": {"subtype": "initialize"},
+        }).encode() + b"\n")
+        process.stdin.flush()
+        deadline = time.monotonic() + 20
+        buffer = b""
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while time.monotonic() < deadline:
+                if not selector.select(timeout=1):
+                    continue
+                chunk = os.read(process.stdout.fileno(), 65536)
+                if not chunk:
+                    break
+                buffer += chunk
+                if len(buffer) > 262144:
+                    raise ValueError("Claude Code metadata exceeded the size limit")
+                while b"\n" in buffer:
+                    line, buffer = buffer.split(b"\n", 1)
+                    message = json.loads(line)
+                    response = message.get("response", {})
+                    if response.get("request_id") != "runtime-models":
+                        continue
+                    models = response.get("response", {}).get("models", [])
+                    return [
+                        {"value": entry["value"], "displayName": entry["displayName"],
+                         "description": entry.get("description", "")}
+                        for entry in models
+                        if isinstance(entry.get("value"), str)
+                        and isinstance(entry.get("displayName"), str)
+                    ]
+        raise ValueError("Claude Code did not return its available models")
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
+directory = Path("/tmp/archestra-claude-account")
+flow_file = directory / "flow-id"
+session = "archestra-claude-login"
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        # Provider/subprocess exceptions may contain credential-bearing output.
+        print(json.dumps({"state": "failed"}))
+        sys.exit(1)

@@ -17,8 +17,6 @@ import type {
   ResolvedAgentRuntime,
 } from "@/types";
 import { ApiError } from "@/types";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
-import { getClaudeCodeCloudProvider } from "./model-compatibility";
 
 /**
  * Outcome of resolving one Agent Runtime run's declared credentials for one user.
@@ -46,9 +44,7 @@ export async function resolveAgentRuntimeCredentials(params: {
   organizationId: string;
   userId: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
-  const { shared, perUser } = splitDeclarations(
-    await applicableCredentials(params),
-  );
+  const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   const env: Record<string, string> = {};
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
@@ -124,9 +120,7 @@ export async function preflightAgentRuntimeCredentials(params: {
   missing: MissingAgentRuntimeCredential[];
   misconfigured: MissingAgentRuntimeCredential[];
 }> {
-  const { shared, perUser } = splitDeclarations(
-    await applicableCredentials(params),
-  );
+  const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   const configured: string[] = [];
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
@@ -197,6 +191,12 @@ export async function setAgentRuntimeCredential(params: {
   key: string;
   value: string;
 }): Promise<{ scope: AgentRuntimeCredentialDeclaration["scope"] }> {
+  if (params.key === "CLAUDE_CODE_OAUTH_TOKEN") {
+    throw new ApiError(
+      400,
+      "Use the native Claude Code sign-in instead of storing a subscription token.",
+    );
+  }
   const declaration = requireDeclaration(params.runtime, params.key);
   assertCredentialValue(params.value);
 
@@ -419,35 +419,16 @@ async function deleteSecretQuietly(secretId: string): Promise<void> {
   }
 }
 
-// Cloud-hosted Claude uses the selected provider credential; a saved subscription
-// declaration must neither block the run nor inject an unrelated OAuth token.
-async function applicableCredentials(params: {
+// Claude Code owns subscription authentication. Legacy pasted tokens must not
+// block native sign-in or override the selected provider's billing.
+function applicableCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials"> &
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
 }) {
-  if (
-    params.runtime.command?.[0] !== "archestra-claude-code" ||
-    !params.runtime.credentials?.some(
-      ({ key }) => key === "CLAUDE_CODE_OAUTH_TOKEN",
-    )
-  ) {
-    return params.runtime.credentials;
-  }
-  const agent = await AgentModel.findById(params.runtime.agentId);
-  if (!agent) return params.runtime.credentials;
-  const llm = await resolveConversationLlmSelectionForAgent({
-    agent,
-    organizationId: params.organizationId,
-    userId: params.userId ?? "system",
-    includeMemberChatDefault: false,
-  });
-  return getClaudeCodeCloudProvider({
-    runtime: params.runtime,
-    provider: llm.selectedProvider,
-  })
-    ? params.runtime.credentials.filter(
+  return params.runtime.command?.[0] === "archestra-claude-code"
+    ? params.runtime.credentials?.filter(
         ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
       )
     : params.runtime.credentials;

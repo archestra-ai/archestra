@@ -32,8 +32,8 @@ const declarations = [
     required: true,
   },
   {
-    key: "CLAUDE_CODE_OAUTH_TOKEN",
-    label: "Claude Code token",
+    key: "SERVICE_TOKEN",
+    label: "Service token",
     scope: "per_user" as const,
     required: true,
   },
@@ -172,8 +172,8 @@ describe("credential setup deep links", () => {
       "example-github-secret",
     );
     await user.type(
-      screen.getByLabelText("Claude Code token"),
-      "example-claude-secret",
+      screen.getByLabelText("Service token"),
+      "example-service-secret",
     );
     expect(screen.queryByLabelText("Optional token")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save credentials" }));
@@ -183,7 +183,7 @@ describe("credential setup deep links", () => {
     expect(writes).toEqual(
       expect.arrayContaining([
         { key: "GITHUB_TOKEN", value: "example-github-secret" },
-        { key: "CLAUDE_CODE_OAUTH_TOKEN", value: "example-claude-secret" },
+        { key: "SERVICE_TOKEN", value: "example-service-secret" },
       ]),
     );
     expect(writes).toHaveLength(2);
@@ -197,7 +197,7 @@ describe("credential setup deep links", () => {
   });
 
   it("only retries failed credentials after a partial save", async () => {
-    failKey = "CLAUDE_CODE_OAUTH_TOKEN";
+    failKey = "SERVICE_TOKEN";
     const user = userEvent.setup();
     show();
     await user.type(
@@ -205,28 +205,26 @@ describe("credential setup deep links", () => {
       "example-github-secret",
     );
     await user.type(
-      screen.getByLabelText("Claude Code token"),
-      "example-claude-secret",
+      screen.getByLabelText("Service token"),
+      "example-service-secret",
     );
     await user.click(screen.getByRole("button", { name: "Save credentials" }));
     await screen.findByText("Could not save this credential. Try again.");
     expect(screen.queryByLabelText("GitHub token")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Claude Code token")).toHaveValue(
-      "example-claude-secret",
+    expect(screen.getByLabelText("Service token")).toHaveValue(
+      "example-service-secret",
     );
     failKey = null;
     await user.click(screen.getByRole("button", { name: "Save credentials" }));
     await screen.findByText(/All required credentials are configured/);
     expect(writes.filter(({ key }) => key === "GITHUB_TOKEN")).toHaveLength(1);
-    expect(
-      writes.filter(({ key }) => key === "CLAUDE_CODE_OAUTH_TOKEN"),
-    ).toHaveLength(2);
+    expect(writes.filter(({ key }) => key === "SERVICE_TOKEN")).toHaveLength(2);
   });
 
   it("does not request already configured or optional credentials", async () => {
     configured = ["GITHUB_TOKEN"];
     show();
-    await screen.findByLabelText("Claude Code token");
+    await screen.findByLabelText("Service token");
     expect(screen.queryByLabelText("GitHub token")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Optional token")).not.toBeInTheDocument();
   });
@@ -259,8 +257,8 @@ describe("credential setup deep links", () => {
       "example-github-secret",
     );
     await user.type(
-      screen.getByLabelText("Claude Code token"),
-      "example-claude-secret",
+      screen.getByLabelText("Service token"),
+      "example-service-secret",
     );
     expect(
       screen.getByText(
@@ -270,8 +268,8 @@ describe("credential setup deep links", () => {
     await user.click(screen.getByRole("button", { name: "Save credentials" }));
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Save credentials" }),
-      ).toBeDisabled(),
+        screen.queryByRole("button", { name: "Save credentials" }),
+      ).not.toBeInTheDocument(),
     );
     expect(writes).toHaveLength(2);
     expect(
@@ -328,7 +326,7 @@ describe("credential setup deep links", () => {
       await screen.findByRole("button", { name: "GitHub token" }),
     ).toHaveTextContent("Select Vault secret");
     expect(
-      screen.getByRole("button", { name: "Claude Code token" }),
+      screen.getByRole("button", { name: "Service token" }),
     ).toHaveTextContent("Select Vault secret");
     expect(
       screen.queryByPlaceholderText("Paste secret"),
@@ -397,14 +395,14 @@ describe("credential setup deep links", () => {
       "example-github-secret",
     );
     await user.type(
-      screen.getByLabelText("Claude Code token"),
-      "example-claude-secret",
+      screen.getByLabelText("Service token"),
+      "example-service-secret",
     );
     await user.click(screen.getByRole("button", { name: "Save credentials" }));
     await screen.findByText(/All required credentials are configured/);
     expect(bag).toEqual({
       GITHUB_TOKEN: "example-github-secret",
-      CLAUDE_CODE_OAUTH_TOKEN: "example-claude-secret",
+      SERVICE_TOKEN: "example-service-secret",
     });
   });
 

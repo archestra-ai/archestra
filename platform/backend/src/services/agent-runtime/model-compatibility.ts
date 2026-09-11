@@ -14,7 +14,10 @@ import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution"
  * callers can use it before creating a detached task.
  */
 export async function preflightAgentRuntimeModelCompatibility(params: {
-  runtime: Pick<ResolvedAgentRuntime, "command" | "inferenceProtocol">;
+  runtime: Pick<
+    ResolvedAgentRuntime,
+    "command" | "inferenceProtocol" | "claudeCode"
+  >;
   agent: Pick<Agent, "llmApiKeyId" | "modelId">;
   organizationId: string;
   userId: string;
@@ -27,17 +30,44 @@ export async function preflightAgentRuntimeModelCompatibility(params: {
 }
 
 export async function getResolvedAgentRuntimeModelCompatibility(params: {
-  runtime: Pick<ResolvedAgentRuntime, "command" | "inferenceProtocol">;
+  runtime: Pick<
+    ResolvedAgentRuntime,
+    "command" | "inferenceProtocol" | "claudeCode"
+  >;
   agent: Pick<Agent, "llmApiKeyId" | "modelId">;
   organizationId: string;
   userId: string;
 }) {
-  const llm = await resolveConversationLlmSelectionForAgent({
-    agent: params.agent,
-    organizationId: params.organizationId,
-    userId: params.userId,
-    includeMemberChatDefault: false,
-  });
+  let llm =
+    params.runtime.command?.[0] === "archestra-claude-code" &&
+    params.runtime.claudeCode?.authentication === "subscription"
+      ? {
+          modelId: null,
+          chatApiKeyId: null,
+          selectedModel: params.runtime.claudeCode.model ?? "default",
+          selectedProvider: "anthropic" as const,
+        }
+      : await resolveConversationLlmSelectionForAgent({
+          agent: params.agent,
+          organizationId: params.organizationId,
+          userId: params.userId,
+          includeMemberChatDefault: false,
+        });
+  const usesClaudeCodeSubscription =
+    params.runtime.command?.[0] === "archestra-claude-code" &&
+    params.runtime.claudeCode?.authentication !== "provider" &&
+    !getClaudeCodeCloudProvider({
+      runtime: params.runtime,
+      provider: llm.selectedProvider,
+    });
+  if (usesClaudeCodeSubscription) {
+    llm = {
+      modelId: null,
+      chatApiKeyId: null,
+      selectedProvider: "anthropic",
+      selectedModel: params.runtime.claudeCode?.model ?? "default",
+    };
+  }
   const selectedModel = llm.modelId
     ? await ModelModel.findById(llm.modelId)
     : null;
@@ -49,15 +79,16 @@ export async function getResolvedAgentRuntimeModelCompatibility(params: {
     supportedEndpoints: selectedModel?.supportedEndpoints,
   });
 
-  return { compatibility, llm, selectedModel };
+  return { compatibility, llm, selectedModel, usesClaudeCodeSubscription };
 }
 
 /** Cloud-hosted Claude uses provider billing instead of a Claude subscription. */
 export function getClaudeCodeCloudProvider(params: {
-  runtime: Partial<Pick<ResolvedAgentRuntime, "command">>;
+  runtime: Partial<Pick<ResolvedAgentRuntime, "command" | "claudeCode">>;
   provider: SupportedProvider;
 }): "bedrock" | "vertex" | null {
   if (params.runtime.command?.[0] !== "archestra-claude-code") return null;
+  if (params.runtime.claudeCode?.authentication === "subscription") return null;
   if (params.provider === "bedrock") return "bedrock";
   if (
     params.provider === "anthropic" &&

@@ -1,121 +1,104 @@
 "use client";
 
 import type { SupportedProvider } from "@archestra/shared";
-import { ChevronDown } from "lucide-react";
-import Link from "next/link";
-import type { ReactNode } from "react";
-import { useId } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { type ReactNode, useId } from "react";
+import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { cn } from "@/lib/utils";
 
 export function ClaudeCodeInferenceSettings({
+  agentId,
+  authentication,
+  onAuthenticationChange,
+  model,
+  onModelChange,
   provider,
   vertexEnabled,
-  availableProviders,
-  onProviderChange,
   apiKeySelector,
   modelSelector,
-  subscriptionCredential,
 }: {
+  agentId: string;
+  authentication: "provider" | "subscription";
+  onAuthenticationChange: (value: "provider" | "subscription") => void;
+  model?: string;
+  onModelChange: (value: string) => void;
   provider: SupportedProvider | null;
   vertexEnabled: boolean;
-  availableProviders: SupportedProvider[];
-  onProviderChange: (provider: "anthropic" | "bedrock") => void;
   apiKeySelector: ReactNode;
   modelSelector: ReactNode;
-  subscriptionCredential: ReactNode;
 }) {
-  const sourceId = useId();
-  const subscription = provider === "anthropic" && !vertexEnabled;
-  const cloud =
-    provider === "bedrock" || (provider === "anthropic" && vertexEnabled);
+  const id = useId();
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor={sourceId}>Pay with</Label>
-        <Select
-          value={
-            provider === "anthropic" || provider === "bedrock" ? provider : ""
-          }
-          onValueChange={(value) => {
-            if (value === "anthropic" || value === "bedrock")
-              onProviderChange(value);
-          }}
-        >
-          <SelectTrigger id={sourceId} className="w-full sm:w-72">
-            <SelectValue placeholder="Choose an inference source" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              value="anthropic"
-              disabled={!availableProviders.includes("anthropic")}
-            >
-              {vertexEnabled
-                ? "Google Cloud (Vertex AI)"
-                : "Claude subscription"}
-            </SelectItem>
-            <SelectItem
-              value="bedrock"
-              disabled={!availableProviders.includes("bedrock")}
-            >
-              Amazon Bedrock
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          {subscription
-            ? "Each person uses their own Claude subscription. The provider API key is not used for inference."
-            : cloud
-              ? "Runs use cloud provider billing. Your Claude subscription token is not sent or required."
-              : "Choose a provider connection to select the model and billing source."}
-        </p>
-      </div>
-      {availableProviders.length === 0 && (
-        <Button asChild type="button" variant="outline" size="sm">
-          <Link href="/llm/model-providers">Add a model provider</Link>
-        </Button>
-      )}
-      {subscription && subscriptionCredential}
-      <div className="space-y-2">
-        <Label>Model</Label>
-        <div className="flex flex-wrap items-center gap-2">
-          {cloud && apiKeySelector}
-          {modelSelector}
+    <div className="space-y-2">
+      <RadioGroup
+        aria-label="Authentication"
+        value={authentication}
+        onValueChange={(value) =>
+          onAuthenticationChange(value as "provider" | "subscription")
+        }
+        className="grid-cols-1 gap-0 overflow-hidden rounded-lg border sm:grid-cols-2"
+      >
+        {(
+          [
+            [
+              "provider",
+              "API key or cloud provider",
+              "Billed to the selected provider connection.",
+            ],
+            [
+              "subscription",
+              "Personal Claude subscription",
+              "Use your own Claude Pro or Max account.",
+            ],
+          ] as const
+        ).map(([value, title, description], index) => (
+          <Label
+            key={value}
+            htmlFor={`${id}-${value}`}
+            className={cn(
+              "flex cursor-pointer items-center gap-2.5 px-3 py-2 font-normal transition-colors",
+              index === 1 && "border-t sm:border-l sm:border-t-0",
+              authentication === value ? "bg-primary/10" : "hover:bg-muted/50",
+            )}
+          >
+            <RadioGroupItem id={`${id}-${value}`} value={value} />
+            <span className="space-y-0.5">
+              <span className="block text-[13px] leading-5 font-medium">
+                {title}
+              </span>
+              <span className="block text-xs leading-4 text-muted-foreground">
+                {description}
+              </span>
+            </span>
+          </Label>
+        ))}
+      </RadioGroup>
+      <p className="text-xs text-muted-foreground">
+        {authentication === "subscription"
+          ? "Each person using this agent must sign in to their own Claude Code account before they can run it. Your subscription is never shared."
+          : provider === "bedrock"
+            ? "Uses Amazon Bedrock billing."
+            : provider === "anthropic" && vertexEnabled
+              ? "Uses Google Cloud (Vertex AI) billing."
+              : "Uses the selected API connection for usage-based billing."}
+      </p>
+      {authentication === "subscription" ? (
+        <div className="pt-2">
+          <ClaudeCodeAccount
+            agentId={agentId}
+            model={model}
+            onModelChange={onModelChange}
+          />
         </div>
-      </div>
-      {!cloud && (
-        <Collapsible defaultOpen={!provider}>
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="-ml-2 text-muted-foreground"
-            >
-              <ChevronDown className="size-4" />
-              <span>Model catalog</span>
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-2 pt-2">
-            <p className="text-xs text-muted-foreground">
-              This connection supplies the list of available models.
-              Subscription runs do not use its API key.
-            </p>
+      ) : (
+        <div className="space-y-2 pt-2">
+          <Label>Provider and model</Label>
+          <div className="flex flex-wrap items-center gap-2">
             {apiKeySelector}
-          </CollapsibleContent>
-        </Collapsible>
+            {modelSelector}
+          </div>
+        </div>
       )}
     </div>
   );

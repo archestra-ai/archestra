@@ -20,7 +20,7 @@ You use a Claude Pro or Max subscription for local Cowork tasks. Archestra route
 
 Install Claude Desktop. The downloadable installer uses Desktop’s built-in runtime. You do not need Node.js, Python, or Claude Code. Subscription access requires your existing Claude subscription.
 
-Remote MCP and marketplace endpoints require HTTPS. HTTP works for local development on localhost and loopback IP addresses. The Anthropic proxy must forward to Anthropic, without a Vertex AI endpoint override.
+MCP sign-in requires HTTPS, including local deployments. Use a trusted local HTTPS reverse proxy for development. Inference alone supports HTTP on localhost and loopback IP addresses. The Anthropic proxy must forward to Anthropic, without a Vertex AI endpoint override.
 
 ## Setup
 

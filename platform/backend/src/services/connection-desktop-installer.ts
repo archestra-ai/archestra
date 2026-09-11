@@ -35,6 +35,7 @@ class DesktopInstaller {
     } catch (error) { this.fail(error); }
   }
   async prepare() {
+    if (this.setup.mcp && new URL(this.setup.mcp.url).protocol !== 'https:') throw new Error('Claude Desktop requires HTTPS for MCP sign-in, including local deployments. Open Connect at your deployment’s HTTPS address and download a new installer. Desktop settings have not changed.');
     const base = process.platform === 'darwin' ? path.join(os.homedir(),'Library','Application Support') : process.platform === 'win32' ? process.env.LOCALAPPDATA : process.env.XDG_CONFIG_HOME || path.join(os.homedir(),'.config');
     if (!base) throw new Error('Could not locate your Desktop settings.');
     this.directory = path.join(base,'Claude-3p');

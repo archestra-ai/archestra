@@ -12,12 +12,14 @@ const require = createRequire(import.meta.url);
 const token = "sk-ant-oat01-test-subscription";
 
 test.each([
-  { targetOs: "darwin", quotaFailure: false },
-  { targetOs: "darwin", quotaFailure: true },
-  { targetOs: "win32", quotaFailure: false },
+  { targetOs: "darwin", quotaFailure: false, insecureMcp: false },
+  { targetOs: "darwin", quotaFailure: true, insecureMcp: false },
+  { targetOs: "win32", quotaFailure: false, insecureMcp: false },
+  { targetOs: "darwin", quotaFailure: false, insecureMcp: true },
 ])("Desktop $targetOs browser setup without developer tools (quota failure=$quotaFailure)", async ({
   targetOs,
   quotaFailure,
+  insecureMcp,
 }) => {
   const home = await mkdtemp(join(tmpdir(), "desktop-browser-setup-"));
   const opened: string[] = [];
@@ -40,7 +42,9 @@ test.each([
         },
         mcp: {
           serverName: "Test gateway",
-          url: "https://proxy.example/v1/mcp/test",
+          url: insecureMcp
+            ? "http://localhost:9000/v1/mcp/test"
+            : "https://proxy.example/v1/mcp/test",
         },
         skills: {
           cloneUrl: "https://proxy.example/marketplace.git",
@@ -134,6 +138,15 @@ test.each([
     const page = opened[0];
     const origin = new URL(page).origin;
     const status = async () => (await fetch(`${page}/status`)).json();
+    if (insecureMcp) {
+      expect(await status()).toMatchObject({
+        phase: "error",
+        message: expect.stringContaining("requires HTTPS for MCP sign-in"),
+      });
+      expect(await readdir(home)).toEqual([]);
+      expect(opened).toHaveLength(1);
+      return;
+    }
     expect((await status()).phase).toBe("signin");
     expect(
       (await fetch(page)).headers.get("content-security-policy"),

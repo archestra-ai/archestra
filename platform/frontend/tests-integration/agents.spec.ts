@@ -220,7 +220,7 @@ test.describe("Agents", () => {
       .getByRole("link", { name: "Agents" })
       .click();
     await expect(
-      page.getByRole("button", { name: /Add an External Agent/ }),
+      page.getByRole("button", { name: /Connect via A2A/ }),
     ).toBeVisible();
     await page.getByRole("button", { name: /Start from scratch/ }).click();
     await page.getByRole("textbox", { name: "Name" }).fill(NAME);

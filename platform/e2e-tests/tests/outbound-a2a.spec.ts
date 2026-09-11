@@ -49,7 +49,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
       .first()
       .click();
     await expect(page).toHaveURL(/\/agents\/new$/);
-    await page.getByRole("button", { name: /Add an External Agent/ }).click();
+    await page.getByRole("button", { name: /Connect via A2A/ }).click();
     await expect(page).toHaveURL(/\/agents\/a2a\/new$/);
     await expect(
       page.getByRole("heading", {

@@ -919,7 +919,21 @@ Upgrading from a chart that ran the included engine leaves its cache volume behi
 
 ### Agent Runtime
 
-Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can view logs, open a shell, and steer a run while it is active. It needs the Kubernetes runtime configured (see `ARCHESTRA_ORCHESTRATOR_*`); without it the capability stays unavailable.
+Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_*`. Install the upstream Agent Sandbox controller before enabling it:
+
+```sh
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
+kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
+kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
+```
+
+Use Linux nodes and a storage class with dynamic volume provisioning. For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve workspaces after node loss. Runtime workloads need access to the image registry, DNS, and the platform API. Install the Helm chart's runtime permissions in each execution namespace.
+
+Privileged workloads require deployment approval, an Agent override, and compatible cluster admission policies. Use a dedicated node pool; your cloud provider may restrict privileged containers. Ordinary coding clients do not require privilege.
+
+For local development, set `ARCHESTRA_AGENT_RUNTIME_ENABLED=true` in `platform/.env` and run `tilt up`. Tilt installs the controller and checks storage readiness.
+
+Upgrade the Helm chart together with the backend. Older volume-based Claude connections require fresh sign-in. Existing account volumes are not migrated or removed automatically.
 
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
@@ -947,7 +961,7 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
 - **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each Agent Sandbox workspace. Stores runtime state, client sessions, and working files under `/home/node`. Privileged workspaces also store `/var/lib/docker` on this volume.
   - Default: `20Gi`
 
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime prerequisites](/docs/platform-agent-runtime#prerequisites).
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime setup](#agent-runtime).
   - Default: the cluster's default storage class
 
 - **`ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.

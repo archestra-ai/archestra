@@ -64,7 +64,9 @@ test.describe("Skills marketplace share step", () => {
     await page.goto(STEP_URL);
     await expect(page.getByText(STEP_TITLE)).toBeVisible();
     await openShareLinks(page);
-    await expect(page.getByText("Snapshot 2 skills")).toBeVisible();
+    await expect(
+      page.getByRole("paragraph").filter({ hasText: /^Share 2 skills/ }),
+    ).toBeVisible();
 
     // The default create handler (src/mocks/handlers.ts) returns 400 for any
     // payload whose skillIds differ from the two seeded org skills, so the

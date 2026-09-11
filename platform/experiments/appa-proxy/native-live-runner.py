@@ -251,6 +251,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reviewer-command", help="automated TEST reviewer command for review scenarios")
     parser.add_argument("--test-reviewer-id-sha256", help="SHA-256 of the authorized automated TEST reviewer identity")
     parser.add_argument("--resume-session", help="native session/thread ID for a fork or post-compaction follow-up")
+    parser.add_argument("--resume-from-run-dir", type=Path, help="source run directory to seed client session state for fork or compaction")
+    parser.add_argument("--runtime-selector", help="Kubernetes pod label selector for the active APPA runtime")
     parser.add_argument("--timeout", type=positive_int, default=300)
     parser.add_argument("--execute", action="store_true", help="allow a provider call after deployed-ready acknowledgement")
     parser.add_argument("--offline", action="store_true", help="validate the plan only; performs no network or provider calls")
@@ -376,6 +378,10 @@ def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir
     home = run_dir / "client-home"
     home.mkdir(mode=0o700)
     os.chmod(home, 0o700)
+    if getattr(args, "resume_from_run_dir", None):
+        source_home = Path(args.resume_from_run_dir) / "client-home"
+        if source_home.is_dir():
+            shutil.copytree(source_home, home, dirs_exist_ok=True)
     if gateway:
         mcp_url = str(gateway["url"])
         mcp_token_env = str(gateway["token_env"])
@@ -644,6 +650,8 @@ def archive_phase_trace(run_dir: Path) -> None:
 
 def collect_runtime_evidence(args: argparse.Namespace, run_dir: Path, run_id: str, request_key: str, reviewer: dict[str, Any] | None, fixtures: dict[str, str]) -> dict[str, Any]:
     command = runtime_evidence_command(args) + ["--scenario", args.scenario, "--client", args.client, "--run-id", run_id, "--request-key", request_key, "--run-dir", str(run_dir), "--agent-id", args.agent_id]
+    if getattr(args, "runtime_selector", None):
+        command.extend(["--runtime-selector", str(args.runtime_selector)])
     fixture_evidence_path = run_dir / "fixture-evidence.json"
     if fixture_evidence_path.is_file():
         command.extend(["--fixture-evidence", str(fixture_evidence_path)])

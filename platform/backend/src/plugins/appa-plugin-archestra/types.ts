@@ -119,6 +119,19 @@ export interface AppaClientAdapter {
   extractToolResults(requestBody: unknown): AppaToolResult[];
 
   formatToolResult(admittedResult: AppaToolResult): unknown;
+
+  /**
+   * Projects a client-local tool name (e.g. "Bash", "exec_command") into
+   * the canonical tool identity expected by OpenAPPA runtime policies.
+   */
+  canonicalizeLocalToolName?(rawName: string): string;
+}
+
+/**
+ * Checks whether a tool name matches the standard agent/sub-agent spawn convention.
+ */
+export function isAppaSpawnTool(toolName: string): boolean {
+  return /(^|__|\.)(spawn_agent|Agent|Task|task)$/.test(toolName);
 }
 
 /**

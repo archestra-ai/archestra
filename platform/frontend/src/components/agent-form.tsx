@@ -1119,8 +1119,7 @@ export function AccessLevelSelector({
  *   knowledge sources, subagents, and hooks.
  * - `advanced`: Agent Runtime, security, passthrough headers, identity
  *   provider, and labels.
- */
-/**
+ *
  * The groups a host can mount independently. `messaging` is a section of its
  * own rather than part of `configuration`: channel assignments save through
  * their own endpoint, so a surface showing only them must not also re-send the
@@ -1813,8 +1812,6 @@ export function AgentForm({
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
-  // Skills moved to Advanced, so they no longer keep this panel alive: a record
-  // with only published skills would otherwise mount an empty tools tab.
   const toolsPanelHasContent = showTools || showsHooks;
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change

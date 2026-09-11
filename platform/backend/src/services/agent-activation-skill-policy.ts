@@ -12,8 +12,8 @@ import type {
 import {
   getAvailableAgentSkillReference,
   listPolicyIndependentAvailableAgentSkills,
-  type PolicyIndependentAvailableAgentSkill,
 } from "@/services/agent-activation-skill-candidates";
+import { projectPolicyIndependentAvailableAgentSkills } from "@/services/agent-activation-skill-projection";
 import type {
   AgentActivationSkill,
   AgentActivationSkillMode,
@@ -87,7 +87,10 @@ class AgentActivationSkillPolicyService {
     return buildEditorResponse({
       state: snapshot,
       rules: snapshot.rules,
-      candidates,
+      skills: projectPolicyIndependentAvailableAgentSkills(
+        candidates,
+        params.userId,
+      ),
     });
   }
 
@@ -306,19 +309,16 @@ class AgentActivationSkillPolicyService {
 function buildEditorResponse(params: {
   state: { mode: AgentActivationSkillMode; revision: number };
   rules: AgentActivationSkillPolicyRule[];
-  candidates: PolicyIndependentAvailableAgentSkill[];
+  skills: AgentActivationSkill[];
 }): AgentActivationSkillPolicyResponse {
-  const candidatesByKey = new Map(
-    params.candidates.map((candidate) => [
-      referenceKey(getAvailableAgentSkillReference(candidate)),
-      candidate,
-    ]),
+  const skillsByKey = new Map(
+    params.skills.map((skill) => [referenceKey(skill.reference), skill]),
   );
   const rules = (disposition: AgentActivationSkillRuleDisposition) =>
     params.rules.filter((rule) => rule.disposition === disposition);
   const visible = (disposition: AgentActivationSkillRuleDisposition) =>
     rules(disposition).filter((rule) =>
-      candidatesByKey.has(referenceKey(rule.reference)),
+      skillsByKey.has(referenceKey(rule.reference)),
     );
   const visibleAllowed = visible("allow");
   const visibleExcluded = visible("exclude");
@@ -327,8 +327,8 @@ function buildEditorResponse(params: {
     revision: params.state.revision,
     allowedReferences: visibleAllowed.map((rule) => rule.reference),
     excludedReferences: visibleExcluded.map((rule) => rule.reference),
-    allowedSkills: displaySkillsForRules(visibleAllowed, candidatesByKey),
-    excludedSkills: displaySkillsForRules(visibleExcluded, candidatesByKey),
+    allowedSkills: displaySkillsForRules(visibleAllowed, skillsByKey),
+    excludedSkills: displaySkillsForRules(visibleExcluded, skillsByKey),
     hiddenAllowedCount: rules("allow").length - visibleAllowed.length,
     hiddenExcludedCount: rules("exclude").length - visibleExcluded.length,
   };
@@ -336,39 +336,12 @@ function buildEditorResponse(params: {
 
 function displaySkillsForRules(
   rules: AgentActivationSkillPolicyRule[],
-  candidatesByKey: Map<string, PolicyIndependentAvailableAgentSkill>,
+  skillsByKey: Map<string, AgentActivationSkill>,
 ): AgentActivationSkill[] {
   return rules.flatMap((rule) => {
-    const candidate = candidatesByKey.get(referenceKey(rule.reference));
-    return candidate ? [candidateToDisplaySkill(candidate)] : [];
+    const skill = skillsByKey.get(referenceKey(rule.reference));
+    return skill ? [skill] : [];
   });
-}
-
-function candidateToDisplaySkill(
-  candidate: PolicyIndependentAvailableAgentSkill,
-): AgentActivationSkill {
-  const reference = getAvailableAgentSkillReference(candidate);
-  if (candidate.source === "native") {
-    return {
-      reference,
-      name: candidate.skill.name,
-      activationName: candidate.skill.name,
-      description: candidate.skill.description,
-      scope: candidate.skill.scope,
-      providerName: null,
-    };
-  }
-  return {
-    reference,
-    name: candidate.skill.name,
-    activationName: candidate.skill.name,
-    description: candidate.skill.description,
-    scope: candidate.skill.scope,
-    providerName:
-      candidate.source === "plugin"
-        ? candidate.skill.pluginName
-        : candidate.skill.serverName,
-  };
 }
 
 function normalizeOperations(

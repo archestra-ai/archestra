@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { PaginationQuery } from "@archestra/shared";
 import { and, asc, count, desc, eq, lt } from "drizzle-orm";
+import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import {
   createPaginatedResult,
@@ -22,9 +23,9 @@ type AgentRow = typeof schema.agentsTable.$inferSelect;
  * operations fork a new version at their boundary via `forkIfChangedBestEffort`
  * when the write changes the canonical payload (see AgentConfigSnapshotSchema
  * for the exact surface): agent create/update, tool assign/unassign/delegation,
- * hook create/update/delete, tool/subagent exclusion edits, and knowledge/
- * connector assignment. A write producing an identical payload leaves the head
- * untouched (content-hash dedup).
+ * activation-skill policy edits, hook create/update/delete, tool/subagent
+ * exclusion edits, and knowledge/connector assignment. A write producing an
+ * identical payload leaves the head untouched (content-hash dedup).
  *
  * Coverage is at those operation boundaries, not a DB trigger — a write that
  * bypasses them (e.g. the bulk MCP-server install tool fan-out, which runs
@@ -40,11 +41,33 @@ class AgentVersionModel {
     return createHash("sha256").update(stableStringify(snapshot)).digest("hex");
   }
 
-  /** Public-safe identity for comparing rule sets without exposing references. */
+  /** Server-keyed marker that prevents offline testing of guessed rule sets. */
   static computeActivationSkillRuleDigest(
     rules: AgentConfigSnapshot["activationSkillRules"],
   ): string {
-    return createHash("sha256").update(stableStringify(rules)).digest("hex");
+    return AgentVersionModel.computePublicDigest(
+      "activation-skill-rules",
+      stableStringify(rules),
+    );
+  }
+
+  /** Server-keyed projection of the private snapshot hash for read APIs. */
+  static computePublicContentHash(contentHash: string): string {
+    return AgentVersionModel.computePublicDigest("content-hash", contentHash);
+  }
+
+  private static computePublicDigest(domain: string, value: string): string {
+    const secret = config.auth.secret;
+    if (!secret) {
+      throw new Error(
+        "ARCHESTRA_AUTH_SESSION_SECRET or ARCHESTRA_AUTH_SECRET is required",
+      );
+    }
+    return createHmac("sha256", secret)
+      .update(domain)
+      .update("\0")
+      .update(value)
+      .digest("hex");
   }
 
   /**

@@ -108,24 +108,24 @@ describe("AgentActivationSkillsEditor", () => {
     renderEditor();
 
     expect(
-      await screen.findByRole("button", { name: "Remove incident-response" }),
+      await screen.findByRole("button", { name: /^Remove incident-response/ }),
     ).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "Manual" }));
     expect(
-      screen.getByRole("button", { name: "Remove research" }),
+      screen.getByRole("button", { name: /^Remove research/ }),
     ).toBeVisible();
     expect(screen.queryByText("MCP")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Add" }));
     await user.click(await screen.findByText("incident-response"));
     expect(
-      screen.getByRole("button", { name: "Remove incident-response" }),
+      screen.getByRole("button", { name: /^Remove incident-response/ }),
     ).toBeVisible();
     expect(screen.queryByText("Skill library")).toBeNull();
 
     await user.click(screen.getByRole("tab", { name: "All" }));
     expect(
-      screen.getByRole("button", { name: "Remove incident-response" }),
+      screen.getByRole("button", { name: /^Remove incident-response/ }),
     ).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "Manual" }));
     await user.click(screen.getByRole("button", { name: "Save skills" }));
@@ -177,6 +177,84 @@ describe("AgentActivationSkillsEditor", () => {
       screen.getByRole("columnheader", { name: "Visibility" }),
     ).toBeVisible();
     expect(screen.getByText("Research Server")).toBeVisible();
+  });
+
+  it("distinguishes same-named skill-library choices by scope and exact identity", async () => {
+    const personalSkill = {
+      ...nativeSkill,
+      reference: { source: "native" as const, skillId: "aaaa1111-personal" },
+      name: "duplicate-playbook",
+      activationName: "duplicate-playbook",
+      scope: "personal" as const,
+    };
+    const otherPersonalSkill = {
+      ...personalSkill,
+      reference: { source: "native" as const, skillId: "bbbb2222-personal" },
+    };
+    const organizationSkill = {
+      ...nativeSkill,
+      reference: { source: "native" as const, skillId: "cccc3333-org" },
+      name: "duplicate-playbook",
+      activationName: "duplicate-playbook",
+      scope: "org" as const,
+    };
+    server.use(
+      http.get(POLICY_URL, () =>
+        HttpResponse.json({
+          mode: "manual",
+          revision: 0,
+          allowedReferences: [],
+          excludedReferences: [],
+          hiddenAllowedCount: 0,
+          hiddenExcludedCount: 0,
+          allowedSkills: [],
+          excludedSkills: [],
+        }),
+      ),
+      http.get(CATALOG_URL, () =>
+        HttpResponse.json(
+          catalog([personalSkill, otherPersonalSkill, organizationSkill]),
+        ),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderEditor();
+    await user.click(await screen.findByRole("button", { name: "Add" }));
+
+    expect(
+      screen.getByText("Skill library · Personal · aaaa1111"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Skill library · Personal · bbbb2222"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Skill library · Organization · cccc3333"),
+    ).toBeVisible();
+
+    await user.click(screen.getByText("Skill library · Personal · aaaa1111"));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByText("Skill library · Personal · bbbb2222"));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(
+      screen.getByText("Skill library · Organization · cccc3333"),
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Remove duplicate-playbook (Personal · aaaa1111)",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Remove duplicate-playbook (Personal · bbbb2222)",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Remove duplicate-playbook (Organization · cccc3333)",
+      }),
+    ).toBeVisible();
   });
 
   it("does not show editable defaults while policy state is loading", async () => {
@@ -264,7 +342,7 @@ describe("AgentActivationSkillsEditor", () => {
 
     await waitFor(() => expect(policyReads).toBeGreaterThan(1));
     expect(
-      screen.getByRole("button", { name: "Remove incident-response" }),
+      screen.getByRole("button", { name: /^Remove incident-response/ }),
     ).toBeVisible();
   });
 
@@ -398,7 +476,7 @@ describe("AgentActivationSkillsEditor", () => {
     );
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: "Remove incident-response" }),
+        screen.queryByRole("button", { name: /^Remove incident-response/ }),
       ).toBeNull(),
     );
     await user.click(screen.getByRole("button", { name: "Capture policy" }));

@@ -43,7 +43,6 @@ export const AgentActivationSkillSchema = z.object({
   scope: ResourceVisibilityScopeSchema.describe(
     "The visibility scope through which the skill is shared.",
   ),
-  /** Plugin or MCP server name; null for a native skill-library entry. */
   providerName: z
     .string()
     .nullable()

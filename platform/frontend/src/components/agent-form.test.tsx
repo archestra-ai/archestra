@@ -1714,7 +1714,7 @@ describe("AgentForm delegation state", () => {
 
     expect(await screen.findByText("off-page-skill")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Remove off-page-skill" }),
+      screen.getByRole("button", { name: /^Remove off-page-skill/ }),
     ).toBeInTheDocument();
   });
 
@@ -1753,7 +1753,7 @@ describe("AgentForm delegation state", () => {
 
     expect(await screen.findByText("regraded-skill")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Remove regraded-skill" }),
+      screen.getByRole("button", { name: /^Remove regraded-skill/ }),
     ).toBeInTheDocument();
   });
 
@@ -2442,7 +2442,7 @@ describe("AgentForm published skills", () => {
       await screen.findByRole("button", { name: "Add far-away-skill" }),
     );
     expect(
-      screen.getByRole("button", { name: "Remove far-away-skill" }),
+      screen.getByRole("button", { name: /^Remove far-away-skill/ }),
     ).toBeInTheDocument();
 
     await user.clear(search);
@@ -2457,7 +2457,7 @@ describe("AgentForm published skills", () => {
       ),
     );
     expect(
-      screen.getByRole("button", { name: "Remove far-away-skill" }),
+      screen.getByRole("button", { name: /^Remove far-away-skill/ }),
     ).toBeInTheDocument();
   });
 

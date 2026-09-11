@@ -14,6 +14,7 @@ export interface SkillSelectionItem extends AssignmentComboboxItem {
   id: string;
   name: string;
   chipBadge?: ReactNode;
+  removeLabel?: string;
 }
 
 interface SkillSelectionEditorProps {
@@ -89,7 +90,7 @@ export function SkillSelectionEditor({
             size="sm"
             className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
             onClick={() => handleToggle(skill.id)}
-            aria-label={`Remove ${skill.name}`}
+            aria-label={skill.removeLabel ?? `Remove ${skill.name}`}
           >
             <X className="h-3 w-3" />
           </Button>

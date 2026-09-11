@@ -778,13 +778,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, query, user, organizationId }, reply) => {
       await requireReadableAgent({ id, userId: user.id, organizationId });
-      return reply.send(
-        await AgentVersionModel.listForAgent({
-          agentId: id,
-          organizationId,
-          pagination: query,
-        }),
-      );
+      const result = await AgentVersionModel.listForAgent({
+        agentId: id,
+        organizationId,
+        pagination: query,
+      });
+      return reply.send({
+        ...result,
+        data: result.data.map((version) => ({
+          ...version,
+          contentHash: AgentVersionModel.computePublicContentHash(
+            version.contentHash,
+          ),
+        })),
+      });
     },
   );
 
@@ -833,7 +840,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             activationSkillRules,
           ),
       };
-      return reply.send({ ...row, snapshot });
+      return reply.send({
+        ...row,
+        contentHash: AgentVersionModel.computePublicContentHash(
+          row.contentHash,
+        ),
+        snapshot,
+      });
     },
   );
 

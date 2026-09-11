@@ -462,6 +462,15 @@ function useRememberedActivationSkills(
 
 function toSelectionItem(skill: AgentActivationSkill): SkillSelectionItem {
   const source = skillSourceLabel(skill.reference.source);
+  const provider = skill.providerName
+    ? `${skill.providerName} · ${source}`
+    : source;
+  const activationIdentity =
+    skill.activationName === skill.name ? null : skill.activationName;
+  const exactIdentity = selectionIdentity(skill);
+  const chipBadge = [skillScopeLabel(skill.scope), exactIdentity]
+    .filter(Boolean)
+    .join(" · ");
   return {
     id: agentActivationSkillReferenceKey(skill.reference),
     name: skill.name,
@@ -469,9 +478,39 @@ function toSelectionItem(skill: AgentActivationSkill): SkillSelectionItem {
     searchText: [skill.activationName, skill.providerName, source]
       .filter(Boolean)
       .join(" "),
-    badge: skill.providerName ? `${skill.providerName} · ${source}` : source,
+    badge: [
+      provider,
+      skillScopeLabel(skill.scope),
+      activationIdentity,
+      skill.reference.source === "native" ? exactIdentity : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    chipBadge,
+    removeLabel: `Remove ${skill.name} (${chipBadge})`,
     icon: <BookOpen className="h-3.5 w-3.5 shrink-0" />,
   };
+}
+
+function selectionIdentity(skill: AgentActivationSkill): string {
+  switch (skill.reference.source) {
+    case "native":
+      return skill.reference.skillId.slice(0, 8);
+    case "plugin":
+    case "external_mcp":
+      return skill.activationName;
+  }
+}
+
+function skillScopeLabel(scope: AgentActivationSkill["scope"]): string {
+  switch (scope) {
+    case "personal":
+      return "Personal";
+    case "team":
+      return "Team";
+    case "org":
+      return "Organization";
+  }
 }
 
 function policyChanged(saved: DraftPolicy, draft: DraftPolicy) {

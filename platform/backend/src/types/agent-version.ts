@@ -119,7 +119,7 @@ export const PublicAgentConfigSnapshotSchema = AgentConfigSnapshotSchema.omit({
     allowed: z.number().int().nonnegative(),
     excluded: z.number().int().nonnegative(),
   }),
-  /** Opaque comparison marker; never reveals which references changed. */
+  /** Server-keyed marker that prevents offline testing of guessed rule sets. */
   activationSkillRuleDigest: z.string().length(64),
 });
 

@@ -223,8 +223,8 @@ export async function isDynamicallyAvailableArchestraTool(params: {
 /**
  * Whether a built-in is reachable through either an active explicit assignment
  * or the same Auto-mode relaxation used by execution. This is the canonical
- * agent-level reachability check for read-only discovery surfaces; it does not
- * enforce tool RBAC, so every caller must do that first.
+ * agent-level reachability check for discovery and execution/assignment gates;
+ * it does not enforce tool RBAC, so every caller must do that first.
  */
 export async function isArchestraToolAvailableToAgent(params: {
   toolName: string;

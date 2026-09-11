@@ -562,22 +562,24 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (!policy) {
             throw new ApiError(404, "Agent not found");
           }
-          if (agentSkillView === "eligible") {
-            // The generic Skills table is native-only. The activation-skills
-            // route supplies the editor's complete cross-source eligible view.
-          } else if (policy.mode === "manual") {
-            allowedSkillIds = policy.rules.flatMap((rule) =>
-              rule.disposition === "allow" && rule.reference.source === "native"
-                ? [rule.reference.skillId]
-                : [],
-            );
-          } else {
-            excludedSkillIds = policy.rules.flatMap((rule) =>
-              rule.disposition === "exclude" &&
-              rule.reference.source === "native"
-                ? [rule.reference.skillId]
-                : [],
-            );
+          // The generic Skills table is native-only. For the eligible view,
+          // activation-skills supplies the editor's complete cross-source set.
+          if (agentSkillView !== "eligible") {
+            if (policy.mode === "manual") {
+              allowedSkillIds = policy.rules.flatMap((rule) =>
+                rule.disposition === "allow" &&
+                rule.reference.source === "native"
+                  ? [rule.reference.skillId]
+                  : [],
+              );
+            } else {
+              excludedSkillIds = policy.rules.flatMap((rule) =>
+                rule.disposition === "exclude" &&
+                rule.reference.source === "native"
+                  ? [rule.reference.skillId]
+                  : [],
+              );
+            }
           }
         } else {
           throw new ApiError(400, "This agent type does not expose skills");

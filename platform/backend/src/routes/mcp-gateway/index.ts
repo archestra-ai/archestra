@@ -3,12 +3,12 @@ import { RUN_ID_HEADER } from "@archestra/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { configuredAppaControlProvider } from "@/services/appa-control-provider";
 import {
   AgentRunAttentionStateSchema,
   type AgentRunRecord,
@@ -17,6 +17,11 @@ import {
   UuidOrSlugSchema,
 } from "@/types";
 import { getPublicRequestOrigin } from "../request-origin";
+import {
+  type AppaControlService,
+  resolveAppaControlService,
+  setAppaControlServiceProvider,
+} from "./appa-controls";
 import {
   deriveStatePrincipal,
   extractMrtrParams,
@@ -155,6 +160,9 @@ async function handleMcpPostRequest(
   resolution: ProtocolResolution,
   /** Rounds already spent on this call, from a verified requestState. */
   mrtrRound: number,
+  /** Signed retry state, present only after route-level verification. */
+  verifiedRequestState: string | undefined,
+  appaControls: AppaControlService | undefined = undefined,
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
@@ -199,9 +207,11 @@ async function handleMcpPostRequest(
         // client keeps the in-band elicitation it has always used.
         enabled: revision === STATELESS_MCP_PROTOCOL_REVISION,
         inputResponses: mrtrParams.inputResponses,
+        verifiedRequestState,
         round: mrtrRound,
         clientCapabilities: readClientCapabilities(body),
       },
+      appaControls,
     });
     const transport = createStatelessTransport(profileId);
 
@@ -290,6 +300,7 @@ async function handleMcpPostRequest(
 // Authorization header: Bearer <platform_token>
 // =============================================================================
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  setAppaControlServiceProvider(configuredAppaControlProvider);
   const { endpoint } = config.mcpGateway;
 
   // GET endpoint for server discovery with profile ID in URL
@@ -720,6 +731,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
         ...(runId && { runId }),
       };
+      // The provider is only an integration selector (global or profile scoped).
+      // Authorization remains token-derived in the control service and never
+      // reads client `_meta` correlation IDs.
+      const appaControls = resolveAppaControlService({
+        profileId,
+        tokenAuth: tokenAuthContext,
+      });
 
       // Extract passthrough headers from the incoming request per the agent's allowlist
       const agent = await AgentModel.findGatewayAgentById(profileId);
@@ -745,6 +763,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenAuthContext,
         resolution,
         mrtrRound,
+        retryState,
+        appaControls,
       );
     },
   );

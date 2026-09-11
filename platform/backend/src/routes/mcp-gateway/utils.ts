@@ -53,7 +53,10 @@ import {
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
-import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import mcpClient, {
+  readMcpClientToolOutcome,
+  type TokenAuthContext,
+} from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
@@ -86,6 +89,7 @@ import {
 } from "@/observability/tracing";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { DurableAppaNativeMcpExecutionService } from "@/services/appa-native-mcp-execution";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import {
   appLaunchToolDescription,
@@ -111,6 +115,14 @@ import {
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+import {
+  type AppaControlService,
+  type AppaWireContext,
+  assertNoAppaControlToolCollisions,
+  dispatchAppaControlTool,
+  getAppaControlTools,
+  isAppaControlToolName,
+} from "./appa-controls";
 import {
   buildInputRequiredResult,
   clientSupportsInputRequest,
@@ -260,6 +272,7 @@ const rawArchestraTokenCache =
     maxSize: TOKEN_AUTH_CACHE_MAX_ENTRIES,
     defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
   });
+const appaNativeMcpExecution = new DurableAppaNativeMcpExecutionService();
 
 /**
  * Creates an MCP server for the given agent.
@@ -269,18 +282,25 @@ export async function createAgentServer(params: {
   tokenAuth?: TokenAuthContext;
   runId?: string;
   /**
+   * Optional durable APPA control-plane implementation. Omitted by default so
+   * no APPA control is advertised or callable until the parent wires it in.
+   */
+  appaControls?: AppaControlService;
+  /**
    * Answers the client supplied on an MRTR retry, keyed as they were issued.
    * Absent on a first attempt, which is what makes the gateway elicit.
    */
   mrtr?: {
     enabled: boolean;
     inputResponses?: InputResponses;
+    /** Present only after index.ts verified the signed retry state. */
+    verifiedRequestState?: string;
     clientCapabilities?: unknown;
     /** Rounds already spent, read from a verified requestState. */
     round?: number;
   };
 }): Promise<{ server: McpServer; agent: AgentInfo }> {
-  const { agentId, tokenAuth, runId, mrtr } = params;
+  const { agentId, tokenAuth, runId, mrtr, appaControls } = params;
   const mrtrEnabled = mrtr?.enabled === true;
 
   /**
@@ -420,6 +440,19 @@ export async function createAgentServer(params: {
     const implicitTaskControlTools = hasTaskStarter
       ? getImplicitTaskControlTools()
       : [];
+    const appaControlTools = await getAppaControlTools({
+      service: appaControls,
+      profileId: agentId,
+      tokenAuth,
+    });
+    // No upstream or assigned tool may squat on this gateway-reserved prefix.
+    // This check runs before splicing the control definitions into tools/list.
+    assertNoAppaControlToolCollisions([
+      ...mcpTools,
+      ...delegationTools,
+      ...skillDelegationTools,
+    ]);
+
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter(
@@ -436,6 +469,7 @@ export async function createAgentServer(params: {
             _meta: tool._meta,
           },
         })),
+        ...appaControlTools,
       ].map(toMcpListTool),
     );
 
@@ -544,9 +578,10 @@ export async function createAgentServer(params: {
     ]);
 
     const toolsList: McpListTool[] = permittedTools.map(
-      ({ name, description, parameters, meta, catalogId }) => ({
+      ({ name, title, description, parameters, meta, catalogId }) => ({
         name,
         title:
+          title ||
           archestraToolTitles.get(name) ||
           appLaunchTitle(catalogId, name) ||
           name,
@@ -715,7 +750,7 @@ export async function createAgentServer(params: {
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    const { name, arguments: args } = request.params;
+    const { name, arguments: rawArgs } = request.params;
 
     // Tasks extension (io.modelcontextprotocol/tasks): an eligible call —
     // the client declared the extension in this request's _meta — races the
@@ -724,13 +759,32 @@ export async function createAgentServer(params: {
     // persistence) runs identically either way; only who is waiting for the
     // outcome changes.
     const taskEligible =
-      mrtrEnabled && clientDeclaredTasks({ params: request.params });
+      !isAppaControlToolName(name) &&
+      mrtrEnabled &&
+      clientDeclaredTasks({ params: request.params });
 
     const executeCallToolRequest = async (
       taskAbortSignal: AbortSignal,
     ): Promise<Record<string, unknown>> => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
+      const metadataWireContext = readAppaWireContext(
+        (request.params as { _meta?: unknown })._meta,
+      );
+      const nativeRunTool = readNativeRunToolExecution({
+        name,
+        args: rawArgs,
+      });
+      const appaWireContext = nativeRunTool
+        ? mergeAppaWireContexts(metadataWireContext, nativeRunTool.wireContext)
+        : metadataWireContext;
+      const args = nativeRunTool?.runToolArgs ?? rawArgs;
+      let nativeExecution:
+        | Extract<
+            Awaited<ReturnType<typeof appaNativeMcpExecution.claim>>,
+            { state: "acquired" }
+          >
+        | undefined;
 
       // Resolve user identity for OTEL span attributes
       let mcpUser: {
@@ -750,6 +804,51 @@ export async function createAgentServer(params: {
       }
 
       try {
+        if (!appaWireContext) {
+          return complete(nativeMcpExecutionUnavailableResult());
+        }
+        // APPA controls are gateway-owned and capability-scoped. Handle the
+        // reserved names before ordinary built-in, dynamic, or upstream paths.
+        if (isAppaControlToolName(name)) {
+          const appaResult = await dispatchAppaControlTool({
+            service: appaControls,
+            profileId: agentId,
+            tokenAuth,
+            toolName: name,
+            args,
+            wireContext: appaWireContext,
+            elicitationResponse:
+              mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY],
+            verifiedRequestState: mrtr?.verifiedRequestState,
+          });
+          if (appaResult.kind === "input_required") {
+            throw new InputRequiredSignal({
+              key: GATEWAY_INPUT_REQUEST_KEY,
+              request: appaResult.request,
+            });
+          }
+          return appaResult.result;
+        }
+
+        if (appaWireContext.callId?.startsWith("call_appa_")) {
+          const claim = await appaNativeMcpExecution.claim({
+            tokenAuth,
+            callId: appaWireContext.callId,
+            toolName: nativeRunTool?.targetName ?? name,
+            args: nativeRunTool?.targetArgs ?? args ?? {},
+            executionArgs: rawArgs ?? {},
+            actualGatewayProfileId: agent.id,
+            wireContext: appaWireContext,
+          });
+          if (claim.state === "completed") {
+            return complete(claim.result);
+          }
+          if (claim.state === "unavailable") {
+            return complete(nativeMcpExecutionUnavailableResult());
+          }
+          nativeExecution = claim;
+        }
+
         // Check if this is an Archestra tool or a delegation tool (agent or
         // skill delegation — both dispatch through executeArchestraTool)
         const isArchestraTool = archestraMcpBranding.isToolName(name);
@@ -879,6 +978,15 @@ export async function createAgentServer(params: {
             );
           }
 
+          if (nativeExecution) {
+            const receipt = await appaNativeMcpExecution.complete({
+              scope: nativeExecution.scope,
+              frameId: nativeExecution.frameId,
+              status: "failure",
+              result: blockedResult,
+            });
+            return complete(receipt ?? nativeMcpExecutionUnavailableResult());
+          }
           return blockedResult;
         }
 
@@ -989,6 +1097,34 @@ export async function createAgentServer(params: {
             );
           }
 
+          if (nativeExecution) {
+            // An error may follow a partial side effect. Only a successful
+            // gateway-owned return settles this claim without producer proof.
+            // A run_tool policy denial is the exception: the policy gate ran
+            // before dispatch, so its structured outcome proves no target call
+            // happened and is safe to receipt as a durable failure.
+            if (response.isError) {
+              if (isPolicyDeniedResult(response)) {
+                const receipt = await appaNativeMcpExecution.complete({
+                  scope: nativeExecution.scope,
+                  frameId: nativeExecution.frameId,
+                  status: "failure",
+                  result: archestraResult,
+                });
+                return complete(
+                  receipt ?? nativeMcpExecutionUnavailableResult(),
+                );
+              }
+              return nativeMcpExecutionUnavailableResult();
+            }
+            const receipt = await appaNativeMcpExecution.complete({
+              scope: nativeExecution.scope,
+              frameId: nativeExecution.frameId,
+              status: "success",
+              result: archestraResult,
+            });
+            return complete(receipt ?? nativeMcpExecutionUnavailableResult());
+          }
           return archestraResult;
         }
 
@@ -1003,7 +1139,10 @@ export async function createAgentServer(params: {
         );
 
         // Generate a unique ID for this tool call
-        const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const toolCallId =
+          nativeExecution === undefined
+            ? `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+            : nativeExecution.callId;
 
         // Create CommonToolCall for McpClient
         const toolCall: CommonToolCall = {
@@ -1114,23 +1253,71 @@ export async function createAgentServer(params: {
             : "MCP gateway tool call completed",
         );
 
-        // Transform CommonToolResult to MCP response format
         // When isError is true, we still return the content so the LLM can see
-        // the error message and potentially try a different approach
-        return complete({
+        // the error message and potentially try a different approach.
+        const gatewayResult = {
           content: Array.isArray(result.content)
             ? result.content
             : [{ type: "text", text: JSON.stringify(result.content) }],
           isError: result.isError,
           _meta: result._meta,
           structuredContent: result.structuredContent,
-        });
+        };
+        if (nativeExecution) {
+          const outcome = readMcpClientToolOutcome(result);
+          if (
+            !outcome ||
+            outcome.call_id !== appaWireContext.callId ||
+            outcome.status === "indeterminate"
+          ) {
+            // A dropped response can follow a committed upstream mutation. Do
+            // not expose it as a retryable result and never execute it again.
+            return complete(nativeMcpExecutionUnavailableResult());
+          }
+          const replay = await appaNativeMcpExecution.complete({
+            scope: nativeExecution.scope,
+            frameId: nativeExecution.frameId,
+            status: outcome.status,
+            result: gatewayResult,
+          });
+          return complete(replay ?? nativeMcpExecutionUnavailableResult());
+        }
+        return complete(gatewayResult);
       } catch (error) {
         // MRTR: not a failure. The call needs input the gateway does not have,
         // so it answers with an InputRequiredResult and the client retries the
         // whole call with the answer attached. Handled before the metrics below
         // so it is not counted as an errored tool call.
+        if (nativeExecution) {
+          // The external outcome is unknown if an exception bypassed the MCP
+          // adapter. The durable running claim is retained as a replay barrier.
+          return complete(nativeMcpExecutionUnavailableResult());
+        }
         if (isInputRequiredSignal(error)) {
+          // APPA's durable service has already recorded that trusted review is
+          // pending. If this client cannot complete MRTR elicitation, leave it
+          // to the existing operator review/status path; do not invent a task
+          // or treat an absent response as a retryable execution failure.
+          if (
+            isAppaControlToolName(name) &&
+            (!mrtrEnabled ||
+              !clientSupportsInputRequest({
+                clientCapabilities: mrtr?.clientCapabilities,
+                request: error.request,
+              }))
+          ) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Trusted review is pending. Check APPA remedy status or use the operator review surface; no remedy has been approved or executed.",
+                },
+              ],
+              structuredContent: { status: "awaiting_trusted_review" },
+              isError: false,
+            };
+          }
+
           if (
             !clientSupportsInputRequest({
               clientCapabilities: mrtr?.clientCapabilities,
@@ -2322,6 +2509,11 @@ function filterExposedTools(params: {
   const { toolExposureMode, advertiseUiResourceTools, autoToolMode, tools } =
     params;
   return tools.filter((tool) => {
+    // APPA controls are the deliberately narrow exception to the normal
+    // no-auto-injection rule. They are already independently gated by the
+    // durable control-session capability before entering this list.
+    if (isAppaControlToolName(tool.name)) return true;
+
     // `search_and_run_only` hides every tool behind search_tools/run_tool, but
     // the meta tools themselves and the always-exposed skill path must stay
     // top-level. UI-providing tools (app launch tools, external ext-apps tools)
@@ -2356,6 +2548,7 @@ type McpToolForSearchDescription = {
 
 type McpListToolCandidate = {
   name: string;
+  title?: string;
   description: string | null;
   parameters: McpListTool["inputSchema"];
   catalogId?: string | null;
@@ -2367,6 +2560,7 @@ type McpListToolCandidate = {
 
 function toMcpListTool(tool: {
   name: string;
+  title?: string;
   description?: string | null;
   catalogId?: string | null;
   parameters?: unknown;
@@ -2378,6 +2572,7 @@ function toMcpListTool(tool: {
 }): McpListToolCandidate {
   return {
     name: tool.name,
+    title: tool.title,
     description: tool.description ?? null,
     parameters: normalizeToolInputSchema(tool.parameters ?? tool.inputSchema),
     catalogId: tool.catalogId,
@@ -2520,6 +2715,126 @@ export function normalizeToolInputSchema(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readAppaWireContext(meta: unknown): AppaWireContext {
+  if (!isRecord(meta)) return {};
+
+  return {
+    ...(typeof meta.callId === "string" && { callId: meta.callId }),
+    ...(typeof meta.threadId === "string" && { threadId: meta.threadId }),
+    ...(typeof meta.itemId === "string" && { itemId: meta.itemId }),
+  };
+}
+
+/**
+ * The native proxy releases a stock `run_tool` envelope with this locator. The
+ * wrapper is consumed here, before run_tool sees it, so ordinary clients retain
+ * its published two-field strict schema and the target receives only its real
+ * arguments.
+ */
+function readNativeRunToolExecution(params: {
+  name: string;
+  args: Record<string, unknown> | undefined;
+}):
+  | {
+      targetName: string;
+      targetArgs: Record<string, unknown>;
+      runToolArgs: Record<string, unknown>;
+      wireContext: AppaWireContext;
+    }
+  | undefined {
+  if (
+    archestraMcpBranding.getToolShortName(params.name) !==
+    TOOL_RUN_TOOL_SHORT_NAME
+  ) {
+    return undefined;
+  }
+  const args = params.args;
+  if (!isRecord(args) || !("wire_context" in args)) return undefined;
+  if (
+    !hasExactObjectKeys(args, ["tool_name", "tool_args", "wire_context"]) ||
+    typeof args.tool_name !== "string" ||
+    !isRecord(args.tool_args) ||
+    !isRecord(args.wire_context) ||
+    !hasExactObjectKeys(args.wire_context, [
+      "call_id",
+      "thread_id",
+      "item_id",
+    ]) ||
+    typeof args.wire_context.call_id !== "string" ||
+    typeof args.wire_context.thread_id !== "string" ||
+    typeof args.wire_context.item_id !== "string"
+  ) {
+    return undefined;
+  }
+  if (!args.wire_context.call_id.startsWith("call_appa_")) {
+    return undefined;
+  }
+  return {
+    targetName: args.tool_name,
+    targetArgs: args.tool_args,
+    runToolArgs: { tool_name: args.tool_name, tool_args: args.tool_args },
+    wireContext: {
+      callId: args.wire_context.call_id,
+      threadId: args.wire_context.thread_id,
+      itemId: args.wire_context.item_id,
+    },
+  };
+}
+
+function mergeAppaWireContexts(
+  metadata: AppaWireContext,
+  wireContext: AppaWireContext,
+): AppaWireContext | null {
+  for (const key of ["callId", "threadId", "itemId"] as const) {
+    if (
+      metadata[key] !== undefined &&
+      wireContext[key] !== undefined &&
+      metadata[key] !== wireContext[key]
+    ) {
+      return null;
+    }
+  }
+  return { ...metadata, ...wireContext };
+}
+
+function hasExactObjectKeys(value: Record<string, unknown>, keys: string[]) {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return (
+    actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index])
+  );
+}
+
+function isPolicyDeniedResult(result: {
+  structuredContent?: unknown;
+  _meta?: unknown;
+}): boolean {
+  const structuredError = isRecord(result.structuredContent)
+    ? result.structuredContent.archestraError
+    : undefined;
+  const metadataError = isRecord(result._meta)
+    ? result._meta.archestraError
+    : undefined;
+  return (
+    (isRecord(structuredError) && structuredError.type === "policy_denied") ||
+    (isRecord(metadataError) && metadataError.type === "policy_denied")
+  );
+}
+
+function nativeMcpExecutionUnavailableResult(): Record<string, unknown> {
+  return {
+    content: [
+      {
+        type: "text",
+        text: "The native MCP call has an unavailable or indeterminate durable execution receipt and was not retried.",
+      },
+    ],
+    structuredContent: { status: "indeterminate_execution" },
+    isError: true,
+  };
 }
 
 function isArchestraMetaTool(toolName: string) {

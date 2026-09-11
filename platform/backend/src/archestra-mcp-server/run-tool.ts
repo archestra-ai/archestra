@@ -52,6 +52,16 @@ const RunToolArgsSchema = z
       .describe(
         "Arguments object for the target tool; must match its input schema.",
       ),
+    // A native Codex response may carry a proxy-issued opaque locator. The
+    // public gateway consumes it before this handler runs; it is never target
+    // input or client-provided authority.
+    wire_context: z
+      .strictObject({
+        call_id: z.string().min(1).max(512),
+        thread_id: z.string().min(1).max(512),
+        item_id: z.string().min(1).max(512),
+      })
+      .optional(),
   })
   .strict();
 
@@ -275,6 +285,18 @@ async function dispatchTool({
       : "third-party";
 
   const resolvedName = resolveRunToolTargetName(effectiveName);
+
+  // APPA controls are injected only by the gateway factory after a separate
+  // control-session check. They are never valid run_tool targets, even if an
+  // upstream server or stored tool row attempts to reuse the reserved prefix.
+  if (resolvedName.startsWith("archestra__appa_")) {
+    return dispatchRefusalResult({
+      code: "invalid_target",
+      message:
+        "APPA gateway controls cannot be invoked through run_tool. Call the exact injected APPA control directly when it is advertised by tools/list.",
+      toolName: resolvedName,
+    });
+  }
 
   logger.info(
     {

@@ -146,6 +146,21 @@ type PassiveMcpClient = {
   >;
 };
 
+type PlatformToolOutcome = {
+  call_id: string;
+  status: "success" | "failure" | "indeterminate";
+};
+
+// This proof is deliberately not MCP result metadata. It belongs only to the
+// adapter that performed the call, so an upstream server cannot forge success.
+const outcomesByResult = new WeakMap<object, PlatformToolOutcome>();
+
+export function readMcpClientToolOutcome(
+  result: CommonToolResult,
+): PlatformToolOutcome | null {
+  return outcomesByResult.get(result) ?? null;
+}
+
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -924,6 +939,7 @@ class McpClient {
         currentSecrets: Record<string, unknown>,
         isRetry = false,
       ): Promise<CommonToolResult> => {
+        let callDispatched = false;
         try {
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
@@ -1048,6 +1064,7 @@ class McpClient {
             options?.abortSignal,
           );
 
+          callDispatched = true;
           const result = await client.callTool(
             {
               name: targetToolName,
@@ -1066,38 +1083,7 @@ class McpClient {
             },
           );
 
-          const isOAuthServer = !!catalogItem.oauthConfig;
           const toolResultAuthError = isAuthRelatedToolResult(result);
-          if (
-            toolResultAuthError &&
-            isOAuthServer &&
-            secretId &&
-            hasRefreshToken &&
-            !isRetry
-          ) {
-            const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
-              secretId,
-              catalogId: catalogItem.id,
-              connectionKey,
-              toolCall,
-              owner,
-              mcpServerName,
-              catalogItem,
-              targetMcpServerId,
-              tokenAuth,
-              lockedChatContent,
-              enterpriseTransportCredential,
-              toolCatalogId: tool.catalogId,
-              toolCatalogName: tool.catalogName,
-              executeRetry: (nextGetTransport, secrets) =>
-                executeToolCall(nextGetTransport, secrets, true),
-            });
-
-            if (retryToolCallResult) {
-              return retryToolCallResult;
-            }
-          }
-
           if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
             const catalogDisplayName = tool.catalogName || catalogItem.name;
             const authError = await this.buildExpiredAuthMessage({
@@ -1169,6 +1155,27 @@ class McpClient {
           // RPC call (listTools / callTool).  Detect this and retry with a
           // fresh session.
           const isStaleSession = isStaleSessionError(error);
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          const isAuthError =
+            error instanceof UnauthorizedError ||
+            (error instanceof StreamableHTTPError && error.code === 401) ||
+            isAuthRelatedError(errorMessage);
+
+          // Once tools/call has started, a timeout, disconnect, or ordinary
+          // transport failure cannot prove whether an external side effect
+          // happened. Do not retry it or expose the upstream error body.
+          // A stale HTTP session is the narrow exception: the transport rejects
+          // its session id before dispatch (see isStaleSessionError).
+          if (callDispatched && !isStaleSession && !isAuthError) {
+            return await this.createIndeterminateResult({
+              toolCall,
+              owner,
+              mcpServerName,
+              authInfo,
+              lockedChatContent,
+            });
+          }
 
           if (isStaleSession && !isRetry) {
             // Check if another concurrent call is already recovering this
@@ -1226,17 +1233,9 @@ class McpClient {
             }
           }
 
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-
           // Check if this is an authentication error - either by type/status code
           // or by detecting auth-related keywords in the error message (some servers
           // return non-401 status codes with auth error messages in the body)
-          const isAuthError =
-            error instanceof UnauthorizedError ||
-            (error instanceof StreamableHTTPError && error.code === 401) ||
-            isAuthRelatedError(errorMessage);
-
           // Only attempt token refresh for OAuth servers with a refresh token
           const isOAuthServer = !!catalogItem.oauthConfig;
           const usesClientCredentials = usesOAuthClientCredentials(catalogItem);
@@ -2926,6 +2925,11 @@ class McpClient {
       },
     };
 
+    outcomesByResult.set(errorResult, {
+      call_id: toolCall.id,
+      status: "failure",
+    });
+
     await this.persistToolCall({
       owner,
       mcpServerName,
@@ -2935,6 +2939,43 @@ class McpClient {
       lockedChatContent,
     });
     return errorResult;
+  }
+
+  /** A dispatched call ended without a result, so its external effect is unknown. */
+  private async createIndeterminateResult(opts: {
+    toolCall: CommonToolCall;
+    owner: ToolOwner;
+    mcpServerName?: string;
+    authInfo?: ToolCallAuthInfo;
+    lockedChatContent?: ToolCallContentDisposition;
+  }): Promise<CommonToolResult> {
+    const message =
+      "The tool call did not return a result. It may have completed, so it was not retried automatically.";
+    const result: CommonToolResult = {
+      id: opts.toolCall.id,
+      name: opts.toolCall.name,
+      content: [{ type: "text", text: message }],
+      isError: true,
+      error: message,
+      _meta: {
+        archestraError: { type: "generic", message },
+        ...this.executedAsMeta(opts.authInfo),
+      },
+      structuredContent: { archestraError: { type: "generic", message } },
+    };
+    outcomesByResult.set(result, {
+      call_id: opts.toolCall.id,
+      status: "indeterminate",
+    });
+    await this.persistToolCall({
+      owner: opts.owner,
+      mcpServerName: opts.mcpServerName ?? "unknown",
+      toolCall: opts.toolCall,
+      toolResult: result,
+      authInfo: opts.authInfo,
+      lockedChatContent: opts.lockedChatContent,
+    });
+    return result;
   }
 
   /**
@@ -2984,6 +3025,10 @@ class McpClient {
           : undefined,
       structuredContent: stripReservedPlatformMeta(structuredContent),
     };
+    outcomesByResult.set(toolResult, {
+      call_id: toolCall.id,
+      status: isError ? "failure" : "success",
+    });
 
     await this.persistToolCall({
       owner,

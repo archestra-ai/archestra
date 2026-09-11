@@ -90,6 +90,21 @@ export { default as appRenderDiagnosticsTable } from "./app-render-diagnostics";
 export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";
 export { default as appVersionsTable } from "./app-version";
+export { default as appaApprovalsTable } from "./appa-approval";
+export {
+  appaOpaqueHistoryItemsTable,
+  default as appaOpaqueHistoryWindowsTable,
+} from "./appa-opaque-history";
+export { appaProxyCheckpointBindingsTable } from "./appa-proxy";
+export {
+  appaProxyCallsTable,
+  appaProxyEventsTable,
+  default as appaProxySessionsTable,
+} from "./appa-proxy-session";
+export {
+  appaProxyWireAliasesTable,
+  appaProxyWireFramesTable,
+} from "./appa-proxy-wire";
 export { default as auditLogsTable } from "./audit-log";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {

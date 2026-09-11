@@ -1973,8 +1973,24 @@ class AgentModel {
   static async findGatewayNamesByOrganizationId(
     organizationId: string,
   ): Promise<string[]> {
-    const agents = await db
-      .select({ name: schema.agentsTable.name })
+    const gateways =
+      await AgentModel.findGatewayProfilesByOrganizationId(organizationId);
+    return gateways.map((gateway) => gateway.name);
+  }
+
+  /**
+   * Live gateway identities in one organization. Consumers that bind client
+   * aliases use the id to validate the gateway's current registry tool surface.
+   */
+  static async findGatewayProfilesByOrganizationId(
+    organizationId: string,
+  ): Promise<Array<{ id: string; name: string; authorId: string | null }>> {
+    return await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        authorId: schema.agentsTable.authorId,
+      })
       .from(schema.agentsTable)
       .where(
         and(
@@ -1985,8 +2001,6 @@ class AgentModel {
           ]),
         ),
       );
-
-    return agents.map((agent) => agent.name);
   }
 
   static async findIdsByOrganizationId(

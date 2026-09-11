@@ -72,6 +72,34 @@ describe("log redaction", () => {
     const tokenAuth = records[0].tokenAuth as Record<string, unknown>;
     expect(tokenAuth.passthroughHeaders).toBe("[Redacted]");
   });
+
+  test("censors APPA spawn capabilities in request and response headers", () => {
+    const { logger, records } = createCapturingLogger();
+    const capability = "synthetic-one-use-spawn-capability";
+    logger.info({
+      spawnBinding: capability,
+      dispatch: { spawn_binding: capability },
+      request: { headers: { "x-archestra-appa-spawn-binding": capability } },
+      response: {
+        headers: {
+          "x-archestra-appa-spawn-bindings": JSON.stringify({
+            call: capability,
+          }),
+        },
+      },
+      callId: "safe-call-reference",
+    });
+    expect(JSON.stringify(records)).not.toContain(capability);
+    expect(records[0]).toMatchObject({
+      spawnBinding: "[Redacted]",
+      dispatch: { spawn_binding: "[Redacted]" },
+      request: { headers: { "x-archestra-appa-spawn-binding": "[Redacted]" } },
+      response: {
+        headers: { "x-archestra-appa-spawn-bindings": "[Redacted]" },
+      },
+      callId: "safe-call-reference",
+    });
+  });
 });
 
 describe("bounded error serialization", () => {

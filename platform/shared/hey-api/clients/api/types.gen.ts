@@ -38585,6 +38585,7 @@ export type GetConfigResponses = {
             azureOpenAiEntraIdEnabled: boolean;
             anthropicWifEnabled: boolean;
             anthropicKeylessAuthEnabled: boolean;
+            anthropicVertexAiEnabled: boolean;
             bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
             incomingEmail: {

@@ -140704,6 +140704,9 @@
                         "anthropicKeylessAuthEnabled": {
                           "type": "boolean"
                         },
+                        "anthropicVertexAiEnabled": {
+                          "type": "boolean"
+                        },
                         "bedrockIamAuthEnabled": {
                           "type": "boolean"
                         },
@@ -140859,6 +140862,7 @@
                         "azureOpenAiEntraIdEnabled",
                         "anthropicWifEnabled",
                         "anthropicKeylessAuthEnabled",
+                        "anthropicVertexAiEnabled",
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
                         "incomingEmail",

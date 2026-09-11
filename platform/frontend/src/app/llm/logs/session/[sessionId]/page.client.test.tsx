@@ -99,7 +99,7 @@ describe("SessionDetailPage", () => {
 
     expect(
       await screen.findByText(
-        "You do not have permission to view this session, or it no longer exists.",
+        "You may not have permission to view this session, or it may no longer exist.",
       ),
     ).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent("Session unavailable");

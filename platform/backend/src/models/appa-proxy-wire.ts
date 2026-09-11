@@ -1655,6 +1655,37 @@ export default class AppaProxyWireModel {
       )
         fail("APPA aliases must persist before frame issuance");
       if (params.aliases.length === 0) return [];
+      const seenWireKeys = new Set<string>();
+      const seenPositions = new Set<number>();
+      for (const alias of params.aliases) {
+        const wireKey = `${alias.kind}:${alias.wireId}`;
+        if (seenWireKeys.has(wireKey)) {
+          fail("Duplicate wire alias within batch");
+        }
+        seenWireKeys.add(wireKey);
+        if (seenPositions.has(alias.position)) {
+          fail("Duplicate alias position within batch");
+        }
+        seenPositions.add(alias.position);
+      }
+
+      const existingWireMatches = await tx
+        .select({ id: aliases.id })
+        .from(aliases)
+        .where(
+          and(
+            eq(aliases.sessionId, params.sessionId),
+            inArray(
+              aliases.wireId,
+              params.aliases.map((a) => a.wireId),
+            ),
+          ),
+        )
+        .limit(1);
+      if (existingWireMatches.length > 0) {
+        fail("Wire alias already exists for session");
+      }
+
       const [usage] = await tx
         .select({
           bytes: sql<number>`coalesce(sum(${aliases.metadataBytes}), 0)::integer`,
@@ -1799,11 +1830,22 @@ export default class AppaProxyWireModel {
   }
 }
 
+const derivedKeys = new Map<string, Buffer>();
+
 function key(purpose: "encryption" | "fingerprint" = "encryption") {
   const secret = config.llmProxy.appaHook?.sessionHmacSecret;
   if (!secret)
     fail("APPA wire storage requires a stable configured session secret");
-  return deriveKeyFromSecret(secret, `archestra-appa-proxy-wire-${purpose}-v1`);
+  const cacheKey = `${purpose}:${secret}`;
+  let cached = derivedKeys.get(cacheKey);
+  if (!cached) {
+    cached = deriveKeyFromSecret(
+      secret,
+      `archestra-appa-proxy-wire-${purpose}-v1`,
+    );
+    derivedKeys.set(cacheKey, cached);
+  }
+  return cached;
 }
 
 function activeFrameScope(scope: Scope) {

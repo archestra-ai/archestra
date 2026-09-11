@@ -34,6 +34,7 @@ export type AppaProxyHookConfig = {
   maxSessionsPerOwner?: number;
   /** Enables the experimental native Codex bridge. Disabled unless explicitly set. */
   nativeCodexEnabled?: boolean;
+  maxStreamBufferBytes?: number;
 };
 
 export type AppaInboundToolResult = {

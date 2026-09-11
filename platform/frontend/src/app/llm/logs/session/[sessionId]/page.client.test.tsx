@@ -73,7 +73,13 @@ describe("SessionDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the empty state after session interactions finish loading empty", async () => {
+  it("shows a permission-aware unavailable state when the requested session is not visible", async () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [],
+        pagination: { limit: 1, nextCursor: null, hasNext: false },
+      },
+    } as unknown as ReturnType<typeof useInteractionSessions>);
     vi.mocked(useInteractionSummaries).mockReturnValue({
       data: {
         data: [],
@@ -92,8 +98,15 @@ describe("SessionDetailPage", () => {
     renderSessionDetailPage();
 
     expect(
-      await screen.findByText("No interactions found for this session"),
+      await screen.findByText(
+        "You may not have permission to view this session, or it may no longer exist.",
+      ),
     ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("Session unavailable");
+    expect(screen.queryByText("Requests")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No interactions found for this session"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("status", { name: "Loading session logs…" }),
     ).not.toBeInTheDocument();

@@ -1,8 +1,13 @@
 name: Open Backport PRs
 
 on:
-  # Poll from the trusted default branch, matching reviewer assignment's
-  # approach. This also handles labels added after merge and fork-origin PRs.
+  push:
+    branches: [main]
+  # Only merged PRs from branches in this repository can request backports.
+  pull_request:
+    branches: [main]
+    types: [labeled]
+  # Recover after event/API failures. GitHub can delay scheduled runs.
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
@@ -20,12 +25,15 @@ permissions:
   contents: read
 
 concurrency:
+  # Every automatic run scans all outstanding labels, so replacement of a
+  # pending run by a newer event cannot drop that pending run's requests.
   group: backport-requests
   cancel-in-progress: false
 
 jobs:
   backport:
     name: Open requested backport PRs
+    if: github.repository == 'archestra-ai/archestra' && (github.event_name != 'pull_request' || (github.event.pull_request.merged && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == github.event.repository.default_branch && startsWith(github.event.label.name, 'backport ')))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

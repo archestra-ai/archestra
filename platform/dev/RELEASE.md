@@ -54,7 +54,8 @@ gitGraph
 Add each new stable or candidate branch there, and create its `backport release/X.Y` label.
 Remove retired branches from that list when making them read-only.
 The workflow always runs trusted automation from the default branch, including manual retries.
-Label events only run for merged PRs targeting the default branch.
+Automatic backports only accept merged PRs from branches in this repository targeting the default branch.
+PRs from forks are ineligible, including through scheduled scans and manual retries.
 Each automatic run scans all outstanding labels, so overlapping triggers can share one job.
 
 Use **Open Backport PRs → Run workflow** to retry a merged main PR.

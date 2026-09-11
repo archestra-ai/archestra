@@ -632,6 +632,11 @@ function appsQueryOptions(params: AppsParams, toastOnError?: boolean) {
     queryKey: ["apps", "paginated", params],
     queryFn: async ({ signal }) => {
       const { data, error } = await getApps({ query: params, signal });
+      // TanStack aborts this request when its observer disappears (for example,
+      // when navigating away from Chat). The generated SDK returns that
+      // cancellation in `error`; hand it back to TanStack without reporting it
+      // as an API failure or sending it through Next's dev error overlay.
+      if (signal.aborted) throw signal.reason;
       throwOnApiError(error, { toastOnError });
       return data;
     },

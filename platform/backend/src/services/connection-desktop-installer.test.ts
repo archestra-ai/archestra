@@ -12,14 +12,41 @@ const require = createRequire(import.meta.url);
 const token = "sk-ant-oat01-test-subscription";
 
 test.each([
-  { targetOs: "darwin", quotaFailure: false, insecureMcp: false },
-  { targetOs: "darwin", quotaFailure: true, insecureMcp: false },
-  { targetOs: "win32", quotaFailure: false, insecureMcp: false },
-  { targetOs: "darwin", quotaFailure: false, insecureMcp: true },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: false,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: true,
+    insecureMcp: false,
+    invalidMarketplace: false,
+  },
+  {
+    targetOs: "win32",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: false,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: true,
+    invalidMarketplace: false,
+  },
+  {
+    targetOs: "darwin",
+    quotaFailure: false,
+    insecureMcp: false,
+    invalidMarketplace: true,
+  },
 ])("Desktop $targetOs browser setup without developer tools (quota failure=$quotaFailure)", async ({
   targetOs,
   quotaFailure,
   insecureMcp,
+  invalidMarketplace,
 }) => {
   const home = await mkdtemp(join(tmpdir(), "desktop-browser-setup-"));
   const opened: string[] = [];
@@ -51,6 +78,12 @@ test.each([
           marketplaceName: "shared",
         },
       });
+    }
+    if (url.endsWith("/info/refs?service=git-upload-pack")) {
+      if (invalidMarketplace) return new Response("not a git repository");
+      return new Response(
+        `001e# service=git-upload-pack\n0000003f${"a".repeat(40)} HEAD\0symref=HEAD:refs/heads/main\n0000`,
+      );
     }
     const body = JSON.parse(options.body as string);
     if (url.endsWith("/v1/oauth/token")) {
@@ -180,7 +213,7 @@ test.each([
     expect((await fetch(callback, { redirect: "manual" })).status).toBe(303);
     await expect
       .poll(async () => (await status()).phase)
-      .toBe(quotaFailure ? "error" : "ready");
+      .toBe(quotaFailure || invalidMarketplace ? "error" : "ready");
     expect(JSON.stringify(await status())).not.toContain(token);
     expect((await fetch(callback)).status).toBe(400);
     const library = join(
@@ -189,8 +222,10 @@ test.each([
         ? "Claude-3p/configLibrary"
         : "Library/Application Support/Claude-3p/configLibrary",
     );
-    if (quotaFailure) {
-      expect((await status()).message).toContain("429");
+    if (quotaFailure || invalidMarketplace) {
+      expect((await status()).message).toContain(
+        quotaFailure ? "429" : "valid Git revision",
+      );
       expect(native).not.toContain("/usr/bin/osascript");
       expect(await readdir(home)).toEqual([]);
     } else {
@@ -209,7 +244,11 @@ test.each([
         "https://proxy.example/v1/anthropic",
       );
       expect(profile.managedMcpServers[0].oauth).toEqual({ mode: "dcr" });
-      expect(profile.allowedPluginMarketplaces[0].expectedName).toBe("shared");
+      expect(profile.allowedPluginMarketplaces[0]).toMatchObject({
+        expectedName: "shared",
+        ref: "a".repeat(40),
+        installationPreference: "auto_install",
+      });
       expect((await stat(profileFile)).mode & 0o777).toBe(0o600);
       expect(native).toContain(
         targetOs === "win32" ? "powershell.exe" : "/bin/sh",

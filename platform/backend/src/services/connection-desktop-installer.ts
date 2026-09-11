@@ -69,9 +69,9 @@ class DesktopInstaller {
         this.credential = proxy.virtualKey;
       }
     }
-    this.ready();
+    await this.ready();
   }
-  ready() {
+  async ready() {
     const {proxy,mcp,skills} = this.setup;
     if (proxy) Object.assign(this.profile,{
       inferenceProvider:'gateway',inferenceCredentialKind:'static',
@@ -79,7 +79,19 @@ class DesktopInstaller {
       inferenceGatewayAuthScheme:'bearer',inferenceCustomHeaders:this.headers,modelDiscoveryEnabled:true
     });
     if (mcp) this.profile.managedMcpServers = [{name:mcp.serverName,transport:'http',url:mcp.url,oauth:{mode:'dcr'}}];
-    if (skills) this.profile.allowedPluginMarketplaces = [{source:'git',url:skills.cloneUrl,expectedName:skills.marketplaceName}];
+    if (skills) {
+      const url = new URL(skills.cloneUrl);
+      if (url.protocol !== 'https:') throw new Error('Claude Desktop requires HTTPS to install shared skills. Open Connect at your deployment’s HTTPS address and download a new installer. Desktop settings have not changed.');
+      if (url.username || url.password) throw new Error('Claude Desktop requires a snapshot link for shared skills. Download a new installer from Connect. Desktop settings have not changed.');
+      url.pathname = url.pathname.replace(/\/$/,'') + '/info/refs';
+      url.search = '?service=git-upload-pack';
+      const response = await fetch(url.toString(),{redirect:'error',signal:AbortSignal.timeout(60000)});
+      if (!response.ok) throw new Error('Could not verify shared skills (HTTP ' + response.status + '). Desktop settings have not changed.');
+      const refs = await response.text();
+      const head = refs.match(/[0-9a-f]{4}([0-9a-f]{40}) HEAD(?:\x00|\n)/);
+      if (!head) throw new Error('The shared skills marketplace did not provide a valid Git revision. Desktop settings have not changed.');
+      this.profile.allowedPluginMarketplaces = [{source:'git',url:skills.cloneUrl,expectedName:skills.marketplaceName,ref:head[1],installationPreference:'auto_install'}];
+    }
     this.state = {phase:'ready',message:'Your connection is ready. Finish any active Desktop tasks, then restart to apply it.',subscription:proxy?.authMode === 'provider-key'};
   }
   async probe(token) {
@@ -120,7 +132,7 @@ class DesktopInstaller {
       if (typeof data.access_token !== 'string' || !data.access_token.startsWith('sk-ant-oat')) throw new Error('Claude did not return a subscription credential.');
       if (!await this.probe(data.access_token)) throw new Error('The gateway rejected the subscription credential. Desktop settings have not changed.');
       this.credential = data.access_token;
-      this.ready();
+      await this.ready();
     } catch(error) {this.fail(error);}
   }
   async apply() {
@@ -228,7 +240,7 @@ function uuid(value) {
   return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
 }
 function page(nonce) {
-  return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect Claude Desktop</title><style>body{margin:0;background:#faf9f6;color:#292824;font:16px/1.6 system-ui,sans-serif}main{max-width:520px;margin:12vh auto;padding:32px}h1{font-size:28px;line-height:1.2;font-weight:600}p{color:#605e56}button{font:inherit;background:#292824;color:white;padding:12px 20px;border:0;border-radius:8px;cursor:pointer}button:focus-visible{outline:3px solid #8b5cf6;outline-offset:3px}button:disabled{opacity:.6}#signin{display:block;background:transparent;color:#605e56;padding:12px 0;text-decoration:underline}#signin[hidden]{display:none}small{display:block;margin-top:32px;color:#737168}li{margin-bottom:12px}</style><main><h1>Connect Claude Desktop</h1><p id="status" role="status">Preparing your connection…</p><button id="continue" hidden>Continue</button><button id="signin" hidden>Use another Claude account</button><ul id="next" hidden></ul><small>Your Claude sign-in stays on this computer. You can close this page after setup finishes.</small></main><script nonce="' + nonce + '">const signin=document.getElementById("signin"),button=document.getElementById("continue"),status=document.getElementById("status"),next=document.getElementById("next");async function refresh(){try{const r=await fetch(location.pathname+"/status"),s=await r.json();status.textContent=s.message;button.hidden=!["signin","ready"].includes(s.phase);button.textContent=s.phase==="signin"?"Sign in with Claude":"Restart and connect";button.disabled=false;signin.hidden=!(s.phase==="ready"&&s.subscription);if(s.phase==="done"){next.replaceChildren();for(const text of [s.mcp&&"In Desktop Settings → Connectors, connect your gateway and approve access in the browser.",s.skills&&"In Desktop Settings → Plugins, install your shared marketplace.","You can remove the setup helper from Desktop Extensions."]){if(text){const li=document.createElement("li");li.textContent=text;next.append(li);}}next.hidden=false;return;}if(!["error","restarting"].includes(s.phase))setTimeout(refresh,1000);}catch{status.textContent="Setup has closed. If Desktop is not connected, download a new installer from Connect.";button.hidden=true;}}signin.onclick=async()=>{signin.hidden=true;await fetch(location.pathname+"/signin",{method:"POST"});};button.onclick=async()=>{button.disabled=true;await fetch(location.pathname+"/continue",{method:"POST"});await refresh();};refresh();</script></html>';
+  return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect Claude Desktop</title><style>body{margin:0;background:#faf9f6;color:#292824;font:16px/1.6 system-ui,sans-serif}main{max-width:520px;margin:12vh auto;padding:32px}h1{font-size:28px;line-height:1.2;font-weight:600}p{color:#605e56}button{font:inherit;background:#292824;color:white;padding:12px 20px;border:0;border-radius:8px;cursor:pointer}button:focus-visible{outline:3px solid #8b5cf6;outline-offset:3px}button:disabled{opacity:.6}#signin{display:block;background:transparent;color:#605e56;padding:12px 0;text-decoration:underline}#signin[hidden]{display:none}small{display:block;margin-top:32px;color:#737168}li{margin-bottom:12px}</style><main><h1>Connect Claude Desktop</h1><p id="status" role="status">Preparing your connection…</p><button id="continue" hidden>Continue</button><button id="signin" hidden>Use another Claude account</button><ul id="next" hidden></ul><small>Your Claude sign-in stays on this computer. You can close this page after setup finishes.</small></main><script nonce="' + nonce + '">const signin=document.getElementById("signin"),button=document.getElementById("continue"),status=document.getElementById("status"),next=document.getElementById("next");async function refresh(){try{const r=await fetch(location.pathname+"/status"),s=await r.json();status.textContent=s.message;button.hidden=!["signin","ready"].includes(s.phase);button.textContent=s.phase==="signin"?"Sign in with Claude":"Restart and connect";button.disabled=false;signin.hidden=!(s.phase==="ready"&&s.subscription);if(s.phase==="done"){next.replaceChildren();for(const text of [s.mcp&&"In Desktop Settings → Connectors, connect your gateway and approve access in the browser.",s.skills&&"Your selected shared skills install automatically after Desktop restarts.","You can remove the setup helper from Desktop Extensions."]){if(text){const li=document.createElement("li");li.textContent=text;next.append(li);}}next.hidden=false;return;}if(!["error","restarting"].includes(s.phase))setTimeout(refresh,1000);}catch{status.textContent="Setup has closed. If Desktop is not connected, download a new installer from Connect.";button.hidden=true;}}signin.onclick=async()=>{signin.hidden=true;await fetch(location.pathname+"/signin",{method:"POST"});};button.onclick=async()=>{button.disabled=true;await fetch(location.pathname+"/continue",{method:"POST"});await refresh();};refresh();</script></html>';
 }
 // The public subscription client used by the official setup-token flow. PKCE
 // binds the code to this local process; only inference scope is requested.
@@ -236,7 +248,7 @@ const OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 function completionPage(setup,success) {
   const title = success ? 'Claude Desktop restarted' : 'Restart Claude Desktop to finish';
   const instructions = success ? 'Your connection settings are saved. Send a message in Desktop and check LLM Proxy Logs to verify it.' : 'Your connection settings are saved, but Desktop could not restart automatically. Finish active tasks, quit Desktop from its app menu, and open it again.';
-  const steps = [setup.mcp && 'In Desktop Settings → Connectors, connect your gateway and approve access in the browser.',setup.skills && 'In Desktop Settings → Plugins, install your shared marketplace.','You can remove the setup helper from Desktop Extensions.'].filter(Boolean);
+  const steps = [setup.mcp && 'In Desktop Settings → Connectors, connect your gateway and approve access in the browser.',setup.skills && 'Your selected shared skills install automatically after Desktop restarts.','You can remove the setup helper from Desktop Extensions.'].filter(Boolean);
   return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title><style>body{margin:0;background:#faf9f6;color:#292824;font:16px/1.6 system-ui,sans-serif}main{max-width:520px;margin:12vh auto;padding:32px}h1{font-size:28px;line-height:1.2;font-weight:600}p,li{color:#605e56}li{margin-bottom:12px}</style><main><h1>' + title + '</h1><p>' + instructions + '</p><ul>' + steps.map(text => '<li>' + text + '</li>').join('') + '</ul></main></html>';
 }
 const RESTART_MAC = [

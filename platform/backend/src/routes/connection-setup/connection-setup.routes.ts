@@ -823,7 +823,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // A setup that also delivers plugins still mints a share link: the
           // shared URL serves skills only, and splitting the two would make the
           // script register two marketplaces.
-          if (marketplaceRender && marketplaceRender.pluginIds.length === 0) {
+          // Desktop rejects URL userinfo and requires a pinned revision for
+          // automatic installation, so it uses the snapshot branch below.
+          if (
+            marketplaceRender &&
+            marketplaceRender.pluginIds.length === 0 &&
+            setup.clientId !== "claude-desktop"
+          ) {
             const { rawToken: marketplaceToken } =
               await SkillMarketplaceCredentialModel.create({
                 organizationId: setup.organizationId,

@@ -206,7 +206,7 @@ Download the setup helper and open it in normal Claude Desktop. Confirm its nati
 
 Subscription setup obtains a token locally through the official Claude Code CLI. API-key setup uses a personal virtual key backed by your configured Anthropic key. The download requires Node.js 18+ and Python 3.9 or newer.
 
-Authorize the MCP connector in Desktop's **Settings → Connectors**. Install your shared-skills marketplace under **Settings → Plugins**. To switch back, rerun the previous deployment’s installer or select a manually created inference profile.
+Authorize the MCP connector in Desktop's **Settings → Connectors**. The selected shared skills install automatically after restart. Rerun Connect to install an updated snapshot. To switch back, rerun the previous deployment’s installer or select a manually created inference profile.
 
 See [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example) for requirements and authentication details.
 ### n8n

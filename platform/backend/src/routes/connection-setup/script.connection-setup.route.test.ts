@@ -148,6 +148,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     makeAgent,
   }) => {
     const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const skill = await seedSkill({ organizationId, name: "desktop-skill" });
     const { rawToken } = await createSetup({
       clientId: "claude-desktop",
       platform: "macos",
@@ -155,6 +156,7 @@ describe("GET /api/connection-setups/script/:token", () => {
       llmProxyId: proxy.id,
       provider: "anthropic",
       proxyAuth: "provider-key",
+      skills: { skillIds: [skill.id], ttlDays: 30 },
     });
     const response = await app.inject({
       method: "GET",
@@ -174,6 +176,16 @@ describe("GET /api/connection-setups/script/:token", () => {
         virtualKey: null,
       },
     });
+    const marketplaceUrl = new URL(response.json().skills.cloneUrl);
+    expect(marketplaceUrl.username).toBe("");
+    expect(marketplaceUrl.pathname).toMatch(
+      /^\/skills\/m\/archestra_skl_.+\/repo\.git$/,
+    );
+    const links = await SkillShareLinkModel.listByOrganization({
+      organizationId,
+    });
+    expect(links).toHaveLength(1);
+    expect(links[0].skills.map((item) => item.id)).toEqual([skill.id]);
     expect(response.body).not.toContain("sk-ant-");
     expect((await fetchScript(rawToken)).statusCode).toBe(410);
   });

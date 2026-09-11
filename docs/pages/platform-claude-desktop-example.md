@@ -46,7 +46,7 @@ Choose **API key** in the review step's authentication settings. Archestra provi
 
 ## Tools And Skills
 
-MCP connectors require separate browser authorization in Desktop's **Settings → Connectors**. Install your configured skills marketplace under **Settings → Plugins**.
+MCP connectors require separate browser authorization in Desktop's **Settings → Connectors**. The skills selected on Connect install automatically after Desktop restarts. Setup pins the selected snapshot; rerun Connect to install an updated snapshot.
 
 ## Revert
 

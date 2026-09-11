@@ -45,6 +45,7 @@ gitGraph
    - Conflicts and schema changes produce a manual-action comment instead of a pushed backport.
    - Never merge `main` into a release branch.
    - Review the migration compatibility check. A green result does not permit schema migrations in a stable fix.
+   - A migration backport is only permissible under the prefix rule below; in practice stable fixes ship without migrations.
 4. [ ] Merge the generated release-please patch PR on `release/X.Y` (for example, `1.3.52`).
 5. [ ] Complete **Test And Approve Stable** below.
 
@@ -85,10 +86,25 @@ Drizzle runs migrations newer than the database's latest recorded journal timest
 A stable backport can advance that timestamp past beta-only migrations.
 The next beta upgrade can then report success while required columns remain missing.
 
+Every deployed stable version must upgrade cleanly to the next stable patch, to
+any later beta, and to the next stable line. The rule that guarantees this is
+the **prefix rule**: a stable branch's migration history must remain a prefix
+of main's, matching migrations by SQL content so renamed backports count.
+Backport a migration only when every earlier main migration is already on the
+stable branch. While the rule holds, upgrading any stable release applies
+exactly the remaining suffix of main's history in canonical order, so schema
+and data migrations converge with every other upgrade path.
+
 PR validation checks upgrades within a release line and from stable to main.
 Backport PRs also check their resulting stable history against main.
 Release creation repeats the check against the current branch refs.
 Keep these guards on both main and the active stable branch.
+
+PR validation also replays the real upgrade. Backend `test:migration-upgrades`
+migrates a database with each active stable line's latest released migration
+history, upgrades it to the PR's history with the real Drizzle migrator, and
+requires the schema to match a fresh install, no migration to apply twice, and
+pre-existing data to survive.
 
 The checker recognizes identical SQL under different backport filenames.
 It rejects migrations that would be skipped or replayed, and missing source SQL.

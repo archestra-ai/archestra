@@ -8,6 +8,7 @@ type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
 type HandlerOverride = {
   method: HttpMethod;
   url: string;
+  query?: Record<string, string>;
   status?: number;
   body?: unknown;
   once?: boolean;

@@ -29,6 +29,6 @@
     "concurrently": "^9.2.1",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   }
 }

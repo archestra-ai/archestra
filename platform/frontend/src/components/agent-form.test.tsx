@@ -3729,6 +3729,7 @@ describe("AgentForm save payload and failure handling", () => {
     const runtime = {
       image: "example.com/coding-agent:latest",
       command: ["archestra-claude-code"],
+      claudeCode: { authentication: "provider" as const },
       inferenceProtocol: "anthropic" as const,
       backend: "kubernetes" as const,
       steerMode: "pipe" as const,

@@ -228,11 +228,17 @@ person in both Archestra Chat and the Codex Agent Runtime image. A teammate who
 starts the same Agent uses their own connected account; Archestra never shares
 one user's subscription credential with another user.
 
-Claude Code subscriptions are deliberately narrower. The **Claude Code** catalog option declares a per-user `CLAUDE_CODE_OAUTH_TOKEN` for direct Anthropic access. Each user generates it with `claude setup-token` and saves it from the Agent's Overview after the Agent is created. Archestra injects it only into the official Claude Code Agent Runtime image. It is not registered as a general Anthropic provider credential and cannot be used by Archestra Chat, Hermes, OpenClaw, or a custom runtime. Direct Anthropic runs require that token. They never fall back to a metered Anthropic API key.
+The **Claude Code** runtime offers two authentication modes: provider billing or a personal Claude subscription.
 
-Claude Code also supports Claude models hosted on **AWS Bedrock**. Select a Bedrock provider credential and Claude model on the Agent. These runs use Bedrock billing and require no Claude subscription token. Archestra configures Claude Code's native Bedrock transport through the Agent-scoped proxy. AWS credentials stay in the backend; the runtime receives a temporary virtual key. Non-Claude Bedrock models remain incompatible with Claude Code.
+**Personal Claude subscription** starts the native Claude Code sign-in flow inside the runtime. Each person signs in separately with their own Pro or Max account. Claude Code manages its credentials in private storage for that user, Agent, and Environment. The backend does not receive the subscription token. Existing pasted tokens require a fresh native sign-in.
 
-Claude Code also supports **Anthropic on Vertex AI** when configured on the platform. Select the Anthropic provider and a Claude model available through Vertex AI. These runs use Google Cloud billing and require no Claude subscription token. The runtime uses the Anthropic proxy; the backend authenticates to Vertex through Google ADC. Google credentials stay in the backend. See [Anthropic on Vertex AI](/docs/platform-supported-llm-providers#anthropic-on-vertex-ai) for setup.
+Available models come from that authenticated CLI. The model picker appears after sign-in. Its default follows Claude Code's recommended model, including future updates.
+
+Subscription inference connects directly to Anthropic. It does not pass through the LLM proxy's logging, cost limits, or inference guardrails. MCP calls still use the Agent's gateway and tool policies. Personal Claude accounts cannot fund Archestra Chat or other Agent Runtime harnesses.
+
+**API key or cloud provider** uses the selected provider connection through the Agent-scoped LLM proxy. This supports Anthropic API keys, Claude models on **AWS Bedrock**, and **Anthropic on Vertex AI**. These runs never reuse a personal Claude connection. Provider credentials stay in the backend; the runtime receives a temporary virtual key.
+
+Bedrock uses Claude Code's native Bedrock transport. Vertex uses the Anthropic proxy, with Google ADC authentication in the backend. See [Anthropic on Vertex AI](/docs/platform-supported-llm-providers#anthropic-on-vertex-ai) for setup.
 
 The **Codex** catalog option requires the initiating user's connected ChatGPT
 subscription. If that person has already signed in with ChatGPT under Model

@@ -3,6 +3,7 @@
 import { InfoIcon, KeyRound } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,6 +84,14 @@ export function AgentRuntimeCredentialPrompt({
           </Link>
         </span>
       </output>
+    );
+  }
+
+  if (missing.some(({ key }) => key === "CLAUDE_CODE_ACCOUNT")) {
+    return (
+      <div className="mt-2">
+        <ClaudeCodeAccount agentId={agentId} />
+      </div>
     );
   }
 

@@ -127,38 +127,57 @@ export function A2aRemoteAgentForm({
     setInspectionPending(false);
   };
 
-  const inspectCompatibility = useCallback(
-    ({
-      knownInspection,
-      nextAuthType = form.getValues("authType"),
-      nextHeaderName = form.getValues("headerName"),
+  const inspectConnection = useCallback(
+    async ({
+      validate = true,
+      onSuccess,
     }: {
-      knownInspection: Inspection;
-      nextAuthType?: AuthType;
-      nextHeaderName?: string;
-    }) => {
-      const draft = {
-        ...form.getValues(),
-        authType: nextAuthType,
-        headerName: nextHeaderName,
-      };
-      const source = sourceForInspection(draft, agent);
-      if (!source) return;
-      if (nextAuthType === "api_key" && !nextHeaderName.trim()) {
-        form.setError("headerName", { message: "A header name is required." });
+      validate?: boolean;
+      onSuccess?: (result: Inspection, draft: FormValues) => void;
+    } = {}) => {
+      const draft = form.getValues();
+      const fieldsToValidate: (keyof FormValues)[] = ["url"];
+      if (draft.authType === "api_key") fieldsToValidate.push("headerName");
+      if (validate && !(await form.trigger(fieldsToValidate))) return;
+
+      form.clearErrors("credential");
+      const credential = draft.credential.trim();
+      const usesStoredCredential =
+        !credential && keepsStoredCredential(draft, agent);
+      if (draft.authType !== "none" && !credential && !usesStoredCredential) {
+        form.setError("credential", {
+          message: agent
+            ? "Enter a credential when changing authentication."
+            : "A credential is required.",
+        });
         return;
       }
-      form.clearErrors("headerName");
+
+      const source = sourceForInspection(draft, agent);
+      if (!source) return;
+      const auth =
+        draft.authType === "none"
+          ? { type: "none" as const }
+          : draft.authType === "bearer"
+            ? {
+                type: "bearer" as const,
+                ...(credential ? { credential } : {}),
+              }
+            : {
+                type: "api_key" as const,
+                headerName: draft.headerName.trim(),
+                ...(credential ? { credential } : {}),
+              };
       const requestId = ++requestRef.current;
       setInspectionPending(true);
       setInspectionError(null);
+      setInspection(null);
+      setCompatibleStamp(null);
       inspectRemoteAgent(
         {
           source,
-          auth:
-            nextAuthType === "api_key"
-              ? { type: "api_key", headerName: nextHeaderName.trim() }
-              : { type: nextAuthType },
+          auth,
+          ...(usesStoredCredential && agent ? { remoteAgentId: agent.id } : {}),
         },
         {
           onSuccess: (result) => {
@@ -172,11 +191,11 @@ export function A2aRemoteAgentForm({
             setCapabilitiesInspected(true);
             setCompatibleStamp(connectionStamp(draft, agent));
             setInspectionPending(false);
+            onSuccess?.(result, draft);
           },
           onError: (error) => {
             if (requestId !== requestRef.current) return;
-            setInspection(knownInspection);
-            setCompatibleStamp(null);
+            setCapabilitiesInspected(false);
             setInspectionError(getApiErrorMessage(error));
             setInspectionPending(false);
           },
@@ -195,61 +214,13 @@ export function A2aRemoteAgentForm({
     )
       return;
     refreshedAgentIdRef.current = agent.id;
-    inspectCompatibility({ knownInspection: inspectionFromAgent(agent) });
+    void inspectConnection({ validate: false });
     return () => {
       if (refreshedAgentIdRef.current === agent.id) {
         refreshedAgentIdRef.current = null;
       }
     };
-  }, [agent, inspectCompatibility, readOnly]);
-
-  const inspectSource = async () => {
-    if (!(await form.trigger("url"))) return;
-    const draft = form.getValues();
-    const source = sourceForInspection(draft, agent);
-    if (!source) return;
-    const requestId = ++requestRef.current;
-    setInspectionPending(true);
-    setInspectionError(null);
-    setInspection(null);
-    setCompatibleStamp(null);
-    inspectRemoteAgent(
-      { source },
-      {
-        onSuccess: (result) => {
-          if (requestId !== requestRef.current) return;
-          if (!result) {
-            setInspectionError("The Agent Card inspection returned no data.");
-            setInspectionPending(false);
-            return;
-          }
-          setInspection(result);
-          setCapabilitiesInspected(true);
-          const nextAuthType = result.supportedAuthTypes.includes(
-            draft.authType,
-          )
-            ? draft.authType
-            : result.supportedAuthTypes[0];
-          if (!nextAuthType) {
-            setInspectionError(
-              "This Agent Card does not advertise a supported authentication method.",
-            );
-            setInspectionPending(false);
-            return;
-          }
-          if (nextAuthType !== draft.authType)
-            form.setValue("authType", nextAuthType, { shouldDirty: true });
-          inspectCompatibility({ knownInspection: result, nextAuthType });
-        },
-        onError: (error) => {
-          if (requestId !== requestRef.current) return;
-          setCapabilitiesInspected(false);
-          setInspectionError(getApiErrorMessage(error));
-          setInspectionPending(false);
-        },
-      },
-    );
-  };
+  }, [agent, inspectConnection, readOnly]);
 
   const validateCredential = () => {
     form.clearErrors("credential");
@@ -277,9 +248,15 @@ export function A2aRemoteAgentForm({
     return true;
   };
 
-  const buildSubmission = (): A2aRemoteAgentFormSubmission | null => {
+  const buildSubmission = ({
+    verifiedInspection = inspection,
+    verifiedStamp = compatibleStamp,
+  }: {
+    verifiedInspection?: Inspection | null;
+    verifiedStamp?: string | null;
+  } = {}): A2aRemoteAgentFormSubmission | null => {
     const current = form.getValues();
-    if (connectionStamp(current, agent) !== compatibleStamp) return null;
+    if (connectionStamp(current, agent) !== verifiedStamp) return null;
     const source = parseSource({ values: current, agent, form });
     const auth = parseAuth({ values: current, agent, form });
     if (source === null || auth === null || !validateAccess()) return null;
@@ -299,10 +276,13 @@ export function A2aRemoteAgentForm({
       };
     }
     const submission: A2aRemoteAgentFormSubmission = {};
+    const verifiedInspectionNeedsPersistence =
+      !!verifiedInspection && verifiedInspection.cardHash !== agent.cardHash;
     if (
       source &&
       (!sameSource(source, agent) ||
-        (inspectionNeedsPersistence && agent.discoveryMode === "well_known"))
+        (verifiedInspectionNeedsPersistence &&
+          agent.discoveryMode === "well_known"))
     )
       submission.source = source;
     if (auth) submission.auth = auth;
@@ -339,30 +319,52 @@ export function A2aRemoteAgentForm({
     setInspectionPending(false);
     resetRemoteAgentInspection();
   };
-  const submit = form.handleSubmit(() => {
-    if (!validateCredential()) return;
-    const submission = buildSubmission();
+  const completeSubmission = ({
+    verifiedInspection = inspection,
+    verifiedStamp = compatibleStamp,
+  }: {
+    verifiedInspection?: Inspection | null;
+    verifiedStamp?: string | null;
+  } = {}) => {
+    const submission = buildSubmission({
+      verifiedInspection,
+      verifiedStamp,
+    });
     if (!submission) return;
     if (agent && Object.keys(submission).length === 0) {
       discardChanges();
       return;
     }
     onSubmit(submission);
+  };
+  const submit = form.handleSubmit(() => {
+    if (!validateCredential() || !validateAccess()) return;
+    const draft = form.getValues();
+    const draftStamp = connectionStamp(draft, agent);
+    if (draftStamp === compatibleStamp && inspection) {
+      completeSubmission();
+      return;
+    }
+    void inspectConnection({
+      validate: false,
+      onSuccess: (result, inspectedDraft) => {
+        completeSubmission({
+          verifiedInspection: result,
+          verifiedStamp: connectionStamp(inspectedDraft, agent),
+        });
+      },
+    });
   });
+  const canReuseStoredCredential = keepsStoredCredential(values, agent);
   const hasRequiredCredential =
     values.authType === "none" ||
     !!values.credential.trim() ||
-    keepsStoredCredential(values, agent);
-  const hasValidAccessSelection =
-    (values.accessChoice !== "user" || values.userIds.length > 0) &&
-    (values.accessChoice !== "team" || values.teamIds.length > 0);
-  const canSubmit =
-    !inspectionPending &&
-    !connectionNeedsInspection &&
-    !!inspection &&
+    canReuseStoredCredential;
+  const canInspect =
+    !!values.url.trim() &&
     hasRequiredCredential &&
-    hasValidAccessSelection &&
-    (!agent || isDirty);
+    (values.authType !== "api_key" || !!values.headerName.trim());
+  const canSubmit = !agent || isDirty;
 
   if (readOnly && agent) {
     return <ReadOnlySummary agent={agent} currentUserId={session?.user?.id} />;
@@ -374,39 +376,26 @@ export function A2aRemoteAgentForm({
         <SettingsSectionGroup>
           <SettingsSection
             title="Connection"
-            description="Discover the Agent Card from the external agent's base URL."
+            description={`Set the external agent's base URL and how ${appName} authenticates. Connecting validates the Agent Card before saving.`}
           >
             <div className="space-y-2">
               <Label htmlFor="a2a-url">Agent base URL</Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id="a2a-url"
-                  type="url"
-                  aria-invalid={!!form.formState.errors.url}
-                  aria-describedby="a2a-url-help a2a-url-error"
-                  placeholder="https://agent.example.com"
-                  {...form.register("url", {
-                    required: urlRequiredMessage,
-                    validate: (value) =>
-                      keepsLegacySource && !value.trim()
-                        ? true
-                        : !!normalizeAgentBaseUrl(value.trim()) ||
-                          "Enter an HTTP(S) base URL without credentials, a query, or a fragment.",
-                    onChange: invalidateSource,
-                  })}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="shrink-0"
-                  disabled={inspectionPending || !values.url.trim()}
-                  onClick={() => void inspectSource()}
-                >
-                  <span>
-                    {inspectionPending ? "Checking…" : "Check Agent Card"}
-                  </span>
-                </Button>
-              </div>
+              <Input
+                id="a2a-url"
+                type="url"
+                aria-invalid={!!form.formState.errors.url}
+                aria-describedby="a2a-url-help a2a-url-error"
+                placeholder="https://agent.example.com"
+                {...form.register("url", {
+                  required: urlRequiredMessage,
+                  validate: (value) =>
+                    keepsLegacySource && !value.trim()
+                      ? true
+                      : !!normalizeAgentBaseUrl(value.trim()) ||
+                        "Enter an HTTP(S) base URL without credentials, a query, or a fragment.",
+                  onChange: invalidateSource,
+                })}
+              />
               <FieldDescription id="a2a-url-help">
                 {keepsLegacySource
                   ? "This connection uses a legacy Agent Card source. Leave this blank to keep it, or enter a base URL to replace it."
@@ -421,53 +410,14 @@ export function A2aRemoteAgentForm({
                   {form.formState.errors.url.message}
                 </p>
               ) : null}
-              {inspectionPending ? (
-                <output
-                  aria-label="Checking Agent Card"
-                  className="flex items-center gap-2 text-sm text-muted-foreground"
-                >
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>
-                    Checking the Agent Card and authentication settings…
-                  </span>
-                </output>
-              ) : null}
-              {inspectionError ? (
-                <p
-                  role="alert"
-                  aria-label="Agent Card unavailable"
-                  className="text-sm text-destructive"
-                >
-                  {inspectionError}
-                </p>
-              ) : null}
-              {inspection && !inspectionError ? (
-                <output
-                  aria-label="Agent Card found"
-                  className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
-                >
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
-                  <div>
-                    <p className="font-medium">{inspection.name}</p>
-                    <p className="text-muted-foreground">
-                      {inspection.selectedInterface.protocolBinding},{" "}
-                      {inspection.selectedInterface.protocolVersion}
-                    </p>
-                  </div>
-                </output>
-              ) : null}
             </div>
-          </SettingsSection>
-          <SettingsSection
-            title="Authentication"
-            description={`Configure how ${appName} authenticates requests to this external agent.`}
-          >
-            {!agent && !inspection ? (
-              <p className="text-sm text-muted-foreground">
-                Check the Agent Card to see its supported authentication
-                methods.
-              </p>
-            ) : null}
+            <div className="space-y-2">
+              <Label>Authentication</Label>
+              <FieldDescription>
+                These credentials are also used to retrieve protected Agent
+                Cards.
+              </FieldDescription>
+            </div>
             <RadioGroup
               aria-label="Authentication"
               value={values.authType}
@@ -477,11 +427,6 @@ export function A2aRemoteAgentForm({
                   shouldDirty: true,
                 });
                 invalidateCompatibility();
-                if (inspection)
-                  inspectCompatibility({
-                    knownInspection: inspection,
-                    nextAuthType,
-                  });
               }}
               className="grid gap-2 sm:grid-cols-3"
             >
@@ -523,12 +468,6 @@ export function A2aRemoteAgentForm({
                   {...form.register("headerName", {
                     required: "A header name is required.",
                     onChange: invalidateCompatibility,
-                    onBlur: () => {
-                      if (inspection && form.getValues("headerName").trim())
-                        inspectCompatibility({
-                          knownInspection: inspection,
-                        });
-                    },
                   })}
                 />
                 {form.formState.errors.headerName ? (
@@ -545,7 +484,7 @@ export function A2aRemoteAgentForm({
             {values.authType !== "none" ? (
               <div className="space-y-2">
                 <Label htmlFor="a2a-credential">
-                  {agent?.connection.hasCredential
+                  {canReuseStoredCredential
                     ? "Replace credential (optional)"
                     : "Credential"}
                 </Label>
@@ -555,12 +494,14 @@ export function A2aRemoteAgentForm({
                   aria-invalid={!!form.formState.errors.credential}
                   aria-describedby="a2a-credential-help a2a-credential-error"
                   placeholder={
-                    agent?.connection.hasCredential ? "••••••••" : undefined
+                    canReuseStoredCredential ? "••••••••" : undefined
                   }
-                  {...form.register("credential")}
+                  {...form.register("credential", {
+                    onChange: invalidateCompatibility,
+                  })}
                 />
                 <FieldDescription id="a2a-credential-help">
-                  {agent?.connection.hasCredential
+                  {canReuseStoredCredential
                     ? "Leave this blank to keep the stored credential, or enter a replacement."
                     : "The credential is stored securely and cannot be shown again."}
                 </FieldDescription>
@@ -574,6 +515,53 @@ export function A2aRemoteAgentForm({
                   </p>
                 ) : null}
               </div>
+            ) : null}
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={inspectionPending || !canInspect}
+                onClick={() => void inspectConnection()}
+              >
+                <span>
+                  {inspectionPending ? "Checking…" : "Check Agent Card"}
+                </span>
+              </Button>
+            </div>
+            {inspectionPending ? (
+              <output
+                aria-label="Checking Agent Card"
+                className="flex items-center gap-2 text-sm text-muted-foreground"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>
+                  Checking the Agent Card and authentication settings…
+                </span>
+              </output>
+            ) : null}
+            {inspectionError ? (
+              <p
+                role="alert"
+                aria-label="Agent Card unavailable"
+                className="text-sm text-destructive"
+              >
+                {inspectionError}
+              </p>
+            ) : null}
+            {inspection && !inspectionError ? (
+              <output
+                aria-label="Agent Card found"
+                className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
+              >
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
+                <div>
+                  <p className="font-medium">{inspection.name}</p>
+                  <p className="text-muted-foreground">
+                    {inspection.selectedInterface.protocolBinding},{" "}
+                    {inspection.selectedInterface.protocolVersion}
+                  </p>
+                </div>
+              </output>
             ) : null}
             {inspection && !inspectionPending && !connectionNeedsInspection ? (
               <output
@@ -670,7 +658,11 @@ export function A2aRemoteAgentForm({
         </SettingsSectionGroup>
       </form>
       <FloatingActionBar>
-        <Button type="submit" form={formId} disabled={isSaving || !canSubmit}>
+        <Button
+          type="submit"
+          form={formId}
+          disabled={isSaving || inspectionPending || !canSubmit}
+        >
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           <span>
             {isSaving
@@ -882,8 +874,13 @@ function sameSource(source: Source, agent: A2aRemoteAgent) {
   );
 }
 function keepsStoredCredential(values: FormValues, agent?: A2aRemoteAgent) {
+  const storedBaseUrl = storedWellKnownBaseUrl(agent);
+  const keepsSource = storedBaseUrl
+    ? normalizeAgentBaseUrl(values.url.trim()) === storedBaseUrl
+    : !values.url.trim();
   return (
     !!agent?.connection.hasCredential &&
+    keepsSource &&
     values.authType === agent.connection.authType &&
     (values.authType !== "api_key" ||
       values.headerName.trim().toLowerCase() ===

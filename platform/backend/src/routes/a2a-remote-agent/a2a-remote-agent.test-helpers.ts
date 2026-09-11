@@ -6,6 +6,12 @@ import { createA2aFixtureServer } from "../../../../e2e-tests/fixtures/a2a-test-
 
 export type FixtureAuthMode = "none" | "bearer" | "api-key" | "either";
 
+type FixtureRequest = {
+  method: string;
+  path: string;
+  headers: Record<string, string | string[] | undefined>;
+};
+
 export function makeAgentCard(
   authMode: FixtureAuthMode = "none",
   overrides: Record<string, unknown> = {},
@@ -67,7 +73,11 @@ export async function startA2aDiscoveryFixture(
   authMode: FixtureAuthMode = "none",
   hostname = "127.0.0.1",
   basePath = "",
-): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+): Promise<{
+  baseUrl: string;
+  close: () => Promise<void>;
+  requests: () => Promise<FixtureRequest[]>;
+}> {
   const trimmedBasePath = basePath.replace(/^\/+|\/+$/g, "");
   const normalizedBasePath = trimmedBasePath ? `/${trimmedBasePath}` : "";
   const server = createA2aFixtureServer({
@@ -79,9 +89,15 @@ export async function startA2aDiscoveryFixture(
     server.listen(0, hostname, resolve);
   });
   const address = server.address() as AddressInfo;
+  const origin = `http://${hostname}:${address.port}`;
 
   return {
-    baseUrl: `http://${hostname}:${address.port}${normalizedBasePath}`,
+    baseUrl: `${origin}${normalizedBasePath}`,
+    requests: async () => {
+      const response = await fetch(`${origin}/__fixture/requests`);
+      const body = (await response.json()) as { requests: FixtureRequest[] };
+      return body.requests;
+    },
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

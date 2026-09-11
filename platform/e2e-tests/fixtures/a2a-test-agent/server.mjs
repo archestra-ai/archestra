@@ -433,6 +433,15 @@ export function createA2aFixtureServer(inputOptions = {}) {
         path: url.pathname,
         headers: safeHeaders(request.headers),
       });
+      if (!isAuthorized(request, options)) {
+        response.setHeader(
+          "www-authenticate",
+          options.authMode === "api-key"
+            ? 'ApiKey realm="a2a-test-agent"'
+            : 'Bearer realm="a2a-test-agent"',
+        );
+        return json(response, 401, { error: "Unauthorized" });
+      }
       return json(response, 200, buildAgentCard(request, options), {
         "cache-control": "no-store",
       });

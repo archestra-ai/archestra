@@ -159,7 +159,8 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(A2aRemoteAgentInspectionSchema),
       },
     },
-    async ({ body }, reply) => reply.send(await inspectA2aRemoteAgent(body)),
+    async ({ body, organizationId }, reply) =>
+      reply.send(await inspectA2aRemoteAgent({ input: body, organizationId })),
   );
 
   fastify.get(

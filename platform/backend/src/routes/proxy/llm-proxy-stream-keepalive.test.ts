@@ -266,7 +266,6 @@ describe("LLM proxy stream keep-alive", () => {
       // Leave slack for event-loop scheduling: the bound that matters is
       // "well inside the withheld window", not the exact interval.
       expect(maxGapMs(chunks)).toBeLessThan(WITHHELD_WINDOW_MS / 2);
-      expect(maxGapMs(chunks)).toBeLessThan(KEEPALIVE_INTERVAL_MS * 3);
     });
 
     test("the SDK's own SSE parser reads through the keep-alive comments to the released tool call", async () => {

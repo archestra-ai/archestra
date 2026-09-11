@@ -88,12 +88,30 @@ const A2aApiKeyHeaderNameSchema = z
     "API-key header name is reserved and cannot carry credentials",
   );
 
-const A2aConnectionAuthSelectionSchema = z.discriminatedUnion("type", [
+const A2aCredentialSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(20_000)
+  .refine(
+    (credential) =>
+      Array.from(credential).every((character) => {
+        const codePoint = character.codePointAt(0) ?? 0;
+        return codePoint >= 0x20 && codePoint !== 0x7f && codePoint <= 0xff;
+      }),
+    "Credential contains invalid header characters",
+  );
+
+const A2aConnectionAuthInspectionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("none") }),
-  z.object({ type: z.literal("bearer") }),
+  z.object({
+    type: z.literal("bearer"),
+    credential: A2aCredentialSchema.optional(),
+  }),
   z.object({
     type: z.literal("api_key"),
     headerName: A2aApiKeyHeaderNameSchema,
+    credential: A2aCredentialSchema.optional(),
   }),
 ]);
 
@@ -101,19 +119,36 @@ export const A2aConnectionAuthInputSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("none") }),
   z.object({
     type: z.literal("bearer"),
-    credential: z.string().trim().min(1).max(20_000),
+    credential: A2aCredentialSchema,
   }),
   z.object({
     type: z.literal("api_key"),
     headerName: A2aApiKeyHeaderNameSchema,
-    credential: z.string().trim().min(1).max(20_000),
+    credential: A2aCredentialSchema,
   }),
 ]);
 
-export const InspectA2aRemoteAgentRequestSchema = z.object({
-  source: A2aRemoteAgentSourceSchema,
-  auth: A2aConnectionAuthSelectionSchema.optional(),
-});
+export const InspectA2aRemoteAgentRequestSchema = z
+  .object({
+    source: A2aRemoteAgentSourceSchema,
+    auth: A2aConnectionAuthInspectionSchema.optional(),
+    remoteAgentId: z.string().uuid().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.auth &&
+      value.auth.type !== "none" &&
+      value.auth.credential === undefined &&
+      value.remoteAgentId === undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "A saved outbound A2A agent is required when reusing a credential",
+        path: ["remoteAgentId"],
+      });
+    }
+  });
 
 export const CreateA2aRemoteAgentRequestSchema = z.object({
   source: A2aRemoteAgentSourceSchema,

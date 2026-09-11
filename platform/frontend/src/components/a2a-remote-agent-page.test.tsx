@@ -165,54 +165,35 @@ describe("external A2A agent routed pages", () => {
     expect(
       screen.queryByRole("button", { name: "Validate Agent Card" }),
     ).toBeNull();
+    const connectButton = screen.getByRole("button", {
+      name: "Connect agent",
+    });
+    expect(connectButton).toBeEnabled();
+    await user.click(connectButton);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "An agent base URL is required.",
+    );
+    expect(inspectedBody).toBeUndefined();
+    expect(createdBody).toBeUndefined();
+    expect(connectButton).toBeEnabled();
+
     const baseUrlInput = screen.getByLabelText("Agent base URL");
     await user.click(baseUrlInput);
     await user.paste(remoteAgent.discoveryUrl);
     expect(
-      screen.getByRole("button", { name: "Connect agent" }),
-    ).toBeDisabled();
-    expect(
       screen.getByLabelText("Display name (optional)"),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
-    expect(
-      await screen.findByRole("status", { name: "Connection compatible" }),
     ).toBeInTheDocument();
     const nameInput = screen.getByLabelText("Display name (optional)");
     const descriptionInput = screen.getByLabelText("Description (optional)");
     await user.type(nameInput, remoteAgent.name);
     await user.type(descriptionInput, remoteAgent.description);
-    await user.clear(screen.getByLabelText("Agent base URL"));
-    await user.type(
-      screen.getByLabelText("Agent base URL"),
-      "https://changed.example.com",
-    );
-    expect(
-      screen.getByRole("button", { name: "Connect agent" }),
-    ).toBeDisabled();
-    await user.clear(screen.getByLabelText("Agent base URL"));
-    await user.type(
-      screen.getByLabelText("Agent base URL"),
-      remoteAgent.discoveryUrl,
-    );
-    expect(
-      screen.getByRole("button", { name: "Connect agent" }),
-    ).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
-    await screen.findByRole("status", { name: "Connection compatible" });
-    expect(screen.getByLabelText("Display name (optional)")).toHaveValue(
-      remoteAgent.name,
-    );
-    expect(screen.getByLabelText("Description (optional)")).toHaveValue(
-      remoteAgent.description,
-    );
-    expect(inspectedBody).toEqual({
-      source: { type: "well_known", url: remoteAgent.discoveryUrl },
-      auth: { type: "none" },
-    });
-    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+    await user.click(connectButton);
 
-    await waitFor(() =>
+    await waitFor(() => {
+      expect(inspectedBody).toEqual({
+        source: { type: "well_known", url: remoteAgent.discoveryUrl },
+        auth: { type: "none" },
+      });
       expect(createdBody).toEqual({
         source: { type: "well_known", url: remoteAgent.discoveryUrl },
         auth: { type: "none" },
@@ -221,8 +202,8 @@ describe("external A2A agent routed pages", () => {
         scope: "personal",
         teams: [],
         users: [],
-      }),
-    );
+      });
+    });
     expect(push).toHaveBeenCalledWith("/a2a/agents/remote-agent-1");
   });
 
@@ -260,6 +241,88 @@ describe("external A2A agent routed pages", () => {
     expect(push).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(push).toHaveBeenCalledWith("/a2a/agents");
+  });
+
+  it.each([
+    {
+      method: "Bearer token",
+      credential: "bearer-secret",
+      expectedAuth: { type: "bearer", credential: "bearer-secret" },
+    },
+    {
+      method: "API key header",
+      credential: "api-key-secret",
+      expectedAuth: {
+        type: "api_key",
+        headerName: "X-API-Key",
+        credential: "api-key-secret",
+      },
+    },
+  ])("connects after checking the Agent Card with $method authentication", async ({
+    method,
+    credential,
+    expectedAuth,
+  }) => {
+    const user = userEvent.setup();
+    let inspectedBody: unknown;
+    let createdBody: unknown;
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, async ({ request }) => {
+        inspectedBody = await request.json();
+        return HttpResponse.json({
+          name: "Fixture Agent",
+          description: null,
+          agentCard: remoteAgent.agentCard,
+          cardHash: remoteAgent.cardHash,
+          selectedInterface: remoteAgent.connection.selectedInterface,
+          supportedAuthTypes: [expectedAuth.type],
+          selectedSecurityRequirement: { fixtureAuth: [] },
+        });
+      }),
+      http.post(REGISTRY_URL, async ({ request }) => {
+        createdBody = await request.json();
+        return HttpResponse.json(remoteAgent);
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+
+    const connectionSection = screen
+      .getByRole("heading", { name: "Connection" })
+      .closest("section");
+    expect(connectionSection).not.toBeNull();
+    expect(connectionSection).toContainElement(
+      screen.getByRole("radiogroup", { name: "Authentication" }),
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Authentication" }),
+    ).toBeNull();
+
+    await user.type(
+      screen.getByLabelText("Agent base URL"),
+      remoteAgent.discoveryUrl,
+    );
+    await user.click(screen.getByRole("radio", { name: method }));
+    expect(
+      screen.getByRole("button", { name: "Check Agent Card" }),
+    ).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Credential"), credential);
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+
+    await waitFor(() => {
+      expect(inspectedBody).toEqual({
+        source: { type: "well_known", url: remoteAgent.discoveryUrl },
+        auth: expectedAuth,
+      });
+      expect(createdBody).toEqual({
+        source: { type: "well_known", url: remoteAgent.discoveryUrl },
+        auth: expectedAuth,
+        scope: "personal",
+        teams: [],
+        users: [],
+      });
+    });
   });
 
   it("rejects query parameters and discovers from a canonical path-prefixed base URL", async () => {
@@ -303,7 +366,7 @@ describe("external A2A agent routed pages", () => {
     expect(
       await screen.findByRole("status", { name: "Agent Card found" }),
     ).toHaveTextContent("Fixture Agent");
-    expect(inspectCalls).toBe(2);
+    expect(inspectCalls).toBe(1);
     expect(inspectedBody).toEqual({
       source: {
         type: "well_known",
@@ -315,6 +378,7 @@ describe("external A2A agent routed pages", () => {
 
   it("requires a selected user or team for explicit access choices", async () => {
     const user = userEvent.setup();
+    let inspectCalls = 0;
     vi.mocked(useOrganizationMembers).mockReturnValue({
       data: [
         { id: "user-1", name: "Test User", email: "owner@example.com" },
@@ -325,8 +389,9 @@ describe("external A2A agent routed pages", () => {
       data: [{ id: "team-1", name: "Operations", parentId: null }],
     } as unknown as ReturnType<typeof useTeams>);
     server.use(
-      http.post(`${REGISTRY_URL}/inspect`, () =>
-        HttpResponse.json({
+      http.post(`${REGISTRY_URL}/inspect`, () => {
+        inspectCalls += 1;
+        return HttpResponse.json({
           name: "Fixture Agent",
           description: null,
           agentCard: remoteAgent.agentCard,
@@ -334,8 +399,8 @@ describe("external A2A agent routed pages", () => {
           selectedInterface: remoteAgent.connection.selectedInterface,
           supportedAuthTypes: ["none"],
           selectedSecurityRequirement: null,
-        }),
-      ),
+        });
+      }),
     );
 
     renderPage(<CreateA2aRemoteAgentPage />);
@@ -347,14 +412,23 @@ describe("external A2A agent routed pages", () => {
     await screen.findByRole("status", { name: "Connection compatible" });
     await user.click(screen.getByRole("button", { name: /Personal/ }));
     await user.click(screen.getByRole("button", { name: /Users/ }));
-    expect(
-      screen.getByRole("button", { name: "Connect agent" }),
-    ).toBeDisabled();
+    const connectButton = screen.getByRole("button", {
+      name: "Connect agent",
+    });
+    expect(connectButton).toBeEnabled();
+    await user.click(connectButton);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Select at least one user.",
+    );
+    expect(inspectCalls).toBe(1);
     await user.click(screen.getByRole("button", { name: /Users/ }));
     await user.click(screen.getByRole("button", { name: /Teams/ }));
-    expect(
-      screen.getByRole("button", { name: "Connect agent" }),
-    ).toBeDisabled();
+    expect(connectButton).toBeEnabled();
+    await user.click(connectButton);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Select at least one team.",
+    );
+    expect(inspectCalls).toBe(1);
   });
 
   it("prefills edit and omits unchanged source and stored credential on a visibility-only update", async () => {
@@ -432,6 +506,7 @@ describe("external A2A agent routed pages", () => {
     expect(inspectedBody).toEqual({
       source: { type: "well_known", url: remoteAgent.discoveryUrl },
       auth: { type: remoteAgent.connection.authType },
+      remoteAgentId: remoteAgent.id,
     });
   });
 
@@ -499,14 +574,14 @@ describe("external A2A agent routed pages", () => {
     );
   });
 
-  it("rechecks an edited base URL without resubmitting its stored credential", async () => {
+  it("requires a credential when checking an edited base URL", async () => {
     const user = userEvent.setup();
-    let inspectedBody: unknown;
+    const inspectedBodies: unknown[] = [];
     let updatedBody: unknown;
     server.use(
       http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
       http.post(`${REGISTRY_URL}/inspect`, async ({ request }) => {
-        inspectedBody = await request.json();
+        inspectedBodies.push(await request.json());
         return HttpResponse.json({
           name: remoteAgent.name,
           description: remoteAgent.description,
@@ -528,32 +603,52 @@ describe("external A2A agent routed pages", () => {
 
     renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
 
+    await screen.findByRole("status", { name: "Connection compatible" });
+    expect(inspectedBodies).toHaveLength(1);
     const baseUrlInput = await screen.findByLabelText("Agent base URL");
     await user.clear(baseUrlInput);
     await user.click(baseUrlInput);
-    await user.paste(remoteAgent.discoveryUrl);
-    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
-
-    await waitFor(() =>
-      expect(inspectedBody).toEqual({
-        source: { type: "well_known", url: remoteAgent.discoveryUrl },
-        auth: { type: "bearer" },
-      }),
-    );
+    await user.paste(`${remoteAgent.discoveryUrl}/replacement`);
+    expect(screen.getByLabelText("Credential")).toHaveValue("");
     expect(
-      await screen.findByRole("status", { name: "Agent Card found" }),
-    ).toBeInTheDocument();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Save changes" }),
-      ).toBeEnabled(),
+      screen.getByRole("button", { name: "Check Agent Card" }),
+    ).toBeDisabled();
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    expect(saveButton).toBeEnabled();
+    await user.click(saveButton);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Enter a credential when changing authentication.",
     );
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
+    expect(inspectedBodies).toHaveLength(1);
+    expect(updatedBody).toBeUndefined();
+    await user.type(
+      screen.getByLabelText("Credential"),
+      "replacement-bearer-token",
+    );
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(inspectedBodies).toContainEqual({
+        source: {
+          type: "well_known",
+          url: `${remoteAgent.discoveryUrl}/replacement`,
+        },
+        auth: {
+          type: "bearer",
+          credential: "replacement-bearer-token",
+        },
+      });
       expect(updatedBody).toEqual({
-        source: { type: "well_known", url: remoteAgent.discoveryUrl },
-      }),
-    );
+        source: {
+          type: "well_known",
+          url: `${remoteAgent.discoveryUrl}/replacement`,
+        },
+        auth: {
+          type: "bearer",
+          credential: "replacement-bearer-token",
+        },
+      });
+    });
   });
 
   it("uses one submit action for edit and enables it when dirty", async () => {
@@ -611,6 +706,7 @@ describe("external A2A agent routed pages", () => {
 
   it("shows why automatic Agent Card validation failed", async () => {
     const user = userEvent.setup();
+    let createCalls = 0;
     server.use(
       http.post(`${REGISTRY_URL}/inspect`, () =>
         HttpResponse.json(
@@ -622,6 +718,10 @@ describe("external A2A agent routed pages", () => {
           { status: 400 },
         ),
       ),
+      http.post(REGISTRY_URL, () => {
+        createCalls += 1;
+        return HttpResponse.json(remoteAgent);
+      }),
     );
 
     renderPage(<CreateA2aRemoteAgentPage />);
@@ -629,11 +729,13 @@ describe("external A2A agent routed pages", () => {
       screen.getByLabelText("Agent base URL"),
       remoteAgent.discoveryUrl,
     );
-    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Agent Card must accept the text/plain input mode",
     );
+    expect(createCalls).toBe(0);
+    expect(screen.getByRole("button", { name: "Connect agent" })).toBeEnabled();
   });
 
   it("shows a read-only detail without exposing or replacing credentials", async () => {

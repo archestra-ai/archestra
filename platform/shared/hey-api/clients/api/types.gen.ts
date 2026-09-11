@@ -12782,10 +12782,13 @@ export type InspectA2aRemoteAgentData = {
             type: 'none';
         } | {
             type: 'bearer';
+            credential?: string;
         } | {
             type: 'api_key';
             headerName: string;
+            credential?: string;
         };
+        remoteAgentId?: string;
     };
     path?: never;
     query?: never;

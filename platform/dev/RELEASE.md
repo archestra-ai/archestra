@@ -9,7 +9,7 @@ Archestra uses two release pipelines:
 ## Release A Beta
 
 1. [ ] Open the release-please PR on `main` (for example, `1.4.0-beta.2`).
-2. [ ] Review the changelog and confirm checks pass.
+2. [ ] Review the changelog and confirm checks pass, including migration upgrades from the active stable line.
 3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the beta release.
 
 ## Ship A Stable Fix
@@ -24,8 +24,38 @@ Archestra uses two release pipelines:
    - Only include necessary bug fixes. Do not include new features, refactors, or schema migrations.
    - If an unreleased candidate branch (such as `release/1.4`) also needs the fix, repeat step 2 for that candidate branch.
    - Never merge `main` into a release branch.
+   - Review the migration compatibility check. A green result does not permit schema migrations in a stable fix.
 4. [ ] Merge the generated release-please patch PR on `release/X.Y` (for example, `1.3.52`).
 5. [ ] Complete **Test And Approve Stable** below.
+
+## Migration Compatibility Across Release Tracks
+
+A higher application version does not guarantee a compatible migration history.
+Drizzle runs migrations newer than the database's latest recorded journal timestamp.
+A stable backport can advance that timestamp past beta-only migrations.
+The next beta upgrade can then report success while required columns remain missing.
+
+PR validation checks upgrades within a release line and from stable to main.
+Backport PRs also check their resulting stable history against main.
+Release creation repeats the check against the current branch refs.
+Keep these guards on both main and the active stable branch.
+
+The checker recognizes identical SQL under different backport filenames.
+It rejects migrations that would be skipped or replayed, and missing source SQL.
+It does not validate SQL semantics, dependency order, or database lock safety.
+Continue testing the actual upgrade against the saved release artifacts.
+
+If a published release already created a gap:
+
+1. Add a new idempotent repair on main, newer than both migration histories.
+2. Cover every skipped change and preserve values on already-migrated databases.
+3. Register the reviewed SQL hashes in `backend/src/database/migrations/upgrade-repairs.json`.
+4. Test with the real Drizzle migrator, including a database whose ledger already advanced past the gap.
+5. Publish the repaired beta before directing affected stable installations to that beta.
+
+Do not edit shipped migration SQL, renumber its timestamps, or rewind a database's migration ledger.
+The ordinary backend test snapshot executes SQL directly and cannot detect timestamp-based skips.
+See [migration upgrade checks](../backend/src/database/migrations/README.md) for commands and repair coverage rules.
 
 ## Cut A New Stable Feature Line
 

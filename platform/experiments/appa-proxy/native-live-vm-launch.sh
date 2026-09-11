@@ -2,7 +2,7 @@
 # Launch one sequential native live case after deployment-owned readiness.
 set -euo pipefail
 
-if [ "$#" -ne 4 ]; then
+if [ "$#" -lt 4 ]; then
   printf 'usage: %s <claude|codex|opencode> <scenario> <agent-uuid> <native-proxy-url>\n' "$0" >&2
   exit 64
 fi
@@ -319,4 +319,4 @@ else
   fi
 fi
 
-python3 "$harness_dir/native-live-runner.py" "${runner_args[@]}"
+python3 "$harness_dir/native-live-runner.py" "${runner_args[@]}" "${@:5}"

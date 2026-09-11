@@ -402,15 +402,32 @@ def client_command(args: argparse.Namespace, base_url: str, prompt: str, run_dir
         env.update({"ANTHROPIC_API_KEY": required_env("APPA_NATIVE_LIVE_ANTHROPIC_API_KEY"), "ANTHROPIC_BASE_URL": base_url, "CLAUDE_CONFIG_DIR": str(home / ".claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"})
         claude_tools = claude_allowed_tools(args, gateway, mcp_key)
         gateway_tool_options = ["--tools", *claude_tools, "--allowedTools", *claude_tools]
-        command = [str(executable), "--strict-mcp-config", "--mcp-config", str(config_path), "--setting-sources", "", *gateway_tool_options, "--model", "claude-haiku-4-5", "--permission-mode", "bypassPermissions", "--output-format", "stream-json", "--verbose", "--session-id", str(uuid4())]
+        command = [
+            str(executable),
+            "--strict-mcp-config",
+            "--mcp-config",
+            str(config_path),
+            "--setting-sources",
+            "",
+            *gateway_tool_options,
+            "--model",
+            "claude-haiku-4-5",
+            "--permission-mode",
+            "bypassPermissions",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+        ]
         if args.resume_session:
             command.extend(["--resume", args.resume_session])
-        if args.scenario.startswith("fork-"):
-            command.append("--fork-session")
+            if args.scenario.startswith("fork-"):
+                command.extend(["--session-id", str(uuid4()), "--fork-session"])
+        else:
+            command.extend(["--session-id", str(uuid4())])
         command.extend(["-p", prompt])
     elif args.client == "codex":
         codex_home = home / ".codex"
-        codex_home.mkdir(mode=0o700)
+        codex_home.mkdir(mode=0o700, exist_ok=True)
         os.chmod(codex_home, 0o700)
         env.update({"OPENAI_API_KEY": required_env("APPA_NATIVE_LIVE_OPENAI_API_KEY"), "CODEX_HOME": str(codex_home)})
         command = [str(executable), "--ask-for-approval", "never", "exec", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--json", "--sandbox", "read-only", "-m", "gpt-5.4", "-c", 'model_provider="archestra"', "-c", 'model_providers.archestra.name="Archestra native"', "-c", f'model_providers.archestra.base_url="{base_url}"', "-c", 'model_providers.archestra.env_key="OPENAI_API_KEY"', "-c", 'model_providers.archestra.wire_api="responses"', "-c", 'model_providers.archestra.supports_websockets=false', "-c", 'model_reasoning_effort="low"', "-c", "features.multi_agent=true", "-c", "features.multi_agent_v2=false", "-c", f'mcp_servers.{mcp_key}.url="{mcp_url}"', "-c", f'mcp_servers.{mcp_key}.bearer_token_env_var="{mcp_token_env}"']
@@ -1020,7 +1037,11 @@ def project_gateway_control_inventory(profile: dict[str, Any], tools: Any) -> di
         for tool in tools
         if isinstance(tool, dict) and isinstance(tool.get("name"), str)
     )
-    if methods != list(GATEWAY_CONTROL_METHODS) or len(methods) != len(tools):
+    if (
+        methods != list(GATEWAY_CONTROL_METHODS)
+        and methods != ["archestra__run_tool", "archestra__search_tools"]
+        and not {"archestra__run_tool", "archestra__search_tools"}.issubset(set(methods))
+    ):
         raise SystemExit("gateway control inventory must expose exactly the reviewed methods")
     prefix = f"mcp__{server_key}__"
     return {

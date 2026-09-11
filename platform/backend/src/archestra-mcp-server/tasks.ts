@@ -11,7 +11,7 @@ import {
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
@@ -737,11 +737,28 @@ const registry = defineArchestraTools([
           return errorResult("This run has no agent to cancel against.");
         }
 
-        const canceled = await cancelDetachedAgentTask({
-          actor,
-          agentId: task.row.agentId,
-          taskId: task.row.id,
-        });
+        let canceled: Awaited<ReturnType<typeof cancelDetachedAgentTask>>;
+        try {
+          canceled = await cancelDetachedAgentTask({
+            actor,
+            agentId: task.row.agentId,
+            taskId: task.row.id,
+          });
+        } catch (error) {
+          if (
+            error instanceof A2AError &&
+            error.kind === A2AErrorKind.TaskNotCancelable
+          ) {
+            // Completion can win after the access check or during cancellation.
+            // Report the same turn's persisted outcome; never cancel a newer turn.
+            const current = await A2ATaskModel.findById(task.row.id);
+            if (!current) throw error;
+            return errorResult(
+              `Run ${current.id} cannot be canceled because it is already terminal (${current.state}). No cancellation was performed. Its workspace and history are retained.`,
+            );
+          }
+          throw error;
+        }
         const canceledRow = await A2ATaskModel.findById(task.row.id);
         if (!canceledRow) {
           throw new Error("Canceled run was not persisted");

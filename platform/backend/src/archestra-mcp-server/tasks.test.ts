@@ -1,4 +1,5 @@
 import {
+  TOOL_CANCEL_RUN_FULL_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_POST_RUN_FILE_FULL_NAME,
@@ -275,6 +276,109 @@ describe("run tools", () => {
     });
     return task;
   }
+
+  test.each([
+    "TASK_STATE_COMPLETED",
+    "TASK_STATE_FAILED",
+    "TASK_STATE_CANCELED",
+    "TASK_STATE_REJECTED",
+  ] as const)("cancel_run explains a terminal %s outcome", async (state) => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    await A2ATaskModel.updateState(task.id, state);
+    const result = await executeArchestraTool(
+      TOOL_CANCEL_RUN_FULL_NAME,
+      { task_id: task.id },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: "text", text: expect.stringContaining(state) },
+    ]);
+    expect(JSON.stringify(result.content)).toContain(
+      "No cancellation was performed",
+    );
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(state);
+    expect(await AgentRunModel.findByTaskId(task.id)).not.toBeNull();
+  });
+
+  test("concurrent cancellations report the persisted outcome without an internal error", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    const results = await Promise.all(
+      [0, 1].map(() =>
+        executeArchestraTool(
+          TOOL_CANCEL_RUN_FULL_NAME,
+          { task_id: task.id },
+          context,
+        ),
+      ),
+    );
+    expect(results.filter((result) => !result.isError)).toHaveLength(1);
+    const refused = results.find((result) => result.isError);
+    expect(JSON.stringify(refused?.content)).toContain("TASK_STATE_CANCELED");
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(
+      "TASK_STATE_CANCELED",
+    );
+  });
+
+  test("completion racing cancel_run preserves completion and explains the refusal", async () => {
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: false,
+    });
+    // Both operations use the real database. Completion starts while the tool
+    // resolves access, reproducing a run finishing after the caller's lookup.
+    const [result, completed] = await Promise.all([
+      executeArchestraTool(
+        TOOL_CANCEL_RUN_FULL_NAME,
+        { task_id: task.id },
+        context,
+      ),
+      A2ATaskModel.transitionStateWithEvent({
+        id: task.id,
+        to: "TASK_STATE_COMPLETED",
+        allowedFrom: ["TASK_STATE_WORKING"],
+        eventPayload: {
+          statusUpdate: {
+            taskId: task.id,
+            contextId: task.contextId,
+            status: { state: "TASK_STATE_COMPLETED" },
+          },
+        },
+      }),
+    ]);
+    expect(completed?.state).toBe("TASK_STATE_COMPLETED");
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("TASK_STATE_COMPLETED");
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(
+      "TASK_STATE_COMPLETED",
+    );
+  });
+
+  test("cancel_run does not reveal another actor's terminal outcome", async ({
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const task = await seedChatopsTask({
+      actorUserId: owner.id,
+      withTarget: false,
+    });
+    await A2ATaskModel.updateState(task.id, "TASK_STATE_COMPLETED");
+    const result = await executeArchestraTool(
+      TOOL_CANCEL_RUN_FULL_NAME,
+      { task_id: task.id },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: "text", text: "Error: Run not found" },
+    ]);
+  });
 
   test("get_run resolves the current turn from the original session ID", async () => {
     const first = await seedChatopsTask({

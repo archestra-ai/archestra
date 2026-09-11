@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appa-native-live-fixture
+  labels:
+    app: appa-native-live-fixture
+    app.kubernetes.io/part-of: appa-native-live-harness
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: appa-native-live-fixture
+  template:
+    metadata:
+      labels:
+        app: appa-native-live-fixture
+        app.kubernetes.io/part-of: appa-native-live-harness
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 65532
+      initContainers:
+        - name: data-directory
+          image: alpine:3.21
+          command: ["sh", "-c", "mkdir -p /data && chmod 770 /data"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsUser: 65532
+      containers:
+        - name: fixture
+          image: appa-native-live-fixture:local
+          imagePullPolicy: IfNotPresent
+          command: ["node", "/opt/fixture/native-live-fixture-sdk.cjs", "--db", "/data/fixture.sqlite", "--host", "0.0.0.0", "--port", "18880"]
+          ports:
+            - name: mcp
+              containerPort: 18880
+          env:
+            - name: APPA_NATIVE_FIXTURE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: appa-native-live-fixture-auth
+                  key: APPA_NATIVE_FIXTURE_TOKEN
+            - name: APPA_NATIVE_FIXTURE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: appa-native-live-fixture-auth
+                  key: APPA_NATIVE_FIXTURE_ADMIN_TOKEN
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1002
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: appa-native-live-fixture-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appa-native-live-fixture
+  labels:
+    app: appa-native-live-fixture
+    app.kubernetes.io/part-of: appa-native-live-harness
+spec:
+  type: ClusterIP
+  selector:
+    app: appa-native-live-fixture
+  ports:
+    - name: mcp
+      port: 18880
+      targetPort: mcp
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: appa-native-live-fixture-data
+  labels:
+    app: appa-native-live-fixture
+    app.kubernetes.io/part-of: appa-native-live-harness
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 128Mi

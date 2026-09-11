@@ -369,6 +369,35 @@ describe("extractSessionInfo", () => {
     });
   });
 
+  test("preserves the OpenCode session on its native Chat Completions headers", () => {
+    const result = extractSessionInfo({
+      headers: {
+        "user-agent": "opencode/1.18.29",
+        "x-opencode-session": "opencode-session-123",
+      },
+      body: undefined,
+      externalAgentId: undefined,
+    });
+
+    expect(result).toEqual({
+      sessionId: "opencode-session-123",
+      sessionSource: "opencode_session",
+    });
+  });
+
+  test("preserves the observed native Claude session header", () => {
+    expect(
+      extractSessionInfo({
+        headers: { "x-claude-code-session-id": "claude-session-123" },
+        body: undefined,
+        externalAgentId: undefined,
+      }),
+    ).toEqual({
+      sessionId: "claude-session-123",
+      sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+    });
+  });
+
   test("Codex attribution with a non-UUID session-id header and no client_metadata yields no session", () => {
     const result = extractSessionInfo({
       headers: { "session-id": "not-a-uuid" },

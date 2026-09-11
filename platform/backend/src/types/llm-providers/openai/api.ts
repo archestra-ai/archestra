@@ -181,6 +181,25 @@ export const ResponsesRequestSchema = z
     "https://developers.openai.com/api/reference/resources/responses/methods/create",
   );
 
+/** The legacy Responses compaction endpoint does not support streaming. */
+export const ResponsesCompactRequestSchema = z
+  .object({
+    model: z.string(),
+    input: z
+      .union([z.string(), z.array(ResponsesInputItemSchema)])
+      .nullable()
+      .optional(),
+    instructions: z.string().nullable().optional(),
+    previous_response_id: z.string().nullable().optional(),
+    prompt_cache_key: z.string().nullable().optional(),
+    // Accepted only so the route can return the normal proxy 400 envelope.
+    stream: z.boolean().optional(),
+  })
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses/methods/compact",
+  );
+
 export const ResponsesUsageSchema = z
   .object({
     input_tokens: z.number(),
@@ -260,6 +279,19 @@ export const ResponsesResponseSchema = z
   .passthrough()
   .describe(
     "https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)",
+  );
+
+export const ResponsesCompactResponseSchema = z
+  .object({
+    id: z.string(),
+    object: z.literal("response.compaction"),
+    created_at: z.number(),
+    output: z.array(z.object({ type: z.string() }).passthrough()),
+    usage: ResponsesUsageSchema,
+  })
+  .passthrough()
+  .describe(
+    "https://developers.openai.com/api/reference/resources/responses/compact",
   );
 
 // ===== Embeddings API =====

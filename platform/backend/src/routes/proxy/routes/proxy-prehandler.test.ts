@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import config from "@/config";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
 const TEST_UUID = "44f56e01-7167-42c1-88ee-64b566fbc34d";
@@ -86,6 +87,33 @@ describe("createProxyPreHandler", () => {
 
     return app;
   }
+
+  test("APPA rejects catch-all endpoints without forwarding upstream", async () => {
+    const original = config.llmProxy.appaHook;
+    config.llmProxy.appaHook = {
+      url: "http://appa-runtime.appa.svc.cluster.local:18787",
+      timeoutMs: 100,
+      sessionHmacSecret: "a".repeat(32),
+    };
+    try {
+      await setupProxy({
+        apiPrefix: "/v1/openai",
+        endpointSuffix: "/chat/completions",
+        providerName: "OpenAI",
+      });
+      for (const method of ["GET", "POST"] as const) {
+        const response = await app.inject({
+          method,
+          url: "/v1/openai/batches",
+        });
+        expect(response.statusCode).toBe(403);
+        expect(response.body).toContain("OpenAPPA");
+      }
+      expect(upstreamHits).toBe(0);
+    } finally {
+      config.llmProxy.appaHook = original;
+    }
+  });
 
   describe("endpoint skipping", () => {
     test("returns 400 for POST to the custom-handled endpoint suffix", async () => {

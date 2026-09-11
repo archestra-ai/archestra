@@ -152,7 +152,8 @@ type TimedChunk = { at: number; bytes: Uint8Array };
 /** Read the whole body, timestamping each chunk as it arrives. */
 async function readTimedChunks(response: Response): Promise<TimedChunk[]> {
   const chunks: TimedChunk[] = [];
-  const reader = response.body!.getReader();
+  if (!response.body) throw new Error("response body missing");
+  const reader = response.body.getReader();
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;

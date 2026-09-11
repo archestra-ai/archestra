@@ -137,6 +137,20 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  // Decisions are audited in their transaction; do not snapshot arbitrary
+  // failed request bodies, which may contain proposed tool arguments.
+  "/api/appa-approvals/:id/decision": {
+    resourceType: "appaApproval",
+    action: "appaApproval.decided",
+    onlyWhenChanged: true,
+  },
+  // Quarantine records are written atomically by the model so their audit
+  // snapshots never include correlation material or remote event bodies.
+  "/api/appa-quarantines/:id/acknowledgment": {
+    resourceType: "appaQuarantine",
+    action: "appaQuarantine.acknowledged",
+    onlyWhenChanged: true,
+  },
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",

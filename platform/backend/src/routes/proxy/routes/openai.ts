@@ -6,10 +6,16 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
-import { constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import {
+  ApiError,
+  constructResponseSchema,
+  OpenAi,
+  UuidIdSchema,
+} from "@/types";
 import {
   openAiEmbeddingsAdapterFactory,
   openAiResponsesAdapterFactory,
+  openAiResponsesCompactAdapterFactory,
   openaiAdapterFactory,
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
@@ -27,6 +33,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
+  const RESPONSES_COMPACT_SUFFIX = "/responses/compact";
   const EMBEDDINGS_SUFFIX = "/embeddings";
 
   logger.info("[UnifiedProxy] Registering unified OpenAI routes");
@@ -39,6 +46,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       apiPrefix: API_PREFIX,
       endpointSuffix: [
         CHAT_COMPLETIONS_SUFFIX,
+        RESPONSES_COMPACT_SUFFIX,
         RESPONSES_SUFFIX,
         EMBEDDINGS_SUFFIX,
       ],
@@ -100,6 +108,81 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         openAiEmbeddingsAdapterFactory,
+      );
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}${RESPONSES_COMPACT_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OpenAiResponsesCompactWithDefaultAgent,
+        description: "Compact OpenAI Responses context (uses default agent)",
+        tags: ["LLM Proxy"],
+        body: OpenAi.API.ResponsesCompactRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(
+          OpenAi.API.ResponsesCompactResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (request.body.stream) {
+        throw new ApiError(
+          400,
+          "Responses compact does not support streaming.",
+        );
+      }
+      logger.debug(
+        { url: request.url },
+        "[UnifiedProxy] Handling OpenAI Responses compact request (default agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.ResponsesCompactRequest,
+        request,
+        reply,
+        openAiResponsesCompactAdapterFactory,
+        { nativeCodexLegacyCompact: true },
+      );
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}/:agentId${RESPONSES_COMPACT_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OpenAiResponsesCompactWithAgent,
+        description: "Compact OpenAI Responses context for a specific agent",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.ResponsesCompactRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(
+          OpenAi.API.ResponsesCompactResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (request.body.stream) {
+        throw new ApiError(
+          400,
+          "Responses compact does not support streaming.",
+        );
+      }
+      logger.debug(
+        { url: request.url, agentId: request.params.agentId },
+        "[UnifiedProxy] Handling OpenAI Responses compact request (with agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.ResponsesCompactRequest,
+        request,
+        reply,
+        openAiResponsesCompactAdapterFactory,
+        { nativeCodexLegacyCompact: true },
       );
     },
   );

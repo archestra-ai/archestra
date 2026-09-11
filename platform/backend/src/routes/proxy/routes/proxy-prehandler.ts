@@ -3,7 +3,9 @@ import type {
   FastifyRequest,
   HookHandlerDoneFunction,
 } from "fastify";
+import config from "@/config";
 import logger from "@/logging";
+import { ApiError } from "@/types";
 
 const UUID_REGEX =
   /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i;
@@ -43,6 +45,17 @@ export function createProxyPreHandler(params: {
     reply: FastifyReply,
     next: HookHandlerDoneFunction,
   ) => {
+    // Explicit routes own APPA enforcement. Catch-all forwarding must not
+    // expose an uninstrumented provider API while that enforcement is enabled.
+    if (config.llmProxy.appaHook) {
+      next(
+        new ApiError(
+          403,
+          "OpenAPPA proxy hooks do not support uninstrumented provider endpoints.",
+        ),
+      );
+      return;
+    }
     const urlPath = request.url.split("?")[0];
     const endpointSuffixes = Array.isArray(endpointSuffix)
       ? endpointSuffix

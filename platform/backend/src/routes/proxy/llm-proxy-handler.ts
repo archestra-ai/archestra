@@ -5,6 +5,7 @@
  * Routes choose which adapter factory to use based on URL.
  */
 
+import { randomUUID } from "node:crypto";
 import {
   APP_ID_HEADER,
   ArchestraInternalErrorCode,
@@ -28,6 +29,7 @@ import {
   type Context,
   context as otelContext,
   propagation,
+  trace,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -48,6 +50,8 @@ import {
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  AppaProxySessionModel,
+  AppaProxySessionProtocolError,
   AppModel,
   EnvironmentModel,
   InteractionModel,
@@ -58,6 +62,7 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
+import AppaProxyWireModel from "@/models/appa-proxy-wire";
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_BILLING_MODE,
@@ -76,6 +81,60 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import { getAppaPluginArchestra } from "@/plugins/appa-plugin-archestra";
+import {
+  type AppaNativeClient,
+  classifyAppaNativeClient,
+  collectAppaProtocolToolResults,
+  resolveAppaCarrierChild,
+  unsupportedNativeLifecycleReason,
+} from "@/services/appa-client-correlation";
+import {
+  type NativeCodexHistory,
+  persistNativeCodexHistory,
+  validateNativeCodexHistory,
+} from "@/services/appa-codex-history";
+import {
+  commitNativeCodexCalls,
+  createNativeCodexBootstrap,
+  isNativeCodexCodeModeRequest,
+  isNativeCodexCompactionV2,
+  issuedCodexToolSearchMcpTargets,
+  issueNativeCodexFrame,
+  loadIssuedCodexToolSearchRegistry,
+  nativeCodexBootstrapSse,
+  nativeCodexPolicyToolName,
+  normalizeNativeCodexInput,
+  prepareNativeCodexCallAliases,
+  projectNativeCodexModelRequest,
+  recordNativeCodexDiscovery,
+  replaceNativeCodexCallItems,
+  resolveNativeCodexGatewayPrincipals,
+  restoreNativeCodexProviderIds,
+  rewriteNativeCodexResponseForClient,
+  stripNativeCodexControlHistory,
+  toNativeCodexToolNames,
+} from "@/services/appa-codex-native-bridge";
+import {
+  normalizeNativeCodexProcessHistory,
+  restoreNativeCodexClientProcessCalls,
+} from "@/services/appa-codex-process-routing";
+import {
+  AppaHeldResponseController,
+  type AppaSyntheticControlCall,
+} from "@/services/appa-held-response-controller";
+import {
+  AppaHistoryCodec,
+  type AppaHistoryProtocol,
+} from "@/services/appa-history-codec";
+import {
+  attachNativeChild,
+  extractNativeChildRequest,
+  extractNativeTaskPath,
+  prepareNativeChildSpawnPublication,
+  resolveNativeChildSpawnBinding,
+} from "@/services/appa-native-child-correlation";
+import { AppaProxyLedger } from "@/services/appa-proxy/ledger";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
@@ -95,9 +154,21 @@ import {
   UNSAFE_CONTEXT_BOUNDARY_REASON,
   type UnsafeContextBoundary,
 } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
+import { codexToolName } from "./adapters/openai-responses";
+import { isCodexToolSearchCall } from "./appa-codex-wire";
+import {
+  type AppaInboundToolResult,
+  type AppaOutboundToolCall,
+  AppaProxyHookError,
+  AppaProxyHookSession,
+  canonicalJsonObject,
+  deriveAppaOwnerScope,
+} from "./appa-proxy-hook";
+
 import {
   assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
@@ -132,6 +203,8 @@ import {
   resolveLockedChatAuditContext,
 } from "./utils/locked-chat-session";
 
+const APPA_SPAWN_BINDINGS_HEADER = "x-archestra-appa-spawn-bindings";
+
 const {
   observability: {
     otel: { captureContent, contentMaxLength },
@@ -149,8 +222,26 @@ export interface LLMProxyContext<TRequest> {
   actualModel: string;
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
+  nativeCodexApplyPatch: boolean;
+  nativeCodex: boolean;
+  nativeCodexHistory?: NativeCodexHistory;
+  /** Proven by a credential, never by a user-attribution header. */
+  authenticatedUserId?: string;
+  /** Server-resolved principals for registered native MCP gateway namespaces. */
+  nativeCodexGatewayPrincipals: ReadonlyMap<
+    string,
+    { principalUserId: string; gatewayProfileId: string }
+  >;
+  nativeCodexControl?: {
+    userId: string;
+    namespace: string;
+    threadId: string;
+  };
+  appaNativeClient: AppaNativeClient;
   /** Maps client-decorated gateway tool names to the platform's own names. */
   canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
+  /** APPA-only canonical identities proven by this request's MCP declarations. */
+  declaredMcpToolTargets: ReadonlyMap<string, string>;
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -202,6 +293,9 @@ export interface LLMProxyContext<TRequest> {
   teamIds?: string[];
   teams?: SpanTeamInfo[];
   userTeams?: SpanTeamInfo[];
+  appaHook?: AppaProxyHookSession;
+  nativeClientTaskPath: string | null;
+  nativeLogicalTaskPath: string | null;
   /**
    * Client-visible latency clock. `requestReceivedAt` is stamped on entry to
    * the handler; `firstByteAt` is set by `ensureStreamHeaders` the moment the
@@ -234,6 +328,11 @@ export type LLMProxyAuthOverride = {
   userId?: string;
 };
 
+export type LLMProxyRequestOptions = {
+  /** The route is the legacy Codex `POST /responses/compact` transport. */
+  nativeCodexLegacyCompact?: boolean;
+};
+
 function getProviderMessagesCount(messages: unknown): number | null {
   if (Array.isArray(messages)) {
     return messages.length;
@@ -247,6 +346,13 @@ function getProviderMessagesCount(messages: unknown): number | null {
   }
 
   return null;
+}
+
+function proxyTraceId(parentContext: Context): string | undefined {
+  return (
+    trace.getSpan(parentContext)?.spanContext().traceId ??
+    trace.getSpan(otelContext.active())?.spanContext().traceId
+  );
 }
 
 /**
@@ -279,6 +385,7 @@ export async function handleLLMProxy<
   request: FastifyRequest,
   reply: FastifyReply,
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
+  options: LLMProxyRequestOptions = {},
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
   const headers = request.headers as unknown as THeaders;
@@ -362,9 +469,30 @@ export async function handleLLMProxy<
     otelContext.active(),
     request.headers,
   );
+  getAppaPluginArchestra();
 
-  const requestAdapter = provider.createRequestAdapter(body);
-  const streamAdapter = provider.createStreamAdapter(body);
+  let requestBody = config.llmProxy.appaHook?.nativeCodexEnabled
+    ? normalizeNativeCodexInput(body)
+    : body;
+  let nativeCodexToolNames: string[] = [];
+  let nativeCodexIssuedMcpTargets: ReadonlyMap<string, string> = new Map();
+  let nativeCodexGatewayPrincipals: ReadonlyMap<
+    string,
+    { principalUserId: string; gatewayProfileId: string }
+  > = new Map();
+  let nativeCodexHistory: NativeCodexHistory | undefined;
+  let nativeCodexControl: LLMProxyContext<TRequest>["nativeCodexControl"];
+  let nativeClientTaskPath: string | null = null;
+  let nativeLogicalTaskPath: string | null = null;
+  let appaNativeClient: AppaNativeClient = "unknown";
+  const nativeCodexRequested =
+    config.llmProxy.appaHook?.nativeCodexEnabled === true &&
+    provider.interactionType === "openai:responses" &&
+    (options.nativeCodexLegacyCompact ||
+      isNativeCodexCodeModeRequest(requestBody) ||
+      isNativeCodexCompactionV2(requestBody));
+  let requestAdapter = provider.createRequestAdapter(requestBody as TRequest);
+  let streamAdapter = provider.createStreamAdapter(requestBody as TRequest);
   const providerMessages = requestAdapter.getProviderMessages();
   const messagesCount = getProviderMessagesCount(providerMessages);
 
@@ -756,8 +884,469 @@ export async function handleLLMProxy<
   // attributable instead of collapsing into the shared App Runtime agent.
   const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
+  let activeAppaHook: AppaProxyHookSession | undefined;
+
   // Check usage limits
   try {
+    appaNativeClient = config.llmProxy.appaHook
+      ? classifyAppaNativeClient({
+          provider: providerName,
+          interactionType: provider.interactionType,
+          headers: headersForExtraction,
+          request: requestAdapter.getOriginalRequest(),
+        })
+      : "unknown";
+    const appaThreadCandidate = config.llmProxy.appaHook
+      ? resolveAppaThreadContext({
+          headers: headersForExtraction,
+          request: requestAdapter.getOriginalRequest(),
+          sessionId,
+          sessionSource,
+          nativeClient: appaNativeClient,
+        })
+      : null;
+    // Once configured, APPA owns every request on this proxy boundary. A
+    // request without a stable trajectory cannot safely bypass the gate.
+    if (config.llmProxy.appaHook) {
+      if (
+        hasProviderHostedMcpToolDefinition(requestAdapter.getOriginalRequest())
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA proxy hooks do not permit provider-hosted MCP tools.",
+        );
+      }
+      if (
+        !nativeCodexRequested &&
+        !isAppaHookSupportedRequest(
+          provider,
+          requestAdapter.getOriginalRequest(),
+        )
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA proxy hooks support only OpenAI Chat Completions or Responses requests with ordinary JSON function tools.",
+        );
+      }
+      if (
+        hasUnsupportedOpaqueProxyContext(requestAdapter.getOriginalRequest())
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA proxy hooks do not support hidden Responses continuation context.",
+        );
+      }
+      let appaThread = appaThreadCandidate;
+      if (!appaThread || "error" in appaThread) {
+        throw new ApiError(
+          400,
+          appaThread && "error" in appaThread
+            ? appaThread.error
+            : "OpenAPPA proxy hooks require a stable thread id.",
+        );
+      }
+      if (
+        !isValidAppaSessionId(appaThread.threadId) ||
+        (appaThread.parentThreadId !== undefined &&
+          !isValidAppaSessionId(appaThread.parentThreadId))
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA proxy hooks require a stable thread id.",
+        );
+      }
+      const nativeChildRequest = nativeCodexRequested
+        ? extractNativeChildRequest({
+            headers: headersForExtraction,
+            request: requestAdapter.getOriginalRequest(),
+          })
+        : null;
+      if (
+        nativeCodexRequested &&
+        appaThread.parentThreadId !== undefined &&
+        !nativeChildRequest
+      ) {
+        throw new ApiError(
+          400,
+          "Native Codex child requests require verified task metadata.",
+        );
+      }
+      nativeClientTaskPath = nativeCodexRequested
+        ? extractNativeTaskPath({
+            headers: headersForExtraction,
+            request: requestAdapter.getOriginalRequest(),
+          })
+        : null;
+      nativeLogicalTaskPath =
+        nativeClientTaskPath === "/root" ? "/tasks/root" : null;
+      const ownerScopeHash = deriveAppaOwnerScope({
+        secret: config.llmProxy.appaHook.sessionHmacSecret,
+        profileId: resolvedAgent.id,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        authenticatedPrincipalId: authenticatedUserId,
+        authenticatedAppId: authenticatedApp?.id,
+        rawProviderCredential: rawApiKey ?? apiKey,
+      });
+      if (!ownerScopeHash) {
+        throw new ApiError(
+          400,
+          "OpenAPPA proxy hooks require an authenticated credential and principal binding.",
+        );
+      }
+      try {
+        if (nativeChildRequest) {
+          if (
+            appaThread.threadId !== nativeChildRequest.childClientSessionId ||
+            (appaThread.parentThreadId !== undefined &&
+              appaThread.parentThreadId !==
+                nativeChildRequest.parentClientSessionId)
+          ) {
+            throw new ApiError(
+              400,
+              "Native Codex child thread metadata does not match the request thread.",
+            );
+          }
+          const resolvedSpawn = await resolveNativeChildSpawnBinding({
+            ownerScopeHash,
+            profileId: resolvedAgent.id,
+            parentClientSessionId: nativeChildRequest.parentClientSessionId,
+            childTaskPath: nativeChildRequest.childTaskPath,
+          });
+          appaThread = {
+            threadId: nativeChildRequest.childClientSessionId,
+            parentThreadId: nativeChildRequest.parentClientSessionId,
+            spawnBinding: resolvedSpawn.spawnBinding,
+          };
+          nativeClientTaskPath = nativeChildRequest.childTaskPath;
+          nativeLogicalTaskPath = resolvedSpawn.logicalTaskPath;
+        }
+        const disconnect = new AbortController();
+        reply.raw.once("finish", () => {
+          activeAppaHook?.markOutboundCallsDelivered();
+        });
+        reply.raw.once("close", () => {
+          if (reply.raw.writableFinished) return;
+          disconnect.abort();
+          if (activeAppaHook) {
+            trackBackgroundWork(
+              activeAppaHook.quarantineUndeliveredCalls().catch((error) => {
+                logger.error(
+                  { error },
+                  "Failed to quarantine APPA calls before response delivery",
+                );
+              }),
+            );
+          }
+        });
+        if (reply.raw.destroyed) disconnect.abort();
+        logger.debug(
+          { nativeClient: appaNativeClient },
+          "Resolved native APPA protocol evidence without using it for authorization",
+        );
+        const carrierChild = nativeCodexRequested
+          ? null
+          : await resolveAppaCarrierChild({
+              client: appaNativeClient,
+              headers: headersForExtraction,
+              request: requestAdapter.getOriginalRequest(),
+              sessionId: appaThread.threadId,
+              ownerScopeHash,
+              profileId: resolvedAgent.id,
+            });
+        if (carrierChild) {
+          const expectedThread =
+            appaNativeClient === "claude-code"
+              ? carrierChild.parentClientSessionId
+              : carrierChild.childClientSessionId;
+          if (appaThread.threadId !== expectedThread) {
+            throw new ApiError(
+              400,
+              "Native child session metadata does not match the proxy-issued carrier.",
+            );
+          }
+          appaThread = {
+            threadId: carrierChild.childClientSessionId,
+            parentThreadId: carrierChild.parentClientSessionId,
+            spawnBinding: carrierChild.spawnBinding,
+          };
+        }
+        const unsupportedNativeLifecycle = unsupportedNativeLifecycleReason({
+          client: appaNativeClient,
+          headers: headersForExtraction,
+          request: requestAdapter.getOriginalRequest(),
+        });
+        if (
+          unsupportedNativeLifecycle &&
+          !nativeCodexRequested &&
+          !carrierChild
+        ) {
+          throw new ApiError(400, unsupportedNativeLifecycle);
+        }
+        let inboundToolResults = collectAppaInboundToolResults({
+          request: nativeCodexRequested
+            ? normalizeNativeCodexInput(body)
+            : body,
+          interactionType: provider.interactionType,
+        });
+        // Stock clients need not repeat deferred gateway declarations. Issued
+        // controls are located through the authenticated durable wire ledger.
+        if (nativeCodexRequested && authenticatedUserId) {
+          const continuation =
+            await new AppaHeldResponseController().continueBeforeAcquire({
+              config: config.llmProxy.appaHook,
+              organizationId: resolvedAgent.organizationId,
+              authenticatedUserId,
+              profileId: resolvedAgent.id,
+              ownerScopeHash,
+              threadId: appaThread.threadId,
+              controlItemIds: nativeCodexFunctionCallItemIds(
+                requestAdapter.getOriginalRequest(),
+              ),
+              results: inboundToolResults,
+              signal: disconnect.signal,
+            });
+          if (continuation.state === "rejected") {
+            throw new ApiError(
+              400,
+              "Invalid APPA native control continuation.",
+            );
+          }
+          if (continuation.state === "pending") {
+            throw new ApiError(409, "APPA native control is still pending.");
+          }
+          if (continuation.state === "historical") {
+            const controlCallIds = new Set(continuation.controlCallIds);
+            // Completed gateway controls are full-history artifacts, not new
+            // APPA results or provider-visible model context.
+            inboundToolResults = inboundToolResults.filter(
+              (result) => !controlCallIds.has(result.id),
+            );
+            requestBody = stripNativeCodexControlHistory({
+              request: requestBody,
+              controlCallIds,
+            });
+            requestAdapter = provider.createRequestAdapter(
+              requestBody as TRequest,
+            );
+            streamAdapter = provider.createStreamAdapter(
+              requestBody as TRequest,
+            );
+          }
+          if (
+            continuation.state === "held" ||
+            continuation.state === "committed"
+          ) {
+            activeAppaHook = continuation.session;
+            const response = await restoreHeldNativeResponse({
+              session: continuation.session,
+              heldFrameId: continuation.heldFrameId,
+              omitPublishedContext: true,
+              calls:
+                continuation.state === "held"
+                  ? [continuation.control]
+                  : continuation.calls,
+            });
+            if (continuation.state === "committed") {
+              await continuation.session.finish();
+            }
+            continuation.session.markContinuationResponseReady();
+            return requestAdapter.isStreaming()
+              ? reply
+                  .type("text/event-stream")
+                  .send(nativeCodexBootstrapSse(response))
+              : reply.send(response);
+          }
+        }
+        const historyProtocol = appaHistoryProtocol(provider.interactionType);
+        if (!historyProtocol) {
+          throw new AppaProxySessionProtocolError(
+            "APPA session has no supported history protocol",
+          );
+        }
+        let forkCheckpointId: string | undefined;
+        let forkRootId: string | undefined;
+        // Compaction retains the existing client root. Only a newly observed
+        // client session with an exact recorded provider prefix can attach a
+        // checkpoint-forked root.
+        if (
+          config.llmProxy.appaHook.runtimeToken &&
+          historyProtocol &&
+          !nativeChildRequest &&
+          !carrierChild &&
+          !(await AppaProxySessionModel.hasOwnedSession({
+            profileId: resolvedAgent.id,
+            ownerScopeHash,
+            clientSessionId: appaThread.threadId,
+            binding: {
+              provider: providerName,
+              protocol: historyProtocol,
+              model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+            },
+          }))
+        ) {
+          const forkHistory = AppaHistoryCodec.request({
+            protocol: historyProtocol,
+            request: requestAdapter.getOriginalRequest(),
+          });
+          const matchingFork = await AppaProxyLedger.forForkLookup({
+            ownerScopeHash,
+            profileId: resolvedAgent.id,
+          }).matchingCheckpointFork({
+            provider: providerName,
+            model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+            history: forkHistory,
+          });
+          if (matchingFork) {
+            forkCheckpointId = matchingFork.checkpointId;
+            forkRootId = `archestra-proxy:${randomUUID()}`;
+          } else if (hasCheckpointForkIntent(forkHistory.history)) {
+            throw new ApiError(
+              400,
+              "OpenAPPA checkpoint fork history does not match an issued response.",
+            );
+          }
+        }
+        activeAppaHook = await AppaProxyHookSession.acquire({
+          config: config.llmProxy.appaHook,
+          profileId: resolvedAgent.id,
+          organizationId: resolvedAgent.organizationId,
+          ownerScopeHash,
+          provider: providerName,
+          protocol: historyProtocol,
+          model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+          clientSessionId: appaThread.threadId,
+          parentClientSessionId: appaThread.parentThreadId,
+          spawnBinding: appaThread.spawnBinding,
+          forkCheckpointId,
+          rootId: forkRootId,
+          nativeCodexExecution: nativeCodexRequested,
+          signal: disconnect.signal,
+          traceId: proxyTraceId(parentContext),
+          prepareInboundResults: nativeCodexRequested
+            ? async (results, session) => {
+                try {
+                  await normalizeNativeCodexProcessHistory({
+                    scope: session.getNativeWireScope(),
+                    request: requestBody,
+                  });
+                } catch {
+                  // The provider and opaque-history store can only see the
+                  // durable proxy handle, never a client-local fallback.
+                  throw new AppaProxyHookError("unavailable", "input");
+                }
+                nativeCodexHistory = await validateNativeCodexHistory({
+                  session,
+                  request: requestBody,
+                  headers: request.headers,
+                  provider: providerName,
+                  principalUserId: authenticatedUserId,
+                  legacyCompact: options.nativeCodexLegacyCompact,
+                });
+                return [...results];
+              }
+            : undefined,
+          toolResults: inboundToolResults,
+        });
+        if (nativeChildRequest) {
+          await attachNativeChild({
+            ownerScopeHash,
+            profileId: resolvedAgent.id,
+            parentClientSessionId: nativeChildRequest.parentClientSessionId,
+            childClientSessionId: nativeChildRequest.childClientSessionId,
+            childTaskPath: nativeChildRequest.childTaskPath,
+            spawnBinding: appaThread.spawnBinding ?? "",
+          });
+        }
+        if (
+          nativeCodexRequested &&
+          !options.nativeCodexLegacyCompact &&
+          !isNativeCodexCompactionV2(requestBody)
+        ) {
+          const nativeRequest = requestAdapter.getOriginalRequest();
+          if (!isNativeCodexCodeModeRequest(nativeRequest)) {
+            throw new ApiError(400, "Invalid native Codex request.");
+          }
+          const directRegistry = await recordNativeCodexDiscovery({
+            session: activeAppaHook,
+            request: nativeRequest,
+          });
+          if (!directRegistry) {
+            const bootstrap = await createNativeCodexBootstrap({
+              session: activeAppaHook,
+              request: nativeRequest,
+            });
+            await activeAppaHook.releaseWithoutPrompt();
+            activeAppaHook = undefined;
+            return requestAdapter.isStreaming()
+              ? reply
+                  .type("text/event-stream")
+                  .send(nativeCodexBootstrapSse(bootstrap))
+              : reply.send(bootstrap);
+          }
+          const issuedToolSearchRegistry =
+            await loadIssuedCodexToolSearchRegistry({
+              session: activeAppaHook,
+            });
+          const registry = [...directRegistry, ...issuedToolSearchRegistry];
+          nativeCodexToolNames = toNativeCodexToolNames(registry);
+          nativeCodexIssuedMcpTargets =
+            issuedCodexToolSearchMcpTargets(registry);
+          nativeCodexGatewayPrincipals =
+            await resolveNativeCodexGatewayPrincipals({
+              organizationId: resolvedAgent.organizationId,
+              registry,
+            });
+          const controlNamespace = authenticatedUserId
+            ? registry.find(
+                (tool) =>
+                  typeof tool.namespace === "string" &&
+                  /^mcp__[A-Za-z0-9_-]+$/.test(tool.namespace) &&
+                  tool.name === "archestra__appa_execute_remedy",
+              )?.namespace
+            : undefined;
+          nativeCodexControl =
+            controlNamespace && authenticatedUserId
+              ? {
+                  userId: authenticatedUserId,
+                  namespace: controlNamespace,
+                  threadId: appaThread.threadId,
+                }
+              : undefined;
+          const projected = await projectNativeCodexModelRequest({
+            session: activeAppaHook,
+            request: nativeRequest,
+            registry,
+            principalUserId: authenticatedUserId,
+          });
+          delete request.headers["x-openai-internal-codex-responses-lite"];
+          requestAdapter = provider.createRequestAdapter(projected as TRequest);
+          streamAdapter = provider.createStreamAdapter(projected as TRequest);
+        }
+        if (nativeCodexRequested && isNativeCodexCompactionV2(requestBody)) {
+          const projected = await projectNativeCodexModelRequest({
+            session: activeAppaHook,
+            request: requestBody,
+            registry: [],
+            principalUserId: authenticatedUserId,
+          });
+          delete projected.tools;
+          requestAdapter = provider.createRequestAdapter(projected as TRequest);
+          streamAdapter = provider.createStreamAdapter(projected as TRequest);
+        }
+        const modelResultUpdates = activeAppaHook.getModelResultUpdates();
+        if (modelResultUpdates.size > 0) {
+          const presented = applyAppaOutcomeNotices(
+            requestAdapter.toProviderRequest(),
+            modelResultUpdates,
+          );
+          requestAdapter = provider.createRequestAdapter(presented);
+          streamAdapter = provider.createStreamAdapter(presented);
+        }
+      } catch (error) {
+        throw toAppaHookApiError(error);
+      }
+    }
     logger.debug(
       { resolvedAgentId },
       `[${providerName}Proxy] Checking usage limits`,
@@ -890,7 +1479,10 @@ export async function handleLLMProxy<
     // Safe to call multiple times — only writes headers once.
     const ensureStreamHeaders = () => {
       if (sseHeaders && !reply.raw.headersSent) {
-        reply.raw.writeHead(200, sseHeaders);
+        reply.raw.writeHead(200, {
+          ...sseHeaders,
+          ...(reply.getHeaders() as Record<string, string>),
+        });
         streamTiming.firstByteAt = Date.now();
       }
     };
@@ -982,6 +1574,12 @@ export async function handleLLMProxy<
           requestAdapter.getOriginalRequest(),
         ),
       });
+    const declaredMcpToolTargets = new Map(
+      utils.collectDeclaredMcpToolTargets(requestAdapter.getOriginalRequest()),
+    );
+    for (const [wireName, target] of nativeCodexIssuedMcpTargets) {
+      declaredMcpToolTargets.set(wireName, target);
+    }
     const commonMessages = canonicalizeCommonMessageToolNames(
       requestAdapter.getMessages(),
       canonicalizeToolName,
@@ -1176,6 +1774,15 @@ export async function handleLLMProxy<
       ...(perKeyExtraHeaders ?? {}),
       ...headersToForward,
     };
+    // This is a proxy-to-client capability, never a provider request header.
+    for (const headerName of Object.keys(mergedHeaders)) {
+      if (
+        headerName.toLowerCase() === APPA_SPAWN_BINDINGS_HEADER ||
+        headerName.toLowerCase() === "x-archestra-appa-spawn-binding"
+      ) {
+        delete mergedHeaders[headerName];
+      }
+    }
     if (Object.keys(mergedHeaders).length > 0) {
       logger.info(
         { headers: headerNamePeek(mergedHeaders) },
@@ -1224,7 +1831,14 @@ export async function handleLLMProxy<
     });
 
     // Build final request
-    const builtRequest = requestAdapter.toProviderRequest();
+    const builtRequest =
+      nativeCodexRequested && activeAppaHook
+        ? await restoreNativeCodexProviderIds({
+            session: activeAppaHook,
+            request: requestAdapter.toProviderRequest(),
+            principalUserId: authenticatedUserId,
+          })
+        : requestAdapter.toProviderRequest();
 
     // Repair unpaired UTF-16 surrogates before the body leaves for the
     // provider. Half a surrogate pair has no UTF-8 encoding, so a provider
@@ -1252,6 +1866,14 @@ export async function handleLLMProxy<
     }
     const finalRequest = repairedRequest as TRequest;
 
+    if (activeAppaHook) {
+      try {
+        await activeAppaHook.sendPrompt(finalRequest);
+      } catch (error) {
+        throw toAppaHookApiError(error);
+      }
+    }
+
     // Which called tool names count as available to evaluatePolicies, in the
     // canonical form tool-call names are compared in. Read from the request
     // body rather than `getTools()`, which keeps only schema-carrying function
@@ -1266,9 +1888,10 @@ export async function handleLLMProxy<
     // them, and leaves the client — which is the one executing them — as the
     // boundary that governs them.
     const enabledToolNames = new Set(
-      utils
-        .collectDeclaredToolNames(requestAdapter.getOriginalRequest())
-        .map(canonicalizeToolName),
+      [
+        ...utils.collectDeclaredToolNames(requestAdapter.getOriginalRequest()),
+        ...nativeCodexToolNames,
+      ].map(canonicalizeToolName),
     );
 
     // A gateway tool name the client decorated with an alias the platform does
@@ -1309,7 +1932,17 @@ export async function handleLLMProxy<
       actualModel,
       contextIsTrusted,
       enabledToolNames,
+      nativeCodexApplyPatch: nativeCodexToolNames.includes(
+        "functions.apply_patch",
+      ),
+      nativeCodex: nativeCodexRequested,
+      nativeCodexHistory,
+      nativeCodexControl,
+      appaNativeClient,
+      nativeCodexGatewayPrincipals,
+      authenticatedUserId,
       canonicalizeToolName,
+      declaredMcpToolTargets,
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
@@ -1336,6 +1969,9 @@ export async function handleLLMProxy<
       teams,
       userTeams,
       streamTiming,
+      appaHook: activeAppaHook,
+      nativeClientTaskPath,
+      nativeLogicalTaskPath,
     };
 
     // handleStreaming is self-contained: it persists its own failed-interaction
@@ -1361,9 +1997,17 @@ export async function handleLLMProxy<
     // captured as unhandled server exceptions.
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
+    let handledError = error;
+    if (activeAppaHook) {
+      try {
+        await activeAppaHook.abort();
+      } catch (abortError) {
+        handledError = toAppaHookApiError(abortError);
+      }
+    }
     // Persist failed interactions so they appear in LLM logs
     try {
-      const errorMessage = provider.extractErrorMessage(error);
+      const errorMessage = provider.extractErrorMessage(handledError);
       logger.info(
         { profileId: resolvedAgent.id, errorMessage },
         "Persisting error interaction record",
@@ -1408,7 +2052,7 @@ export async function handleLLMProxy<
     }
 
     return handleError(
-      error,
+      handledError,
       reply,
       provider.extractErrorMessage,
       requestAdapter.isStreaming(),
@@ -1444,6 +2088,7 @@ async function handleStreaming<
     contextIsTrusted,
     enabledToolNames,
     canonicalizeToolName,
+    declaredMcpToolTargets,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1469,6 +2114,15 @@ async function handleStreaming<
     teamIds,
     teams,
     userTeams,
+    appaHook,
+    nativeCodex,
+    nativeCodexHistory,
+    nativeCodexControl,
+    appaNativeClient,
+    nativeCodexGatewayPrincipals,
+    authenticatedUserId,
+    nativeClientTaskPath,
+    nativeLogicalTaskPath,
     streamTiming,
   } = ctx;
 
@@ -1558,6 +2212,14 @@ async function handleStreaming<
   // interaction is written in the finally, and a row that does not say it was
   // refused is indistinguishable from a healthy one.
   let toolCallBlock: ToolCallBlock | undefined;
+  // Hook-enabled streams cannot release provider bytes before the final tool
+  // decision. Some provider chunks carry text and a tool call together.
+  const bufferedFrames: Array<{
+    data: string | Uint8Array;
+    hasToolCall: boolean;
+  }> = [];
+  let hasUnsupportedAppaStreamToolCall = false;
+  let appaStreamBytes = 0;
 
   try {
     // Execute streaming request with tracing — the span covers the full streaming
@@ -1621,6 +2283,26 @@ async function handleStreaming<
             );
           }
 
+          if (appaHook) {
+            // Bound the whole provider stream, including tool-only chunks that
+            // the adapter stores without returning an SSE frame.
+            appaStreamBytes += Buffer.byteLength(JSON.stringify(chunk) ?? "");
+            if (appaStreamBytes > 16 * 1024 * 1024) {
+              throw new ApiError(
+                503,
+                "OpenAPPA proxy stream exceeds the 16 MiB prototype limit.",
+              );
+            }
+            if (
+              hasUnsupportedOpenAiStreamToolCall(
+                chunk,
+                provider.interactionType,
+              )
+            ) {
+              hasUnsupportedAppaStreamToolCall = true;
+            }
+          }
+
           const result = streamAdapter.processChunk(chunk);
 
           // An adapter reports a tool-call chunk by withholding `sseData`, so
@@ -1633,13 +2315,15 @@ async function handleStreaming<
           // the whole batch too, so a call released before its siblings arrive
           // could not be taken back.
           //
-          // Whatever an adapter does put in `sseData` is forwarded verbatim,
-          // so an adapter that emits a chunk carrying both text and a tool call
-          // defeats this (gemini.ts, minimax.ts, and openai.ts's `delta.content`
-          // branch still do; zhipuai.ts guards it), as does one whose terminal
-          // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {
-            writeToClient(result.sseData);
+            if (appaHook) {
+              bufferedFrames.push({
+                data: result.sseData,
+                hasToolCall: result.isToolCallChunk,
+              });
+            } else {
+              writeToClient(result.sseData);
+            }
           }
 
           if (result.isFinal) {
@@ -1745,13 +2429,26 @@ async function handleStreaming<
     logger.info("Stream loop completed, processing final events");
 
     // Evaluate tool invocation policies
-    const toolCalls = streamAdapter.state.toolCalls;
+    const toolCalls = nativeCodex
+      ? streamAdapter.state.toolCalls.map((call) => ({
+          ...call,
+          name: nativeCodexPolicyToolName(call.name),
+        }))
+      : streamAdapter.state.toolCalls;
     let toolInvocationRefusal: utils.toolInvocation.PolicyBlockResult | null =
       null;
 
     let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+    let clientNativeToolCalls: AccumulatedToolCall[] | null = null;
 
-    if (toolCalls.length > 0) {
+    if (
+      appaHook &&
+      (hasUnsupportedAppaStreamToolCall ||
+        hasUnsupportedFunctionToolCalls(toolCalls))
+    ) {
+      toolInvocationRefusal = appaUnsupportedToolCallBlock();
+      toolCallBlock = toToolCallBlock(toolInvocationRefusal);
+    } else if (toolCalls.length > 0) {
       rewrittenToolCalls = planDispatchRewrites({
         supported: streamAdapter.formatToolCallsSSE !== undefined,
         toolCalls,
@@ -1797,6 +2494,229 @@ async function handleStreaming<
       );
 
       toolCallBlock = toToolCallBlock(toolInvocationRefusal);
+    }
+
+    if (
+      !toolInvocationRefusal &&
+      appaHook &&
+      toolCalls.length > 0 &&
+      !reply.raw.destroyed
+    ) {
+      let nativeFrameId: string | undefined;
+      if (nativeCodex) {
+        const prepared = await prepareNativeCodexCallAliases({
+          session: appaHook,
+          principalUserId: authenticatedUserId,
+          gatewayPrincipals: nativeCodexGatewayPrincipals,
+          request,
+          response: streamAdapter.toProviderResponse(),
+          calls: rewrittenToolCalls ?? toolCalls,
+        });
+        rewrittenToolCalls = prepared.calls;
+        nativeFrameId = prepared.frameId;
+      }
+      const appaToolCalls = normalizeToolCallsForAppa(
+        rewrittenToolCalls ?? toolCalls,
+        canonicalizeToolName,
+        declaredMcpToolTargets,
+      );
+      let heldBatchCommitted = false;
+      if (nativeCodex && nativeCodexControl && nativeFrameId) {
+        const held = await new AppaHeldResponseController().prepare({
+          session: appaHook,
+          heldFrameId: nativeFrameId,
+          calls: appaToolCalls,
+          organizationId: agent.organizationId,
+          authenticatedUserId: nativeCodexControl.userId,
+          controlNamespace: nativeCodexControl.namespace,
+          boundThreadId: nativeCodexControl.threadId,
+        });
+        if (held.state === "held") {
+          await persistHeldNativeHistory({
+            session: appaHook,
+            history: nativeCodexHistory,
+            response: streamAdapter.toProviderResponse(),
+          });
+          const response = await restoreHeldNativeResponse({
+            session: appaHook,
+            heldFrameId: nativeFrameId,
+            calls: [held.control],
+          });
+          ensureStreamHeaders();
+          reply.raw.end(nativeCodexBootstrapSse(response));
+          streamCompleted = true;
+          return reply;
+        }
+        rewrittenToolCalls = held.calls.map((call) => ({
+          id: call.id,
+          name: call.emittedName,
+          arguments: call.emittedArguments,
+        }));
+        heldBatchCommitted = true;
+      }
+      try {
+        if (!heldBatchCommitted) {
+          const effectiveCalls = await appaHook.authorizeOutboundToolCalls(
+            appaToolCalls,
+            nativeSpawnCarrierPreparation({
+              session: appaHook,
+              profileId: agent.id,
+              client: appaNativeClient,
+            }),
+          );
+          rewrittenToolCalls = effectiveCalls.map((call) => ({
+            id: call.id,
+            name: call.emittedName,
+            arguments: call.emittedArguments,
+          }));
+        }
+        if (
+          nativeFrameId &&
+          heldBatchCommitted &&
+          appaToolCalls.some((call) => call.spawn)
+        ) {
+          throw new AppaProxySessionProtocolError(
+            "native spawn aliases require held-batch prepublication support",
+          );
+        }
+        if (nativeFrameId && !heldBatchCommitted) {
+          await commitNativeCodexCalls({
+            session: appaHook,
+            frameId: nativeFrameId,
+            calls: rewrittenToolCalls ?? toolCalls,
+          });
+          rewrittenToolCalls = await publishNativeChildSpawnAliases({
+            session: appaHook,
+            frameId: nativeFrameId,
+            calls: rewrittenToolCalls ?? toolCalls,
+            clientParentTaskPath: nativeClientTaskPath,
+            logicalParentTaskPath: nativeLogicalTaskPath,
+          });
+          await issueNativeCodexFrame({
+            session: appaHook,
+            frameId: nativeFrameId,
+          });
+        }
+        if (nativeCodex && rewrittenToolCalls) {
+          clientNativeToolCalls = await restoreNativeCodexClientProcessCalls({
+            scope: appaHook.getNativeWireScope(),
+            calls: rewrittenToolCalls,
+          });
+        }
+        exposeAppaSpawnBindings({ reply, appaHook });
+        if (reply.raw.destroyed) {
+          await appaHook.quarantineUndeliveredCalls();
+          throw new AppaProxyHookError("unavailable", "outbound");
+        }
+      } catch (error) {
+        if (error instanceof AppaProxyHookError && error.kind === "denied") {
+          toolInvocationRefusal = appaHookPolicyBlock(appaToolCalls);
+          toolCallBlock = toToolCallBlock(toolInvocationRefusal);
+        } else {
+          await appaHook.quarantineUndeliveredCalls();
+          throw toAppaHookApiError(error);
+        }
+      }
+    }
+
+    // Freeze the post-authorization response before the durable completion is
+    // sealed. The same state later drives the emitted SSE, so no mutation can
+    // change executable arguments after APPA authorizes and attests them.
+    const providerResponseForFrame = streamAdapter.toProviderResponse();
+    if (rewrittenToolCalls) {
+      streamAdapter.state.toolCalls.splice(
+        0,
+        streamAdapter.state.toolCalls.length,
+        ...rewrittenToolCalls,
+      );
+    }
+    const clientResponseForFrame = nativeCodex
+      ? finalizeStreamClientResponse({
+          providerResponse: providerResponseForFrame,
+          clientNativeToolCalls,
+          rewrittenToolCalls,
+        })
+      : streamAdapter.toProviderResponse();
+
+    if (appaHook) {
+      try {
+        const awaitingClientToolExecution =
+          !toolInvocationRefusal &&
+          (rewrittenToolCalls ?? toolCalls).length > 0;
+        const awaitingClientToolSearch =
+          nativeCodex && hasNativeCodexToolSearch(providerResponseForFrame);
+        if (
+          nativeCodex &&
+          !toolInvocationRefusal &&
+          awaitingClientToolSearch &&
+          !awaitingClientToolExecution
+        ) {
+          const prepared = await prepareNativeCodexCallAliases({
+            session: appaHook,
+            principalUserId: authenticatedUserId,
+            gatewayPrincipals: nativeCodexGatewayPrincipals,
+            request,
+            response: providerResponseForFrame,
+            calls: [],
+          });
+          await issueNativeCodexFrame({
+            session: appaHook,
+            frameId: prepared.frameId,
+          });
+        }
+        await appaHook.finish({
+          childReturn: streamAdapter.state.text,
+          beforeRelease:
+            !toolInvocationRefusal && awaitingClientToolExecution && nativeCodex
+              ? () =>
+                  persistPendingNativeCodexHistory({
+                    history: nativeCodexHistory,
+                    response: providerResponseForFrame,
+                  })
+              : !toolInvocationRefusal && !awaitingClientToolExecution
+                ? () =>
+                    persistAppaCompletedResponse({
+                      session: appaHook,
+                      profileId: agent.id,
+                      provider: providerName,
+                      protocol: appaHistoryProtocol(provider.interactionType),
+                      model: actualModel,
+                      request,
+                      clientResponse: clientResponseForFrame,
+                      providerResponse: providerResponseForFrame,
+                      nativeCodexHistory,
+                    })
+                : undefined,
+        });
+        appaHook.markContinuationResponseReady();
+      } catch (error) {
+        throw toAppaHookApiError(error);
+      }
+    }
+
+    if (
+      appaHook &&
+      nativeCodex &&
+      !toolInvocationRefusal &&
+      !reply.raw.destroyed
+    ) {
+      ensureStreamHeaders();
+      reply.raw.end(
+        nativeCodexBootstrapSse(
+          clientResponseForFrame as Record<string, unknown>,
+        ),
+      );
+      streamCompleted = true;
+      return reply;
+    }
+    if (appaHook && !toolInvocationRefusal && !reply.raw.destroyed) {
+      const safeFrames = bufferedFrames.filter((frame) => !frame.hasToolCall);
+      if (safeFrames.length > 0) {
+        ensureStreamHeaders();
+        for (const frame of safeFrames) {
+          reply.raw.write(frame.data);
+        }
+      }
     }
 
     if (toolInvocationRefusal) {
@@ -1862,6 +2782,14 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
+    let handledError = error;
+    if (appaHook) {
+      try {
+        await appaHook.abort();
+      } catch (abortError) {
+        handledError = toAppaHookApiError(abortError);
+      }
+    }
     // If the stream never established (e.g. a provider 400 rejecting the
     // request), record the duration here for providers we instrument in the
     // handler. A mid-stream error is not double-recorded: establishment already
@@ -1872,7 +2800,7 @@ async function handleStreaming<
         agent,
         actualModel,
         (Date.now() - streamStartTime) / 1000,
-        extractDurationStatusCode(error),
+        extractDurationStatusCode(handledError),
         source,
       );
       requestDurationRecorded = true;
@@ -1882,7 +2810,7 @@ async function handleStreaming<
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      const errorMessage = provider.extractErrorMessage(error);
+      const errorMessage = provider.extractErrorMessage(handledError);
       logger.info(
         { profileId: agent.id, errorMessage },
         "Persisting error interaction record for failed stream",
@@ -1891,7 +2819,7 @@ async function handleStreaming<
     }
 
     return handleError(
-      error,
+      handledError,
       reply,
       provider.extractErrorMessage,
       true,
@@ -2050,7 +2978,13 @@ async function handleNonStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
+    nativeCodexApplyPatch,
+    nativeCodex,
+    nativeCodexHistory,
+    nativeClientTaskPath,
+    nativeLogicalTaskPath,
     canonicalizeToolName,
+    declaredMcpToolTargets,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -2076,9 +3010,18 @@ async function handleNonStreaming<
     teamIds,
     teams,
     userTeams,
+    appaHook,
+    nativeCodexControl,
+    appaNativeClient,
+    nativeCodexGatewayPrincipals,
+    authenticatedUserId,
   } = ctx;
 
   const providerName = provider.provider;
+  // Legacy compaction participates in APPA and opaque-history validation, but
+  // it is not a native model response to alias or project into tool wire state.
+  const nativeCodexWire =
+    nativeCodex && nativeCodexHistory?.mode !== "compactv1";
   let billingMode = initialBillingMode;
   const requestStartTime = Date.now();
 
@@ -2230,7 +3173,13 @@ async function handleNonStreaming<
     },
   });
 
-  const toolCalls = responseAdapter.getToolCalls();
+  const toolCalls = responseAdapter
+    .getToolCalls()
+    .map((call) =>
+      nativeCodexWire
+        ? { ...call, name: nativeCodexPolicyToolName(call.name) }
+        : call,
+    );
   logger.debug(
     { toolCallCount: toolCalls.length },
     `[${providerName}Proxy] Non-streaming response received, checking tool invocation policies`,
@@ -2238,41 +3187,255 @@ async function handleNonStreaming<
 
   // Evaluate tool invocation policies
   let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
-  if (toolCalls.length > 0) {
-    rewrittenToolCalls = planDispatchRewrites({
-      supported: responseAdapter.withRewrittenToolCalls !== undefined,
-      toolCalls: toolCalls.map((toolCall) => ({
-        id: toolCall.id,
-        name: toolCall.name,
-        arguments: JSON.stringify(toolCall.arguments),
-      })),
-      enabledToolNames,
-      canonicalizeToolName,
-      providerName,
-    });
-
-    const toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-      normalizeToolCallsForPolicy(
-        rewrittenToolCalls ??
-          toolCalls.map((toolCall) => ({
-            name: toolCall.name,
-            arguments: toolCall.arguments,
-          })),
+  let clientNativeToolCalls: AccumulatedToolCall[] | null = null;
+  let toolInvocationRefusal: utils.toolInvocation.PolicyBlockResult | null =
+    null;
+  const appaUnsupportedResponse =
+    appaHook &&
+    (hasUnsupportedOpenAiResponseToolCall(
+      responseAdapter.getOriginalResponse(),
+      provider.interactionType,
+    ) ||
+      hasUnsupportedFunctionToolCalls(
+        toolCalls.map((toolCall) => ({
+          id: toolCall.id,
+          name: toolCall.name,
+          arguments: JSON.stringify(toolCall.arguments),
+        })),
+      ));
+  if (toolCalls.length > 0 || appaUnsupportedResponse) {
+    if (appaUnsupportedResponse) {
+      toolInvocationRefusal = appaUnsupportedToolCallBlock();
+    } else {
+      rewrittenToolCalls = planDispatchRewrites({
+        supported: responseAdapter.withRewrittenToolCalls !== undefined,
+        toolCalls: toolCalls.map((toolCall) => ({
+          id: toolCall.id,
+          name: toolCall.name,
+          arguments: JSON.stringify(toolCall.arguments),
+        })),
+        enabledToolNames,
         canonicalizeToolName,
-      ),
-      agent.id,
-      {
-        teamIds: teamIds ?? [],
-        externalAgentId,
-        sensitiveContextOrigin:
-          utils.trustedData.sensitiveContextOriginFromBoundary(
-            unsafeContextBoundary,
-          ),
-      },
-      contextIsTrusted,
-      enabledToolNames,
-      { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-    );
+        providerName,
+      });
+
+      toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
+        normalizeToolCallsForPolicy(
+          rewrittenToolCalls ??
+            toolCalls.map((toolCall) => ({
+              name: toolCall.name,
+              arguments: toolCall.arguments,
+            })),
+          canonicalizeToolName,
+        ),
+        agent.id,
+        {
+          teamIds: teamIds ?? [],
+          externalAgentId,
+          sensitiveContextOrigin:
+            utils.trustedData.sensitiveContextOriginFromBoundary(
+              unsafeContextBoundary,
+            ),
+        },
+        contextIsTrusted,
+        enabledToolNames,
+        { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+      );
+
+      if (!toolInvocationRefusal && appaHook) {
+        let nativeFrameId: string | undefined;
+        if (nativeCodexWire) {
+          const prepared = await prepareNativeCodexCallAliases({
+            session: appaHook,
+            principalUserId: authenticatedUserId,
+            gatewayPrincipals: nativeCodexGatewayPrincipals,
+            request,
+            response: responseAdapter.getOriginalResponse(),
+            calls:
+              rewrittenToolCalls ??
+              toolCalls.map((call) => ({
+                id: call.id,
+                name: call.name,
+                arguments: JSON.stringify(call.arguments),
+              })),
+          });
+          rewrittenToolCalls = prepared.calls;
+          nativeFrameId = prepared.frameId;
+        }
+        const appaToolCalls = normalizeToolCallsForAppa(
+          rewrittenToolCalls ??
+            toolCalls.map((toolCall) => ({
+              id: toolCall.id,
+              name: toolCall.name,
+              arguments: JSON.stringify(toolCall.arguments),
+            })),
+          canonicalizeToolName,
+          declaredMcpToolTargets,
+        );
+        let heldBatchCommitted = false;
+        if (nativeCodexWire && nativeCodexControl && nativeFrameId) {
+          const held = await new AppaHeldResponseController().prepare({
+            session: appaHook,
+            heldFrameId: nativeFrameId,
+            calls: appaToolCalls,
+            organizationId: agent.organizationId,
+            authenticatedUserId: nativeCodexControl.userId,
+            controlNamespace: nativeCodexControl.namespace,
+            boundThreadId: nativeCodexControl.threadId,
+          });
+          if (held.state === "held") {
+            await persistHeldNativeHistory({
+              session: appaHook,
+              history: nativeCodexHistory,
+              response: responseAdapter.getOriginalResponse(),
+            });
+            return reply.send(
+              await restoreHeldNativeResponse({
+                session: appaHook,
+                heldFrameId: nativeFrameId,
+                calls: [held.control],
+              }),
+            );
+          }
+          rewrittenToolCalls = held.calls.map((call) => ({
+            id: call.id,
+            name: call.emittedName,
+            arguments: call.emittedArguments,
+          }));
+          heldBatchCommitted = true;
+        }
+        try {
+          if (!heldBatchCommitted) {
+            const effectiveCalls = await appaHook.authorizeOutboundToolCalls(
+              appaToolCalls,
+              nativeSpawnCarrierPreparation({
+                session: appaHook,
+                profileId: agent.id,
+                client: appaNativeClient,
+              }),
+            );
+            rewrittenToolCalls = effectiveCalls.map((call) => ({
+              id: call.id,
+              name: call.emittedName,
+              arguments: call.emittedArguments,
+            }));
+          }
+          if (
+            nativeFrameId &&
+            heldBatchCommitted &&
+            appaToolCalls.some((call) => call.spawn)
+          ) {
+            throw new AppaProxySessionProtocolError(
+              "native spawn aliases require held-batch prepublication support",
+            );
+          }
+          if (nativeFrameId && !heldBatchCommitted) {
+            await commitNativeCodexCalls({
+              session: appaHook,
+              frameId: nativeFrameId,
+              calls:
+                rewrittenToolCalls ??
+                toolCalls.map((toolCall) => ({
+                  id: toolCall.id,
+                  name: toolCall.name,
+                  arguments: JSON.stringify(toolCall.arguments),
+                })),
+            });
+            rewrittenToolCalls = await publishNativeChildSpawnAliases({
+              session: appaHook,
+              frameId: nativeFrameId,
+              calls:
+                rewrittenToolCalls ??
+                toolCalls.map((toolCall) => ({
+                  id: toolCall.id,
+                  name: toolCall.name,
+                  arguments: JSON.stringify(toolCall.arguments),
+                })),
+              clientParentTaskPath: nativeClientTaskPath,
+              logicalParentTaskPath: nativeLogicalTaskPath,
+            });
+            await issueNativeCodexFrame({
+              session: appaHook,
+              frameId: nativeFrameId,
+            });
+          }
+          if (nativeCodexWire && rewrittenToolCalls) {
+            clientNativeToolCalls = await restoreNativeCodexClientProcessCalls({
+              scope: appaHook.getNativeWireScope(),
+              calls: rewrittenToolCalls,
+            });
+          }
+          exposeAppaSpawnBindings({ reply, appaHook });
+          if (reply.raw.destroyed) {
+            await appaHook.quarantineUndeliveredCalls();
+            throw new AppaProxyHookError("unavailable", "outbound");
+          }
+        } catch (error) {
+          if (error instanceof AppaProxyHookError && error.kind === "denied") {
+            toolInvocationRefusal = appaHookPolicyBlock(appaToolCalls);
+          } else {
+            await appaHook.quarantineUndeliveredCalls();
+            throw toAppaHookApiError(error);
+          }
+        }
+      }
+    }
+
+    const finalClientResponse =
+      nativeCodexWire && clientNativeToolCalls
+        ? rewriteNativeCodexResponseForClient(
+            replaceNativeCodexCallItems(
+              responseAdapter.getOriginalResponse(),
+              clientNativeToolCalls,
+            ),
+          )
+        : nativeCodexWire && rewrittenToolCalls
+          ? rewriteNativeCodexResponseForClient(
+              replaceNativeCodexCallItems(
+                responseAdapter.getOriginalResponse(),
+                rewrittenToolCalls,
+              ),
+            )
+          : rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
+            ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
+            : responseAdapter.getOriginalResponse();
+
+    if (appaHook) {
+      try {
+        const awaitingClientToolExecution =
+          !toolInvocationRefusal &&
+          (rewrittenToolCalls ?? toolCalls).length > 0;
+        await appaHook.finish({
+          childReturn: responseAdapter.getText?.(),
+          beforeRelease:
+            !toolInvocationRefusal &&
+            awaitingClientToolExecution &&
+            nativeCodexWire
+              ? () =>
+                  persistPendingNativeCodexHistory({
+                    history: nativeCodexHistory,
+                    response: responseAdapter.getOriginalResponse(),
+                  })
+              : !toolInvocationRefusal && !awaitingClientToolExecution
+                ? () =>
+                    persistAppaCompletedResponse({
+                      session: appaHook,
+                      profileId: agent.id,
+                      provider: providerName,
+                      protocol: appaHistoryProtocol(provider.interactionType),
+                      model: actualModel,
+                      request,
+                      clientResponse: finalClientResponse,
+                      providerResponse: responseAdapter.getOriginalResponse(),
+                      nativeCodexHistory,
+                    })
+                : undefined,
+        });
+        appaHook.markContinuationResponseReady();
+      } catch (error) {
+        throw toAppaHookApiError(error);
+      }
+    }
 
     if (toolInvocationRefusal) {
       const { refusalMessage, contentMessage, reason, allToolCallNames } =
@@ -2367,17 +3530,66 @@ async function handleNonStreaming<
     }
   }
 
+  const clientResponseBeforeNativeWire =
+    nativeCodexWire && clientNativeToolCalls
+      ? replaceNativeCodexCallItems(
+          responseAdapter.getOriginalResponse(),
+          clientNativeToolCalls,
+        )
+      : nativeCodexWire && rewrittenToolCalls
+        ? replaceNativeCodexCallItems(
+            responseAdapter.getOriginalResponse(),
+            rewrittenToolCalls,
+          )
+        : rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
+          ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
+          : responseAdapter.getOriginalResponse();
+  const clientResponse =
+    nativeCodexWire || nativeCodexApplyPatch
+      ? rewriteNativeCodexResponseForClient(clientResponseBeforeNativeWire)
+      : clientResponseBeforeNativeWire;
+
+  if (toolCalls.length === 0 && appaHook) {
+    try {
+      if (nativeCodexWire) {
+        const prepared = await prepareNativeCodexCallAliases({
+          session: appaHook,
+          request,
+          response: responseAdapter.getOriginalResponse(),
+          calls: [],
+        });
+        await issueNativeCodexFrame({
+          session: appaHook,
+          frameId: prepared.frameId,
+        });
+      }
+      await appaHook.finish({
+        childReturn: responseAdapter.getText?.(),
+        beforeRelease: () =>
+          persistAppaCompletedResponse({
+            session: appaHook,
+            profileId: agent.id,
+            provider: providerName,
+            protocol: appaHistoryProtocol(provider.interactionType),
+            model: actualModel,
+            request,
+            clientResponse,
+            providerResponse: responseAdapter.getOriginalResponse(),
+            nativeCodexHistory,
+          }),
+      });
+      appaHook.markContinuationResponseReady();
+    } catch (error) {
+      throw toAppaHookApiError(error);
+    }
+  }
+
   // Tool calls allowed (or no tool calls) - return response.
   // `usage` (corrected for zero-input above) is reused here.
   //
   // Computed once: a translator adapter that rewrites remembers the inner
   // (logged) shape it produced, so `getLoggedResponse` below must observe the
   // same call that produced the client response.
-  const clientResponse =
-    rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
-      ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
-      : responseAdapter.getOriginalResponse();
-
   // Note: Token metrics are reported by getObservableFetch() in the HTTP layer
   // for non-streaming requests. We only report cost here to avoid double counting.
   // TODO: Add test for metrics reported by the LLM proxy. It's not obvious since
@@ -2460,7 +3672,893 @@ async function handleNonStreaming<
     );
   }
 
-  return reply.send(clientResponse);
+  try {
+    const sent = reply.send(clientResponse);
+    return sent;
+  } catch (error) {
+    await appaHook?.quarantineUndeliveredCalls();
+    throw error;
+  }
+}
+
+function appaHookPolicyBlock(
+  toolCalls: AppaOutboundToolCall[],
+): utils.toolInvocation.PolicyBlockResult {
+  const blockedToolName = toolCalls[0]?.targetName || "unknown";
+  const message = `${archestraMcpBranding.appName} LLM Proxy blocked unsafe tool call to ${blockedToolName}: OpenAPPA remote hook denied the call.`;
+  return {
+    refusalMessage: message,
+    contentMessage: message,
+    reason: "OpenAPPA remote hook denied the tool call",
+    blockedToolName,
+    toolInput: {},
+    allToolCallNames: toolCalls.map((toolCall) => toolCall.targetName),
+  };
+}
+
+function appaUnsupportedToolCallBlock(): utils.toolInvocation.PolicyBlockResult {
+  const message = `${archestraMcpBranding.appName} LLM Proxy blocked an unsupported tool call while OpenAPPA hooks are enabled.`;
+  return {
+    refusalMessage: message,
+    contentMessage: message,
+    reason: "OpenAPPA hook does not support the provider tool-call shape",
+    blockedToolName: "unsupported",
+    toolInput: {},
+    allToolCallNames: [],
+  };
+}
+
+function normalizeToolCallsForAppa(
+  toolCalls: Array<{ id: string; name: string; arguments: string }>,
+  canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer,
+  declaredMcpToolTargets: ReadonlyMap<string, string>,
+): AppaOutboundToolCall[] {
+  return toolCalls.map((toolCall) => {
+    const [normalized] = normalizeToolCallsForPolicy(
+      [toolCall],
+      canonicalizeToolName,
+    );
+    if (!normalized) {
+      throw new ApiError(
+        400,
+        "OpenAPPA proxy hooks could not normalize a tool call.",
+      );
+    }
+    const nativeGatewayTool =
+      canonicalizeToolName.isDeclaredNativeGatewayTool?.(toolCall.name) ??
+      false;
+    const trustedGatewayTarget =
+      toolCall.name.startsWith("mcp__") || nativeGatewayTool
+        ? canonicalizeToolName.resolveTrustedGatewayToolTarget?.({
+            emittedName: toolCall.name,
+            targetName: normalized.toolCallName,
+          })
+        : undefined;
+    if (
+      (toolCall.name.startsWith("mcp__") &&
+        (!declaredMcpToolTargets.has(toolCall.name) ||
+          !trustedGatewayTarget)) ||
+      (nativeGatewayTool && !trustedGatewayTarget)
+    ) {
+      logger.error(
+        {
+          emittedName: toolCall.name,
+          hasDeclaredTarget: declaredMcpToolTargets.has(toolCall.name),
+          hasTrustedGatewayTarget: Boolean(trustedGatewayTarget),
+          isNativeGatewayTool: nativeGatewayTool,
+        },
+        "Rejected untrusted MCP tool call",
+      );
+      throw new AppaProxySessionProtocolError(
+        "MCP tool call is not a declared target of a registered gateway profile",
+      );
+    }
+    return {
+      id: toolCall.id,
+      emittedName: toolCall.name,
+      emittedArguments: toolCall.arguments,
+      emittedArgumentsCanonical: canonicalJsonObject(toolCall.arguments),
+      targetName:
+        trustedGatewayTarget ??
+        (normalized.toolCallName === toolCall.name
+          ? (declaredMcpToolTargets.get(toolCall.name) ??
+            normalized.toolCallName)
+          : normalized.toolCallName),
+      targetArguments: JSON.parse(normalized.toolCallArgs) as Record<
+        string,
+        unknown
+      >,
+      spawn: isAppaSpawnTool(normalized.toolCallName),
+    };
+  });
+}
+
+function isAppaSpawnTool(toolName: string): boolean {
+  return /(^|__|\.)(spawn_agent|Agent|Task|task)$/.test(toolName);
+}
+
+const CLAUDE_NATIVE_CHILD_CONTRACT = "agent/claude-code/Agent";
+
+function nativeSpawnCarrierPreparation(params: {
+  session: AppaProxyHookSession;
+  profileId: string;
+  client: AppaNativeClient;
+}):
+  | {
+      prepareSpawn: (
+        call: AppaOutboundToolCall,
+      ) => Promise<AppaOutboundToolCall>;
+    }
+  | undefined {
+  if (params.client !== "claude-code" && params.client !== "opencode-kimi") {
+    return undefined;
+  }
+  const ledger = new AppaProxyLedger({
+    ...params.session.getNativeWireScope(),
+    profileId: params.profileId,
+  });
+  return {
+    prepareSpawn: async (call) => {
+      let originalArguments: Record<string, unknown>;
+      try {
+        originalArguments = JSON.parse(call.emittedArguments) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        throw new AppaProxySessionProtocolError(
+          "Native spawn arguments must be a JSON object.",
+        );
+      }
+      if (
+        !originalArguments ||
+        Array.isArray(originalArguments) ||
+        typeof originalArguments.prompt !== "string"
+      ) {
+        throw new AppaProxySessionProtocolError(
+          "Native spawn requires a documented prompt argument.",
+        );
+      }
+      const prepared = await ledger.prepareChildCarrier({
+        callId: call.id,
+        originalArguments,
+      });
+      return {
+        ...call,
+        emittedArguments: JSON.stringify(prepared.rewrittenArguments),
+        emittedArgumentsCanonical: prepared.rewrittenArgumentsCanonical,
+        // OpenAPPA checks declared child contracts before it evaluates
+        // arguments. Only the server-signed Claude carrier may name this
+        // contract, so a client-authored Agent call cannot widen delegation.
+        targetName:
+          call.targetName === "Agent"
+            ? CLAUDE_NATIVE_CHILD_CONTRACT
+            : call.targetName,
+        targetArguments: prepared.rewrittenArguments,
+      };
+    },
+  };
+}
+
+/**
+ * Called after APPA releases a normal native batch and before its frame is
+ * issued. The runtime capability authorizes child creation; this only binds
+ * the client-visible stock task path to that already-approved call.
+ */
+async function publishNativeChildSpawnAliases(params: {
+  session: AppaProxyHookSession;
+  frameId: string;
+  calls: AccumulatedToolCall[];
+  clientParentTaskPath: string | null;
+  logicalParentTaskPath: string | null;
+}): Promise<AccumulatedToolCall[]> {
+  const spawnCalls = params.calls
+    .map((call, position) => ({ call, position }))
+    .filter(({ call }) => isAppaSpawnTool(call.name));
+  if (spawnCalls.length === 0) return params.calls;
+  if (!params.clientParentTaskPath || !params.logicalParentTaskPath) {
+    throw new AppaProxySessionProtocolError(
+      "native spawn has no verified parent task path",
+    );
+  }
+  const bindings = parseNativeSpawnBindings(params.session);
+  const aliases = [];
+  const replacements = new Map<string, string>();
+  for (const { call, position } of spawnCalls) {
+    const binding = bindings.get(call.id);
+    if (!binding) {
+      throw new AppaProxySessionProtocolError(
+        "native spawn has no runtime-approved spawn binding",
+      );
+    }
+    const originalProviderTaskName = nativeSpawnTaskName(call.arguments);
+    if (!originalProviderTaskName) {
+      throw new AppaProxySessionProtocolError(
+        "native spawn has invalid task_name arguments",
+      );
+    }
+    const wireTaskName = `${originalProviderTaskName}__proxy_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    const publication = prepareNativeChildSpawnPublication({
+      taskAlias: {
+        logicalTaskPath: `${params.logicalParentTaskPath}/${originalProviderTaskName}`,
+        clientTaskPath: `${params.clientParentTaskPath}/${wireTaskName}`,
+        wireTaskName,
+      },
+      position,
+      clientParentTaskPath: params.clientParentTaskPath,
+      logicalParentTaskPath: params.logicalParentTaskPath,
+      originalProviderTaskName,
+      approvedCall: { callId: call.id, spawnBinding: binding },
+    });
+    aliases.push(publication.alias);
+    replacements.set(call.id, publication.rewrittenTaskName);
+  }
+  await AppaProxyWireModel.addAliases({
+    ...params.session.getNativeWireScope(),
+    frameId: params.frameId,
+    aliases,
+  });
+  return params.calls.map((call) => {
+    const taskName = replacements.get(call.id);
+    if (!taskName) return call;
+    return {
+      ...call,
+      arguments: rewriteNativeSpawnTaskName({
+        argumentsJson: call.arguments,
+        taskName,
+      }),
+    };
+  });
+}
+
+function parseNativeSpawnBindings(
+  session: AppaProxyHookSession,
+): Map<string, string> {
+  const raw = session.getSpawnBindingsHeaderValue();
+  if (!raw) return new Map();
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new AppaProxySessionProtocolError(
+      "native spawn bindings are invalid",
+    );
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new AppaProxySessionProtocolError(
+      "native spawn bindings are invalid",
+    );
+  }
+  return new Map(
+    Object.entries(value).flatMap(([callId, binding]) =>
+      typeof binding === "string" && binding.length > 0
+        ? [[callId, binding] as const]
+        : [],
+    ),
+  );
+}
+
+function nativeSpawnTaskName(argumentsJson: string): string | null {
+  try {
+    const value = JSON.parse(argumentsJson);
+    return value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      typeof value.task_name === "string" &&
+      value.task_name.length > 0
+      ? value.task_name
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function rewriteNativeSpawnTaskName(params: {
+  argumentsJson: string;
+  taskName: string;
+}): string {
+  const value = JSON.parse(params.argumentsJson);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new AppaProxySessionProtocolError(
+      "native spawn has invalid task_name arguments",
+    );
+  }
+  return JSON.stringify({ ...value, task_name: params.taskName });
+}
+
+function hasUnsupportedOpaqueProxyContext(request: unknown): boolean {
+  if (!request || typeof request !== "object") {
+    return false;
+  }
+  const values = request as Record<string, unknown>;
+  return (
+    (values.previous_response_id !== undefined &&
+      values.previous_response_id !== null) ||
+    (values.conversation !== undefined && values.conversation !== null)
+  );
+}
+
+function isAppaHookSupportedRequest(
+  provider: { interactionType: string },
+  request: unknown,
+): boolean {
+  if (
+    provider.interactionType !== "openai:chatCompletions" &&
+    provider.interactionType !== "openai:responses" &&
+    provider.interactionType !== "kimi:chatCompletions" &&
+    provider.interactionType !== "anthropic:messages"
+  ) {
+    return false;
+  }
+  if (!request || typeof request !== "object") {
+    return false;
+  }
+  const tools = (request as Record<string, unknown>).tools;
+  if (tools === undefined) {
+    return true;
+  }
+  if (!Array.isArray(tools)) {
+    return false;
+  }
+  return tools.every((tool) => {
+    if (
+      provider.interactionType === "openai:chatCompletions" ||
+      provider.interactionType === "kimi:chatCompletions"
+    ) {
+      return isOrdinaryChatFunctionTool(tool);
+    }
+    if (provider.interactionType === "openai:responses") {
+      return isOrdinaryResponsesFunctionTool(tool);
+    }
+    return isOrdinaryAnthropicClientTool(tool);
+  });
+}
+
+/** Inspect only declared tool containers, never arbitrary request payloads. */
+function hasProviderHostedMcpToolDefinition(request: unknown): boolean {
+  if (!isJsonObject(request) || !Array.isArray(request.tools)) return false;
+  return request.tools.some(containsProviderHostedMcpTool);
+}
+
+function containsProviderHostedMcpTool(tool: unknown): boolean {
+  if (!isJsonObject(tool)) return false;
+  if (tool.type === "mcp") return true;
+  if (tool.type !== "namespace") return false;
+  // A namespace is a declaration container, not arbitrary metadata. Malformed
+  // members must fail closed rather than bypass the nested hosted-tool check.
+  return (
+    !Array.isArray(tool.tools) || tool.tools.some(containsProviderHostedMcpTool)
+  );
+}
+
+function appaHistoryProtocol(
+  interactionType: string,
+): AppaHistoryProtocol | null {
+  if (interactionType === "anthropic:messages") {
+    return "anthropic-messages";
+  }
+  if (
+    interactionType === "openai:chatCompletions" ||
+    interactionType === "kimi:chatCompletions"
+  ) {
+    return "openai-chat-completions";
+  }
+  return interactionType === "openai:responses" ? "openai-responses" : null;
+}
+
+/** A new root may contain fresh user prompts, but not an unbound model turn. */
+function hasCheckpointForkIntent(history: readonly unknown[]): boolean {
+  return history.some(
+    (item) =>
+      !isJsonObject(item) ||
+      (item.type !== "additional_tools" &&
+        (item.type !== "message" || item.role !== "user")),
+  );
+}
+
+function hasNativeCodexToolSearch(response: unknown): boolean {
+  return (
+    !!response &&
+    typeof response === "object" &&
+    !Array.isArray(response) &&
+    Array.isArray((response as { output?: unknown }).output) &&
+    (response as { output: unknown[] }).output.some(isCodexToolSearchCall)
+  );
+}
+
+function finalizeStreamClientResponse(params: {
+  providerResponse: unknown;
+  clientNativeToolCalls?: Array<{
+    id: string;
+    name: string;
+    arguments: string;
+  }> | null;
+  rewrittenToolCalls?: Array<{
+    id: string;
+    name: string;
+    arguments: string;
+  }> | null;
+}): unknown {
+  const response = params.clientNativeToolCalls
+    ? replaceNativeCodexCallItems(
+        params.providerResponse,
+        params.clientNativeToolCalls,
+      )
+    : params.rewrittenToolCalls
+      ? replaceNativeCodexCallItems(
+          params.providerResponse,
+          params.rewrittenToolCalls,
+        )
+      : params.providerResponse;
+  return rewriteNativeCodexResponseForClient(response);
+}
+
+async function persistAppaCompletedResponse(params: {
+  session: AppaProxyHookSession;
+  profileId: string;
+  provider: string;
+  protocol: AppaHistoryProtocol | null;
+  model: string;
+  request: unknown;
+  /** Exact client-visible wire, including authorized dispatch rewrites. */
+  clientResponse: unknown;
+  /** Provider wire retained only for native provider-history replay. */
+  providerResponse: unknown;
+  nativeCodexHistory?: NativeCodexHistory;
+}): Promise<void> {
+  if (params.nativeCodexHistory) {
+    await persistNativeCodexHistory({
+      history: params.nativeCodexHistory,
+      response: params.providerResponse,
+    });
+  }
+  if (!params.protocol) {
+    throw new AppaProxyHookError("unavailable", "turn_end");
+  }
+  await params.session.checkpointCompletedResponse({
+    profileId: params.profileId,
+    provider: params.provider,
+    protocol: params.protocol,
+    model: params.model,
+    request: params.request,
+    response: params.clientResponse,
+  });
+}
+
+function isOrdinaryChatFunctionTool(tool: unknown): boolean {
+  if (!tool || typeof tool !== "object") {
+    return false;
+  }
+  const value = tool as Record<string, unknown>;
+  if (
+    value.type !== "function" ||
+    !value.function ||
+    typeof value.function !== "object"
+  ) {
+    return false;
+  }
+  const functionTool = value.function as Record<string, unknown>;
+  return (
+    typeof functionTool.name === "string" &&
+    functionTool.name.length > 0 &&
+    isJsonObject(functionTool.parameters)
+  );
+}
+
+function isOrdinaryResponsesFunctionTool(tool: unknown): boolean {
+  if (!tool || typeof tool !== "object") {
+    return false;
+  }
+  const value = tool as Record<string, unknown>;
+  return (
+    value.type === "function" &&
+    typeof value.name === "string" &&
+    value.name.length > 0 &&
+    isJsonObject(value.parameters)
+  );
+}
+
+function isOrdinaryAnthropicClientTool(tool: unknown): boolean {
+  if (!isJsonObject(tool) || typeof tool.name !== "string" || !tool.name) {
+    return false;
+  }
+  // Claude Code's client-executed tools omit `type`; server tools have no
+  // input_schema and are intentionally not APPA-dispatchable.
+  return (
+    (tool.type === undefined || tool.type === "custom") &&
+    isJsonObject(tool.input_schema)
+  );
+}
+
+function hasUnsupportedOpenAiStreamToolCall(
+  chunk: unknown,
+  interactionType: string,
+): boolean {
+  return (
+    (interactionType === "openai:chatCompletions" ||
+      interactionType === "openai:responses" ||
+      interactionType === "kimi:chatCompletions") &&
+    containsCustomToolCall(chunk)
+  );
+}
+
+function hasUnsupportedOpenAiResponseToolCall(
+  response: unknown,
+  interactionType: string,
+): boolean {
+  if (interactionType === "anthropic:messages") {
+    if (!isJsonObject(response) || !Array.isArray(response.content)) {
+      return true;
+    }
+    return response.content.some(
+      (block) =>
+        isJsonObject(block) &&
+        block.type === "tool_use" &&
+        (typeof block.id !== "string" ||
+          typeof block.name !== "string" ||
+          !isJsonObject(block.input)),
+    );
+  }
+  if (
+    interactionType !== "openai:chatCompletions" &&
+    interactionType !== "openai:responses" &&
+    interactionType !== "kimi:chatCompletions"
+  ) {
+    return true;
+  }
+  if (!isJsonObject(response) || containsCustomToolCall(response)) {
+    return true;
+  }
+  // Adapters can replace invalid JSON with {}. Check the original argument
+  // bytes so APPA never authorizes that fallback while clients receive raw data.
+  if (
+    interactionType === "openai:chatCompletions" ||
+    interactionType === "kimi:chatCompletions"
+  ) {
+    const choices = Array.isArray(response.choices) ? response.choices : [];
+    return choices.some((choice) => {
+      const message = isJsonObject(choice) ? choice.message : undefined;
+      const calls =
+        isJsonObject(message) && Array.isArray(message.tool_calls)
+          ? message.tool_calls
+          : [];
+      return calls.some((call) => {
+        const args =
+          isJsonObject(call) && isJsonObject(call.function)
+            ? call.function.arguments
+            : undefined;
+        return typeof args !== "string" || !isJsonObjectString(args);
+      });
+    });
+  }
+  const output = Array.isArray(response.output) ? response.output : [];
+  return output.some(
+    (item) =>
+      isJsonObject(item) &&
+      item.type === "function_call" &&
+      (typeof item.arguments !== "string" ||
+        !isJsonObjectString(item.arguments)),
+  );
+}
+
+function containsCustomToolCall(value: unknown): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsCustomToolCall);
+  }
+  const record = value as Record<string, unknown>;
+  // `custom` is a tool declaration, including the tool list carried by a
+  // client-executed tool-search protocol item. Only a custom *call* can be an
+  // executable provider output requiring the invocation gate.
+  if (record.type === "custom_tool_call") {
+    return true;
+  }
+  return Object.values(record).some(containsCustomToolCall);
+}
+
+function hasUnsupportedFunctionToolCalls(
+  toolCalls: Array<{ id: string; name: string; arguments: string }>,
+): boolean {
+  return toolCalls.some(
+    (toolCall) =>
+      !toolCall.id || !toolCall.name || !isJsonObjectString(toolCall.arguments),
+  );
+}
+
+function isJsonObjectString(value: string): boolean {
+  try {
+    return isJsonObject(JSON.parse(value));
+  } catch {
+    return false;
+  }
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isValidAppaSessionId(value: string | null): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 200 &&
+    /^[A-Za-z0-9._:-]+$/.test(value)
+  );
+}
+
+function resolveAppaThreadContext(params: {
+  headers: Record<string, string | string[] | undefined>;
+  request: unknown;
+  sessionId: string | null;
+  sessionSource: SessionSource;
+  nativeClient: AppaNativeClient;
+}):
+  | {
+      threadId: string;
+      parentThreadId?: string;
+      spawnBinding?: string;
+    }
+  | { error: string }
+  | null {
+  const headerThreadId = singleHeader(params.headers["thread-id"]);
+  if (params.nativeClient === "claude-code") {
+    const metadataUserId =
+      isJsonObject(params.request) && isJsonObject(params.request.metadata)
+        ? params.request.metadata.user_id
+        : undefined;
+    const nativeSessionId =
+      typeof metadataUserId === "string"
+        ? utils.headers.sessionId.extractClaudeMetadataSessionId(metadataUserId)
+        : null;
+    if (!nativeSessionId) return null;
+    const nativeHeaderSessionId = singleHeader(
+      params.headers["x-claude-code-session-id"],
+    );
+    const alias =
+      params.sessionSource === "claude_metadata" ? undefined : params.sessionId;
+    if (
+      (nativeHeaderSessionId !== undefined &&
+        nativeHeaderSessionId !== nativeSessionId) ||
+      (headerThreadId !== undefined && headerThreadId !== nativeSessionId) ||
+      (alias !== undefined && alias !== nativeSessionId)
+    ) {
+      return {
+        error:
+          "OpenAPPA native Claude session metadata conflicts with a native or client session alias.",
+      };
+    }
+    return { threadId: nativeSessionId };
+  }
+  const metadataSessionId =
+    isJsonObject(params.request) && isJsonObject(params.request.client_metadata)
+      ? params.request.client_metadata.session_id
+      : undefined;
+  const metadataRootTurnId =
+    isJsonObject(params.request) && isJsonObject(params.request.client_metadata)
+      ? params.request.client_metadata.root_turn_id
+      : undefined;
+  const metadataThreadId =
+    isJsonObject(params.request) && isJsonObject(params.request.client_metadata)
+      ? params.request.client_metadata.thread_id
+      : undefined;
+  const threadId =
+    headerThreadId ??
+    (typeof metadataRootTurnId === "string" ? metadataRootTurnId : undefined) ??
+    (typeof metadataSessionId === "string" ? metadataSessionId : undefined) ??
+    (typeof metadataThreadId === "string" ? metadataThreadId : undefined);
+  const parentThreadId = singleHeader(
+    params.headers["x-codex-parent-thread-id"],
+  );
+  const spawnBinding = singleHeader(
+    params.headers["x-archestra-appa-spawn-binding"],
+  );
+  if (parentThreadId && !threadId) return null;
+  if (threadId) {
+    return parentThreadId
+      ? { threadId, parentThreadId, spawnBinding }
+      : { threadId };
+  }
+  // Native clients carry their stable trajectory id in protocol metadata.
+  // `openai_user` is attribution, not a conversation identity.
+  return params.sessionSource !== "openai_user" && params.sessionId
+    ? { threadId: params.sessionId }
+    : null;
+}
+
+function singleHeader(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * The adapter's normalized result list identifies output bodies. Call names and
+ * arguments from caller history are only contradiction checks: the durable
+ * ledger remains the source of authority for both values.
+ */
+function collectAppaInboundToolResults(params: {
+  request: unknown;
+  interactionType: string;
+}): AppaInboundToolResult[] {
+  const protocolResults = collectAppaProtocolToolResults(params);
+  if (
+    protocolResults.length > 0 ||
+    params.interactionType === "anthropic:messages"
+  ) {
+    return protocolResults;
+  }
+  const claimedCalls = new Map<
+    string,
+    { name: string; rawArguments: string }
+  >();
+  if (isJsonObject(params.request)) {
+    if (params.interactionType === "openai:chatCompletions") {
+      const messages = Array.isArray(params.request.messages)
+        ? params.request.messages
+        : [];
+      for (const message of messages) {
+        if (!isJsonObject(message) || !Array.isArray(message.tool_calls))
+          continue;
+        for (const call of message.tool_calls) {
+          if (!isJsonObject(call) || !isJsonObject(call.function)) continue;
+          if (
+            typeof call.id === "string" &&
+            typeof call.function.name === "string" &&
+            typeof call.function.arguments === "string"
+          ) {
+            claimedCalls.set(call.id, {
+              name: call.function.name,
+              rawArguments: call.function.arguments,
+            });
+          }
+        }
+      }
+    } else if (params.interactionType === "openai:responses") {
+      const input = Array.isArray(params.request.input)
+        ? params.request.input
+        : [];
+      for (const item of input) {
+        if (
+          !isJsonObject(item) ||
+          item.type !== "function_call" ||
+          typeof item.call_id !== "string" ||
+          typeof item.name !== "string" ||
+          typeof item.arguments !== "string"
+        ) {
+          continue;
+        }
+        claimedCalls.set(item.call_id, {
+          name: codexToolName({ name: item.name, namespace: item.namespace }),
+          rawArguments: item.arguments,
+        });
+      }
+    }
+  }
+  if (!isJsonObject(params.request)) return [];
+  if (params.interactionType === "openai:chatCompletions") {
+    const messages = Array.isArray(params.request.messages)
+      ? params.request.messages
+      : [];
+    const results = messages.flatMap((message) => {
+      if (
+        !isJsonObject(message) ||
+        message.role !== "tool" ||
+        typeof message.tool_call_id !== "string"
+      ) {
+        return [];
+      }
+      return [
+        {
+          id: message.tool_call_id,
+          // Keep the source representation. Trusted-data/TOON transformations
+          // happen after this identity and APPA admission boundary.
+          content: message.content,
+          claimedCall: claimedCalls.get(message.tool_call_id),
+        },
+      ];
+    });
+    return results;
+  }
+  if (params.interactionType === "openai:responses") {
+    const input = Array.isArray(params.request.input)
+      ? params.request.input
+      : [];
+    const results = input.flatMap((item) => {
+      if (
+        !isJsonObject(item) ||
+        item.type !== "function_call_output" ||
+        typeof item.call_id !== "string"
+      ) {
+        return [];
+      }
+      return [
+        {
+          id: item.call_id,
+          content: item.output,
+          claimedCall: claimedCalls.get(item.call_id),
+        },
+      ];
+    });
+    return results;
+  }
+  return [];
+}
+
+function applyAppaOutcomeNotices<T>(
+  body: T,
+  updates: ReadonlyMap<string, string>,
+): T {
+  if (!isJsonObject(body)) return body;
+  return {
+    ...body,
+    ...(Array.isArray(body.messages)
+      ? {
+          messages: body.messages.map((message) => {
+            if (
+              !isJsonObject(message) ||
+              message.role !== "tool" ||
+              typeof message.tool_call_id !== "string"
+            )
+              return message;
+            const content = updates.get(message.tool_call_id);
+            return content === undefined ? message : { ...message, content };
+          }),
+        }
+      : {}),
+    ...(Array.isArray(body.input)
+      ? {
+          input: body.input.map((item) => {
+            if (
+              !isJsonObject(item) ||
+              item.type !== "function_call_output" ||
+              typeof item.call_id !== "string"
+            )
+              return item;
+            const output = updates.get(item.call_id);
+            return output === undefined ? item : { ...item, output };
+          }),
+        }
+      : {}),
+  } as T;
+}
+
+function toAppaHookApiError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  // The client gets a stable fail-closed error, but the original boundary
+  // failure must remain available in backend logs for native wire diagnosis.
+  logger.error(
+    { err: error, stage: "appa_hook_boundary" },
+    "OpenAPPA hook boundary failed",
+  );
+  if (
+    error instanceof Error &&
+    [
+      "AppaProxySessionProtocolError",
+      "AppaProxySessionBusyError",
+      "AppaProxySessionQuarantinedError",
+    ].includes(error.name)
+  ) {
+    return new ApiError(
+      409,
+      `OpenAPPA conversation rejected: ${error.message}`,
+    );
+  }
+  if (error instanceof AppaProxyHookError) {
+    return new ApiError(
+      error.kind === "unavailable" ? 503 : 403,
+      error.kind === "unavailable"
+        ? "OpenAPPA remote hook did not authorize the request."
+        : "OpenAPPA remote hook denied the request.",
+    );
+  }
+  return new ApiError(
+    503,
+    "OpenAPPA remote hook did not authorize the request.",
+  );
 }
 
 /**
@@ -2772,6 +4870,162 @@ async function resolveAttributedAppId(
     return undefined;
   }
   return app.id;
+}
+
+function exposeAppaSpawnBindings(params: {
+  reply: FastifyReply;
+  appaHook: AppaProxyHookSession;
+}): void {
+  const value = params.appaHook.getSpawnBindingsHeaderValue();
+  if (!value) return;
+  params.reply.header(APPA_SPAWN_BINDINGS_HEADER, value);
+}
+
+async function persistHeldNativeHistory(params: {
+  session: AppaProxyHookSession;
+  history: NativeCodexHistory | undefined;
+  response: unknown;
+}): Promise<void> {
+  try {
+    if (!params.history)
+      throw new AppaProxyHookError("unavailable", "outbound");
+    await persistNativeCodexHistory({
+      history: params.history,
+      response: params.response,
+    });
+  } catch (error) {
+    await params.session.quarantineHeldResponse();
+    throw error;
+  }
+}
+
+async function persistPendingNativeCodexHistory(params: {
+  history: NativeCodexHistory | undefined;
+  response: unknown;
+}): Promise<void> {
+  if (!params.history) {
+    throw new AppaProxyHookError("unavailable", "outbound");
+  }
+  await persistNativeCodexHistory({
+    history: params.history,
+    response: params.response,
+  });
+}
+
+async function restoreHeldNativeResponse(params: {
+  session: AppaProxyHookSession;
+  heldFrameId: string;
+  calls: AppaOutboundToolCall[] | [AppaSyntheticControlCall];
+  omitPublishedContext?: boolean;
+}): Promise<Record<string, unknown>> {
+  const held = await AppaProxyWireModel.findOwned({
+    ...params.session.getNativeWireScope(),
+    frameId: params.heldFrameId,
+  });
+  if (
+    !held ||
+    !isPlainObject(held.payload) ||
+    !isPlainObject(held.payload.response)
+  ) {
+    throw new AppaProxySessionProtocolError(
+      "held native response is unavailable",
+    );
+  }
+  const response = params.omitPublishedContext
+    ? {
+        ...held.payload.response,
+        output: Array.isArray(held.payload.response.output)
+          ? held.payload.response.output.filter(
+              (item) => isPlainObject(item) && item.type === "function_call",
+            )
+          : [],
+      }
+    : held.payload.response;
+  const calls = params.calls;
+  if (isSyntheticControl(calls[0])) {
+    return replaceHeldCallsWithControl(response, calls[0]);
+  }
+  const businessCalls = calls as AppaOutboundToolCall[];
+  const clientCallArguments = await restoreNativeCodexClientProcessCalls({
+    scope: params.session.getNativeWireScope(),
+    calls: businessCalls.map((call) => ({
+      name: call.emittedName,
+      arguments: call.emittedArguments,
+    })),
+  });
+  const clientCalls = businessCalls.map((call, index) => ({
+    ...call,
+    emittedArguments: clientCallArguments[index].arguments,
+  }));
+  return rewriteNativeCodexResponseForClient(
+    replaceNativeCodexCallItems(
+      response,
+      clientCalls.map((call) => ({
+        id: call.id,
+        name: call.emittedName,
+        arguments: call.emittedArguments,
+      })),
+    ),
+  ) as Record<string, unknown>;
+}
+
+function nativeCodexFunctionCallItemIds(request: unknown): Map<string, string> {
+  const itemIds = new Map<string, string>();
+  const duplicateCallIds = new Set<string>();
+  if (!isPlainObject(request) || !Array.isArray(request.input)) return itemIds;
+  for (const item of request.input) {
+    if (
+      !isPlainObject(item) ||
+      item.type !== "function_call" ||
+      typeof item.call_id !== "string" ||
+      typeof item.id !== "string" ||
+      duplicateCallIds.has(item.call_id)
+    ) {
+      continue;
+    }
+    if (itemIds.has(item.call_id)) {
+      itemIds.delete(item.call_id);
+      duplicateCallIds.add(item.call_id);
+      continue;
+    }
+    itemIds.set(item.call_id, item.id);
+  }
+  return itemIds;
+}
+
+function replaceHeldCallsWithControl(
+  response: Record<string, unknown>,
+  control: AppaSyntheticControlCall,
+): Record<string, unknown> {
+  const output = Array.isArray(response.output) ? response.output : [];
+  const controlItem = {
+    id: `fc_${control.id}`,
+    type: "function_call",
+    call_id: control.id,
+    namespace: control.namespace,
+    name: control.name,
+    arguments: control.arguments,
+  };
+  return rewriteNativeCodexResponseForClient({
+    ...response,
+    id: `resp_${control.id}`,
+    output: [
+      ...output.filter(
+        (item) => !isPlainObject(item) || item.type !== "function_call",
+      ),
+      controlItem,
+    ],
+  });
+}
+
+function isSyntheticControl(
+  call: AppaOutboundToolCall | AppaSyntheticControlCall | undefined,
+): call is AppaSyntheticControlCall {
+  return Boolean(call && "namespace" in call);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 /**

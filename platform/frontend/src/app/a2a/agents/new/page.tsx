@@ -1,12 +1,8 @@
-import { ForbiddenPage } from "@/app/_parts/forbidden-page";
-import { CreateA2aRemoteAgentPage } from "@/components/a2a-remote-agent-page";
-import { serverCanAccessPage } from "@/lib/auth/auth.server";
+import { permanentRedirect } from "next/navigation";
+import { a2aRemoteAgentNewHref } from "@/lib/a2a-remote-agent-route";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewA2aRemoteAgentPageServer() {
-  if (!(await serverCanAccessPage("/a2a/agents"))) {
-    return <ForbiddenPage />;
-  }
-  return <CreateA2aRemoteAgentPage />;
+  permanentRedirect(a2aRemoteAgentNewHref());
 }

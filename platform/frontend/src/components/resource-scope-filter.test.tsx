@@ -40,9 +40,11 @@ vi.mock("@/components/permission-requirement-hint", () => ({
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
+  ActiveFilterBadges,
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "./resource-scope-filter";
@@ -132,6 +134,42 @@ describe("ResourceScopeFilter owner selector gating", () => {
     expect(navigate).toHaveBeenCalledWith("/agents?");
     expect(useRouter().push).not.toHaveBeenCalled();
   });
+
+  it("updates only the adapted scope and pagination keys", async () => {
+    mockSearchParams(
+      "scope=team&page=7&externalScope=personal&externalAuthorIds=user-1&externalPage=4",
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+
+    function ExternalScopeFilter() {
+      const queryParamsAdapter = useQueryParamsAdapter({
+        paramNames: {
+          scope: "externalScope",
+          teamIds: "externalTeamIds",
+          authorIds: "externalAuthorIds",
+          excludeAuthorIds: "externalExcludeAuthorIds",
+          page: "externalPage",
+        },
+      });
+      return (
+        <ResourceScopeFilter
+          ownerLabelPlural="external agents"
+          adminPermission={{ agentSettings: ["update"] }}
+          queryParamsAdapter={queryParamsAdapter}
+        />
+      );
+    }
+
+    render(<ExternalScopeFilter />);
+    await userEvent.click(screen.getAllByRole("combobox")[0]);
+    await userEvent.click(screen.getByRole("option", { name: "All types" }));
+
+    expect(useRouter().push).toHaveBeenCalledWith("/agents?scope=team&page=7", {
+      scroll: false,
+    });
+  });
 });
 
 describe("useScopeFilterParams", () => {
@@ -158,6 +196,19 @@ describe("useScopeFilterParams", () => {
 
   function ProbeBuiltIn() {
     results.push(useScopeFilterParams({ includeBuiltIn: true }));
+    return null;
+  }
+
+  function ProbeExternal() {
+    const queryParamsAdapter = useQueryParamsAdapter({
+      paramNames: {
+        scope: "externalScope",
+        teamIds: "externalTeamIds",
+        authorIds: "externalAuthorIds",
+        excludeAuthorIds: "externalExcludeAuthorIds",
+      },
+    });
+    results.push(useScopeFilterParams({ queryParamsAdapter }));
     return null;
   }
 
@@ -198,6 +249,65 @@ describe("useScopeFilterParams", () => {
     expect(readParams("scope=garbage").scope).toBeUndefined();
     expect(readParams("scope=built_in", { includeBuiltIn: true }).scope).toBe(
       "built_in",
+    );
+  });
+
+  it("reads the adapted scope keys without consuming the regular section filters", () => {
+    mockSearchParams(
+      "scope=personal&authorIds=regular-user&externalScope=team&externalTeamIds=team-1,team-2",
+    );
+    results.length = 0;
+    render(<ProbeExternal />);
+
+    expect(results.at(-1)).toMatchObject({
+      scope: "team",
+      teamIds: ["team-1", "team-2"],
+      authorIds: undefined,
+      hasActiveScopeFilters: true,
+    });
+  });
+});
+
+describe("ActiveFilterBadges", () => {
+  it("removes an adapted team badge without changing the regular filters", async () => {
+    mockSearchParams(
+      "teamIds=regular-team&externalScope=team&externalTeamIds=team-1,team-2&externalPage=2",
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useTeams).mockReturnValue({
+      data: [
+        { id: "team-1", name: "External Team One" },
+        { id: "team-2", name: "External Team Two" },
+      ],
+    } as ReturnType<typeof useTeams>);
+
+    function ExternalBadges() {
+      const queryParamsAdapter = useQueryParamsAdapter({
+        paramNames: {
+          scope: "externalScope",
+          teamIds: "externalTeamIds",
+          page: "externalPage",
+        },
+      });
+      return (
+        <ActiveFilterBadges
+          adminPermission={{ agentSettings: ["update"] }}
+          queryParamsAdapter={queryParamsAdapter}
+          showLabels={false}
+        />
+      );
+    }
+
+    render(<ExternalBadges />);
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Remove team from filter" })[0],
+    );
+
+    expect(useRouter().push).toHaveBeenCalledWith(
+      "/agents?teamIds=regular-team&externalScope=team&externalTeamIds=team-2",
+      { scroll: false },
     );
   });
 });

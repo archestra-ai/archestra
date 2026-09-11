@@ -21,7 +21,6 @@ import type { MswControl } from "./helpers/msw-control";
 /** Rows of the studio nav, in order, as a reader sees them. */
 const STUDIO_NAV = [
   "Agents",
-  "External Agents",
   "Skills",
   "MCP Registry",
   "MCP Gateways",
@@ -128,6 +127,13 @@ test.describe("studio sidebar navigation", () => {
     await page.goto("/llm/proxy");
     await expect(active).toHaveText(/^LLM Proxy/);
 
+    await page.goto("/a2a/agents/new");
+    await expect(page).toHaveURL(/\/agents\/a2a\/new$/);
+    await expect(active).toHaveText(/^Agents/);
+    await expect(
+      page.getByRole("link", { name: /^External Agents/ }),
+    ).toHaveCount(0);
+
     // Costs & Limits lighting on both of its pages is not pinned here: it
     // costs nine mock endpoints of page data to assert one pathname
     // predicate. What is worth pinning about that row — which of the two it
@@ -179,9 +185,9 @@ test.describe("studio sidebar navigation", () => {
 
     await expect(page.getByRole("link", { name: /^Plugins/ })).toBeVisible();
     expect(await rowNames(page)).toEqual([
-      ...STUDIO_NAV.slice(0, 3),
+      ...STUDIO_NAV.slice(0, 2),
       "Plugins",
-      ...STUDIO_NAV.slice(3),
+      ...STUDIO_NAV.slice(2),
     ]);
   });
 });

@@ -3,8 +3,11 @@
  * Used across backend, frontend, and e2e-tests.
  */
 import { AGENT_TOOL_PREFIX } from "./agents";
+import { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 import { POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS } from "./system-prompt-template";
 import { slugify } from "./utils";
+
+export { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 
 /** Display names for built-in agents */
 export const BUILT_IN_AGENT_NAMES = {
@@ -15,17 +18,6 @@ export const BUILT_IN_AGENT_NAMES = {
   CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
   APP_RUNTIME: "App Runtime LLM Agent",
   ADVISOR: "Advisor",
-} as const;
-
-/** Discriminator values for builtInAgentConfig.name */
-export const BUILT_IN_AGENT_IDS = {
-  POLICY_CONFIG: "policy-configuration-subagent",
-  DUAL_LLM_MAIN: "dual-llm-main-agent",
-  DUAL_LLM_QUARANTINE: "dual-llm-quarantine-agent",
-  CONTEXT_COMPACTION: "context-compaction-subagent",
-  CHAT_TITLE_GENERATION: "chat-title-generation-subagent",
-  APP_RUNTIME: "app-runtime-llm-agent",
-  ADVISOR: "advisor-agent",
 } as const;
 
 /**

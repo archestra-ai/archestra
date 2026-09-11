@@ -9,6 +9,7 @@ import {
   permissionDescriptions,
   predefinedPermissionsMap,
   requiredEndpointPermissionsMap,
+  requiredPagePermissionsMap,
 } from "./access-control";
 import {
   type Action,
@@ -158,6 +159,17 @@ describe("access-control", () => {
   });
 
   describe("outbound A2A administration", () => {
+    test("external A2A pages share the Agents read gate", () => {
+      expect(requiredPagePermissionsMap["/agents/a2a"]).toEqual({
+        agent: ["read"],
+      });
+      expect(requiredPagePermissionsMap["/a2a/agents"]).toBeUndefined();
+    });
+
+    test("the shared page gate defers the Agent chooser's OR authorization to its server page", () => {
+      expect(requiredPagePermissionsMap["/agents/new"]).toBeUndefined();
+    });
+
     test("credential-bearing configuration mutations require agent settings administration", () => {
       for (const routeId of [
         RouteId.InspectA2aRemoteAgent,

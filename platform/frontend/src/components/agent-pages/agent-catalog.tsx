@@ -1,5 +1,5 @@
 import type { SubscriptionCredentialKind } from "@archestra/shared";
-import { Bot } from "lucide-react";
+import { Bot, Network } from "lucide-react";
 import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
@@ -116,11 +116,19 @@ export function getAgentCatalogTemplates(
 }
 
 export function AgentCatalog({
+  canAddExternalAgent,
+  canCreateAgent,
   onStartFromScratch,
+  onAddExternalAgent,
   onSelect,
+  showPopularAgents,
 }: {
+  canAddExternalAgent: boolean;
+  canCreateAgent: boolean;
   onStartFromScratch: () => void;
+  onAddExternalAgent: () => void;
   onSelect: (template: AgentCatalogTemplate) => void;
+  showPopularAgents: boolean;
 }) {
   const configuredImage = useFeature("agentRuntimeBaseImage");
   const appName = useAppName();
@@ -142,7 +150,7 @@ export function AgentCatalog({
     appIconLogo,
   );
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="space-y-8">
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Create your own</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -151,27 +159,49 @@ export function AgentCatalog({
             title="Start from scratch"
             description="Build an Agent with the existing setup wizard and choose every setting yourself."
             onClick={onStartFromScratch}
+            disabled={!canCreateAgent}
+            disabledReason="Requires permission to create agents."
           />
         </div>
       </div>
 
+      {showPopularAgents ? (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold">Popular agents</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {templates.map((item) => (
+              <CatalogSourceCard
+                key={item.id}
+                icon={
+                  <CatalogAgentIcon id={item.id} appIconLogo={appIconLogo} />
+                }
+                title={item.name}
+                description={item.description}
+                badge={
+                  item.id === "archestra" ? (
+                    <Badge variant="outline">Built in</Badge>
+                  ) : undefined
+                }
+                onClick={() => onSelect(item)}
+                disabled={!canCreateAgent}
+                disabledReason="Requires permission to create agents."
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="space-y-3">
-        <h2 className="text-base font-semibold">Popular agents</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {templates.map((item) => (
-            <CatalogSourceCard
-              key={item.id}
-              icon={<CatalogAgentIcon id={item.id} appIconLogo={appIconLogo} />}
-              title={item.name}
-              description={item.description}
-              badge={
-                item.id === "archestra" ? (
-                  <Badge variant="outline">Built in</Badge>
-                ) : undefined
-              }
-              onClick={() => onSelect(item)}
-            />
-          ))}
+        <h2 className="text-base font-semibold">External agents</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CatalogSourceCard
+            icon={<Network className="size-5" />}
+            title="Connect via A2A"
+            description="Connect an A2A-compatible agent that your agents can use only as a subagent."
+            onClick={onAddExternalAgent}
+            disabled={!canAddExternalAgent}
+            disabledReason="Requires permission to view agents and update agent settings."
+          />
         </div>
       </div>
     </div>

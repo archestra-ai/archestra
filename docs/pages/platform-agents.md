@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-10
+lastUpdated: 2026-09-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -180,7 +180,7 @@ Which agent a new chat starts on — one opened from the composer, an app opened
 3. the organization-wide **Default Agent**, set by an admin in **Settings → Agents**
 4. the member's own personal chat agent — **My Assistant**, created for them on first use
 
-A member can pin **any chat agent they can see** as their default — their own, a team's, or an organization-wide one. On the **Agents** page each one offers **Pin default** and **Unpin default**. There is at most one pin per member.
+A member can pin **any chat agent they can see** as their default — their own, a team's, or an organization-wide one. On the **Agents** page each one offers **Set as default** and **Unpin default**. There is at most one pin per member.
 
 Exactly one row in that list is badged, because exactly one agent starts a member's new chats: **default (me)** when it is their own pin, **default (org)** when the agent is the organization's default. The organization's default reads as the organization's even for a member who also pinned it — it starts their chats either way — and that row offers no pin or unpin, since neither would change anything they can see. Unpinning elsewhere moves the badge back to the organization default.
 

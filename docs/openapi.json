@@ -72757,6 +72757,45 @@
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "initiatorName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "shareVisibility": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "organization",
+                              "team",
+                              "user"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      "shareTeamNames": {
+                        "nullable": true,
+                        "description": "Share recipient teams; null unless the viewer owns the run",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "shareUserNames": {
+                        "nullable": true,
+                        "description": "Share recipient users; null unless the viewer owns the run",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -72781,7 +72820,11 @@
                       "statusReason",
                       "stateChangedAt",
                       "hardDeadlineAt",
-                      "lastModelActivityAt"
+                      "lastModelActivityAt",
+                      "initiatorName",
+                      "shareVisibility",
+                      "shareTeamNames",
+                      "shareUserNames"
                     ],
                     "additionalProperties": false
                   }

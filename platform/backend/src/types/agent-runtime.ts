@@ -7,6 +7,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { A2ATaskStateSchema } from "./a2a-task";
+import { AgentRunShareVisibilitySchema } from "./agent-run-share";
 
 /**
  * Runtime backends an Agent Runtime configuration can name. The enum is the
@@ -270,6 +271,20 @@ export const SelectAgentRunSchema = SelectAgentRunRecordSchema.omit({
   lastModelActivityAt: z.date().nullable(),
 });
 
+/** Run metadata shown to Agent managers alongside the runtime state. */
+export const SelectAgentRunListItemSchema = SelectAgentRunSchema.extend({
+  initiatorName: z.string().nullable(),
+  shareVisibility: z.union([AgentRunShareVisibilitySchema, z.null()]),
+  shareTeamNames: z
+    .array(z.string())
+    .nullable()
+    .describe("Share recipient teams; null unless the viewer owns the run"),
+  shareUserNames: z
+    .array(z.string())
+    .nullable()
+    .describe("Share recipient users; null unless the viewer owns the run"),
+});
+
 /** A user's durable run session as rendered in Chat and its sidebar. */
 export const SelectAgentRunSessionSchema = SelectAgentRunSchema.extend({
   sessionId: z.string().uuid(),
@@ -347,6 +362,7 @@ export const StartAgentRunResponseSchema = z.object({
 export type AgentRunRecord = z.infer<typeof SelectAgentRunRecordSchema>;
 export type InsertAgentRunRecord = z.infer<typeof InsertAgentRunRecordSchema>;
 export type AgentRun = z.infer<typeof SelectAgentRunSchema>;
+export type AgentRunListItem = z.infer<typeof SelectAgentRunListItemSchema>;
 export type AgentRunSession = z.infer<typeof SelectAgentRunSessionSchema>;
 export type AgentRunViewerRole = z.infer<typeof AgentRunViewerRoleSchema>;
 export type GetAgentRunResponse = z.infer<typeof GetAgentRunResponseSchema>;

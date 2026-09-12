@@ -348,7 +348,7 @@ describe("websocket Agent run authorization and cleanup", () => {
         type: "agent_run_logs_error",
         payload: {
           runId: task.id,
-          error: "Only the person who started this run can view its logs",
+          error: "You do not have access to this run's output",
         },
       }),
     );

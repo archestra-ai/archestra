@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Configure isolated workspaces for coding agents and delegated tasks
-lastUpdated: "2026-09-11"
+lastUpdated: "2026-09-12"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -206,9 +206,13 @@ Project access determines which members can review others' runs. Only the person
 
 Share a run with your organization, teams, or individual users. Recipients can review its details and live or retained output. Sharing grants read-only access; terminal control stays with the person who started the run.
 
+Only the run owner can view or change its sharing recipients. Agent readers can see run history, initiators, and sharing scopes without access to recipient names.
+
 ## View Runs From An Agent
 
 The Agent's **Runs** tab opens live terminals and completed recordings. Reattach while the client remains alive, or resume its saved conversation after suspension. Detaching leaves the run active.
+
+Run ownership follows the user who started it, not the Agent creator. Sharing grants read-only output access, never an interactive terminal. Agent administrators can read output even without an explicit share. Project access also permits reading runs when paired with permission to read all project sessions.
 
 Recordings preserve earlier terminal output, including screens replaced by redraws. Run history remains available after workspace removal and follows the configured retention period. See [Deployment](/docs/platform-deployment#agent-runtime) for retention and transcript limits.
 

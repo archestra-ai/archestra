@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.59](https://github.com/archestra-ai/archestra/compare/platform-v1.3.58...platform-v1.3.59) (2026-09-12)
+
+
+### Features
+
+* **agents:** show provider details (backport release/1.3) ([#7879](https://github.com/archestra-ai/archestra/issues/7879)) ([2efe459](https://github.com/archestra-ai/archestra/commit/2efe4591845b2a5fc5eeb088aecccd1b041cb330))
+
+
+### Bug Fixes
+
+* **agents:** backport canonical subagent selector to 1.3 ([#7867](https://github.com/archestra-ai/archestra/issues/7867)) ([dca7773](https://github.com/archestra-ai/archestra/commit/dca7773d694cdc1952d7c814a7554bc15e1938aa))
+* **chat:** preserve browser devtools shortcut (backport release/1.3) ([#7876](https://github.com/archestra-ai/archestra/issues/7876)) ([1addb32](https://github.com/archestra-ai/archestra/commit/1addb32801295ee36cb7841cbb1c4f9e859e1969))
+* **database:** backport rollout connection budgeting to 1.3 ([#7878](https://github.com/archestra-ai/archestra/issues/7878)) ([b63de95](https://github.com/archestra-ai/archestra/commit/b63de9526ed5a894d3b7ee842e4f9ae04887d5dd))
+* **frontend:** improve chat context ring contrast in both themes (backport release/1.3) ([#7875](https://github.com/archestra-ai/archestra/issues/7875)) ([14a69b6](https://github.com/archestra-ai/archestra/commit/14a69b6170d20652aacec42152a9bf4c7b7859cb))
+
 ## [1.3.58](https://github.com/archestra-ai/archestra/compare/platform-v1.3.57...platform-v1.3.58) (2026-09-11)
 
 

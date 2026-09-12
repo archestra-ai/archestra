@@ -10,8 +10,6 @@ import { LabelTags } from "@/components/label-tags";
 type AgentLabels =
   archestraApiTypes.GetAgentsResponses["200"]["data"][number]["labels"];
 
-const MAX_NAME_LENGTH = 20;
-
 export function AgentNameCell({
   name,
   href,
@@ -39,7 +37,6 @@ export function AgentNameCell({
   icon?: ReactNode;
 }) {
   const hasMetadata = !!extraBadges || !!labels?.length || builtIn;
-  const displayName = truncateName(name);
 
   const content = (
     <div className="font-medium">
@@ -51,15 +48,15 @@ export function AgentNameCell({
             // itself so the row handler does not fire a second navigation.
             <Link
               href={href}
-              className="leading-tight hover:underline"
+              className="max-w-full truncate leading-tight hover:underline"
               title={name}
               onClick={(e) => e.stopPropagation()}
             >
-              {displayName}
+              {name}
             </Link>
           ) : (
-            <span className="leading-tight" title={name}>
-              {displayName}
+            <span className="max-w-full truncate leading-tight" title={name}>
+              {name}
             </span>
           )}
           {hasMetadata && (
@@ -89,12 +86,4 @@ export function AgentNameCell({
       <div className="min-w-0">{content}</div>
     </div>
   );
-}
-
-function truncateName(name: string) {
-  if (name.length <= MAX_NAME_LENGTH) {
-    return name;
-  }
-
-  return `${name.slice(0, MAX_NAME_LENGTH)}...`;
 }

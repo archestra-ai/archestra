@@ -199,6 +199,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Include the caller-relative activation skill count used by internal-agent cards. Omitted when the caller lacks skill:read.",
               ),
+            providerApiKeyId: z
+              .union([z.string().uuid(), z.literal("organization-default")])
+              .optional()
+              .describe(
+                "Filter by a configured provider key, or organization-default for agents with no pinned key or model.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -231,6 +237,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeOtherPersonalAgents,
           status,
           includeActivationSkillsCount,
+          providerApiKeyId,
           limit,
           offset,
           sortBy,
@@ -268,6 +275,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { limit, offset },
         { sortBy, sortDirection },
         {
+          organizationId,
           name,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
@@ -282,6 +290,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : undefined,
           labels: parseLabelsParam(labels),
           status,
+          providerApiKeyId,
         },
         user.id,
         isAdmin,

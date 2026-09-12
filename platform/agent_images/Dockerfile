@@ -56,7 +56,7 @@ RUN --network=none \
 
 FROM agent-base AS agent-codex
 USER root
-RUN pnpm add --global @openai/codex@0.149.1 \
+RUN pnpm add --global @openai/codex@0.153.0 \
  && codex --version \
  && chown -R 1000:1000 /home/node
 USER 1000:1000

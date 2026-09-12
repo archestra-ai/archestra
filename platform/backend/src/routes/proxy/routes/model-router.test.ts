@@ -244,14 +244,18 @@ function createResponsesTestClient() {
 
   return {
     responses: {
-      create: async (params: { stream?: boolean }) => {
+      create: async (params: { stream?: boolean; model?: string }) => {
+        const response = {
+          ...completedResponse,
+          model: params.model ?? completedResponse.model,
+        };
         if (params.stream) {
           return {
             [Symbol.asyncIterator]: async function* () {
               yield {
                 type: "response.created",
                 response: {
-                  ...completedResponse,
+                  ...response,
                   status: "in_progress",
                   output: [],
                 },
@@ -260,11 +264,11 @@ function createResponsesTestClient() {
                 type: "response.output_text.delta",
                 delta: "Hello from Copilot Responses",
               };
-              yield { type: "response.completed", response: completedResponse };
+              yield { type: "response.completed", response };
             },
           };
         }
-        return completedResponse;
+        return response;
       },
     },
   };
@@ -610,7 +614,7 @@ describe("model router proxy routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
         object: "response",
-        model: `${provider}:${modelId}`,
+        model: provider === "openai" ? modelId : `${provider}:${modelId}`,
       });
     });
 
@@ -725,7 +729,7 @@ describe("model router proxy routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       object: "response",
-      model: "openai:gpt-5.4",
+      model: "gpt-5.4",
     });
   });
 

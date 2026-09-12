@@ -21,7 +21,9 @@ import { organizationKeys } from "@/lib/organization.query";
 
 function XaiAvailability() {
   const catalog = useModelProviderCatalog();
-  return <span>{catalog.isHidden("xai") ? "xai hidden" : "xai available"}</span>;
+  return (
+    <span>{catalog.isHidden("xai") ? "xai hidden" : "xai available"}</span>
+  );
 }
 
 /**

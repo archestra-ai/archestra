@@ -921,6 +921,8 @@ Upgrading from a chart that ran the included engine leaves its cache volume behi
 
 Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can view logs, open a shell, and steer a run while it is active. It needs the Kubernetes runtime configured (see `ARCHESTRA_ORCHESTRATOR_*`); without it the capability stays unavailable.
 
+On GKE, custom Sandbox controllers can produce a “not backed by a controller” scale-down warning. Active runs must finish before their nodes can be removed safely. Idle workspace suspension releases pods through the runtime lifecycle. Setting `safe-to-evict: "true"` permits interruptions; persisted files do not preserve running processes.
+
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
   - Values: `true`, `false`

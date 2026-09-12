@@ -35,7 +35,7 @@ Percentiles pool samples across all three repeats. Throughput uses their combine
 | 10 | 11.88 | 40.33 | 28.45 | 50.99 | 13.05 | 15.46 |
 | 50 | 12.75 | 113.87 | 101.12 | 129.54 | 13.06 | 15.84 |
 
-Added P50 is the proxy median minus the direct mock median. It estimates added latency across separate request populations. Proxy P99 describes complete proxy requests; it is not the P99 of added overhead.
+Added P50 is the proxy median minus the direct mock median. It estimates added latency across separate request populations. Proxy P99 uses observed latencies for each table's metric. It is not the P99 of added overhead.
 
 ### Environment
 

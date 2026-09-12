@@ -2,6 +2,57 @@ suite: test archestra platform -- Deployment/Service
 templates:
   - archestra-platform.yaml
 tests:
+  - it: preserves existing bulk environment imports on upgrade
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - configMapRef:
+            name: database-pool
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: database-pool
+
+  - it: budgets pools when bulk imports are exclusively prefixed
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - prefix: APP_
+          configMapRef:
+            name: unrelated-config
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "21"
+
+  - it: preserves a declared bulk database pool override
+    documentIndex: 1
+    set:
+      archestra.database.poolMaxFromEnvFrom: true
+      archestra.envFrom:
+        - configMapRef:
+            name: database-pool
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: database-pool
+
   - it: should create a Service with correct metadata
     documentIndex: 0
     asserts:
@@ -86,10 +137,140 @@ tests:
           path: spec.replicas
           value: 4
 
+  - it: should divide the database connection budget across peak rollout pods
+    documentIndex: 1
+    set:
+      archestra.replicaCount: 4
+      archestra.worker.enabled: true
+      archestra.worker.replicaCount: 3
+      archestra.database.connectionBudget: 400
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "13"
+
+  - it: should use HPA max replicas when sizing the database pool
+    documentIndex: 1
+    set:
+      archestra.horizontalPodAutoscaler.enabled: true
+      archestra.horizontalPodAutoscaler.maxReplicas: 10
+      archestra.worker.enabled: false
+      archestra.database.connectionBudget: 400
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "5"
+
+  - it: should preserve an explicit database pool environment override
+    documentIndex: 1
+    set:
+      archestra.env.ARCHESTRA_DATABASE_POOL_MAX: "17"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "17"
+
+  - it: should support a fixed per-pod database pool override
+    documentIndex: 1
+    set:
+      archestra.database.poolMax: 12
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "12"
+
+  - it: should reject a database budget smaller than the peak pod count
+    set:
+      archestra.replicaCount: 4
+      archestra.worker.enabled: true
+      archestra.worker.replicaCount: 3
+      archestra.database.connectionBudget: 8
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.database.connectionBudget (8) must provide at least 13 connections (1 query, 10 cache, 2 listeners) for each of the 16 peak backend pods."
+
+  - it: budgets Kubernetes default surge when no deployment strategy is provided
+    documentIndex: 1
+    set:
+      archestra.replicaCount: 3
+      archestra.worker.enabled: false
+      archestra.deploymentStrategy: null
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "16"
+
+  - it: preserves zero surge and reserves terminating replicas
+    documentIndex: 1
+    set:
+      archestra.replicaCount: 3
+      archestra.worker.enabled: false
+      archestra.deploymentStrategy.rollingUpdate.maxSurge: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "21"
+
+  - it: does not reserve overlapping replicas for Recreate
+    documentIndex: 1
+    set:
+      archestra.replicaCount: 4
+      archestra.worker.enabled: false
+      archestra.deploymentStrategy.type: Recreate
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "38"
+
+  - it: caps a large connection budget at the backend supported maximum
+    documentIndex: 1
+    set:
+      archestra.database.connectionBudget: 100000
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "500"
+
+  - it: rejects a fixed pool larger than the backend supported maximum
+    set:
+      archestra.database.poolMax: 501
+    asserts:
+      - failedTemplate:
+          errorMessage: "Configuration error: archestra.database.poolMax must be between 1 and 500."
+
+  - it: permits scaling every backend deployment to zero
+    documentIndex: 1
+    set:
+      archestra.replicaCount: 0
+      archestra.worker.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_POOL_MAX
+            value: "188"
+
   - it: should not have replicas field when HPA is enabled
     documentIndex: 1
     set:
       archestra.horizontalPodAutoscaler.enabled: true
+      archestra.database.connectionBudget: 400
     asserts:
       - isNull:
           path: spec.replicas
@@ -1156,6 +1337,7 @@ tests:
   - it: should allow chart-managed diagnostics with ReadWriteMany
     documentIndex: 1
     set:
+      archestra.database.connectionBudget: 400
       archestra.diagnostics.enabled: true
       archestra.replicaCount: 4
       archestra.worker.enabled: true
@@ -1487,6 +1669,7 @@ tests:
   - it: should add envFrom with multiple secretRef and configMapRef
     documentIndex: 1
     set:
+      archestra.database.poolMaxFromEnvFrom: false
       archestra.envFrom:
         - secretRef:
             name: secret-one
@@ -1508,6 +1691,7 @@ tests:
   - it: should add envFrom with optional flag
     documentIndex: 1
     set:
+      archestra.database.poolMaxFromEnvFrom: false
       archestra.envFrom:
         - secretRef:
             name: my-secret
@@ -1529,6 +1713,7 @@ tests:
   - it: should work with env, envFromSecrets, and envFrom all configured
     documentIndex: 1
     set:
+      archestra.database.poolMaxFromEnvFrom: false
       archestra.env:
         CUSTOM_VAR: "custom-value"
       archestra.envFromSecrets:
@@ -1564,6 +1749,7 @@ tests:
   - it: should add envFrom with prefix
     documentIndex: 1
     set:
+      archestra.database.poolMaxFromEnvFrom: false
       archestra.envFrom:
         - secretRef:
             name: my-secret

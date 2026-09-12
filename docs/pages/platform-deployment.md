@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-10
+lastUpdated: 2026-09-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -797,7 +797,13 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_DATABASE_POOL_MAX`** - Maximum number of PostgreSQL connections per backend pod.
   - Default: `50`
   - Range: `1`–`500`
-  - Tune this when you have many concurrent users or long-running chat streams. The backend opens at most `ARCHESTRA_DATABASE_POOL_MAX` connections per pod, so coordinate with PostgreSQL `max_connections` to ensure `pods × ARCHESTRA_DATABASE_POOL_MAX < max_connections` with headroom for admin sessions. On managed Postgres (e.g. AWS RDS, Cloud SQL) the server limit is typically several thousand and rarely the binding constraint.
+  - Helm divides `archestra.database.connectionBudget` (default `200`) across peak backend pods, then subtracts 12 per pod. Those 12 connections cover the cache pool and two notification listeners. The query pool is capped at `500`.
+  - Peak pods include web/HPA maximum replicas, worker replicas, rollout surge, and one terminating old revision. Recreate deployments count only their target replicas. Each peak pod needs at least 13 budgeted connections; Helm rejects smaller budgets.
+  - For example, four web and three worker replicas with default surge budget for 16 peak pods. A `400`-connection budget gives each pod 13 query connections: `16 × (13 + 12) = 400`.
+  - Keep the budget below PostgreSQL `max_connections`, after subtracting reserved slots and other clients. The bundled database allows `250` connections, leaving `50` outside the default budget. External databases and multiple releases need explicitly allocated budgets.
+  - Finish one rollout before starting another. Before increasing replicas, roll out a smaller `archestra.database.poolMax` at the existing replica count. Then scale and clear the override. Old pods keep their previous limits until replaced; Helm cannot resize existing pools.
+  - Fixed overrides (`archestra.database.poolMax` or this environment variable) bypass automatic budgeting. Operators must budget their aggregate use separately.
+  - Unprefixed `archestra.envFrom` imports preserve their existing pool configuration by default. Helm omits its explicit pool variable so it cannot override a value from the Secret or ConfigMap; if neither supplies a pool limit, the backend default applies. Set `archestra.database.poolMaxFromEnvFrom: false` to opt into chart-managed sizing, or `true` to explicitly require an unprefixed bulk source. Exclusively prefixed sources cannot supply `ARCHESTRA_DATABASE_POOL_MAX`, so they use chart sizing by default.
 
 - **`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`** - Per-connection PostgreSQL `statement_timeout` (in milliseconds) applied to every pooled connection.
   - Default: `30000` (30s)

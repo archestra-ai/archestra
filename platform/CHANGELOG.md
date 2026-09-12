@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.4.0-beta.8](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.7...platform-v1.4.0-beta.8) (2026-09-12)
+
+
+### Features
+
+* **agent-runs:** show run owner and visibility ([#7870](https://github.com/archestra-ai/archestra/issues/7870)) ([0713c0f](https://github.com/archestra-ai/archestra/commit/0713c0f52d22966da5355dcfacbbdd721d2befef))
+* **agents:** show provider details and filter by configured keys ([#7877](https://github.com/archestra-ai/archestra/issues/7877)) ([15f5b33](https://github.com/archestra-ai/archestra/commit/15f5b332da4da1c431db9d021474d1c32ce30836))
+* **chat:** send queued steering messages on interrupt ([#7884](https://github.com/archestra-ai/archestra/issues/7884)) ([1b83775](https://github.com/archestra-ai/archestra/commit/1b83775311fbe1698d5c57a2faf2cef4155bede9))
+
+
+### Bug Fixes
+
+* **agent-runtime:** attach Project starters to current session turns ([#7882](https://github.com/archestra-ai/archestra/issues/7882)) ([2973854](https://github.com/archestra-ai/archestra/commit/2973854af23bbcddc5152de071aa9a8653c0059c))
+* **agent-runtime:** bound response previews to avoid completion delays ([#7862](https://github.com/archestra-ai/archestra/issues/7862)) ([07ae716](https://github.com/archestra-ai/archestra/commit/07ae7160eb6dddbfcceb1798ea502f865cfbeeb3))
+* **agent-runtime:** retry recovery before waiting for completion ([#7865](https://github.com/archestra-ai/archestra/issues/7865)) ([1d86dd9](https://github.com/archestra-ai/archestra/commit/1d86dd958800d355abdf848d1a3d759dfc7256af))
+* **agent-runtime:** simplify runs empty state ([#7869](https://github.com/archestra-ai/archestra/issues/7869)) ([0167c44](https://github.com/archestra-ai/archestra/commit/0167c4468a273b6a6049f9d6c2dbf8de9ea0a273))
+* **agent-runtime:** validate and report continuation startup ([#7885](https://github.com/archestra-ai/archestra/issues/7885)) ([317f593](https://github.com/archestra-ai/archestra/commit/317f593ab18312eabc830c12afc296c6397cec5c))
+* **agents:** clarify default agent action ([#7851](https://github.com/archestra-ai/archestra/issues/7851)) ([c6aabf6](https://github.com/archestra-ai/archestra/commit/c6aabf64571ea5b09cc76a81fe86d69650d7d838))
+* **agents:** reuse canonical selector when adding subagents ([#7866](https://github.com/archestra-ai/archestra/issues/7866)) ([624e9f5](https://github.com/archestra-ai/archestra/commit/624e9f5c713a1b82c758587bbb7d0e863a6c9f48))
+* **agents:** surface Claude account setup after creation ([#7871](https://github.com/archestra-ai/archestra/issues/7871)) ([28b1cbc](https://github.com/archestra-ai/archestra/commit/28b1cbcb470717ad9989b960a9947649dcfd5b13))
+* **auth:** preserve service-account creators across shared resources ([#7881](https://github.com/archestra-ai/archestra/issues/7881)) ([64322e9](https://github.com/archestra-ai/archestra/commit/64322e9618c82c60b464c63065c86666ea68fd38))
+* **chat:** preserve browser devtools shortcut ([#7868](https://github.com/archestra-ai/archestra/issues/7868)) ([8ebab8a](https://github.com/archestra-ai/archestra/commit/8ebab8a8db0171f6c23656a9848061f3d79aa45a))
+* **connection:** load skills without unsupported proxy filtering ([#7880](https://github.com/archestra-ai/archestra/issues/7880)) ([370b976](https://github.com/archestra-ai/archestra/commit/370b976e61ec256bc85b28a66bd0a3c05daa3a29))
+* **connect:** preserve startup wrappers across setup and retries ([#7883](https://github.com/archestra-ai/archestra/issues/7883)) ([69f31e7](https://github.com/archestra-ai/archestra/commit/69f31e735a6df0edbf46cca91b9c52043140524e))
+* **database:** budget connections across backend rollout pods ([#7872](https://github.com/archestra-ai/archestra/issues/7872)) ([dff4c27](https://github.com/archestra-ai/archestra/commit/dff4c27ec8b14a35a585be1ce413c506854ec403))
+* **frontend:** improve chat context ring contrast in both themes ([#7873](https://github.com/archestra-ai/archestra/issues/7873)) ([144b477](https://github.com/archestra-ai/archestra/commit/144b4778cc34acd62df810d156d7d3a89b18446d))
+* include run identifiers in model-visible tool output ([#7854](https://github.com/archestra-ai/archestra/issues/7854)) ([7b8a151](https://github.com/archestra-ai/archestra/commit/7b8a1512769df492de47cb5452ef8a71f4001dcc))
+* **llm:** stop offering credentials for model providers the organization turned off ([#7890](https://github.com/archestra-ai/archestra/issues/7890)) ([d57160b](https://github.com/archestra-ai/archestra/commit/d57160b895e4ca4690ef35598bbd777d67c03782))
+* persist Claude runtime credentials and streamline runtime docs ([#7858](https://github.com/archestra-ai/archestra/issues/7858)) ([6130c00](https://github.com/archestra-ai/archestra/commit/6130c00c58f909493d1189404c364037e449d7d9))
+* recover agent runs from the current messaging thread ([#7852](https://github.com/archestra-ai/archestra/issues/7852)) ([c32ae45](https://github.com/archestra-ai/archestra/commit/c32ae4511118f7b1dffa5389c27c608df1a1c7e2))
+* **runtime:** preserve native reasoning and recover detached runs ([#7861](https://github.com/archestra-ai/archestra/issues/7861)) ([bd889b9](https://github.com/archestra-ai/archestra/commit/bd889b9d870bcd594af67bb57e1a4b913f21c8a1))
+* simplify client connection setup and remove Desktop CLI prerequisites ([#7856](https://github.com/archestra-ai/archestra/issues/7856)) ([784fa94](https://github.com/archestra-ai/archestra/commit/784fa94f5f08e45e6b46af9ba589664d8a71deb3))
+* submit runtime steering and explain terminal cancellation ([#7857](https://github.com/archestra-ai/archestra/issues/7857)) ([74694ba](https://github.com/archestra-ai/archestra/commit/74694ba936ae4073d6e2d0001b0ba2decc42708a))
+* use native Claude Code sign-in for personal subscriptions ([#7850](https://github.com/archestra-ai/archestra/issues/7850)) ([1594dec](https://github.com/archestra-ai/archestra/commit/1594decb6440e44dcc5c6a0d6e46908b76cacdff))
+
+
+### Dependencies
+
+* bump fastify from 5.8.5 to 5.12.1 in /platform ([#7632](https://github.com/archestra-ai/archestra/issues/7632)) ([96d0d0a](https://github.com/archestra-ai/archestra/commit/96d0d0a76f0a5a4b19a49a3593a43b0c8199eeaf))
+
 ## [1.4.0-beta.7](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-beta.6...platform-v1.4.0-beta.7) (2026-09-11)
 
 

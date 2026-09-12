@@ -1848,7 +1848,7 @@ describe("stopping with queued messages", () => {
     ).toEqual(["second correction"]);
   });
 
-  it("marks the queue-preserving interrupt before requesting the server stop", async () => {
+  it("keeps instructions queued while an initially empty-queue stop is settling", async () => {
     let session: ChatSessionSnapshot;
     render(
       <ChatProvider>
@@ -1863,12 +1863,12 @@ describe("stopping with queued messages", () => {
     );
     await waitFor(() => expect(session).toBeDefined());
     await act(async () => {
-      chatMessageQueue.enqueue(conversationId, {
-        text: "keep this instruction",
-      });
       session?.stop({
         preserveQueuedMessages: true,
         stopServer: async () => {
+          chatMessageQueue.enqueue(conversationId, {
+            text: "keep this instruction",
+          });
           await chatOptions?.onFinish?.({
             message: { id: "assistant-stopped", role: "assistant", parts: [] },
             isAbort: true,
@@ -1879,6 +1879,52 @@ describe("stopping with queued messages", () => {
     });
     expect(chatMessageQueue.get(conversationId)).toHaveLength(1);
     expect(mocks.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps streaming and preserves the queue when the server stop fails, then allows retry", async () => {
+    let session: ChatSessionSnapshot;
+    render(
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>,
+    );
+    await waitFor(() => expect(session).toBeDefined());
+    const stopServer = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Stop unavailable"));
+    await act(async () => {
+      chatMessageQueue.enqueue(conversationId, {
+        text: "keep the first correction",
+      });
+      chatMessageQueue.enqueue(conversationId, {
+        text: "keep the second correction",
+      });
+      session?.stop({ preserveQueuedMessages: true, stopServer });
+    });
+    expect(mocks.stop).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(2);
+
+    stopServer.mockResolvedValueOnce(undefined);
+    await act(async () => {
+      session?.stop({ preserveQueuedMessages: true, stopServer });
+    });
+    expect(stopServer).toHaveBeenCalledTimes(2);
+    expect(mocks.stop).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "assistant-stopped", role: "assistant", parts: [] },
+        isAbort: true,
+        isError: false,
+      });
+    });
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(2);
   });
 });
 

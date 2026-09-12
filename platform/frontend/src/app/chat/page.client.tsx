@@ -2161,10 +2161,8 @@ export function ChatPageContent({
 
   const handleStopStreaming = () => {
     if (conversationId) {
-      const preserveQueuedMessages =
-        chatMessageQueue.get(conversationId).length > 0;
       stop?.({
-        preserveQueuedMessages,
+        preserveQueuedMessages: true,
         stopServer: () => stopChatStreamMutation.mutateAsync(conversationId),
       });
     } else {

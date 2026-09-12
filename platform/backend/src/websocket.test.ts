@@ -932,7 +932,7 @@ describe("websocket Agent run authorization and cleanup", () => {
     expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
   });
 
-  test("attaches a Project run owner from the stable session URL to the current turn", async ({
+  test("attaches only the Project run starter from the stable session URL to the current turn", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1053,6 +1053,49 @@ describe("websocket Agent run authorization and cleanup", () => {
         },
       }),
     );
+
+    const viewer = await makeUser();
+    await makeMember(viewer.id, organization.id, { role: "admin" });
+    await projectService.setShare({
+      id: project.id,
+      organizationId: organization.id,
+      userId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    const viewerWs = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(viewerWs, {
+      userId: viewer.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: true,
+    });
+    attach.mockClear();
+
+    for (const taskId of [firstTask.id, currentTask.id]) {
+      await service.handleMessage(
+        {
+          type: "subscribe_agent_run_attach",
+          payload: { runId: taskId },
+        },
+        viewerWs,
+      );
+
+      expect(viewerWs.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: "agent_run_attach_error",
+          payload: {
+            runId: taskId,
+            error: "Only the person who started this run can attach to it",
+          },
+        }),
+      );
+    }
+    expect(attach).not.toHaveBeenCalled();
+    expect(service.agentRunAttachSubscriptions.has(viewerWs)).toBe(false);
   });
 
   test("destroys Agent run streams and detaches the exec socket on disconnect", () => {

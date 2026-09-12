@@ -72,6 +72,7 @@ import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
 } from "@/components/agent-runtime-fields";
+import { AgentSelector } from "@/components/agent-selector";
 import {
   AgentSkillsEditor,
   type EditableSkill,
@@ -524,24 +525,11 @@ function SubagentsEditor({
       agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
   );
 
-  const items: AssignmentComboboxItem[] = filteredAgents.map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    description: agent.description || undefined,
-    badge: localMode === "all" ? "Exclude" : "Local",
-    icon: <Bot className="h-4 w-4" />,
-  }));
   const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
-  const handleToggle = (agentId: string) => {
-    if (readOnly) return;
-    const ids = localMode === "all" ? disabledAgentIds : selectedAgentIds;
+  const handleSelectionChange = (ids: string[]) => {
     const setIds =
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
-    setIds(
-      ids.includes(agentId)
-        ? ids.filter((id) => id !== agentId)
-        : [...ids, agentId],
-    );
+    setIds(ids);
   };
 
   const selectedLocalAgents = filteredAgents.filter((agent) =>
@@ -620,12 +608,13 @@ function SubagentsEditor({
       )}
 
       {!readOnly && (
-        <AssignmentCombobox
-          items={items}
-          selectedIds={selectedIds}
-          onToggle={handleToggle}
-          label="Add subagent"
-          placeholder={
+        <AgentSelector
+          mode="multiple"
+          agents={filteredAgents}
+          value={selectedIds}
+          onValueChange={handleSelectionChange}
+          triggerLabel="Add subagent"
+          searchPlaceholder={
             localMode === "all"
               ? "Search agents to exclude..."
               : "Search agents..."
@@ -633,10 +622,7 @@ function SubagentsEditor({
           emptyMessage="No agents found."
           createAction={
             localMode === "selected"
-              ? {
-                  label: "Create a New Agent",
-                  href: "/agents/new",
-                }
+              ? { label: "Create a New Agent", href: "/agents/new" }
               : undefined
           }
         />

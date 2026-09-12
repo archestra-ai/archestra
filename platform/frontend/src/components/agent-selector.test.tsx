@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { AgentSelector, type AgentSelectorAgent } from "./agent-selector";
@@ -221,6 +221,112 @@ describe("AgentSelector sentinelOption", () => {
 });
 
 describe("AgentSelector (multiple, flat)", () => {
+  it("keeps the create action available after an empty search and closes on activation", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentSelector
+        mode="multiple"
+        flat
+        agents={[personalProxy]}
+        value={[]}
+        onValueChange={vi.fn()}
+        triggerLabel="Add subagent"
+        createAction={{ label: "Create a New Agent", href: "/agents/new" }}
+        searchPlaceholder="Search agents..."
+      />,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Add subagent" });
+    await user.click(trigger);
+    await user.type(
+      screen.getByPlaceholderText("Search agents..."),
+      "no match",
+    );
+    expect(screen.queryByRole("option")).toBeNull();
+    const create = screen.getByRole("link", { name: "Create a New Agent" });
+    expect(create).toHaveAttribute("target", "_blank");
+    await user.click(create);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute("aria-expanded", "false"),
+    );
+  });
+
+  it("lets keyboard users remove badges in the default multiple selector", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(
+      <AgentSelector
+        mode="multiple"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value={["p2"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await user.tab();
+    expect(
+      screen.getByRole("button", { name: "Remove Shared Proxy" }),
+    ).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+
+  it("keeps focus on an outside control used to dismiss the compact selector", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <AgentSelector
+          mode="multiple"
+          flat
+          agents={[personalProxy, orgProxy]}
+          value={[]}
+          onValueChange={vi.fn()}
+          triggerLabel="Add subagent"
+        />
+        <input aria-label="Description" />
+      </>,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Add subagent" });
+    const description = screen.getByRole("textbox", { name: "Description" });
+    await user.click(trigger);
+    await user.click(description);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(description).toHaveFocus();
+    await user.keyboard("Continue editing");
+    expect(description).toHaveValue("Continue editing");
+  });
+
+  it("opens the compact selector by keyboard, searches owners, and restores focus", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(
+      <AgentSelector
+        mode="multiple"
+        flat
+        agents={[personalProxy, orgProxy]}
+        value={[]}
+        onValueChange={onValueChange}
+        triggerLabel="Add subagent"
+        searchPlaceholder="Search agents..."
+      />,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Add subagent" });
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.keyboard(" ");
+    expect(screen.getByPlaceholderText("Search agents...")).toHaveFocus();
+    await user.keyboard("owner@example.com");
+    expect(screen.getByRole("option", { name: /My Proxy/ })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /Shared Proxy/ })).toBeNull();
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onValueChange).toHaveBeenCalledWith(["p1"]);
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+  });
+
   it("flat mode lists and toggles llm_proxy items that the grouped view would drop", async () => {
     const onValueChange = vi.fn();
     const user = userEvent.setup();

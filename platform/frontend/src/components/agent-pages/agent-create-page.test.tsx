@@ -333,6 +333,19 @@ describe("AgentCreatePage", () => {
     expect(push).toHaveBeenCalledWith("/agents/new-1?section=connect");
   });
 
+  it("lands a new Claude Code agent where its personal account connection is shown", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime" ? true : undefined,
+    );
+    render(<AgentCreatePage kind="agent" />);
+
+    await user.click(screen.getByRole("button", { name: /claude code/i }));
+    await user.click(screen.getByRole("button", { name: "fire created" }));
+
+    expect(push).toHaveBeenCalledWith("/agents/new-1");
+  });
+
   it("stays put with a success state when the creator may not read what it made", async () => {
     const user = userEvent.setup();
     mockPermissions({ canRead: false });

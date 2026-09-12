@@ -1716,6 +1716,55 @@ describe("stopping with queued messages", () => {
     await waitFor(() => expect(mocks.sendMessage).not.toHaveBeenCalled());
     expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
   });
+
+  it("sends the oldest queued message immediately after a steering interrupt", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    const tree = () => (
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(tree());
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "change direction" });
+      chatMessageQueue.enqueue(conversationId, { text: "then summarize" });
+      latestSessionRef.current?.stop({ preserveQueuedMessages: true });
+    });
+    expect(mocks.stop).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "assistant-interrupted", role: "assistant", parts: [] },
+        isAbort: true,
+        isError: false,
+      });
+    });
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(2);
+
+    status = "ready";
+    rerender(tree());
+    await waitFor(() =>
+      expect(mocks.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: "user",
+          parts: [{ type: "text", text: "change direction" }],
+        }),
+      ),
+    );
+    expect(
+      chatMessageQueue.get(conversationId).map(({ text }) => text),
+    ).toEqual(["then summarize"]);
+  });
 });
 
 describe("manual context compaction and the message queue", () => {

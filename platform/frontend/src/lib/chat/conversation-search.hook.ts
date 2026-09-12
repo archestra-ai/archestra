@@ -61,6 +61,8 @@ export function useConversationSearch() {
       if (
         lockedChatEnabled &&
         event.altKey &&
+        !event.metaKey &&
+        !event.ctrlKey &&
         event.code === SHORTCUT_NEW_LOCKED_CHAT.code
       ) {
         event.preventDefault();

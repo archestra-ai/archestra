@@ -51,7 +51,8 @@ ENV DISABLE_AUTOUPDATER=1
 USER 1000:1000
 RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
-    python3 /tmp/agent-image-tests/claude-auth.py
+    python3 /tmp/agent-image-tests/claude-account.py \
+ && python3 /tmp/agent-image-tests/claude-auth.py
 
 FROM agent-base AS agent-codex
 USER root

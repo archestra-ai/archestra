@@ -47,18 +47,28 @@ export function useClaudeCodeSignIn(agentId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (
-      body: archestraApiTypes.CompleteClaudeCodeSignInData["body"] | undefined,
+      body:
+        | archestraApiTypes.CompleteClaudeCodeSignInData["body"]
+        | archestraApiTypes.StartClaudeCodeSignInData["body"]
+        | undefined,
     ) => {
       const request = { path: { id: agentId } };
-      const { data, error } = body
-        ? await archestraApiSdk.completeClaudeCodeSignIn({ ...request, body })
-        : await archestraApiSdk.startClaudeCodeSignIn(request);
+      const { data, error } =
+        body && "flowId" in body
+          ? await archestraApiSdk.completeClaudeCodeSignIn({ ...request, body })
+          : await archestraApiSdk.startClaudeCodeSignIn({
+              ...request,
+              body: body ?? {},
+            });
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      await client.cancelQueries({ queryKey: accountKey(agentId) });
       client.setQueryData(accountKey(agentId), data);
-      void client.invalidateQueries({ queryKey: accountKey(agentId) });
+      void client.invalidateQueries({
+        queryKey: ["agents", agentId, "runtime", "preflight"],
+      });
     },
   });
 }
@@ -73,7 +83,8 @@ export function useDisconnectClaudeCodeAccount(agentId: string) {
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      await client.cancelQueries({ queryKey: accountKey(agentId) });
       client.setQueryData(accountKey(agentId), data);
       client.removeQueries({ queryKey: modelsKey(agentId) });
       void client.invalidateQueries({

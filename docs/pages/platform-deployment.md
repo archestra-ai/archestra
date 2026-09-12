@@ -919,7 +919,57 @@ Upgrading from a chart that ran the included engine leaves its cache volume behi
 
 ### Agent Runtime
 
-Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can view logs, open a shell, and steer a run while it is active. It needs the Kubernetes runtime configured (see `ARCHESTRA_ORCHESTRATOR_*`); without it the capability stays unavailable.
+#### Cluster Prerequisites
+
+Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_*` and `ARCHESTRA_AGENT_RUNTIME_ENABLED=true`. Your cluster needs:
+
+- Linux nodes with enough CPU, memory, and disk for your runtime images.
+- The upstream [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/) and permission to install its custom resources.
+- A storage class with dynamic volume provisioning.
+- The Helm chart's runtime permissions in each execution namespace.
+- Outbound access from runtime workloads to your image registry, DNS, and Archestra's API, proxy, and gateway.
+
+Install the tested controller version before enabling the feature:
+
+```sh
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
+kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
+kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
+```
+
+The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
+
+#### Provider Setup
+
+| Cluster | Setup |
+| --- | --- |
+| GKE | Use Linux node pools and the Persistent Disk CSI driver. Check Autopilot restrictions; arbitrary privileged images require a compatible Standard pool. GKE Sandbox does not support privileged containers. |
+| AKS | Use Linux agent pools and Azure Disk CSI. Review Pod Security and Azure Policy restrictions. |
+| EKS With EC2 Nodes | Install EBS CSI with its required IAM permissions. Cluster admission must permit your workload. |
+| EKS Auto Mode | Use an Auto Mode storage class with `ebs.csi.eks.amazonaws.com`. Check your NodePool and image compatibility. |
+| Self-Managed Kubernetes | Configure a compatible OCI runtime, CSI driver, and dynamically provisioned storage class. |
+
+For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve a workspace after node loss. Use the storage and node-selector settings below to select compatible resources.
+
+#### Startup Troubleshooting
+
+Check **Settings → Agents → Runtime Backend** if the runtime is unavailable. Confirm the controller is installed and healthy. For runs waiting on storage, check the storage class and available capacity. For image-pull failures, check the image name, registry access, and pull credentials. Chat shows the reported startup failure.
+
+#### Privileged Containers
+
+Ordinary coding clients do not require privilege. Docker-in-Docker and nested Kubernetes development environments may require it. Privileged containers have broad access to the node, so use a dedicated namespace and node pool.
+
+Privilege requires all three settings:
+
+1. `ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true` in the deployment.
+2. Elevated permissions enabled on the Agent.
+3. A node runtime and cluster admission policy that allow privileged containers.
+
+The deployment setting does not override cloud-provider restrictions. Images running nested Docker must also prepare the node's cgroup setup. After workspace resumption, restart Docker and any development services.
+
+#### Runtime Configuration
+
+Configure deployment defaults below; individual Agents can override supported run settings. For agent setup and everyday use, see [Agent Runtime](/docs/platform-agent-runtime).
 
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
@@ -947,7 +997,7 @@ Agent Runtime runs delegated Agent tasks in dedicated Kubernetes pods. You can v
 - **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_SIZE`** - Persistent volume capacity for each Agent Sandbox workspace. Stores runtime state, client sessions, and working files under `/home/node`. Privileged workspaces also store `/var/lib/docker` on this volume.
   - Default: `20Gi`
 
-- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime prerequisites](/docs/platform-agent-runtime#prerequisites).
+- **`ARCHESTRA_AGENT_RUNTIME_WORKSPACE_STORAGE_CLASS`** - Storage class for workspace volumes. Use a CSI-backed class with `WaitForFirstConsumer` when nodes span zones. See [Agent Runtime setup](#agent-runtime).
   - Default: the cluster's default storage class
 
 - **`ARCHESTRA_AGENT_RUNTIME_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.

@@ -18,7 +18,9 @@ An organization connection is shared by Agents in the organization.
 
 GitHub tokens use custom credential definitions. Existing GitHub connections and Agent bindings are preserved when upgrading.
 
-Claude subscriptions use native sign-in on the Agent instead of a reusable secret. Each user connects their own account. See [Claude Code authentication](/docs/platform-agent-runtime#model-inference-and-mcp-tools).
+Claude subscriptions use personal sign-in on each Agent. Each user connects their own account. See [Claude Code authentication](/docs/platform-agent-runtime#model-inference-and-mcp-tools).
+
+On read-only Vault deployments, store a token from `claude setup-token` in Vault. Connect its `path#key` reference on the Agent.
 
 Administrators can add definitions for other services. Each definition controls which scopes it supports.
 

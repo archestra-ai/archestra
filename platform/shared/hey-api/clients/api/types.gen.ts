@@ -20100,7 +20100,9 @@ export type DisconnectClaudeCodeAccountResponses = {
      * Default Response
      */
     200: {
-        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed';
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        requiresVaultReference?: boolean;
+        expiresAt?: string | null;
         flowId?: string;
         authorizationUrl?: string;
     };
@@ -20187,7 +20189,9 @@ export type GetClaudeCodeAccountResponses = {
      * Default Response
      */
     200: {
-        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed';
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        requiresVaultReference?: boolean;
+        expiresAt?: string | null;
         flowId?: string;
         authorizationUrl?: string;
     };
@@ -20196,7 +20200,9 @@ export type GetClaudeCodeAccountResponses = {
 export type GetClaudeCodeAccountResponse = GetClaudeCodeAccountResponses[keyof GetClaudeCodeAccountResponses];
 
 export type StartClaudeCodeSignInData = {
-    body?: never;
+    body: {
+        vaultReference?: string;
+    } | null;
     path: {
         id: string;
     };
@@ -20274,7 +20280,9 @@ export type StartClaudeCodeSignInResponses = {
      * Default Response
      */
     200: {
-        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed';
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        requiresVaultReference?: boolean;
+        expiresAt?: string | null;
         flowId?: string;
         authorizationUrl?: string;
     };
@@ -20285,7 +20293,7 @@ export type StartClaudeCodeSignInResponse = StartClaudeCodeSignInResponses[keyof
 export type CompleteClaudeCodeSignInData = {
     body: {
         flowId: string;
-        code: string;
+        code?: string;
     };
     path: {
         id: string;
@@ -20364,7 +20372,9 @@ export type CompleteClaudeCodeSignInResponses = {
      * Default Response
      */
     200: {
-        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed';
+        state: 'disconnected' | 'starting' | 'awaiting_code' | 'connecting' | 'connected' | 'failed' | 'expired';
+        requiresVaultReference?: boolean;
+        expiresAt?: string | null;
         flowId?: string;
         authorizationUrl?: string;
     };

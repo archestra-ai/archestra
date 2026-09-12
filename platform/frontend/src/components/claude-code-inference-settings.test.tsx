@@ -151,6 +151,77 @@ describe("Claude Code authentication", () => {
     expect(modelRequests).toBe(1);
   });
 
+  it("finishes an asynchronous token flow without resubmitting the authorization code", async () => {
+    let polls = 0;
+    server.use(
+      http.get(accountUrl, () =>
+        HttpResponse.json(
+          connected
+            ? { state: "connected" }
+            : { state: "connecting", flowId: pendingSignIn.flowId },
+        ),
+      ),
+      http.post(`${accountUrl}/complete`, async ({ request }) => {
+        expect(await request.json()).toEqual({ flowId: pendingSignIn.flowId });
+        polls++;
+        connected = true;
+        return HttpResponse.json({ state: "connected" });
+      }),
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <Settings />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Sign in to use this agent.");
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByText("Signed in for you", {}, { timeout: 5000 });
+    expect(polls).toBe(1);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("connects a read-only Vault reference and shows expired connections as requiring sign-in", async () => {
+    let reference: unknown;
+    server.use(
+      http.get(accountUrl, () =>
+        HttpResponse.json({ state: "expired", requiresVaultReference: true }),
+      ),
+      http.post(accountUrl, async ({ request }) => {
+        reference = await request.json();
+        return HttpResponse.json({
+          state: "connecting",
+          flowId: pendingSignIn.flowId,
+          requiresVaultReference: true,
+        });
+      }),
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <Settings />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Connection expired. Sign in again.");
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    const button = screen.getByRole("button", {
+      name: "Connect Vault credential",
+    });
+    expect(button).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Sign in with Claude" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Vault reference"), {
+      target: { value: "secret/data/personal#token" },
+    });
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(reference).toEqual({
+        vaultReference: "secret/data/personal#token",
+      }),
+    );
+  });
+
   it("switches to provider billing without treating Vertex configuration as a personal sign-in", async () => {
     render(
       <QueryClientProvider client={client}>

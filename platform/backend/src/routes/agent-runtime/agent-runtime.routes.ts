@@ -11,7 +11,6 @@ import {
   userHasPermission,
 } from "@/auth";
 import config from "@/config";
-import { claudeCodeAccountManager } from "@/k8s/agent-runtime/claude-code-account";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -28,6 +27,7 @@ import {
   isAnyAgentRuntimeBackendDriverEnabled,
   resolveAgentRuntimeBackendDriver,
 } from "@/services/agent-runtime/backends";
+import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import {
   deleteAgentRuntimeCredential,
   preflightAgentRuntimeCredentials,
@@ -257,6 +257,11 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.StartClaudeCodeSignIn,
+        body: z
+          .object({
+            vaultReference: z.string().trim().min(1).max(2048).optional(),
+          })
+          .nullish(),
         tags: ["Agents"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(ClaudeCodeAccountSchema),
@@ -265,10 +270,23 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       const { runtime } = await requireReadableAgentRuntime(request);
       const owner = { runtime, userId: request.user.id };
-      const before = await claudeCodeAccountManager.status(owner);
-      const after = await claudeCodeAccountManager.start(owner);
-      request.auditBefore = { claudeCodeAccount: { state: before.state } };
-      request.auditAfter = { claudeCodeAccount: { state: after.state } };
+      const before = await claudeCodeAccountManager.status({
+        ...owner,
+        inspectFlow: false,
+      });
+      const after = await claudeCodeAccountManager.start({
+        ...owner,
+        ...request.body,
+      });
+      request.auditBefore = {
+        claudeCodeAccount: {
+          state: before.state,
+          flowId: before.flowId ?? null,
+        },
+      };
+      request.auditAfter = {
+        claudeCodeAccount: { state: after.state, flowId: after.flowId ?? null },
+      };
       return after;
     },
   );
@@ -282,7 +300,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
           flowId: z.string().uuid(),
-          code: z.string().trim().min(1).max(4096),
+          code: z.string().trim().min(1).max(4096).optional(),
         }),
         response: constructResponseSchema(ClaudeCodeAccountSchema),
       },
@@ -294,12 +312,19 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         ...request.body,
       });
-      request.auditBefore = {
-        claudeCodeAccount: { authorizationSubmitted: false },
-      };
-      request.auditAfter = {
-        claudeCodeAccount: { authorizationSubmitted: true },
-      };
+      if (result.state === "connected") {
+        request.auditBefore = { claudeCodeAccount: { state: "connecting" } };
+        request.auditAfter = { claudeCodeAccount: { state: "connected" } };
+      } else if (request.body.code) {
+        request.auditBefore = {
+          claudeCodeAccount: { authorizationSubmitted: false },
+        };
+        request.auditAfter = {
+          claudeCodeAccount: { authorizationSubmitted: true },
+        };
+      } else {
+        request.auditSkip = true;
+      }
       return result;
     },
   );
@@ -317,10 +342,20 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request) => {
       const { runtime } = await requireReadableAgentRuntime(request);
       const owner = { runtime, userId: request.user.id };
-      const before = await claudeCodeAccountManager.status(owner);
+      const before = await claudeCodeAccountManager.status({
+        ...owner,
+        inspectFlow: false,
+      });
       const after = await claudeCodeAccountManager.disconnect(owner);
-      request.auditBefore = { claudeCodeAccount: { state: before.state } };
-      request.auditAfter = { claudeCodeAccount: { state: after.state } };
+      request.auditBefore = {
+        claudeCodeAccount: {
+          state: before.state,
+          flowId: before.flowId ?? null,
+        },
+      };
+      request.auditAfter = {
+        claudeCodeAccount: { state: after.state, flowId: after.flowId ?? null },
+      };
       return after;
     },
   );

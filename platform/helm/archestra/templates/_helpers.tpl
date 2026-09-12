@@ -517,6 +517,10 @@ rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["daemonsets"]
   verbs: ["get", "list", "create", "update", "patch", "delete"]
+# Disposable Claude sign-in Jobs; workspace storage remains managed by Sandbox.
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["create", "delete"]
 # Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]

@@ -878,7 +878,14 @@ export const getClaudeCodeAccount = <ThrowOnError extends boolean = false>(optio
  *
  * `agent:read`: View and list agents
  */
-export const startClaudeCodeSignIn = <ThrowOnError extends boolean = false>(options: Options<StartClaudeCodeSignInData, ThrowOnError>) => (options.client ?? client).post<StartClaudeCodeSignInResponses, StartClaudeCodeSignInErrors, ThrowOnError>({ url: '/api/agents/{id}/runtime/claude-code/account', ...options });
+export const startClaudeCodeSignIn = <ThrowOnError extends boolean = false>(options: Options<StartClaudeCodeSignInData, ThrowOnError>) => (options.client ?? client).post<StartClaudeCodeSignInResponses, StartClaudeCodeSignInErrors, ThrowOnError>({
+    url: '/api/agents/{id}/runtime/claude-code/account',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Authentication:

@@ -70492,8 +70492,18 @@
                         "awaiting_code",
                         "connecting",
                         "connected",
-                        "failed"
+                        "failed",
+                        "expired"
                       ]
+                    },
+                    "requiresVaultReference": {
+                      "type": "boolean"
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
                     },
                     "flowId": {
                       "type": "string",
@@ -70755,6 +70765,24 @@
         "tags": [
           "Agents"
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "vaultReference": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                }
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {
@@ -70783,8 +70811,18 @@
                         "awaiting_code",
                         "connecting",
                         "connected",
-                        "failed"
+                        "failed",
+                        "expired"
                       ]
+                    },
+                    "requiresVaultReference": {
+                      "type": "boolean"
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
                     },
                     "flowId": {
                       "type": "string",
@@ -71074,8 +71112,18 @@
                         "awaiting_code",
                         "connecting",
                         "connected",
-                        "failed"
+                        "failed",
+                        "expired"
                       ]
+                    },
+                    "requiresVaultReference": {
+                      "type": "boolean"
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
                     },
                     "flowId": {
                       "type": "string",
@@ -71358,8 +71406,7 @@
                   }
                 },
                 "required": [
-                  "flowId",
-                  "code"
+                  "flowId"
                 ]
               }
             }
@@ -71393,8 +71440,18 @@
                         "awaiting_code",
                         "connecting",
                         "connected",
-                        "failed"
+                        "failed",
+                        "expired"
                       ]
+                    },
+                    "requiresVaultReference": {
+                      "type": "boolean"
+                    },
+                    "expiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
                     },
                     "flowId": {
                       "type": "string",

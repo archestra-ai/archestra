@@ -2,8 +2,7 @@
 
 These are the maintained container images behind the Agent catalog. Every
 image satisfies the same runtime contract: a POSIX shell and `tmux`, a
-non-root working directory, an Archestra LLM proxy virtual key, and the
-invoking user's Agent-scoped MCP gateway endpoint.
+non-root working directory and the invoking user's Agent-scoped MCP gateway endpoint. Provider-backed runs also receive an Archestra LLM proxy virtual key.
 
 | Target | Agent command | Inference API |
 | --- | --- | --- |
@@ -22,30 +21,20 @@ docker build -f agent_images/Dockerfile --target agent-codex -t agent-codex:dev 
 
 Tilt pulls the public GAR images by default. Set
 `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE=agent-archestra:dev` to build
-all six targets locally and use them for dynamically-created Jobs.
+all six targets locally and use them for Agent Runtime workspaces.
 
-The native wrappers create their client configuration at run time under
-`/var/run/archestra`. Provider and MCP credentials are never baked into an
-image or written to the workspace. Every model request goes to the Agent-scoped
-LLM proxy endpoint and every MCP request goes to the Agent-scoped gateway, so
-the platform applies the same model selection, limits, policies, tool grants,
-and logs as it does for foreground execution. The pod receives a short-lived
-virtual key on the standard provider path; it never receives the upstream
-provider credential. The one exception is an optional per-user Claude Code
-OAuth token. It is injected only into the official Claude Code target, while a
-separate passthrough virtual key authenticates and attributes its proxied
-requests.
+The native wrappers create client configuration at run time under `/var/run/archestra`. Credentials are never baked into images. On the provider path, the runtime receives a temporary virtual key and routes inference through the Agent-scoped LLM proxy. The upstream provider credential stays in the backend.
 
-All maintained clients send the task ID as both `X-Archestra-Run-Id`
-and `X-Archestra-Session-Id` on LLM and MCP requests. Do the same in any new
+Claude Code personal subscriptions use a token from the configured secrets backend and connect directly to Anthropic. Those inference calls bypass proxy logs, limits, and guardrails. MCP calls still use the Agent-scoped gateway and its tool policies.
+
+Maintained clients send the task ID as both `X-Archestra-Run-Id` and `X-Archestra-Session-Id` on proxy and MCP gateway requests. Do the same in any new
 wrapper so the platform can group interactions and tool calls with the run.
 
 All six targets also export their native message and tool history to
 `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json`. The control plane
 validates and persists this provider-neutral artifact independently of the
 terminal recording. Custom images can opt into the same completed-run view by
-implementing the versioned contract documented under **Agent Runtime → Bring
-Your Own Image → Readable transcript**.
+implementing the [runtime image contract](runtime-contract.md#readable-transcript). The same reference covers required tools, input files, steering, and injected environment variables.
 
 Files attached to the initial Chat instruction are written under
 `ARCHESTRA_AGENT_RUNTIME_ATTACHMENTS_DIR` before the client

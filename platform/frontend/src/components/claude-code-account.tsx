@@ -29,6 +29,7 @@ export function ClaudeCodeAccount({
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
+  const [vaultReference, setVaultReference] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const account = useClaudeCodeAccount(agentId, open);
   const connected = account.data?.state === "connected";
@@ -57,6 +58,23 @@ export function ClaudeCodeAccount({
     }
   }, [submitted, connected]);
 
+  const {
+    mutate: finishSignIn,
+    isPending: finishing,
+    isError: signInFailed,
+  } = signIn;
+  const flowId = account.data?.flowId;
+  const state = account.data?.state;
+  useEffect(() => {
+    if (!open || state !== "connecting" || !flowId || finishing || signInFailed)
+      return;
+    const timer = setTimeout(() => {
+      setSubmitted(true);
+      finishSignIn({ flowId });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [open, state, flowId, finishing, signInFailed, finishSignIn]);
+
   if (!agentId)
     return (
       <p className="text-sm text-muted-foreground">
@@ -81,7 +99,9 @@ export function ClaudeCodeAccount({
                   ? "Could not check connection"
                   : connected
                     ? "Signed in for you"
-                    : "Sign in to use this agent."}
+                    : account.data?.state === "expired"
+                      ? "Connection expired. Sign in again."
+                      : "Sign in to use this agent."}
             </span>
           </p>
         </div>
@@ -174,6 +194,17 @@ export function ClaudeCodeAccount({
                 </p>
               </div>
             </div>
+            {account.data?.expiresAt && (
+              <p className="text-xs text-muted-foreground">
+                Reconnect by{" "}
+                {new Date(account.data.expiresAt).toLocaleDateString()}.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Disconnect prevents new runs from using this account. Running
+              sessions keep their token. Revoke the token in Claude to end its
+              access.
+            </p>
             <Button
               type="button"
               variant="outline"
@@ -182,6 +213,22 @@ export function ClaudeCodeAccount({
               onClick={() => disconnect.mutate()}
             >
               <span>Disconnect</span>
+            </Button>
+          </div>
+        ) : signIn.isError ? (
+          <div className="space-y-2">
+            <p role="alert" className="text-sm text-destructive">
+              Could not complete sign-in. Please try again.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                signIn.reset();
+                signIn.mutate(vaultReference ? { vaultReference } : undefined);
+              }}
+            >
+              Try again
             </Button>
           </div>
         ) : account.data?.state === "awaiting_code" ? (
@@ -234,14 +281,53 @@ export function ClaudeCodeAccount({
                 Sign-in did not complete. Please try again.
               </p>
             )}
+            {account.data?.state === "expired" && (
+              <p className="text-sm text-muted-foreground">
+                Your connection expired. Sign in again to start new runs.
+              </p>
+            )}
+            {/* SPDX-SnippetBegin */}
+            {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
+            {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+            {account.data?.requiresVaultReference && (
+              <div className="space-y-2">
+                <Label htmlFor="claude-vault-reference">Vault reference</Label>
+                <Input
+                  id="claude-vault-reference"
+                  autoComplete="off"
+                  placeholder="path/to/secret#key"
+                  value={vaultReference}
+                  onChange={(event) => setVaultReference(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Generate a token with <code>claude setup-token</code>, store
+                  it in Vault, then enter its path#key reference.
+                </p>
+              </div>
+            )}
+            {/* SPDX-SnippetEnd */}
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => signIn.mutate(undefined)}
+              disabled={
+                account.data?.requiresVaultReference && !vaultReference.trim()
+              }
+              onClick={() => {
+                setSubmitted(true);
+                signIn.mutate(
+                  account.data?.requiresVaultReference
+                    ? { vaultReference: vaultReference.trim() }
+                    : undefined,
+                );
+              }}
             >
               <RuntimeCredentialIcon icon="logo:anthropic" className="size-4" />
-              <span>Sign in with Claude</span>
+              <span>
+                {account.data?.requiresVaultReference
+                  ? "Connect Vault credential"
+                  : "Sign in with Claude"}
+              </span>
             </Button>
           </div>
         )}

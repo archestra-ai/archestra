@@ -3,8 +3,7 @@ import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import type { ResolvedAgentRuntime } from "@/types";
-import { claudeCodeAccountManager } from "./claude-code-account";
+import { claudeCodeAccountRuntime } from "./claude-code-account";
 import { execAgentRuntimeCommand } from "./exec";
 
 vi.mock("@/config", async () =>
@@ -35,147 +34,177 @@ beforeEach(() => {
   vi.mocked(execAgentRuntimeCommand).mockReset();
 });
 
-describe("Claude Code native account storage", () => {
-  test("keeps account and model discovery isolated by user, Agent, organization, and environment", async ({
-    makeOrganization,
-    makeAgent,
-    makeUser,
-  }) => {
-    const organization = await makeOrganization({
-      defaultEnvironmentNamespace: "first-environment",
-    });
-    const otherOrganization = await makeOrganization({
-      defaultEnvironmentNamespace: "second-environment",
-    });
-    const user = await makeUser();
-    const otherUser = await makeUser();
-    const agent = await makeAgent({ organizationId: organization.id });
-    const otherAgent = await makeAgent({ organizationId: organization.id });
-    const runtime: ResolvedAgentRuntime = {
-      agentId: agent.id,
-      organizationId: organization.id,
-      secretId: null,
-      environmentId: null,
-      image: "example.test/agent-claude-code:latest",
-      command: ["archestra-claude-code"],
-      inferenceProtocol: "anthropic",
-      backend: "kubernetes",
-      steerMode: "tmux_keys",
-      privileged: false,
-      environment: [],
-      credentials: [],
-      resources: null,
-      ttlHours: null,
-      idleTimeoutMinutes: null,
-      maxCostUsd: null,
-      claudeCode: { authentication: "subscription" },
-    };
-    const requested: string[] = [];
-    let connectedPod: string | undefined;
+describe("disposable Claude sign-in Jobs", () => {
+  test("installs owned egress policy before allowing the credential process to run, without storage", async () => {
+    const order: string[] = [];
     server.use(
+      http.get("https://kubernetes.example.test/apis/:group/:version", () =>
+        HttpResponse.json({ resources: [] }),
+      ),
       http.get(
-        "https://kubernetes.example.test/api/v1/namespaces/:namespace/pods/:name",
-        ({ params }) => {
-          const resource = `${params.namespace}/${params.name}`;
-          requested.push(resource);
-          if (resource !== connectedPod)
-            return HttpResponse.json(
-              { kind: "Status", code: 404, reason: "NotFound" },
-              { status: 404 },
-            );
+        "https://kubernetes.example.test/api/v1/namespaces/account-tests/configmaps/:name",
+        () => HttpResponse.json({ data: {} }),
+      ),
+      http.get(
+        "https://kubernetes.example.test/api/v1/namespaces/kube-system/services/kube-dns",
+        () => HttpResponse.json({ spec: { clusterIP: "10.96.0.10" } }),
+      ),
+      http.post(
+        "https://kubernetes.example.test/apis/batch/v1/namespaces/account-tests/jobs",
+        async ({ request }) => {
+          order.push("job");
+          const job = (await request.json()) as {
+            spec: {
+              activeDeadlineSeconds: number;
+              ttlSecondsAfterFinished: number;
+              template: { spec: Record<string, unknown> };
+            };
+          };
+          expect(job.spec.activeDeadlineSeconds).toBe(600);
+          expect(job.spec.ttlSecondsAfterFinished).toBe(60);
+          expect(job.spec).not.toHaveProperty("suspend");
+          expect(job.spec.template.spec).toMatchObject({
+            schedulingGates: [{ name: "archestra.io/egress-ready" }],
+            automountServiceAccountToken: false,
+          });
+          expect(job.spec.template.spec).not.toHaveProperty("volumes");
+          expect(JSON.stringify(job)).not.toContain("persistentVolumeClaim");
           return HttpResponse.json({
-            metadata: { name: params.name },
-            status: { phase: "Running" },
-            spec: { containers: [{ image: runtime.image }] },
+            ...job,
+            metadata: { name: `claude-sign-in-${FLOW.flowId}`, uid: "job-uid" },
           });
         },
       ),
-    );
-    const owner = { runtime, userId: user.id };
-    expect(await claudeCodeAccountManager.status(owner)).toEqual({
-      state: "disconnected",
-    });
-    connectedPod = requested[0];
-    vi.mocked(execAgentRuntimeCommand).mockImplementation(async ({ command }) =>
-      JSON.stringify(
-        command[1] === "models"
-          ? {
-              models: [
-                {
-                  value: "new-cli-model",
-                  displayName: "New CLI model",
-                  description: "Native metadata",
-                },
+      http.post(
+        "https://kubernetes.example.test/apis/networking.k8s.io/v1/namespaces/account-tests/networkpolicies",
+        async ({ request }) => {
+          order.push("policy");
+          expect(await request.json()).toMatchObject({
+            metadata: {
+              ownerReferences: [
+                { apiVersion: "batch/v1", kind: "Job", uid: "job-uid" },
               ],
-            }
-          : { state: "connected" },
+            },
+          });
+          return HttpResponse.json({});
+        },
+      ),
+      http.get(
+        "https://kubernetes.example.test/api/v1/namespaces/account-tests/pods",
+        ({ request }) => {
+          expect(new URL(request.url).searchParams.get("labelSelector")).toBe(
+            `job-name=claude-sign-in-${FLOW.flowId}`,
+          );
+          return HttpResponse.json({
+            items: [
+              {
+                metadata: { name: "sign-in-pod" },
+                spec: {
+                  schedulingGates: [
+                    { name: "other.test/gate" },
+                    { name: "archestra.io/egress-ready" },
+                  ],
+                },
+              },
+            ],
+          });
+        },
+      ),
+      http.patch(
+        "https://kubernetes.example.test/api/v1/namespaces/account-tests/pods/sign-in-pod",
+        async ({ request }) => {
+          order.push("schedule");
+          expect(await request.json()).toEqual([
+            { op: "remove", path: "/spec/schedulingGates/1" },
+          ]);
+          return HttpResponse.json({});
+        },
       ),
     );
-    expect(await claudeCodeAccountManager.status(owner)).toEqual({
-      state: "connected",
+    await claudeCodeAccountRuntime.create({
+      ...FLOW,
+      image: "example.test/claude:test",
+      agentId: "test-agent",
+      vaultReference: false,
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
     });
-    expect((await claudeCodeAccountManager.models(owner)).models[0].value).toBe(
-      "new-cli-model",
+    expect(order).toEqual(["job", "policy", "schedule"]);
+  });
+
+  test("passes authorization data on stdin and returns only native status for the selected flow", async () => {
+    server.use(
+      http.get(
+        "https://kubernetes.example.test/api/v1/namespaces/account-tests/pods",
+        () =>
+          HttpResponse.json({
+            items: [
+              {
+                metadata: { name: "sign-in-pod" },
+                status: { phase: "Running" },
+              },
+            ],
+          }),
+      ),
     );
-    for (const isolatedOwner of [
-      { runtime, userId: otherUser.id },
-      { runtime: { ...runtime, agentId: otherAgent.id }, userId: user.id },
-      {
-        runtime: { ...runtime, organizationId: otherOrganization.id },
-        userId: user.id,
+    vi.mocked(execAgentRuntimeCommand).mockImplementation(
+      async ({ stdin, command }) => {
+        expect(command).toEqual(["archestra-claude-account", "complete"]);
+        let input = "";
+        for await (const chunk of stdin ?? []) input += chunk;
+        expect(JSON.parse(input)).toEqual({
+          flowId: FLOW.flowId,
+          code: "example-code",
+        });
+        return JSON.stringify({ state: "connecting" });
       },
-    ]) {
-      expect(await claudeCodeAccountManager.status(isolatedOwner)).toEqual({
-        state: "disconnected",
-      });
-      expect(await claudeCodeAccountManager.models(isolatedOwner)).toEqual({
-        models: [],
-      });
-    }
-    await expect(
-      claudeCodeAccountManager.complete({
-        runtime,
-        userId: otherUser.id,
-        flowId: crypto.randomUUID(),
-        code: "another-users-flow",
-      }),
-    ).rejects.toMatchObject({ statusCode: 409 });
-    await expect(
-      claudeCodeAccountManager.requireConnection({
-        runtime,
-        userId: otherUser.id,
-        runtimeScope: "first-environment",
-      }),
-    ).rejects.toMatchObject({
-      code: "AGENT_RUNTIME_CREDENTIALS_REQUIRED",
-      agentId: agent.id,
-      missing: [
-        {
-          key: "CLAUDE_CODE_ACCOUNT",
-          label: "Claude Code account",
-          description: expect.any(String),
-        },
-      ],
-    });
-    expect(new Set(requested).size).toBe(4);
-    expect(requested).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(/^first-environment\//),
-        expect.stringMatching(/^second-environment\//),
-      ]),
     );
-    expect(execAgentRuntimeCommand).toHaveBeenCalledTimes(2);
-    await expect(
-      claudeCodeAccountManager.requireConnection({
-        ...owner,
-        runtimeScope: "different-environment",
+    expect(
+      await claudeCodeAccountRuntime.complete({
+        ...FLOW,
+        code: "example-code",
       }),
-    ).rejects.toThrow("different environment");
+    ).toEqual({ state: "connecting" });
+    vi.mocked(execAgentRuntimeCommand).mockResolvedValue(
+      "malformed-private-output",
+    );
+    await expect(claudeCodeAccountRuntime.status(FLOW)).rejects.toThrow(
+      "invalid account data",
+    );
+  });
+
+  test("handles pending and stopped pods, and cleanup after automatic Job collection", async () => {
+    let phase = "Pending";
+    server.use(
+      http.get(
+        "https://kubernetes.example.test/api/v1/namespaces/account-tests/pods",
+        () =>
+          HttpResponse.json({
+            items: [{ metadata: { name: "sign-in-pod" }, status: { phase } }],
+          }),
+      ),
+      http.delete(
+        "https://kubernetes.example.test/apis/batch/v1/namespaces/account-tests/jobs/:name",
+        () =>
+          HttpResponse.json(
+            { kind: "Status", code: 404, reason: "NotFound" },
+            { status: 404 },
+          ),
+      ),
+    );
+    expect(await claudeCodeAccountRuntime.status(FLOW)).toMatchObject({
+      state: "starting",
+    });
+    phase = "Failed";
+    expect(await claudeCodeAccountRuntime.complete(FLOW)).toEqual({
+      state: "failed",
+    });
+    expect(execAgentRuntimeCommand).not.toHaveBeenCalled();
     await expect(
-      claudeCodeAccountManager.status({
-        ...owner,
-        runtime: { ...runtime, command: ["another-harness"] },
-      }),
-    ).rejects.toThrow("only available in the Claude Code runtime");
+      claudeCodeAccountRuntime.delete(FLOW),
+    ).resolves.toBeUndefined();
   });
 });
+const FLOW = {
+  namespace: "account-tests",
+  flowId: "00000000-0000-4000-8000-000000000001",
+};

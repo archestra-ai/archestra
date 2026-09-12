@@ -43,7 +43,8 @@ vi.mock("@/lib/connection-setup.query", () => ({
 }));
 
 vi.mock("./skills-marketplace-step", () => ({
-  useAllSkills: (params?: { enabled?: boolean }) => allSkillsMock(params),
+  useAllSkills: (params?: { enabled?: boolean; forAgentId?: string | null }) =>
+    allSkillsMock(params),
   // The marketplace step has its own test file; here it only matters whether
   // the panel renders it as a step.
   useSkillsMarketplaceVisible: () => skillsMarketplaceVisibleMock(),
@@ -1055,6 +1056,12 @@ describe("ConnectCommandPanel", () => {
     await screen.findByText(COMMAND);
 
     await user.click(screen.getByTestId("connect-change-skills"));
+    expect(
+      screen.getByText(/Everything shared with you is installed/),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Only skills in the LLM Proxy's environment/),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByLabelText("Install shared skills"));
 
     await waitFor(() =>
@@ -1271,7 +1278,7 @@ describe("ConnectCommandPanel", () => {
     expect(allSkillsMock).toHaveBeenLastCalledWith(
       // objectContaining, so the deferral this list is fetched under stays an
       // implementation detail: what matters is that it is switched off.
-      expect.objectContaining({ enabled: false, forAgentId: "p1" }),
+      expect.objectContaining({ enabled: false }),
     );
     expect(
       screen.queryByTestId("skills-marketplace-step"),

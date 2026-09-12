@@ -784,9 +784,8 @@ export type ConnectSkill = Pick<
  * skill snapshot can opt into a loud error, rather than silently producing an
  * artifact without the selected skills.
  *
- * `forAgentId` narrows the set to skills visible from that agent's
- * environment — the connect command passes the selected LLM proxy so only
- * skills the connection can actually reach are offered.
+ * `forAgentId` narrows the set to skills visible from a supported skill agent's
+ * environment. LLM proxies do not expose skills and must not be passed here.
  */
 export function useAllSkills(params?: {
   enabled?: boolean;

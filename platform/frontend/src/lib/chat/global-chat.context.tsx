@@ -131,7 +131,10 @@ interface ChatSession {
     partIndex: number;
     text: string;
   }) => Promise<void>;
-  stop: () => void;
+  stop: (options?: {
+    preserveQueuedMessages?: boolean;
+    stopServer?: () => Promise<unknown>;
+  }) => void;
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | undefined;
   setMessages: ReturnType<typeof useChat>["setMessages"];
@@ -605,6 +608,12 @@ function ChatSessionHook({
   // onData), which close over the config object before `messages` exists.
   // Assigned every render right after useChat returns.
   const latestMessagesRef = useRef<UIMessage[]>(initialMessages);
+  const latestStatusRef = useRef<ChatSession["status"]>("ready");
+  const preserveQueuedMessagesOnAbortRef = useRef<{
+    userMessageId: string | undefined;
+  } | null>(null);
+  const stopInFlightRef = useRef(false);
+  const [isStopping, setIsStopping] = useState(false);
 
   const {
     messages,
@@ -670,6 +679,18 @@ function ChatSessionHook({
     experimental_throttle: 100,
     id: conversationId,
     onFinish: async ({ message, isAbort, isError }) => {
+      const preservation = preserveQueuedMessagesOnAbortRef.current;
+      const preserveQueuedMessages =
+        preservation !== null &&
+        preservation.userMessageId ===
+          latestMessagesRef.current.findLast((part) => part.role === "user")
+            ?.id;
+      // A failed stream can reattach to the same turn while its server stop
+      // is pending. Preserve that intent until the turn actually finishes;
+      // a different user message must never inherit it.
+      if (!isError || !preserveQueuedMessages) {
+        preserveQueuedMessagesOnAbortRef.current = null;
+      }
       setOptimisticToolCalls([]);
       setPendingMcpElicitation(null);
       clearActiveContextCompaction();
@@ -703,9 +724,12 @@ function ChatSessionHook({
       // perpetually "running" tool. Drop those dangling parts so the live view
       // matches what the backend persists (and a reload would show).
       if (isAbort) {
-        // Stop is a hard boundary: queued follow-ups belong to the work the
-        // user just cancelled and must never auto-submit after the abort.
-        chatMessageQueue.clear(conversationId);
+        // An explicit steering interrupt preserves queued follow-ups so the
+        // normal ready-state drain can deliver the oldest one immediately.
+        // Other aborts remain a hard boundary and discard pending work.
+        if (!preserveQueuedMessages) {
+          chatMessageQueue.clear(conversationId);
+        }
         // The updater form runs against the SDK's live messages, not this
         // callback's (throttled, possibly stale) closure, so the most recently
         // streamed text is never rolled back.
@@ -1079,6 +1103,7 @@ function ChatSessionHook({
   } as Parameters<typeof useChat>[0]);
 
   latestMessagesRef.current = messages;
+  latestStatusRef.current = status;
 
   // Text and tool-call deltas update the SDK's raw message list. Track that
   // progress independently from displayedMessages, which can intentionally be
@@ -1219,6 +1244,8 @@ function ChatSessionHook({
     if (
       status !== "ready" ||
       error ||
+      isStopping ||
+      stopInFlightRef.current ||
       queuedMessages.length === 0 ||
       !resumeSettled ||
       queueDrainInFlightRef.current ||
@@ -1252,6 +1279,7 @@ function ChatSessionHook({
     status,
     error,
     queuedMessages,
+    isStopping,
     resumeSettled,
     hasPendingApprovalRequest,
     pendingMcpElicitation,
@@ -1342,6 +1370,48 @@ function ChatSessionHook({
   // function references from useChat which change every render). This is a ref
   // update only — no state changes, no re-renders.
   const sessionRef = useRef<ChatSession>(null as unknown as ChatSession);
+  const stopSession = useCallback(
+    (options?: {
+      preserveQueuedMessages?: boolean;
+      stopServer?: () => Promise<unknown>;
+    }) => {
+      if (stopInFlightRef.current) return;
+      const activeUserMessageId = latestMessagesRef.current.findLast(
+        (message) => message.role === "user",
+      )?.id;
+      preserveQueuedMessagesOnAbortRef.current = options?.preserveQueuedMessages
+        ? { userMessageId: activeUserMessageId }
+        : null;
+      if (!options?.stopServer) {
+        stop();
+        return;
+      }
+
+      stopInFlightRef.current = true;
+      setIsStopping(true);
+      const finishStop = async () => {
+        const latestUserMessageId = latestMessagesRef.current.findLast(
+          (message) => message.role === "user",
+        )?.id;
+        const responseStillInFlight =
+          latestStatusRef.current === "submitted" ||
+          latestStatusRef.current === "streaming";
+        if (
+          responseStillInFlight &&
+          latestUserMessageId === activeUserMessageId
+        ) {
+          await stop();
+        }
+        stopInFlightRef.current = false;
+        setIsStopping(false);
+      };
+      void options.stopServer().then(finishStop, () => {
+        stopInFlightRef.current = false;
+        setIsStopping(false);
+      });
+    },
+    [stop],
+  );
   sessionRef.current = {
     conversationId,
     messages: displayedMessages,
@@ -1349,7 +1419,7 @@ function ChatSessionHook({
     responseProgressSequence: streamActivity.responseProgressSequence,
     sendMessage,
     regenerateUserMessage,
-    stop,
+    stop: stopSession,
     status,
     error,
     setMessages,
@@ -1401,7 +1471,7 @@ function ChatSessionHook({
     streamActivity,
     sendMessage,
     regenerateUserMessage,
-    stop,
+    stopSession,
     status,
     error,
     setMessages,

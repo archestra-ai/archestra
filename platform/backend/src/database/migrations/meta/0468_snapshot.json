@@ -1,5 +1,5 @@
 {
-  "id": "16f9e0f8-adb6-4a58-a435-27ae2d167de4",
+  "id": "835c8eff-499c-4aef-8f54-2f7fec63228e",
   "prevId": "26df5ceb-721c-4164-9550-531320401371",
   "version": "7",
   "dialect": "postgresql",
@@ -15897,6 +15897,12 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
+        "created_by_service_account_id": {
+          "name": "created_by_service_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "owner_id": {
           "name": "owner_id",
           "type": "text",
@@ -16054,6 +16060,19 @@
           "tableTo": "secret",
           "columnsFrom": [
             "secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "mcp_server_created_by_service_account_id_service_accounts_id_fk": {
+          "name": "mcp_server_created_by_service_account_id_service_accounts_id_fk",
+          "tableFrom": "mcp_server",
+          "tableTo": "service_accounts",
+          "columnsFrom": [
+            "created_by_service_account_id"
           ],
           "columnsTo": [
             "id"

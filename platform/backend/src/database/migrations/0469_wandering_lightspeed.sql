@@ -1,3 +1,0 @@
-ALTER TABLE "mcp_server" ADD COLUMN "created_by_service_account_id" uuid;--> statement-breakpoint
-ALTER TABLE "mcp_server" ADD CONSTRAINT "mcp_server_created_by_service_account_id_service_accounts_id_fk" FOREIGN KEY ("created_by_service_account_id") REFERENCES "public"."service_accounts"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
-ALTER TABLE "mcp_server" VALIDATE CONSTRAINT "mcp_server_created_by_service_account_id_service_accounts_id_fk";--> statement-breakpoint

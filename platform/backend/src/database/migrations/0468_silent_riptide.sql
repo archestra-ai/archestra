@@ -8,6 +8,7 @@ ALTER TABLE "kb_files" ADD COLUMN "created_by_service_account_id" uuid;--> state
 ALTER TABLE "knowledge_base_connectors" ADD COLUMN "created_by_service_account_id" uuid;--> statement-breakpoint
 ALTER TABLE "knowledge_bases" ADD COLUMN "created_by_service_account_id" uuid;--> statement-breakpoint
 ALTER TABLE "chat_api_keys" ADD COLUMN "created_by_service_account_id" uuid;--> statement-breakpoint
+ALTER TABLE "mcp_server" ADD COLUMN "created_by_service_account_id" uuid;--> statement-breakpoint
 ALTER TABLE "plugins" ADD COLUMN "created_by_service_account_id" uuid;--> statement-breakpoint
 ALTER TABLE "runtime_credential_definitions" ADD COLUMN "created_by_service_account_id" uuid;--> statement-breakpoint
 ALTER TABLE "service_accounts" ADD COLUMN "created_by_service_account_id" uuid;--> statement-breakpoint
@@ -32,6 +33,8 @@ ALTER TABLE "knowledge_bases" ADD CONSTRAINT "knowledge_bases_created_by_service
 ALTER TABLE "knowledge_bases" VALIDATE CONSTRAINT "knowledge_bases_created_by_service_account_id_service_accounts_id_fk";--> statement-breakpoint
 ALTER TABLE "chat_api_keys" ADD CONSTRAINT "chat_api_keys_created_by_service_account_id_service_accounts_id_fk" FOREIGN KEY ("created_by_service_account_id") REFERENCES "public"."service_accounts"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
 ALTER TABLE "chat_api_keys" VALIDATE CONSTRAINT "chat_api_keys_created_by_service_account_id_service_accounts_id_fk";--> statement-breakpoint
+ALTER TABLE "mcp_server" ADD CONSTRAINT "mcp_server_created_by_service_account_id_service_accounts_id_fk" FOREIGN KEY ("created_by_service_account_id") REFERENCES "public"."service_accounts"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
+ALTER TABLE "mcp_server" VALIDATE CONSTRAINT "mcp_server_created_by_service_account_id_service_accounts_id_fk";--> statement-breakpoint
 ALTER TABLE "plugins" ADD CONSTRAINT "plugins_created_by_service_account_id_service_accounts_id_fk" FOREIGN KEY ("created_by_service_account_id") REFERENCES "public"."service_accounts"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
 ALTER TABLE "plugins" VALIDATE CONSTRAINT "plugins_created_by_service_account_id_service_accounts_id_fk";--> statement-breakpoint
 ALTER TABLE "runtime_credential_definitions" ADD CONSTRAINT "runtime_credential_definitions_created_by_service_account_id_service_accounts_id_fk" FOREIGN KEY ("created_by_service_account_id") REFERENCES "public"."service_accounts"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
@@ -43,4 +46,4 @@ ALTER TABLE "skills" VALIDATE CONSTRAINT "skills_created_by_service_account_id_s
 ALTER TABLE "team" ADD CONSTRAINT "team_created_by_service_account_id_service_accounts_id_fk" FOREIGN KEY ("created_by_service_account_id") REFERENCES "public"."service_accounts"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
 ALTER TABLE "team" VALIDATE CONSTRAINT "team_created_by_service_account_id_service_accounts_id_fk";--> statement-breakpoint
 ALTER TABLE "virtual_api_keys" ADD CONSTRAINT "virtual_api_keys_created_by_service_account_id_service_accounts_id_fk" FOREIGN KEY ("created_by_service_account_id") REFERENCES "public"."service_accounts"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
-ALTER TABLE "virtual_api_keys" VALIDATE CONSTRAINT "virtual_api_keys_created_by_service_account_id_service_accounts_id_fk";--> statement-breakpoint
+ALTER TABLE "virtual_api_keys" VALIDATE CONSTRAINT "virtual_api_keys_created_by_service_account_id_service_accounts_id_fk";

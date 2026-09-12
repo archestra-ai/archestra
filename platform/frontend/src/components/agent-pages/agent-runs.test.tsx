@@ -28,7 +28,7 @@ import { useSession } from "@/lib/auth/auth.query";
 
 const state = { runs: [] as AgentRunListItem[] };
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/agent-1/runs", () =>
+  http.get("http://localhost:9000/api/agents/:agentId/runs", () =>
     HttpResponse.json(state.runs),
   ),
 );
@@ -76,6 +76,8 @@ describe("AgentRuns", () => {
     renderRuns();
 
     expect(await screen.findByText("Live terminal")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Chat" })).toBeNull();
+
     expect(screen.queryByRole("button", { name: "Output" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
 
@@ -250,12 +252,22 @@ describe("AgentRuns", () => {
     renderRuns();
     expect(await screen.findByText("Started by automation")).toBeVisible();
   });
+  it("links an empty run history to a new Chat with this Agent selected", async () => {
+    state.runs = [];
+
+    renderRuns("agent/with spaces");
+
+    expect(await screen.findByRole("link", { name: "Chat" })).toHaveAttribute(
+      "href",
+      "/chat/new?agent_id=agent%2Fwith%20spaces",
+    );
+  });
 });
 
-function renderRuns() {
+function renderRuns(agentId = "agent-1") {
   return render(
     <QueryClientProvider client={queryClient}>
-      <AgentRuns agentId="agent-1" />
+      <AgentRuns agentId={agentId} />
     </QueryClientProvider>,
   );
 }

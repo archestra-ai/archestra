@@ -2,22 +2,17 @@
 
 import { formatDistanceToNow } from "date-fns";
 import { Info, TerminalSquare } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
 import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
+import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -54,18 +49,22 @@ export function AgentRuns({ agentId }: { agentId: string }) {
   }
   if (runs.length === 0) {
     return (
-      <Empty className="border">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <TerminalSquare />
-          </EmptyMedia>
-          <EmptyTitle>No Agent Runtime runs yet</EmptyTitle>
-          <EmptyDescription>
-            A run appears here when another Agent delegates a task to this
-            Agent.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <EmptyState
+        icon={TerminalSquare}
+        title="No runs yet"
+        description={
+          <>
+            Start a run from{" "}
+            <Link
+              href={`/chat/new?agent_id=${encodeURIComponent(agentId)}`}
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              Chat
+            </Link>
+            .
+          </>
+        }
+      />
     );
   }
 

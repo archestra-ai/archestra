@@ -77,6 +77,70 @@ test.describe("Context window visualizer", () => {
     const trigger = page.getByTestId(E2eTestId.ChatContextUsageTrigger);
     await expect(trigger).toBeVisible({ timeout: 15_000 });
 
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((theme) => {
+        document.documentElement.classList.remove("light", "dark");
+        document.documentElement.classList.add(theme);
+      }, theme);
+      await expect
+        .poll(
+          async () => {
+            return trigger.evaluate((button) => {
+              const canvas = document.createElement("canvas");
+              canvas.width = 1;
+              canvas.height = 1;
+              const context = canvas.getContext("2d");
+              if (!context) throw new Error("Canvas is unavailable");
+              const ancestors: Element[] = [];
+              for (
+                let element: Element | null = button;
+                element;
+                element = element.parentElement
+              ) {
+                ancestors.unshift(element);
+              }
+              context.fillStyle = "white";
+              context.fillRect(0, 0, 1, 1);
+              for (const element of ancestors) {
+                context.fillStyle = getComputedStyle(element).backgroundColor;
+                context.fillRect(0, 0, 1, 1);
+              }
+              const surface = context.getImageData(0, 0, 1, 1);
+              const luminance = (pixels: Uint8ClampedArray) => {
+                const linear = Array.from(pixels.slice(0, 3), (channel) => {
+                  const value = channel / 255;
+                  return value <= 0.04045
+                    ? value / 12.92
+                    : ((value + 0.055) / 1.055) ** 2.4;
+                });
+                return (
+                  linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+                );
+              };
+              const background = luminance(surface.data);
+              const contrasts = Array.from(
+                button.querySelectorAll("circle"),
+                (circle) => {
+                  context.putImageData(surface, 0, 0);
+                  context.fillStyle = getComputedStyle(circle).stroke;
+                  context.fillRect(0, 0, 1, 1);
+                  const foreground = luminance(
+                    context.getImageData(0, 0, 1, 1).data,
+                  );
+                  return (
+                    (Math.max(foreground, background) + 0.05) /
+                    (Math.min(foreground, background) + 0.05)
+                  );
+                },
+              );
+              return contrasts.length === 2 ? Math.min(...contrasts) : 0;
+            });
+          },
+          { message: `Context ring track and arc contrast in ${theme} mode` },
+        )
+        .toBeGreaterThanOrEqual(3);
+    }
+
     // Click the ring to open the modal.
     await trigger.click();
 

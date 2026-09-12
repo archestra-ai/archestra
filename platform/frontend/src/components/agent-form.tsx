@@ -67,6 +67,7 @@ import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
 } from "@/components/agent-runtime-fields";
+import { AgentSelector } from "@/components/agent-selector";
 import {
   AgentSkillsEditor,
   type EditableSkill,
@@ -509,12 +510,6 @@ function SubagentsEditor({
     }
   };
 
-  const comboboxItems: AssignmentComboboxItem[] = filteredAgents.map((a) => ({
-    id: a.id,
-    name: a.name,
-    description: a.description || undefined,
-  }));
-
   const selectedAgents = filteredAgents.filter((a) =>
     selectedAgentIds.includes(a.id),
   );
@@ -546,14 +541,15 @@ function SubagentsEditor({
           tone={tone}
         />
       ))}
-      <AssignmentCombobox
-        items={comboboxItems}
-        selectedIds={selectedAgentIds}
-        onToggle={handleToggle}
+      <AgentSelector
+        mode="multiple"
+        agents={filteredAgents}
+        value={selectedAgentIds}
+        onValueChange={onSelectionChange}
         // Without this the exclude side inherited the default "Add", so Auto
         // mode offered to add an agent and then disabled whichever was picked.
-        label={tone === "exclude" ? "Disable subagents" : "Add"}
-        placeholder={placeholder}
+        triggerLabel={tone === "exclude" ? "Disable subagents" : "Add subagent"}
+        searchPlaceholder={placeholder}
         emptyMessage="No agents found."
         createAction={
           showCreateAction

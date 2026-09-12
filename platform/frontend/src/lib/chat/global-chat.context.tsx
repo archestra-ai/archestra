@@ -609,7 +609,9 @@ function ChatSessionHook({
   // Assigned every render right after useChat returns.
   const latestMessagesRef = useRef<UIMessage[]>(initialMessages);
   const latestStatusRef = useRef<ChatSession["status"]>("ready");
-  const preserveQueuedMessagesOnAbortRef = useRef(false);
+  const preserveQueuedMessagesOnAbortRef = useRef<{
+    userMessageId: string | undefined;
+  } | null>(null);
   const stopInFlightRef = useRef(false);
   const [isStopping, setIsStopping] = useState(false);
 
@@ -677,8 +679,18 @@ function ChatSessionHook({
     experimental_throttle: 100,
     id: conversationId,
     onFinish: async ({ message, isAbort, isError }) => {
-      const preserveQueuedMessages = preserveQueuedMessagesOnAbortRef.current;
-      preserveQueuedMessagesOnAbortRef.current = false;
+      const preservation = preserveQueuedMessagesOnAbortRef.current;
+      const preserveQueuedMessages =
+        preservation !== null &&
+        preservation.userMessageId ===
+          latestMessagesRef.current.findLast((part) => part.role === "user")
+            ?.id;
+      // A failed stream can reattach to the same turn while its server stop
+      // is pending. Preserve that intent until the turn actually finishes;
+      // a different user message must never inherit it.
+      if (!isError || !preserveQueuedMessages) {
+        preserveQueuedMessagesOnAbortRef.current = null;
+      }
       setOptimisticToolCalls([]);
       setPendingMcpElicitation(null);
       clearActiveContextCompaction();
@@ -1364,8 +1376,12 @@ function ChatSessionHook({
       stopServer?: () => Promise<unknown>;
     }) => {
       if (stopInFlightRef.current) return;
-      preserveQueuedMessagesOnAbortRef.current =
-        options?.preserveQueuedMessages === true;
+      const activeUserMessageId = latestMessagesRef.current.findLast(
+        (message) => message.role === "user",
+      )?.id;
+      preserveQueuedMessagesOnAbortRef.current = options?.preserveQueuedMessages
+        ? { userMessageId: activeUserMessageId }
+        : null;
       if (!options?.stopServer) {
         stop();
         return;
@@ -1373,13 +1389,10 @@ function ChatSessionHook({
 
       stopInFlightRef.current = true;
       setIsStopping(true);
-      const activeUserMessageId = [...latestMessagesRef.current]
-        .reverse()
-        .find((message) => message.role === "user")?.id;
       const finishStop = async () => {
-        const latestUserMessageId = [...latestMessagesRef.current]
-          .reverse()
-          .find((message) => message.role === "user")?.id;
+        const latestUserMessageId = latestMessagesRef.current.findLast(
+          (message) => message.role === "user",
+        )?.id;
         const responseStillInFlight =
           latestStatusRef.current === "submitted" ||
           latestStatusRef.current === "streaming";

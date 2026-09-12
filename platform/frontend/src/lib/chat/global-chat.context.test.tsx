@@ -1658,6 +1658,7 @@ describe("stopping with queued messages", () => {
   const conversationId = "conversation-stop-queue";
   let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
   let status: "ready" | "streaming";
+  let messages: UIMessage[];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1665,7 +1666,7 @@ describe("stopping with queued messages", () => {
     chatOptions = undefined;
     status = "streaming";
     mocks.resumeStream.mockResolvedValue(undefined);
-    const messages: UIMessage[] = [];
+    messages = [];
     mocks.useChat.mockImplementation((options) => {
       chatOptions = options;
       return {
@@ -1846,6 +1847,81 @@ describe("stopping with queued messages", () => {
     expect(
       chatMessageQueue.get(conversationId).map(({ text }) => text),
     ).toEqual(["second correction"]);
+  });
+
+  it.each([
+    "same turn",
+    "new turn",
+  ] as const)("scopes steering preservation through a stream error to the %s", async (turn) => {
+    let session: ChatSessionSnapshot;
+    let resolveStop: () => void = () => {};
+    const stopServer = () =>
+      new Promise<void>((resolve) => {
+        resolveStop = resolve;
+      });
+    messages = [
+      {
+        id: "original-user",
+        role: "user",
+        parts: [{ type: "text", text: "Original request" }],
+      },
+    ];
+    const tree = () => (
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(tree());
+    await waitFor(() => expect(session).toBeDefined());
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, {
+        text: "keep this correction",
+      });
+      session?.stop({ preserveQueuedMessages: true, stopServer });
+    });
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "failed-stream", role: "assistant", parts: [] },
+        isAbort: false,
+        isError: true,
+      });
+    });
+    if (turn === "new turn") {
+      messages = [
+        ...messages,
+        {
+          id: "new-user",
+          role: "user",
+          parts: [{ type: "text", text: "A different request" }],
+        },
+      ];
+      rerender(tree());
+    }
+    await act(async () => resolveStop());
+    expect(mocks.stop).toHaveBeenCalledTimes(turn === "same turn" ? 1 : 0);
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "aborted-stream", role: "assistant", parts: [] },
+        isAbort: true,
+        isError: false,
+      });
+    });
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(
+      turn === "same turn" ? 1 : 0,
+    );
+    status = "ready";
+    rerender(tree());
+    await waitFor(() =>
+      expect(mocks.sendMessage).toHaveBeenCalledTimes(
+        turn === "same turn" ? 1 : 0,
+      ),
+    );
   });
 
   it("keeps instructions queued while an initially empty-queue stop is settling", async () => {

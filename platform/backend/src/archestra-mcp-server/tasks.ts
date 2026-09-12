@@ -13,6 +13,7 @@ import {
 import { z } from "zod";
 import { type A2AActor, A2AError, A2AErrorKind } from "@/agents/a2a/a2a-base";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
+import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import logger from "@/logging";
@@ -666,7 +667,7 @@ const registry = defineArchestraTools([
         }
         const agent = await AgentModel.findById(session.agentId);
         const runtime = agent ? resolveAgentRuntime(agent) : null;
-        if (!runtime) {
+        if (!agent || !runtime) {
           return errorResult(
             "The Agent no longer has Agent Runtime configured.",
           );
@@ -686,15 +687,27 @@ const registry = defineArchestraTools([
               projectId: session.projectId ?? undefined,
             },
           });
-          return structuredSuccessResult(
-            {
-              success: true,
-              task_id: continuation.id,
-              previous_task_id: session.taskId,
-              session_id: workspace?.id ?? session.taskId,
-            },
-            "Continuation started in the retained workspace using the same Agent.",
-          );
+          if (session.completionTarget) {
+            void watchTaskCompletion({
+              taskId: continuation.id,
+              target: session.completionTarget,
+              agentName: agent.name,
+            }).catch((error) => {
+              logger.warn(
+                { error, taskId: continuation.id },
+                "Failed to watch Agent continuation for completion",
+              );
+            });
+          }
+          return structuredSuccessResult({
+            success: true,
+            status: "accepted",
+            task_id: continuation.id,
+            previous_task_id: session.taskId,
+            session_id: workspace?.id ?? session.taskId,
+            message:
+              "Continuation accepted in the retained workspace. Poll get_run with task_id to verify startup and report any failure.",
+          });
         }
 
         await resolveAgentRuntimeBackendDriver(session.backend).steer({
@@ -711,6 +724,10 @@ const registry = defineArchestraTools([
           "Steer delivered. It lands at the loop's next turn boundary (pipe) or is typed into the session (tmux keys).",
         );
       } catch (error) {
+        const needed = missingCredentialsFrom(error);
+        if (needed) {
+          return credentialsNeededResult(needed.agentId, needed.missing);
+        }
         return catchError(error, "steering the run");
       }
     },

@@ -104,6 +104,13 @@ export function isScriptClient(
 }
 
 /**
+ * How long the review step's skill list waits before it starts fetching.
+ * Long enough for the setup command above it to render and settle, short
+ * enough that the list is there by the time anyone scrolls to it.
+ */
+const CONNECT_SKILLS_DEFER_MS = 750;
+
+/**
  * Whether skills can ride along in the setup command: the caller can read
  * skills, and there is at least one to install. Reading is the bar because the
  * command registers the deployment's shared marketplace URL, which serves each
@@ -116,26 +123,13 @@ export function isScriptClient(
  * control the install does not have. Sharing a fixed subset is what a snapshot
  * link is for.
  */
-/**
- * How long the review step's skill list waits before it starts fetching.
- * Long enough for the setup command above it to render and settle, short
- * enough that the list is there by the time anyone scrolls to it.
- */
-const CONNECT_SKILLS_DEFER_MS = 750;
-
-function useConnectSkills(
-  llmProxyId: string | null,
-  enabled: boolean,
-): {
+function useConnectSkills(enabled: boolean): {
   eligible: boolean;
   skills: ConnectSkill[];
 } {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  // Skills are environment-scoped: with a proxy selected, only skills in that
-  // proxy's environment are connectable.
   const { data: skills } = useAllSkills({
     enabled: enabled && canReadSkills === true,
-    forAgentId: llmProxyId,
     // Step 2's content, not step 1's: let the part of the page the user acts
     // on first render before walking the catalogue.
     deferMs: CONNECT_SKILLS_DEFER_MS,
@@ -197,10 +191,8 @@ export function ConnectCommandPanel({
   const [customizing, setCustomizing] = useState(false);
   const compact = !!connectRequest && !customizing;
   const requestedPlatform = searchParams.get("platform");
-  const { eligible: skillsEligible, skills: allSkills } = useConnectSkills(
-    llmProxyId,
-    skillsEnabled,
-  );
+  const { eligible: skillsEligible, skills: allSkills } =
+    useConnectSkills(skillsEnabled);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
@@ -806,11 +798,6 @@ export function ConnectCommandPanel({
         />
         Install shared skills
       </label>
-      {llmProxyId !== null && (
-        <p className="pl-6 text-xs text-muted-foreground">
-          Only skills in the LLM Proxy's environment are listed.
-        </p>
-      )}
       <p className="pl-6 text-xs text-muted-foreground">
         Everything shared with you is installed, and stays current as skills are
         added or removed. To share a fixed subset instead, use a snapshot link.

@@ -772,18 +772,14 @@ export type ConnectSkill = Pick<
 >;
 
 /**
- * Query over the org's full skill set, for the connect-command step's
- * per-skill picker. Callers that prepare an artifact containing an explicit
- * skill snapshot can opt into a loud error, rather than silently producing an
- * artifact without the selected skills.
- *
- * `forAgentId` narrows the set to skills visible from that agent's
- * environment — the connect command passes the selected LLM proxy so only
- * skills the connection can actually reach are offered.
+ * Query the caller-visible skill catalog for the connect command's review step.
+ * It deliberately omits agent scoping because Connect registers the caller's
+ * shared marketplace, not an agent's effective skill surface. Callers that
+ * prepare an artifact containing an explicit skill snapshot can opt into a loud
+ * error rather than silently producing an artifact without the selected skills.
  */
 export function useAllSkills(params?: {
   enabled?: boolean;
-  forAgentId?: string | null;
   /** Surface a catalog failure to the caller instead of returning an empty list. */
   throwOnError?: boolean;
   /**
@@ -797,7 +793,6 @@ export function useAllSkills(params?: {
    */
   deferMs?: number;
 }) {
-  const forAgentId = params?.forAgentId ?? null;
   const enabled = useDeferredEnabled(
     params?.enabled ?? true,
     params?.deferMs ?? 0,
@@ -807,25 +802,21 @@ export function useAllSkills(params?: {
     queryKey: [
       "skills",
       "connect-all",
-      forAgentId,
       { throwOnError: params?.throwOnError ?? false },
     ],
-    queryFn: () => fetchAllSkills(forAgentId, params?.throwOnError ?? false),
+    queryFn: () => fetchAllSkills(params?.throwOnError ?? false),
     enabled,
   });
 }
 
 /** Fetch every skill page by page. */
-async function fetchAllSkills(
-  forAgentId: string | null = null,
-  throwOnError = false,
-): Promise<ConnectSkill[]> {
+async function fetchAllSkills(throwOnError = false): Promise<ConnectSkill[]> {
   const skills: ConnectSkill[] = [];
   const limit = 100;
   let offset = 0;
   while (true) {
     const { data, error } = await archestraApiSdk.getSkills({
-      query: { limit, offset, forAgentId: forAgentId ?? undefined },
+      query: { limit, offset },
     });
     if (error) {
       if (throwOnError) {

@@ -25,11 +25,13 @@ import { ConnectCommandPanel } from "./connect-command-panel";
 const {
   createSetupMock,
   allSkillsMock,
+  allSkillsMode,
   pluginsMock,
   skillsMarketplaceVisibleMock,
 } = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
   allSkillsMock: vi.fn(),
+  allSkillsMode: { useRealQuery: false },
   pluginsMock: vi.fn(),
   skillsMarketplaceVisibleMock: vi.fn(() => true),
 }));
@@ -41,13 +43,22 @@ vi.mock("@/lib/connection-setup.query", () => ({
   }),
 }));
 
-vi.mock("./skills-marketplace-step", () => ({
-  useAllSkills: (params?: { enabled?: boolean }) => allSkillsMock(params),
-  // The marketplace step has its own test file; here it only matters whether
-  // the panel renders it as a step.
-  useSkillsMarketplaceVisible: () => skillsMarketplaceVisibleMock(),
-  SkillsMarketplaceStep: () => <div data-testid="skills-marketplace-step" />,
-}));
+vi.mock("./skills-marketplace-step", async () => {
+  const actual = await vi.importActual<
+    typeof import("./skills-marketplace-step")
+  >("./skills-marketplace-step");
+  const actualAllSkillsQuery = actual.useAllSkills;
+  return {
+    useAllSkills: (params?: Parameters<typeof actual.useAllSkills>[0]) =>
+      allSkillsMode.useRealQuery
+        ? actualAllSkillsQuery(params)
+        : allSkillsMock(params),
+    useSkillsMarketplaceVisible: () => skillsMarketplaceVisibleMock(),
+    // The component has its own test file; this suite only needs to know
+    // whether the panel mounts the step.
+    SkillsMarketplaceStep: () => <div data-testid="skills-marketplace-step" />,
+  };
+});
 
 vi.mock("@/lib/plugins/plugin.query", () => ({
   usePlugins: (enabled?: boolean) => pluginsMock(enabled),
@@ -154,6 +165,7 @@ beforeEach(() => {
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
   );
   vi.clearAllMocks();
+  allSkillsMode.useRealQuery = false;
   vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(useConfig).mockReturnValue({
     data: { features: { plugins: true } },
@@ -472,6 +484,65 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.queryByText("http://localhost:9000/v1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads shared skills without treating the LLM Proxy as a skills surface", async () => {
+    allSkillsMode.useRealQuery = true;
+    const requests: URL[] = [];
+    const server = setupServer(
+      http.get("http://localhost:9000/api/skills", ({ request }) => {
+        const url = new URL(request.url);
+        requests.push(url);
+        if (url.searchParams.has("forAgentId")) {
+          return HttpResponse.json(
+            {
+              error: {
+                message: "This agent type does not expose skills",
+                type: "api_validation_error",
+                statusCode: 400,
+              },
+            },
+            { status: 400 },
+          );
+        }
+        return HttpResponse.json({
+          data: [
+            {
+              id: "s1",
+              name: "warehouse-postgres",
+              scope: "org",
+              teams: [],
+            },
+          ],
+          pagination: { total: 1, hasNext: false },
+        });
+      }),
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectCommandPanel {...renderPanelProps()} />
+      </QueryClientProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(requests).toHaveLength(1));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            skills: { skillIds: ["s1"], ttlDays: null },
+          }),
+        ),
+      );
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      server.close();
+    }
   });
 
   it("omits skills from the setup when connecting skills is disabled", async () => {
@@ -1200,7 +1271,7 @@ describe("ConnectCommandPanel", () => {
     expect(allSkillsMock).toHaveBeenLastCalledWith(
       // objectContaining, so the deferral this list is fetched under stays an
       // implementation detail: what matters is that it is switched off.
-      expect.objectContaining({ enabled: false, forAgentId: "p1" }),
+      expect.objectContaining({ enabled: false }),
     );
     expect(
       screen.queryByTestId("skills-marketplace-step"),

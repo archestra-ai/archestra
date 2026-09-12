@@ -28,6 +28,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  type CallToolResult,
   ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
@@ -79,6 +80,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { findAgentAccessContextById } from "@/models/agent-access-context";
+import AppaProxyWireModel from "@/models/appa-proxy-wire";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -591,6 +593,72 @@ export async function createAgentServer(params: {
       logger.warn({ err: dbError }, "Failed to persist tools/list request:");
     }
 
+    if (config.llmProxy?.appaHook?.runtimeToken) {
+      toolsList.push(
+        {
+          name: "archestra__appa_execute_remedy",
+          title: "Execute APPA Remedy",
+          description:
+            "Execute an approved APPA remedy for a held response intent.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              intent_id: { type: "string" },
+              remedy_id: { type: "string" },
+              wire_context: {
+                type: "object",
+                properties: {
+                  call_id: { type: "string" },
+                  thread_id: { type: "string" },
+                },
+                required: ["call_id"],
+              },
+            },
+            required: ["intent_id", "wire_context"],
+          },
+        },
+        {
+          name: "archestra__appa_inspect_plan",
+          title: "Inspect APPA Plan",
+          description:
+            "Inspect an APPA remedy plan for a held response intent.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              intent_id: { type: "string" },
+              wire_context: {
+                type: "object",
+                properties: {
+                  call_id: { type: "string" },
+                  thread_id: { type: "string" },
+                },
+                required: ["call_id"],
+              },
+            },
+            required: ["intent_id", "wire_context"],
+          },
+        },
+        {
+          name: "archestra__appa_status",
+          title: "Check APPA Status",
+          description: "Check APPA status for the current session or intent.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              intent_id: { type: "string" },
+              wire_context: {
+                type: "object",
+                properties: {
+                  call_id: { type: "string" },
+                  thread_id: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      );
+    }
+
     // SEP-2549 freshness hints. Always private: this list is filtered per
     // caller, so it must never be shared across users by an intermediary.
     // Deterministic order: the revision asks servers to return tools stably so
@@ -752,6 +820,7 @@ export async function createAgentServer(params: {
       try {
         // Check if this is an Archestra tool or a delegation tool (agent or
         // skill delegation — both dispatch through executeArchestraTool)
+        const isAppaControl = isAppaControlTool(name);
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
         const isSkillDelegationTool = isSkillTool(name);
@@ -775,6 +844,7 @@ export async function createAgentServer(params: {
         // invocation-policy enabled-tools filter below, so neither path
         // re-queries assignments.
         const assignedToolNames =
+          !isAppaControl &&
           !isArchestraTool &&
           !isAgentDelegationTool &&
           !isSkillDelegationTool &&
@@ -882,23 +952,32 @@ export async function createAgentServer(params: {
           return blockedResult;
         }
 
-        if (isArchestraTool || isAgentDelegationTool || isSkillDelegationTool) {
+        if (
+          isAppaControl ||
+          isArchestraTool ||
+          isAgentDelegationTool ||
+          isSkillDelegationTool
+        ) {
           logger.info(
             {
               agentId,
               toolName: name,
-              toolType: isAgentDelegationTool
-                ? "agent-delegation"
-                : isSkillDelegationTool
-                  ? "skill-delegation"
-                  : "archestra",
+              toolType: isAppaControl
+                ? "appa-control"
+                : isAgentDelegationTool
+                  ? "agent-delegation"
+                  : isSkillDelegationTool
+                    ? "skill-delegation"
+                    : "archestra",
             },
-            isAgentDelegationTool || isSkillDelegationTool
-              ? "Delegation tool call received"
-              : "Archestra MCP tool call received",
+            isAppaControl
+              ? "APPA control tool call received"
+              : isAgentDelegationTool || isSkillDelegationTool
+                ? "Delegation tool call received"
+                : "Archestra MCP tool call received",
           );
 
-          // Handle Archestra and agent delegation tools directly
+          // Handle Archestra, APPA control, and agent delegation tools directly
           const response = await startActiveMcpSpan({
             toolName: name,
             mcpServerName,
@@ -910,6 +989,18 @@ export async function createAgentServer(params: {
             toolArgs: args,
             user: mcpUser,
             callback: async (span) => {
+              if (isAppaControl) {
+                const result = await executeAppaControlTool(name, args, {
+                  userId: tokenAuth?.userId,
+                  organizationId:
+                    tokenAuth?.organizationId ?? agent.organizationId,
+                });
+                span.setAttribute(
+                  ATTR_MCP_IS_ERROR_RESULT,
+                  result.isError ?? false,
+                );
+                return result;
+              }
               const result = await executeArchestraTool(name, args, {
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
@@ -2591,4 +2682,134 @@ function isUnavailableResourceError(error: unknown): boolean {
     });
   }
   return false;
+}
+
+function isAppaControlTool(name: string): boolean {
+  const shortName = name.replace(/^.*__(archestra__appa_[a-z_]+)$/, "$1");
+  return (
+    shortName === "archestra__appa_execute_remedy" ||
+    shortName === "archestra__appa_inspect_plan" ||
+    shortName === "archestra__appa_status" ||
+    name === "archestra__appa_execute_remedy" ||
+    name === "archestra__appa_inspect_plan" ||
+    name === "archestra__appa_status"
+  );
+}
+
+async function executeAppaControlTool(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  context: {
+    userId?: string;
+    organizationId?: string;
+  },
+): Promise<CallToolResult> {
+  const shortName = toolName.replace(/^.*__(archestra__appa_[a-z_]+)$/, "$1");
+  const wireContext =
+    args && typeof args.wire_context === "object" && args.wire_context !== null
+      ? (args.wire_context as { call_id?: string; thread_id?: string })
+      : undefined;
+  const callId = wireContext?.call_id;
+  if (!callId || typeof callId !== "string") {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Missing wire_context.call_id for APPA control execution",
+        },
+      ],
+    };
+  }
+  const organizationId = context.organizationId;
+  if (!organizationId) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Missing organizationId for APPA control execution",
+        },
+      ],
+    };
+  }
+  const metadata = await AppaProxyWireModel.findControlMetadataForOrganization({
+    controlCallId: callId,
+    organizationId,
+  });
+  if (!metadata) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: `APPA control frame not found for call ${callId}`,
+        },
+      ],
+    };
+  }
+  if (shortName === "archestra__appa_execute_remedy") {
+    const scope = {
+      sessionId: metadata.session.id,
+      ownerScopeHash: metadata.session.ownerScopeHash,
+      frameId: metadata.frame.id,
+    };
+    await AppaProxyWireModel.beginControlExecution({
+      ...scope,
+      selection: {
+        source: "gateway",
+        intent_id: args?.intent_id,
+        remedy_id: args?.remedy_id,
+      },
+    });
+    const receipt = {
+      status: "remedied",
+      intent_id: args?.intent_id,
+      remedy_id: args?.remedy_id,
+      timestamp: Date.now(),
+    };
+    await AppaProxyWireModel.completeControl({
+      ...scope,
+      receipt,
+    });
+    return {
+      isError: false,
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            status: "remedied",
+            intent_id: args?.intent_id,
+            remedy_id: args?.remedy_id,
+          }),
+        },
+      ],
+    };
+  }
+  if (shortName === "archestra__appa_inspect_plan") {
+    return {
+      isError: false,
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            status: "inspected",
+            intent_id: args?.intent_id,
+          }),
+        },
+      ],
+    };
+  }
+  return {
+    isError: false,
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          status: "active",
+          intent_id: args?.intent_id,
+        }),
+      },
+    ],
+  };
 }

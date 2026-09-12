@@ -5,7 +5,7 @@
  * Routes choose which adapter factory to use based on URL.
  */
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   APP_ID_HEADER,
   ArchestraInternalErrorCode,
@@ -1091,7 +1091,16 @@ export async function handleLLMProxy<
         });
         // Stock clients need not repeat deferred gateway declarations. Issued
         // controls are located through the authenticated durable wire ledger.
-        if (nativeCodexRequested && authenticatedUserId) {
+        const isNativeStockClient =
+          Boolean(nativeCodexRequested) ||
+          appaNativeClient === "claude-code" ||
+          appaNativeClient === "opencode-kimi";
+        if (isNativeStockClient && authenticatedUserId) {
+          const controlItemIds = nativeCodexRequested
+            ? nativeCodexFunctionCallItemIds(
+                requestAdapter.getOriginalRequest(),
+              )
+            : new Map<string, string>();
           const continuation =
             await new AppaHeldResponseController().continueBeforeAcquire({
               config: config.llmProxy.appaHook,
@@ -1100,9 +1109,7 @@ export async function handleLLMProxy<
               profileId: resolvedAgent.id,
               ownerScopeHash,
               threadId: appaThread.threadId,
-              controlItemIds: nativeCodexFunctionCallItemIds(
-                requestAdapter.getOriginalRequest(),
-              ),
+              controlItemIds,
               results: inboundToolResults,
               signal: disconnect.signal,
             });
@@ -1122,7 +1129,8 @@ export async function handleLLMProxy<
             inboundToolResults = inboundToolResults.filter(
               (result) => !controlCallIds.has(result.id),
             );
-            requestBody = stripNativeCodexControlHistory({
+            requestBody = stripNativeControlHistory({
+              client: appaNativeClient,
               request: requestBody,
               controlCallIds,
             });
@@ -1142,6 +1150,7 @@ export async function handleLLMProxy<
               session: continuation.session,
               heldFrameId: continuation.heldFrameId,
               omitPublishedContext: true,
+              client: appaNativeClient,
               calls:
                 continuation.state === "held"
                   ? [continuation.control]
@@ -1152,9 +1161,12 @@ export async function handleLLMProxy<
             }
             continuation.session.markContinuationResponseReady();
             return requestAdapter.isStreaming()
-              ? reply
-                  .type("text/event-stream")
-                  .send(nativeCodexBootstrapSse(response))
+              ? reply.type("text/event-stream").send(
+                  nativeBootstrapSse({
+                    client: appaNativeClient,
+                    response,
+                  }),
+                )
               : reply.send(response);
           }
         }
@@ -1333,6 +1345,20 @@ export async function handleLLMProxy<
           delete projected.tools;
           requestAdapter = provider.createRequestAdapter(projected as TRequest);
           streamAdapter = provider.createStreamAdapter(projected as TRequest);
+        }
+        if (
+          !nativeCodexControl &&
+          authenticatedUserId &&
+          (Boolean(nativeCodexRequested) ||
+            appaNativeClient === "claude-code" ||
+            appaNativeClient === "opencode-kimi" ||
+            appaNativeClient === "codex-responses-v1")
+        ) {
+          nativeCodexControl = {
+            userId: authenticatedUserId,
+            namespace: "mcp__gateway",
+            threadId: appaThread.threadId,
+          };
         }
         const modelResultUpdates = activeAppaHook.getModelResultUpdates();
         if (modelResultUpdates.size > 0) {
@@ -2518,6 +2544,50 @@ async function handleStreaming<
         });
         rewrittenToolCalls = prepared.calls;
         nativeFrameId = prepared.frameId;
+      } else if (
+        appaNativeClient === "claude-code" ||
+        appaNativeClient === "opencode-kimi"
+      ) {
+        const scope = appaHook.getNativeWireScope();
+        const rawCalls = rewrittenToolCalls ?? toolCalls;
+        const calls = rawCalls.map((call) => ({
+          ...call,
+          id: call.id.startsWith("call_appa_")
+            ? call.id
+            : `call_appa_${randomUUID().replaceAll("-", "")}`,
+        }));
+        const frame = await AppaProxyWireModel.createFrame({
+          ...scope,
+          kind: "model_response",
+          protocol: "native-response/v1",
+          requestHash: createHash("sha256")
+            .update(JSON.stringify(request))
+            .digest("hex"),
+          idempotencyKey: `native-response:${scope.turnId}`,
+          payload: {
+            client: appaNativeClient,
+            request,
+            response: streamAdapter.toProviderResponse(),
+            calls,
+          },
+          expiresAt: new Date(Date.now() + 300_000),
+        });
+        await AppaProxyWireModel.addAliases({
+          ...scope,
+          frameId: frame.id,
+          aliases: calls.map((call, position) => ({
+            kind: "call" as const,
+            position,
+            wireId: call.id,
+            logicalId: rawCalls[position].id || undefined,
+            metadata: {
+              purpose: "native_call",
+              providerCallId: rawCalls[position].id || null,
+            },
+          })),
+        });
+        rewrittenToolCalls = calls;
+        nativeFrameId = frame.id;
       }
       const appaToolCalls = normalizeToolCallsForAppa(
         rewrittenToolCalls ?? toolCalls,
@@ -2525,29 +2595,37 @@ async function handleStreaming<
         declaredMcpToolTargets,
       );
       let heldBatchCommitted = false;
-      if (nativeCodex && nativeCodexControl && nativeFrameId) {
+      const isNativeStock =
+        Boolean(nativeCodex) ||
+        appaNativeClient === "claude-code" ||
+        appaNativeClient === "opencode-kimi";
+      const nativeControl = nativeCodexControl;
+      if (isNativeStock && nativeControl && nativeFrameId) {
         const held = await new AppaHeldResponseController().prepare({
           session: appaHook,
           heldFrameId: nativeFrameId,
           calls: appaToolCalls,
           organizationId: agent.organizationId,
-          authenticatedUserId: nativeCodexControl.userId,
-          controlNamespace: nativeCodexControl.namespace,
-          boundThreadId: nativeCodexControl.threadId,
+          authenticatedUserId: nativeControl.userId,
+          controlNamespace: nativeControl.namespace,
+          boundThreadId: nativeControl.threadId,
         });
         if (held.state === "held") {
           await persistHeldNativeHistory({
             session: appaHook,
-            history: nativeCodexHistory,
+            history: nativeCodex ? nativeCodexHistory : undefined,
             response: streamAdapter.toProviderResponse(),
           });
           const response = await restoreHeldNativeResponse({
             session: appaHook,
             heldFrameId: nativeFrameId,
             calls: [held.control],
+            client: appaNativeClient,
           });
           ensureStreamHeaders();
-          reply.raw.end(nativeCodexBootstrapSse(response));
+          reply.raw.end(
+            nativeBootstrapSse({ client: appaNativeClient, response }),
+          );
           streamCompleted = true;
           return reply;
         }
@@ -2592,22 +2670,34 @@ async function handleStreaming<
           );
         }
         if (nativeFrameId && !heldBatchCommitted) {
-          await commitNativeCodexCalls({
-            session: appaHook,
-            frameId: nativeFrameId,
-            calls: rewrittenToolCalls ?? toolCalls,
-          });
-          rewrittenToolCalls = await publishNativeChildSpawnAliases({
-            session: appaHook,
-            frameId: nativeFrameId,
-            calls: rewrittenToolCalls ?? toolCalls,
-            clientParentTaskPath: nativeClientTaskPath,
-            logicalParentTaskPath: nativeLogicalTaskPath,
-          });
-          await issueNativeCodexFrame({
-            session: appaHook,
-            frameId: nativeFrameId,
-          });
+          if (nativeCodex) {
+            await commitNativeCodexCalls({
+              session: appaHook,
+              frameId: nativeFrameId,
+              calls: rewrittenToolCalls ?? toolCalls,
+            });
+            rewrittenToolCalls = await publishNativeChildSpawnAliases({
+              session: appaHook,
+              frameId: nativeFrameId,
+              calls: rewrittenToolCalls ?? toolCalls,
+              clientParentTaskPath: nativeClientTaskPath,
+              logicalParentTaskPath: nativeLogicalTaskPath,
+            });
+            await issueNativeCodexFrame({
+              session: appaHook,
+              frameId: nativeFrameId,
+            });
+          } else {
+            const scope = appaHook.getNativeWireScope();
+            await AppaProxyWireModel.markReady({
+              ...scope,
+              frameId: nativeFrameId,
+            });
+            await AppaProxyWireModel.markIssued({
+              ...scope,
+              frameId: nativeFrameId,
+            });
+          }
         }
         if (nativeCodex && rewrittenToolCalls) {
           clientNativeToolCalls = await restoreNativeCodexClientProcessCalls({
@@ -3277,6 +3367,56 @@ async function handleNonStreaming<
           });
           rewrittenToolCalls = prepared.calls;
           nativeFrameId = prepared.frameId;
+        } else if (
+          appaNativeClient === "claude-code" ||
+          appaNativeClient === "opencode-kimi"
+        ) {
+          const scope = appaHook.getNativeWireScope();
+          const rawCalls =
+            rewrittenToolCalls ??
+            toolCalls.map((call) => ({
+              id: call.id,
+              name: call.name,
+              arguments: JSON.stringify(call.arguments),
+            }));
+          const calls = rawCalls.map((call) => ({
+            ...call,
+            id: call.id.startsWith("call_appa_")
+              ? call.id
+              : `call_appa_${randomUUID().replaceAll("-", "")}`,
+          }));
+          const frame = await AppaProxyWireModel.createFrame({
+            ...scope,
+            kind: "model_response",
+            protocol: "native-response/v1",
+            requestHash: createHash("sha256")
+              .update(JSON.stringify(request))
+              .digest("hex"),
+            idempotencyKey: `native-response:${scope.turnId}`,
+            payload: {
+              client: appaNativeClient,
+              request,
+              response: responseAdapter.getOriginalResponse(),
+              calls,
+            },
+            expiresAt: new Date(Date.now() + 300_000),
+          });
+          await AppaProxyWireModel.addAliases({
+            ...scope,
+            frameId: frame.id,
+            aliases: calls.map((call, position) => ({
+              kind: "call" as const,
+              position,
+              wireId: call.id,
+              logicalId: rawCalls[position].id || undefined,
+              metadata: {
+                purpose: "native_call",
+                providerCallId: rawCalls[position].id || null,
+              },
+            })),
+          });
+          rewrittenToolCalls = calls;
+          nativeFrameId = frame.id;
         }
         const appaToolCalls = normalizeToolCallsForAppa(
           rewrittenToolCalls ??
@@ -3289,20 +3429,25 @@ async function handleNonStreaming<
           declaredMcpToolTargets,
         );
         let heldBatchCommitted = false;
-        if (nativeCodexWire && nativeCodexControl && nativeFrameId) {
+        const isNativeStock =
+          Boolean(nativeCodexWire) ||
+          appaNativeClient === "claude-code" ||
+          appaNativeClient === "opencode-kimi";
+        const nativeControl = nativeCodexControl;
+        if (isNativeStock && nativeControl && nativeFrameId) {
           const held = await new AppaHeldResponseController().prepare({
             session: appaHook,
             heldFrameId: nativeFrameId,
             calls: appaToolCalls,
             organizationId: agent.organizationId,
-            authenticatedUserId: nativeCodexControl.userId,
-            controlNamespace: nativeCodexControl.namespace,
-            boundThreadId: nativeCodexControl.threadId,
+            authenticatedUserId: nativeControl.userId,
+            controlNamespace: nativeControl.namespace,
+            boundThreadId: nativeControl.threadId,
           });
           if (held.state === "held") {
             await persistHeldNativeHistory({
               session: appaHook,
-              history: nativeCodexHistory,
+              history: nativeCodexWire ? nativeCodexHistory : undefined,
               response: responseAdapter.getOriginalResponse(),
             });
             return reply.send(
@@ -3310,6 +3455,7 @@ async function handleNonStreaming<
                 session: appaHook,
                 heldFrameId: nativeFrameId,
                 calls: [held.control],
+                client: appaNativeClient,
               }),
             );
           }
@@ -3354,34 +3500,46 @@ async function handleNonStreaming<
             );
           }
           if (nativeFrameId && !heldBatchCommitted) {
-            await commitNativeCodexCalls({
-              session: appaHook,
-              frameId: nativeFrameId,
-              calls:
-                rewrittenToolCalls ??
-                toolCalls.map((toolCall) => ({
-                  id: toolCall.id,
-                  name: toolCall.name,
-                  arguments: JSON.stringify(toolCall.arguments),
-                })),
-            });
-            rewrittenToolCalls = await publishNativeChildSpawnAliases({
-              session: appaHook,
-              frameId: nativeFrameId,
-              calls:
-                rewrittenToolCalls ??
-                toolCalls.map((toolCall) => ({
-                  id: toolCall.id,
-                  name: toolCall.name,
-                  arguments: JSON.stringify(toolCall.arguments),
-                })),
-              clientParentTaskPath: nativeClientTaskPath,
-              logicalParentTaskPath: nativeLogicalTaskPath,
-            });
-            await issueNativeCodexFrame({
-              session: appaHook,
-              frameId: nativeFrameId,
-            });
+            if (nativeCodexWire) {
+              await commitNativeCodexCalls({
+                session: appaHook,
+                frameId: nativeFrameId,
+                calls:
+                  rewrittenToolCalls ??
+                  toolCalls.map((toolCall) => ({
+                    id: toolCall.id,
+                    name: toolCall.name,
+                    arguments: JSON.stringify(toolCall.arguments),
+                  })),
+              });
+              rewrittenToolCalls = await publishNativeChildSpawnAliases({
+                session: appaHook,
+                frameId: nativeFrameId,
+                calls:
+                  rewrittenToolCalls ??
+                  toolCalls.map((toolCall) => ({
+                    id: toolCall.id,
+                    name: toolCall.name,
+                    arguments: JSON.stringify(toolCall.arguments),
+                  })),
+                clientParentTaskPath: nativeClientTaskPath,
+                logicalParentTaskPath: nativeLogicalTaskPath,
+              });
+              await issueNativeCodexFrame({
+                session: appaHook,
+                frameId: nativeFrameId,
+              });
+            } else {
+              const scope = appaHook.getNativeWireScope();
+              await AppaProxyWireModel.markReady({
+                ...scope,
+                frameId: nativeFrameId,
+              });
+              await AppaProxyWireModel.markIssued({
+                ...scope,
+                frameId: nativeFrameId,
+              });
+            }
           }
           if (nativeCodexWire && rewrittenToolCalls) {
             clientNativeToolCalls = await restoreNativeCodexClientProcessCalls({
@@ -4344,9 +4502,12 @@ function resolveAppaThreadContext(params: {
         ? params.request.metadata.user_id
         : undefined;
     const nativeSessionId =
-      typeof metadataUserId === "string"
+      (typeof metadataUserId === "string"
         ? utils.headers.sessionId.extractClaudeMetadataSessionId(metadataUserId)
-        : null;
+        : null) ??
+      singleHeader(params.headers["x-claude-code-session-id"]) ??
+      headerThreadId ??
+      params.sessionId;
     if (!nativeSessionId) return null;
     const nativeHeaderSessionId = singleHeader(
       params.headers["x-claude-code-session-id"],
@@ -4922,12 +5083,12 @@ async function persistHeldNativeHistory(params: {
   response: unknown;
 }): Promise<void> {
   try {
-    if (!params.history)
-      throw new AppaProxyHookError("unavailable", "outbound");
-    await persistNativeCodexHistory({
-      history: params.history,
-      response: params.response,
-    });
+    if (params.history) {
+      await persistNativeCodexHistory({
+        history: params.history,
+        response: params.response,
+      });
+    }
   } catch (error) {
     await params.session.quarantineHeldResponse();
     throw error;
@@ -4951,6 +5112,7 @@ async function restoreHeldNativeResponse(params: {
   session: AppaProxyHookSession;
   heldFrameId: string;
   calls: AppaOutboundToolCall[] | [AppaSyntheticControlCall];
+  client?: AppaNativeClient;
   omitPublishedContext?: boolean;
 }): Promise<Record<string, unknown>> {
   const held = await AppaProxyWireModel.findOwned({
@@ -4977,6 +5139,131 @@ async function restoreHeldNativeResponse(params: {
       }
     : held.payload.response;
   const calls = params.calls;
+
+  if (params.client === "claude-code") {
+    if (isSyntheticControl(calls[0])) {
+      const control = calls[0];
+      return {
+        id: `msg_${control.id}`,
+        type: "message",
+        role: "assistant",
+        model:
+          typeof response.model === "string"
+            ? response.model
+            : "claude-3-5-sonnet",
+        content: [
+          {
+            type: "tool_use",
+            id: control.id,
+            name: control.name,
+            input:
+              typeof control.arguments === "string"
+                ? JSON.parse(control.arguments)
+                : control.arguments,
+          },
+        ],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 10, output_tokens: 10 },
+      };
+    }
+    const businessCalls = calls as AppaOutboundToolCall[];
+    return {
+      id:
+        typeof response.id === "string"
+          ? response.id
+          : `msg_${params.heldFrameId}`,
+      type: "message",
+      role: "assistant",
+      model:
+        typeof response.model === "string"
+          ? response.model
+          : "claude-3-5-sonnet",
+      content: businessCalls.map((call) => ({
+        type: "tool_use",
+        id: call.id,
+        name: call.emittedName,
+        input:
+          typeof call.emittedArguments === "string"
+            ? JSON.parse(call.emittedArguments)
+            : call.emittedArguments,
+      })),
+      stop_reason: "tool_use",
+      usage: { input_tokens: 10, output_tokens: 10 },
+    };
+  }
+
+  if (params.client === "opencode-kimi") {
+    if (isSyntheticControl(calls[0])) {
+      const control = calls[0];
+      return {
+        id: `chatcmpl_${control.id}`,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model:
+          typeof response.model === "string"
+            ? response.model
+            : "kimi-for-coding",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: control.id,
+                  type: "function",
+                  function: {
+                    name: control.name,
+                    arguments:
+                      typeof control.arguments === "string"
+                        ? control.arguments
+                        : JSON.stringify(control.arguments),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+      };
+    }
+    const businessCalls = calls as AppaOutboundToolCall[];
+    return {
+      id:
+        typeof response.id === "string"
+          ? response.id
+          : `chatcmpl_${params.heldFrameId}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model:
+        typeof response.model === "string" ? response.model : "kimi-for-coding",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: businessCalls.map((call) => ({
+              id: call.id,
+              type: "function",
+              function: {
+                name: call.emittedName,
+                arguments:
+                  typeof call.emittedArguments === "string"
+                    ? call.emittedArguments
+                    : JSON.stringify(call.emittedArguments),
+              },
+            })),
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+    };
+  }
+
   if (isSyntheticControl(calls[0])) {
     return replaceHeldCallsWithControl(response, calls[0]);
   }
@@ -5002,6 +5289,260 @@ async function restoreHeldNativeResponse(params: {
       })),
     ),
   ) as Record<string, unknown>;
+}
+
+function nativeBootstrapSse(params: {
+  client?: AppaNativeClient;
+  response: Record<string, unknown>;
+}): string {
+  if (params.client === "claude-code") {
+    return nativeClaudeBootstrapSse(params.response);
+  }
+  if (params.client === "opencode-kimi") {
+    return nativeOpenCodeBootstrapSse(params.response);
+  }
+  return nativeCodexBootstrapSse(params.response);
+}
+
+function nativeClaudeBootstrapSse(response: Record<string, unknown>): string {
+  const messageId =
+    typeof response.id === "string" ? response.id : `msg_${randomUUID()}`;
+  const model =
+    typeof response.model === "string" ? response.model : "claude-3-5-sonnet";
+  const content = Array.isArray(response.content) ? response.content : [];
+  const toolBlocks = content.filter(
+    (b): b is { type: "tool_use"; id: string; name: string; input: unknown } =>
+      typeof b === "object" && b !== null && b.type === "tool_use",
+  );
+  const lines: string[] = [];
+  lines.push(
+    `event: message_start\ndata: ${JSON.stringify({
+      type: "message_start",
+      message: {
+        id: messageId,
+        type: "message",
+        role: "assistant",
+        model,
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 1 },
+      },
+    })}\n\n`,
+  );
+  toolBlocks.forEach((block, index) => {
+    lines.push(
+      `event: content_block_start\ndata: ${JSON.stringify({
+        type: "content_block_start",
+        index,
+        content_block: {
+          type: "tool_use",
+          id: block.id,
+          name: block.name,
+          input: {},
+        },
+      })}\n\n`,
+    );
+    const jsonStr =
+      typeof block.input === "string"
+        ? block.input
+        : JSON.stringify(block.input ?? {});
+    lines.push(
+      `event: content_block_delta\ndata: ${JSON.stringify({
+        type: "content_block_delta",
+        index,
+        delta: {
+          type: "input_json_delta",
+          partial_json: jsonStr,
+        },
+      })}\n\n`,
+    );
+    lines.push(
+      `event: content_block_stop\ndata: ${JSON.stringify({
+        type: "content_block_stop",
+        index,
+      })}\n\n`,
+    );
+  });
+  lines.push(
+    `event: message_delta\ndata: ${JSON.stringify({
+      type: "message_delta",
+      delta: { stop_reason: "tool_use", stop_sequence: null },
+      usage: { output_tokens: 15 },
+    })}\n\n`,
+  );
+  lines.push(`event: message_stop\ndata: {"type":"message_stop"}\n\n`);
+  return lines.join("");
+}
+
+function nativeOpenCodeBootstrapSse(response: Record<string, unknown>): string {
+  const id =
+    typeof response.id === "string" ? response.id : `chatcmpl_${randomUUID()}`;
+  const model =
+    typeof response.model === "string" ? response.model : "kimi-for-coding";
+  const choices = Array.isArray(response.choices) ? response.choices : [];
+  const firstChoice = choices[0] as
+    | {
+        message?: {
+          tool_calls?: Array<{
+            id: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }
+    | undefined;
+  const toolCalls = firstChoice?.message?.tool_calls ?? [];
+  const lines: string[] = [];
+  toolCalls.forEach((tc, idx) => {
+    lines.push(
+      `data: ${JSON.stringify({
+        id,
+        object: "chat.completion.chunk",
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: idx,
+                  id: tc.id,
+                  type: "function",
+                  function: {
+                    name: tc.function.name,
+                    arguments: tc.function.arguments,
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      })}\n\n`,
+    );
+  });
+  lines.push(
+    `data: ${JSON.stringify({
+      id,
+      object: "chat.completion.chunk",
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [
+        {
+          index: 0,
+          delta: {},
+          finish_reason: "tool_calls",
+        },
+      ],
+    })}\n\n`,
+  );
+  lines.push(`data: [DONE]\n\n`);
+  return lines.join("");
+}
+
+function stripNativeControlHistory<T>(params: {
+  client?: AppaNativeClient;
+  request: T;
+  controlCallIds: ReadonlySet<string>;
+}): T {
+  if (!params.controlCallIds || params.controlCallIds.size === 0) {
+    return params.request;
+  }
+  if (params.client === "claude-code") {
+    return stripNativeClaudeControlHistory(
+      params.request,
+      params.controlCallIds,
+    );
+  }
+  if (params.client === "opencode-kimi") {
+    return stripNativeOpenCodeControlHistory(
+      params.request,
+      params.controlCallIds,
+    );
+  }
+  return stripNativeCodexControlHistory({
+    request: params.request,
+    controlCallIds: params.controlCallIds,
+  });
+}
+
+function stripNativeClaudeControlHistory<T>(
+  request: T,
+  controlCallIds: ReadonlySet<string>,
+): T {
+  if (!isPlainObject(request) || !Array.isArray(request.messages)) {
+    return request;
+  }
+  const messages = request.messages
+    .map((msg) => {
+      if (!isPlainObject(msg)) return msg;
+      if (Array.isArray(msg.content)) {
+        const filtered = msg.content.filter((item) => {
+          if (!isPlainObject(item)) return true;
+          if (item.type === "tool_use" && typeof item.id === "string") {
+            return !controlCallIds.has(item.id);
+          }
+          if (
+            item.type === "tool_result" &&
+            typeof item.tool_use_id === "string"
+          ) {
+            return !controlCallIds.has(item.tool_use_id);
+          }
+          return true;
+        });
+        return { ...msg, content: filtered };
+      }
+      return msg;
+    })
+    .filter((msg) => {
+      if (!isPlainObject(msg)) return true;
+      if (Array.isArray(msg.content) && msg.content.length === 0) {
+        return false;
+      }
+      return true;
+    });
+  return { ...request, messages } as T;
+}
+
+function stripNativeOpenCodeControlHistory<T>(
+  request: T,
+  controlCallIds: ReadonlySet<string>,
+): T {
+  if (!isPlainObject(request) || !Array.isArray(request.messages)) {
+    return request;
+  }
+  const messages = request.messages
+    .map((msg) => {
+      if (!isPlainObject(msg)) return msg;
+      if (msg.role === "tool" && typeof msg.tool_call_id === "string") {
+        if (controlCallIds.has(msg.tool_call_id)) return null;
+      }
+      if (Array.isArray(msg.tool_calls)) {
+        const filtered = msg.tool_calls.filter(
+          (tc) =>
+            isPlainObject(tc) &&
+            typeof tc.id === "string" &&
+            !controlCallIds.has(tc.id),
+        );
+        return { ...msg, tool_calls: filtered };
+      }
+      return msg;
+    })
+    .filter((msg): msg is NonNullable<typeof msg> => msg !== null)
+    .filter((msg) => {
+      if (
+        msg.role === "assistant" &&
+        Array.isArray(msg.tool_calls) &&
+        msg.tool_calls.length === 0 &&
+        !msg.content
+      ) {
+        return false;
+      }
+      return true;
+    });
+  return { ...request, messages } as T;
 }
 
 function nativeCodexFunctionCallItemIds(request: unknown): Map<string, string> {

@@ -1037,11 +1037,13 @@ def project_gateway_control_inventory(profile: dict[str, Any], tools: Any) -> di
         for tool in tools
         if isinstance(tool, dict) and isinstance(tool.get("name"), str)
     )
-    if (
-        methods != list(GATEWAY_CONTROL_METHODS)
-        and methods != ["archestra__run_tool", "archestra__search_tools"]
-        and not {"archestra__run_tool", "archestra__search_tools"}.issubset(set(methods))
-    ):
+    allowed_control_sets = (
+        sorted(GATEWAY_CONTROL_METHODS),
+        sorted((*GATEWAY_CONTROL_METHODS, "archestra__list_skills", "archestra__load_skill")),
+        ["archestra__run_tool", "archestra__search_tools"],
+        sorted(["archestra__list_skills", "archestra__load_skill", "archestra__run_tool", "archestra__search_tools"]),
+    )
+    if methods not in allowed_control_sets or len(methods) != len(tools):
         raise SystemExit("gateway control inventory must expose exactly the reviewed methods")
     prefix = f"mcp__{server_key}__"
     return {

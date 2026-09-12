@@ -145,7 +145,8 @@ export class AppaHeldResponseController {
           owned.frame.controlCallId !== result.id ||
           payload.data.owner.id !== params.authenticatedUserId ||
           payload.data.boundThreadId !== params.threadId ||
-          (payload.data.boundItemId !== undefined &&
+          (params.controlItemIds.size > 0 &&
+            payload.data.boundItemId !== undefined &&
             payload.data.boundItemId !== params.controlItemIds.get(result.id))
         ) {
           return undefined;
@@ -305,7 +306,8 @@ export class AppaHeldResponseController {
       !found.receipt ||
       payload.data.owner.id !== params.authenticatedUserId ||
       payload.data.boundThreadId !== params.threadId ||
-      (payload.data.boundItemId !== undefined &&
+      (params.itemId !== undefined &&
+        payload.data.boundItemId !== undefined &&
         payload.data.boundItemId !== params.itemId)
     ) {
       return undefined;
@@ -777,10 +779,17 @@ export class AppaHeldResponseController {
     });
     if (!held) throw new Error("held response frame is unavailable");
     if (held.frame.state === "held") {
-      await AppaProxyWireModel.finalizeNativeMcpBindingsAndMarkReady({
-        ...scope,
-        frameId: held.frame.id,
-      });
+      if (held.frame.protocol === "codex-native-response/v1") {
+        await AppaProxyWireModel.finalizeNativeMcpBindingsAndMarkReady({
+          ...scope,
+          frameId: held.frame.id,
+        });
+      } else {
+        await AppaProxyWireModel.markReady({
+          ...scope,
+          frameId: held.frame.id,
+        });
+      }
       await AppaProxyWireModel.markIssued({ ...scope, frameId: held.frame.id });
       return;
     }
@@ -801,27 +810,93 @@ export class AppaHeldResponseController {
     });
     if (!held || !isRecord(held.payload) || !isRecord(held.payload.response))
       return;
-    const output = Array.isArray(held.payload.response.output)
-      ? held.payload.response.output
-      : [];
-    let position = 0;
-    const response = {
-      ...held.payload.response,
-      output: output.map((item) => {
-        if (!isRecord(item) || item.type !== "function_call") return item;
+    let response: Record<string, unknown>;
+    if (Array.isArray(held.payload.response.content)) {
+      let position = 0;
+      const content = held.payload.response.content.map((block) => {
+        if (!isRecord(block) || block.type !== "tool_use") return block;
         const call = params.calls[position++];
         if (!call) throw new Error("held native call positions changed");
         return {
-          ...item,
-          id: `fc_${call.id}`,
-          call_id: call.id,
+          ...block,
+          id: call.id,
           name: call.emittedName,
-          arguments: call.emittedArguments,
+          input:
+            typeof call.emittedArguments === "string"
+              ? JSON.parse(call.emittedArguments)
+              : call.emittedArguments,
         };
-      }),
-    };
-    if (position !== params.calls.length) {
-      throw new Error("held native call positions changed");
+      });
+      if (position !== params.calls.length) {
+        throw new Error("held native call positions changed");
+      }
+      response = {
+        ...held.payload.response,
+        content,
+      };
+    } else if (Array.isArray(held.payload.response.choices)) {
+      let position = 0;
+      const choices = held.payload.response.choices.map((choice) => {
+        if (!isRecord(choice) || !isRecord(choice.message)) return choice;
+        const toolCalls = Array.isArray(choice.message.tool_calls)
+          ? choice.message.tool_calls.map((tc) => {
+              if (!isRecord(tc)) return tc;
+              const call = params.calls[position++];
+              if (!call) throw new Error("held native call positions changed");
+              return {
+                ...tc,
+                id: call.id,
+                function: isRecord(tc.function)
+                  ? {
+                      ...tc.function,
+                      name: call.emittedName,
+                      arguments:
+                        typeof call.emittedArguments === "string"
+                          ? call.emittedArguments
+                          : JSON.stringify(call.emittedArguments),
+                    }
+                  : tc.function,
+              };
+            })
+          : choice.message.tool_calls;
+        return {
+          ...choice,
+          message: {
+            ...choice.message,
+            tool_calls: toolCalls,
+          },
+        };
+      });
+      if (position !== params.calls.length) {
+        throw new Error("held native call positions changed");
+      }
+      response = {
+        ...held.payload.response,
+        choices,
+      };
+    } else {
+      const output = Array.isArray(held.payload.response.output)
+        ? held.payload.response.output
+        : [];
+      let position = 0;
+      response = {
+        ...held.payload.response,
+        output: output.map((item) => {
+          if (!isRecord(item) || item.type !== "function_call") return item;
+          const call = params.calls[position++];
+          if (!call) throw new Error("held native call positions changed");
+          return {
+            ...item,
+            id: `fc_${call.id}`,
+            call_id: call.id,
+            name: call.emittedName,
+            arguments: call.emittedArguments,
+          };
+        }),
+      };
+      if (position !== params.calls.length) {
+        throw new Error("held native call positions changed");
+      }
     }
     await AppaProxyWireModel.replaceHeldPayload({
       ...scope,

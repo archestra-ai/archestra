@@ -235,6 +235,7 @@ export function useProfilesPaginated(
     excludeOtherPersonalAgents,
     labels,
     status,
+    providerApiKeyId,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -253,6 +254,7 @@ export function useProfilesPaginated(
     excludeOtherPersonalAgents === undefined &&
     labels === undefined &&
     status === undefined &&
+    providerApiKeyId === undefined &&
     (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
 
   return useQuery({
@@ -272,6 +274,7 @@ export function useProfilesPaginated(
         excludeOtherPersonalAgents,
         labels,
         status,
+        providerApiKeyId,
       },
     ],
     queryFn: async () => {
@@ -290,6 +293,7 @@ export function useProfilesPaginated(
           excludeOtherPersonalAgents,
           labels,
           status,
+          providerApiKeyId,
         },
       });
       throwOnApiError(error, { toastOnError: false });

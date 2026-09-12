@@ -42749,6 +42749,27 @@
           },
           {
             "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "organization-default"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "providerApiKeyId",
+            "required": false,
+            "description": "Filter by a configured provider key, or organization-default for agents with no pinned key or model."
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -43475,6 +43496,10 @@
                               "archestra",
                               "voyage"
                             ]
+                          },
+                          "resolvedLlmProviderKeyName": {
+                            "nullable": true,
+                            "type": "string"
                           },
                           "resolvedLlmModelName": {
                             "nullable": true,
@@ -44988,6 +45013,10 @@
                         "voyage"
                       ]
                     },
+                    "resolvedLlmProviderKeyName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
@@ -46077,6 +46106,10 @@
                           "archestra",
                           "voyage"
                         ]
+                      },
+                      "resolvedLlmProviderKeyName": {
+                        "nullable": true,
+                        "type": "string"
                       },
                       "resolvedLlmModelName": {
                         "nullable": true,
@@ -47352,6 +47385,10 @@
                         "archestra",
                         "voyage"
                       ]
+                    },
+                    "resolvedLlmProviderKeyName": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "resolvedLlmModelName": {
                       "nullable": true,
@@ -48697,6 +48734,10 @@
                             "voyage"
                           ]
                         },
+                        "resolvedLlmProviderKeyName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "resolvedLlmModelName": {
                           "nullable": true,
                           "type": "string"
@@ -49723,6 +49764,10 @@
                         "archestra",
                         "voyage"
                       ]
+                    },
+                    "resolvedLlmProviderKeyName": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "resolvedLlmModelName": {
                       "nullable": true,
@@ -51191,6 +51236,10 @@
                         "archestra",
                         "voyage"
                       ]
+                    },
+                    "resolvedLlmProviderKeyName": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "resolvedLlmModelName": {
                       "nullable": true,
@@ -53475,6 +53524,10 @@
                         "voyage"
                       ]
                     },
+                    "resolvedLlmProviderKeyName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "resolvedLlmModelName": {
                       "nullable": true,
                       "type": "string"
@@ -54494,6 +54547,10 @@
                         "archestra",
                         "voyage"
                       ]
+                    },
+                    "resolvedLlmProviderKeyName": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "resolvedLlmModelName": {
                       "nullable": true,
@@ -59939,6 +59996,10 @@
                         "archestra",
                         "voyage"
                       ]
+                    },
+                    "resolvedLlmProviderKeyName": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "resolvedLlmModelName": {
                       "nullable": true,

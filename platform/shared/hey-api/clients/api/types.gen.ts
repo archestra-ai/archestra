@@ -12869,6 +12869,10 @@ export type GetAgentsData = {
          * Filter by lifecycle status. Deleted rows require delete permission.
          */
         status?: 'active' | 'deleted';
+        /**
+         * Filter by a configured provider key, or organization-default for agents with no pinned key or model.
+         */
+        providerApiKeyId?: string | 'organization-default';
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
@@ -13066,6 +13070,7 @@ export type GetAgentsResponses = {
                 prompt: string;
             }>;
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
@@ -13364,6 +13369,7 @@ export type CreateAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -13605,6 +13611,7 @@ export type GetAllAgentsResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -13897,6 +13904,7 @@ export type GetDefaultMcpGatewayResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -14181,6 +14189,7 @@ export type ImportAgentResponses = {
                 prompt: string;
             }>;
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
@@ -14478,6 +14487,7 @@ export type GetAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -14769,6 +14779,7 @@ export type UpdateAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -15235,6 +15246,7 @@ export type RestoreAgentVersionResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -15450,6 +15462,7 @@ export type CloneAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -16992,6 +17005,7 @@ export type RestoreAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;

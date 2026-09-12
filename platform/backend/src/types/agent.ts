@@ -342,6 +342,8 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * on read paths (list/get); absent on mutation responses (clients re-fetch).
    */
   resolvedLlmProvider: SupportedProvidersSchema.nullable().optional(),
+  /** Human-facing name of the configured provider key. */
+  resolvedLlmProviderKeyName: z.string().nullable().optional(),
   /**
    * The human-facing name of the agent's configured model (e.g. "gpt-4"),
    * resolved server-side from `modelId` so a viewer who can't access the

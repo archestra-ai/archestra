@@ -40,8 +40,24 @@ export type NamedIntegrationCatalog<Id extends string> =
     label: (id: Id) => string;
   };
 
+/**
+ * Read the organization the way availability decisions need it: revalidated on
+ * mount and whenever the tab regains focus.
+ *
+ * The plain read caches for five minutes and is kept current by mutations
+ * writing the key imperatively — enough for the app name and theme, wrong for
+ * a catalog. That write only lands in the tab that saved, and the query is
+ * restored from the refresh snapshot, so a tab that was already open (or
+ * merely reloaded within the window) went on offering a provider the admins
+ * had just switched off. Availability authorizes what may be configured, so it
+ * is read on the same terms as the connect page's settings.
+ */
+function useIntegrationOrganization() {
+  return useOrganization(true, { fresh: true });
+}
+
 export function useModelProviderCatalog(): NamedIntegrationCatalog<SupportedProvider> {
-  const { data: organization } = useOrganization();
+  const { data: organization } = useIntegrationOrganization();
   const overrides = organization?.modelProviderOverrides ?? null;
   return useMemo(
     () => ({
@@ -55,7 +71,7 @@ export function useModelProviderCatalog(): NamedIntegrationCatalog<SupportedProv
 }
 
 export function useMessagingChannelCatalog(): IntegrationCatalog<MessagingChannelId> {
-  const { data: organization } = useOrganization();
+  const { data: organization } = useIntegrationOrganization();
   const overrides = organization?.messagingChannelOverrides ?? null;
   return useMemo(
     () =>
@@ -68,7 +84,7 @@ export function useMessagingChannelCatalog(): IntegrationCatalog<MessagingChanne
 }
 
 export function useKnowledgeConnectorCatalog(): IntegrationCatalog<ConnectorType> {
-  const { data: organization } = useOrganization();
+  const { data: organization } = useIntegrationOrganization();
   const overrides = organization?.knowledgeConnectorOverrides ?? null;
   return useMemo(
     () =>

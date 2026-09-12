@@ -1,3 +1,4 @@
+import { SupportedProviders } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,8 +8,14 @@ import {
   type LlmProviderApiKey,
   useAvailableLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 
 vi.mock("@/lib/auth/auth.query");
+
+// The selector resolves connectable subscriptions through
+// useModelProviderCatalog() -> useOrganization(); no organization data means
+// "no admin overrides", i.e. every provider available.
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useUpdateConversation: vi.fn(),
@@ -97,6 +104,9 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       data: [],
       isLoading: false,
     } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useOrganization>);
   });
 
   it("shows every subscription when none are connected", () => {
@@ -113,6 +123,66 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "SuperGrok Connect" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer a subscription whose provider the organization turned off", () => {
+    // Offering it opened a sign-in dialog that refuses the hidden provider,
+    // so the only outcome was "No compatible LLM providers are enabled".
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { xai: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    renderSelector();
+
+    expect(
+      screen.queryByRole("button", { name: "SuperGrok Connect" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "ChatGPT Subscription Connect" }),
+    ).toBeInTheDocument();
+  });
+
+  it("drops the add-key option when every provider is turned off", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {
+        modelProviderOverrides: Object.fromEntries(
+          SupportedProviders.map((provider) => [provider, { hidden: true }]),
+        ),
+      },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    renderSelector();
+
+    expect(
+      screen.queryByRole("button", { name: "Add provider key" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a connected key selectable after its provider is turned off", () => {
+    // Switching a provider off withdraws the offer, not credentials that
+    // already exist — those go on working.
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { xai: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [
+        {
+          id: "x-premium-key",
+          name: "SuperGrok",
+          provider: "xai",
+          scope: "personal",
+          userId: "current-user",
+          subscriptionKind: "x-premium",
+        },
+      ] as unknown as LlmProviderApiKey[],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    renderSelector();
+
+    expect(
+      screen.getByRole("button", { name: /SuperGrok Connected/ }),
     ).toBeInTheDocument();
   });
 

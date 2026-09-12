@@ -1056,6 +1056,12 @@ describe("ConnectCommandPanel", () => {
     await screen.findByText(COMMAND);
 
     await user.click(screen.getByTestId("connect-change-skills"));
+    expect(
+      screen.getByText(/Everything shared with you is installed/),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Only skills in the LLM Proxy's environment/),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByLabelText("Install shared skills"));
 
     await waitFor(() =>

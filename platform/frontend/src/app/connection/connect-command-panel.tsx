@@ -802,11 +802,6 @@ export function ConnectCommandPanel({
         />
         Install shared skills
       </label>
-      {llmProxyId !== null && (
-        <p className="pl-6 text-xs text-muted-foreground">
-          Only skills in the LLM Proxy's environment are listed.
-        </p>
-      )}
       <p className="pl-6 text-xs text-muted-foreground">
         Everything shared with you is installed, and stays current as skills are
         added or removed. To share a fixed subset instead, use a snapshot link.

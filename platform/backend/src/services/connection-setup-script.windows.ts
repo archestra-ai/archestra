@@ -425,7 +425,8 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 try { claude mcp remove --scope local ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 try { claude mcp remove --scope user ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
-claude mcp add --scope user --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}`);
+claude mcp add --scope user --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}
+if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }`);
   }
 
   if (ctx.proxy) {
@@ -711,7 +712,8 @@ if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-ba
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
-codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}`);
+codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
+if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }`);
   }
 
   if (ctx.proxy) {
@@ -828,6 +830,7 @@ function copilotSections(ctx: SetupScriptContext): string[] {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 try { copilot mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 copilot mcp add --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}
+if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }
 copilot mcp get ${psq(ctx.mcp.serverName)}`);
   }
 

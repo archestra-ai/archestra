@@ -1450,6 +1450,27 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
 });
 
 describe("renderSetupScript (windows)", () => {
+  test.each([
+    { clientId: "claude-code" as const, binary: "claude" },
+    { clientId: "codex" as const, binary: "codex" },
+    { clientId: "copilot-cli" as const, binary: "copilot" },
+  ])("$clientId: failed native MCP registration aborts before installing the guard", ({
+    clientId,
+    binary,
+  }) => {
+    const script = renderSetupScript(fullContext(clientId, "windows"));
+    const registration = script.indexOf(`\n${binary} mcp add `);
+    const guardInstall = script.indexOf("$archGuardPath = Join-Path");
+    expect(registration).toBeGreaterThan(-1);
+    expect(guardInstall).toBeGreaterThan(registration);
+    const afterRegistration = script.slice(
+      script.indexOf("\n", registration + 1) + 1,
+    );
+    expect(afterRegistration.split("\n")[0]).toMatch(
+      /^if \(\$LASTEXITCODE -ne 0\) \{ throw '.*' \}$/,
+    );
+  });
+
   for (const clientId of ALL_CLIENTS) {
     test(`${clientId}: renders PowerShell, not bash, with secrets injected`, () => {
       const script = renderSetupScript(fullContext(clientId, "windows"));

@@ -195,8 +195,16 @@ const ListAgentsOutputSchema = z.object({
         .string()
         .nullable()
         .describe("The agent description, if any."),
-      resolvedLlmProviderKeyName: z.string().nullable(),
-      resolvedLlmModelName: z.string().nullable(),
+      resolvedLlmProviderKeyName: z
+        .string()
+        .nullable()
+        .describe(
+          "The configured provider-key name, or null when unconfigured.",
+        ),
+      resolvedLlmModelName: z
+        .string()
+        .nullable()
+        .describe("The configured model name, or null when unconfigured."),
       teams: z.array(AgentTeamOutputSchema).describe("Teams attached to it."),
       labels: z.array(AgentLabelOutputSchema).describe("Assigned labels."),
       tools: z.array(

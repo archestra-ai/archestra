@@ -654,6 +654,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <CollectionFilters>
               <FilterBar
                 leading
+                onClearFilters={hasActiveFilters ? clearFilters : undefined}
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                 search={
                   <SearchInput

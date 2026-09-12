@@ -533,6 +533,8 @@ describe("agent tool execution", () => {
   });
 
   test("list_agents filters by provider key and returns its display name", async () => {
+    if (!mockContext.organizationId)
+      throw new Error("Missing organization fixture");
     const key = await LlmProviderApiKeyModel.create({
       organizationId: mockContext.organizationId,
       userId: mockContext.userId,

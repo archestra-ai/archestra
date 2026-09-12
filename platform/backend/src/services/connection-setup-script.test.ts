@@ -17,6 +17,7 @@ import {
   CLAUDE_CODE_CLIENT_ID,
   CODEX_CLIENT_ID,
   EXTERNAL_AGENT_ID_HEADER,
+  STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
@@ -415,6 +416,147 @@ function runInTerminal(body: string): Promise<string> {
 const ALL_CLIENTS = ["claude-code", "codex", "copilot-cli", "cursor"] as const;
 
 describe("renderSetupScript", () => {
+  test.each([
+    { clientId: "claude-code" as const, binary: "claude", mode: "-p" },
+    { clientId: "codex" as const, binary: "codex", mode: "exec" },
+  ])("$clientId: installed and reinstalled wrappers preserve PATH resolution, arguments and exit status", async ({
+    clientId,
+    binary,
+    mode,
+  }) => {
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-installer-"));
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const alternateBin = path.join(root, "alternate-bin");
+    const scriptPath = path.join(root, "setup.sh");
+    const callsPath = path.join(root, "calls.jsonl");
+    const guard = STARTUP_GUARD_INSTALL[clientId];
+    const args = [
+      mode,
+      "two words",
+      "",
+      "single'quote",
+      'double"quote',
+      "$HOME",
+      "*",
+      "--flag=value",
+    ];
+    try {
+      await Promise.all([home, bin, alternateBin].map((dir) => mkdir(dir)));
+      for (const directory of [bin, alternateBin]) {
+        const executable = path.join(directory, binary);
+        await writeFile(
+          executable,
+          `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify({ executable: process.argv[1], args }) + "\\n");
+process.exit(args[0] === "mcp" ? 0 : 23);
+`,
+        );
+        await chmod(executable, 0o755);
+      }
+      await writeFile(
+        path.join(bin, "curl"),
+        `#!/bin/sh
+printf '%s\\n' '{"health":true}' >> "$ARCHESTRA_TEST_COMMAND_LOG"
+printf '%s' '{"mcp":"ok","llm":"ok"}'
+`,
+      );
+      await chmod(path.join(bin, "curl"), 0o755);
+      const sentinel = "export ARCHESTRA_TEST_PROFILE_PRESERVED=1\n";
+      await writeFile(path.join(home, ".bashrc"), sentinel);
+      await writeFile(path.join(home, ".zshrc"), sentinel);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext(clientId, "linux"),
+          proxy: null,
+          skills: null,
+        }),
+      );
+      const env = {
+        HOME: home,
+        SHELL: "/bin/bash",
+        PATH: `${bin}:${process.env.PATH}`,
+        ARCHESTRA_TEST_COMMAND_LOG: callsPath,
+        NO_COLOR: "1",
+      };
+      for (let run = 0; run < 2; run++) {
+        await writeFile(callsPath, "");
+        await execFileAsync(
+          "bash",
+          [
+            "--noprofile",
+            "--norc",
+            "-c",
+            `
+source "$HOME/.bashrc"
+export -f ${binary} 2>/dev/null || true
+cat "$1" | bash
+`,
+            "installer",
+            scriptPath,
+          ],
+          { env, cwd: home },
+        );
+        const setupCalls = (await readFile(callsPath, "utf8"))
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        expect(setupCalls.length).toBeGreaterThan(0);
+        expect(
+          setupCalls.every(
+            (call) =>
+              call.executable === path.join(bin, binary) &&
+              call.args[0] === "mcp",
+          ),
+        ).toBe(true);
+        expect(setupCalls.some((call) => call.args.includes("add"))).toBe(true);
+        expect(
+          (await stat(path.join(home, guard.scriptRelpath))).mode & 0o111,
+        ).not.toBe(0);
+        for (const profile of [".bashrc", ".zshrc"]) {
+          const contents = await readFile(path.join(home, profile), "utf8");
+          expect(contents).toContain(sentinel);
+          expect(contents.split(guard.markerStart)).toHaveLength(2);
+        }
+        for (const directory of [bin, alternateBin]) {
+          await writeFile(callsPath, "");
+          await expect(
+            execFileAsync(
+              "bash",
+              [
+                "--noprofile",
+                "--norc",
+                "-c",
+                `
+source "$HOME/.bashrc"
+test "$ARCHESTRA_TEST_PROFILE_PRESERVED" = 1 || exit 99
+${binary} "$@"
+`,
+                "invoke",
+                ...args,
+              ],
+              { env: { ...env, PATH: `${directory}:${env.PATH}` }, cwd: home },
+            ),
+          ).rejects.toMatchObject({ code: 23 });
+          expect(
+            (await readFile(callsPath, "utf8"))
+              .trim()
+              .split("\n")
+              .map((line) => JSON.parse(line)),
+          ).toEqual([
+            { health: true },
+            { executable: path.join(directory, binary), args },
+          ]);
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   for (const clientId of ALL_CLIENTS) {
     test(`${clientId}: full script is valid bash with no placeholders`, async () => {
       const script = renderSetupScript(fullContext(clientId));

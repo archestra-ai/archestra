@@ -367,6 +367,16 @@ jobs:
               "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" \
               "+refs/heads/release/*:refs/remotes/origin/release/*"
 
+      # The private development mirror does not publish stable release tracks.
+      # Test its changes against the actual released public histories, keeping
+      # origin/main above tied to this PR's own repository.
+      - name: Fetch canonical release histories in the private mirror
+        if: github.repository == 'archestra-ai/archestra-private'
+        run: |
+          git fetch --depth=1 https://github.com/archestra-ai/archestra.git \
+            "+refs/heads/release/*:refs/remotes/origin/release/*" \
+            "+refs/tags/platform-v*:refs/tags/platform-v*"
+
       - name: Check migration upgrade paths across release tracks
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref }}

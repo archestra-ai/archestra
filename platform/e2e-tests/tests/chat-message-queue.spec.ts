@@ -17,7 +17,7 @@ const COMPACT_ROUTE = "**/api/chat/conversations/*/compact";
 test.describe("Chat message queue", () => {
   test.setTimeout(120_000);
 
-  test("interrupts the active response and immediately sends the queued message", async ({
+  test("interrupts once and delivers multiple queued messages in order", async ({
     page,
     request,
     makeApiRequest,
@@ -44,13 +44,26 @@ test.describe("Chat message queue", () => {
     await selectRuntimeModelFromDialog(page, runtimeModel);
 
     const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
+    const sentTexts: string[] = [];
+    let stopRequests = 0;
+    page.on("request", (request) => {
+      if (request.method() !== "POST") return;
+      if (new URL(request.url()).pathname.endsWith("/stop")) stopRequests++;
+      if (new URL(request.url()).pathname === "/api/chat") {
+        const messages = request.postDataJSON().messages;
+        const latestUserMessage = messages.findLast(
+          (message: { role: string }) => message.role === "user",
+        );
+        sentTexts.push(latestUserMessage.parts[0].text);
+      }
+    });
     await textarea.fill("Start a slow response chat-reconnect-e2e-test");
     await page.keyboard.press("Enter");
     await expect(
       page.getByText(/Reconnect stream part one/).first(),
     ).toBeVisible({ timeout: 30_000 });
 
-    const queuedText = `steer now chat-ui-e2e-test ${Math.random().toString(36).slice(2, 10)}`;
+    const queuedText = `change direction ${Math.random().toString(36).slice(2, 10)}`;
     await textarea.fill(queuedText);
     await page.keyboard.press("Enter");
 
@@ -59,17 +72,43 @@ test.describe("Chat message queue", () => {
       .filter({ hasText: queuedText });
     await expect(queuedItem).toBeVisible();
 
-    await textarea.press("Escape");
+    const secondQueuedText = "Then summarize the revised plan";
+    await textarea.fill(secondQueuedText);
+    await textarea.press("Enter");
+    await expect(page.getByTestId(E2eTestId.ChatMessageQueueItem)).toHaveCount(
+      2,
+    );
+
+    await textarea.evaluate((element) => {
+      for (const _attempt of [1, 2, 3]) {
+        element.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+      }
+    });
 
     await expect(queuedItem).toHaveCount(0, { timeout: 30_000 });
+    expect(stopRequests).toBe(1);
+    await expect(page.getByText(/part three part four part five/)).toHaveCount(
+      0,
+    );
     await expect(page.getByText(queuedText).first()).toBeVisible({
       timeout: 30_000,
     });
-    await expect(
-      page.getByText(/part three part four part five/).first(),
-    ).toBeVisible({
-      timeout: 90_000,
-    });
+    await expect(page.getByText(/part three part four part five/)).toHaveCount(
+      2,
+      {
+        timeout: 90_000,
+      },
+    );
+    await expect(page.getByTestId(E2eTestId.ChatMessageQueueItem)).toHaveCount(
+      0,
+    );
+    expect(sentTexts).toEqual([
+      "Start a slow response chat-reconnect-e2e-test",
+      queuedText,
+      secondQueuedText,
+    ]);
   });
 
   // A manual /compact rewrites the thread over REST while the chat stream sits

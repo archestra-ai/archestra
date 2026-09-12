@@ -51,7 +51,7 @@ import {
   GetAgentRunResponseSchema,
   MissingAgentRuntimeCredentialSchema,
   type ResolvedAgentRuntime,
-  SelectAgentRunSchema,
+  SelectAgentRunListItemSchema,
   SelectAgentRunSessionSchema,
   SelectAgentRunShareWithTargetsSchema,
   StartAgentRunResponseSchema,
@@ -504,16 +504,25 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "List Agent Runtime runs created by delegated tasks for this Agent",
         tags: ["Agents"],
         params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(z.array(SelectAgentRunSchema)),
+        response: constructResponseSchema(
+          z.array(SelectAgentRunListItemSchema),
+        ),
       },
     },
     async (request, reply) => {
       await requireReadableAgent(request);
+      const runs = await AgentRunModel.listForAgent({
+        agentId: request.params.id,
+        organizationId: request.organizationId,
+      });
       return reply.send(
-        await AgentRunModel.listForAgent({
-          agentId: request.params.id,
-          organizationId: request.organizationId,
-        }),
+        runs.map((run) => ({
+          ...run,
+          shareTeamNames:
+            run.actorUserId === request.user.id ? run.shareTeamNames : null,
+          shareUserNames:
+            run.actorUserId === request.user.id ? run.shareUserNames : null,
+        })),
       );
     },
   );

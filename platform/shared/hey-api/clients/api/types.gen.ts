@@ -20760,6 +20760,16 @@ export type GetAgentRunsResponses = {
         stateChangedAt: string | null;
         hardDeadlineAt: string;
         lastModelActivityAt: string | null;
+        initiatorName: string | null;
+        shareVisibility: 'organization' | 'team' | 'user' | null;
+        /**
+         * Share recipient teams; null unless the viewer owns the run
+         */
+        shareTeamNames: Array<string> | null;
+        /**
+         * Share recipient users; null unless the viewer owns the run
+         */
+        shareUserNames: Array<string> | null;
     }>;
 };
 

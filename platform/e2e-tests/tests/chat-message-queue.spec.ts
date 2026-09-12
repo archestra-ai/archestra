@@ -17,6 +17,61 @@ const COMPACT_ROUTE = "**/api/chat/conversations/*/compact";
 test.describe("Chat message queue", () => {
   test.setTimeout(120_000);
 
+  test("interrupts the active response and immediately sends the queued message", async ({
+    page,
+    request,
+    makeApiRequest,
+    syncModels,
+  }) => {
+    await expectWireMockReady();
+
+    const { apiKeyId, runtimeModel } =
+      await ensureWireMockAnthropicChatProvider({
+        request,
+        makeApiRequest,
+        syncModels,
+      });
+
+    await goToChat(page);
+    await expectChatReady(page);
+    await selectApiKeyById(page, apiKeyId);
+
+    const modelSelectorTrigger = page
+      .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+      .or(page.getByRole("button", { name: /select model/i }))
+      .first();
+    await modelSelectorTrigger.click();
+    await selectRuntimeModelFromDialog(page, runtimeModel);
+
+    const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
+    await textarea.fill("Start a slow response chat-reconnect-e2e-test");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByText(/Reconnect stream part one/).first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    const queuedText = `steer now chat-ui-e2e-test ${Math.random().toString(36).slice(2, 10)}`;
+    await textarea.fill(queuedText);
+    await page.keyboard.press("Enter");
+
+    const queuedItem = page
+      .getByTestId(E2eTestId.ChatMessageQueueItem)
+      .filter({ hasText: queuedText });
+    await expect(queuedItem).toBeVisible();
+
+    await textarea.press("Escape");
+
+    await expect(queuedItem).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByText(queuedText).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(
+      page.getByText(/part three part four part five/).first(),
+    ).toBeVisible({
+      timeout: 90_000,
+    });
+  });
+
   // A manual /compact rewrites the thread over REST while the chat stream sits
   // idle, so nothing about it is "in flight" from the composer's point of view.
   // The composer still has to stay usable, park the message in the queue rather

@@ -131,7 +131,10 @@ interface ChatSession {
     partIndex: number;
     text: string;
   }) => Promise<void>;
-  stop: (options?: { preserveQueuedMessages?: boolean }) => void;
+  stop: (options?: {
+    preserveQueuedMessages?: boolean;
+    after?: Promise<unknown>;
+  }) => void;
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | undefined;
   setMessages: ReturnType<typeof useChat>["setMessages"];
@@ -605,6 +608,7 @@ function ChatSessionHook({
   // onData), which close over the config object before `messages` exists.
   // Assigned every render right after useChat returns.
   const latestMessagesRef = useRef<UIMessage[]>(initialMessages);
+  const latestStatusRef = useRef<ChatSession["status"]>("ready");
   const preserveQueuedMessagesOnAbortRef = useRef(false);
 
   const {
@@ -671,6 +675,8 @@ function ChatSessionHook({
     experimental_throttle: 100,
     id: conversationId,
     onFinish: async ({ message, isAbort, isError }) => {
+      const preserveQueuedMessages = preserveQueuedMessagesOnAbortRef.current;
+      preserveQueuedMessagesOnAbortRef.current = false;
       setOptimisticToolCalls([]);
       setPendingMcpElicitation(null);
       clearActiveContextCompaction();
@@ -707,10 +713,9 @@ function ChatSessionHook({
         // An explicit steering interrupt preserves queued follow-ups so the
         // normal ready-state drain can deliver the oldest one immediately.
         // Other aborts remain a hard boundary and discard pending work.
-        if (!preserveQueuedMessagesOnAbortRef.current) {
+        if (!preserveQueuedMessages) {
           chatMessageQueue.clear(conversationId);
         }
-        preserveQueuedMessagesOnAbortRef.current = false;
         // The updater form runs against the SDK's live messages, not this
         // callback's (throttled, possibly stale) closure, so the most recently
         // streamed text is never rolled back.
@@ -1084,6 +1089,7 @@ function ChatSessionHook({
   } as Parameters<typeof useChat>[0]);
 
   latestMessagesRef.current = messages;
+  latestStatusRef.current = status;
 
   // Text and tool-call deltas update the SDK's raw message list. Track that
   // progress independently from displayedMessages, which can intentionally be
@@ -1348,10 +1354,34 @@ function ChatSessionHook({
   // update only — no state changes, no re-renders.
   const sessionRef = useRef<ChatSession>(null as unknown as ChatSession);
   const stopSession = useCallback(
-    (options?: { preserveQueuedMessages?: boolean }) => {
+    (options?: {
+      preserveQueuedMessages?: boolean;
+      after?: Promise<unknown>;
+    }) => {
       preserveQueuedMessagesOnAbortRef.current =
         options?.preserveQueuedMessages === true;
-      stop();
+      if (!options?.after) {
+        stop();
+        return;
+      }
+
+      const activeUserMessageId = [...latestMessagesRef.current]
+        .reverse()
+        .find((message) => message.role === "user")?.id;
+      void options.after.finally(() => {
+        const latestUserMessageId = [...latestMessagesRef.current]
+          .reverse()
+          .find((message) => message.role === "user")?.id;
+        const responseStillInFlight =
+          latestStatusRef.current === "submitted" ||
+          latestStatusRef.current === "streaming";
+        if (
+          responseStillInFlight &&
+          latestUserMessageId === activeUserMessageId
+        ) {
+          stop();
+        }
+      });
     },
     [stop],
   );

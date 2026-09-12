@@ -45,8 +45,9 @@ export function classifyAppaNativeClient(params: {
   }
 
   if (
-    params.provider === "kimi" &&
-    params.interactionType === "kimi:chatCompletions" &&
+    (params.provider === "kimi" || params.provider === "openai") &&
+    (params.interactionType === "kimi:chatCompletions" ||
+      params.interactionType === "openai:chatCompletions") &&
     (originator.includes("opencode") ||
       userAgent.includes("opencode") ||
       header(headers, "x-opencode-session") !== undefined)

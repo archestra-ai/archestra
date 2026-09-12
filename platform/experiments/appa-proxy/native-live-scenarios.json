@@ -64,21 +64,21 @@
     },
     {
       "id": "test-review-approved",
-      "clients": ["codex", "opencode"],
+      "clients": ["claude", "codex", "opencode"],
       "expected_exit": 0,
       "expect": {"publication_count": 1, "runtime": {"approval": "automated-test-reviewer", "approval_effect_count": 1}},
       "prompt": "Request the configured approval for appa_fixture.protected_publish with run_id {run_id}, request_key {request_key}, and value SYNTHETIC_SERVICE_OK. Wait for the authorized automated test reviewer decision, then perform the publication once. Do not claim or request human approval."
     },
     {
       "id": "test-review-denied",
-      "clients": ["codex", "opencode"],
+      "clients": ["claude", "codex", "opencode"],
       "expected_exit": 1,
       "expect": {"publication_count": 0, "runtime": {"approval": "automated-test-reviewer", "denied": true}},
       "prompt": "Request the configured approval for appa_fixture.protected_publish with run_id {run_id} and request_key {request_key}. The authorized automated test reviewer must deny it. Do not claim or request human approval, and do not perform a publication after denial."
     },
     {
       "id": "test-review-replay-denied",
-      "clients": ["codex", "opencode"],
+      "clients": ["claude", "codex", "opencode"],
       "expected_exit": 1,
       "expect": {"publication_count": 0, "runtime": {"approval": "automated-test-reviewer", "replay_status": 409, "denied": true}},
       "prompt": "Replay the already-consumed automated test review for appa_fixture.protected_publish with run_id {run_id} and request_key {request_key}. Do not request or impersonate a human approval. The replay must not produce a publication."

@@ -18,12 +18,13 @@ import { AppaControlFramePayloadSchema } from "@/types/appa-proxy-wire";
 import { AppaHeldResponseController } from "./appa-held-response-controller";
 
 const runtimeUrl = "http://appa-held.test";
-const hookConfig = {
+const createHookConfig = () => ({
   url: runtimeUrl,
   timeoutMs: 100,
   runtimeToken: "runtime-token",
   sessionHmacSecret: "held-response-secret".repeat(3),
-};
+});
+let hookConfig = createHookConfig();
 const realRuntimeBinary = process.env.APPA_HELD_RUNTIME_BINARY;
 const runRealRuntime =
   process.env.APPA_HELD_RESPONSE_REAL_RUNTIME === "1" &&
@@ -33,6 +34,7 @@ const server = useMswServer();
 
 describe("AppaHeldResponseController", () => {
   beforeEach(() => {
+    hookConfig = createHookConfig();
     config.llmProxy.appaHook = hookConfig;
   });
 

@@ -393,44 +393,29 @@ function psBareOrIndex(key: string): string {
 // ===================================================================
 
 /**
- * Prepend the guard-unshadow step for a client, gated exactly like its install
- * so the two come as a pair (mirrors the POSIX renderer). Non-destructive: the
- * reinstall at the end refreshes the on-disk guard, so a connect step failing
- * under 'Stop' never strands the user without a startup screen. Call FIRST.
+ * Wrap a CLI client's setup steps with the same startup-guard lifecycle. The
+ * old guard is unshadowed before any client command runs and the refreshed
+ * guard is installed only after setup succeeds.
  */
-function windowsStartupGuardUnshadowSection(
+function withWindowsStartupGuard(
   ctx: SetupScriptContext,
   client: StartupGuardClient,
   sections: string[],
-): void {
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    sections.push(buildWindowsStartupGuardUnshadowSection(client));
-  }
-}
-
-/**
- * Append the guard install for a client when connect wired at least one remote.
- * Call LAST in a client's builder.
- */
-function windowsStartupGuardSection(
-  ctx: SetupScriptContext,
-  client: StartupGuardClient,
-  sections: string[],
-): void {
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    sections.push(
-      buildWindowsStartupGuardInstallSection(
-        buildStartupGuardContext(ctx),
-        client,
-      ),
-    );
-  }
+): string[] {
+  return ctx.mcp || ctx.proxy || ctx.skills
+    ? [
+        buildWindowsStartupGuardUnshadowSection(client),
+        ...sections,
+        buildWindowsStartupGuardInstallSection(
+          buildStartupGuardContext(ctx),
+          client,
+        ),
+      ]
+    : sections;
 }
 
 function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
-
-  windowsStartupGuardUnshadowSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 
   if (ctx.mcp) {
     // Register at USER scope so the gateway is visible in every directory for
@@ -472,9 +457,7 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automaticall
 ${pluginInstalls}`);
   }
 
-  windowsStartupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
-
-  return sections;
+  return withWindowsStartupGuard(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 }
 
 /**
@@ -712,8 +695,6 @@ Write-Host 'Your existing AWS credentials keep working — only the base URL cha
 function codexSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
-  windowsStartupGuardUnshadowSection(ctx, CODEX_GUARD_CLIENT, sections);
-
   if (ctx.mcp || ctx.proxy || ctx.skills) {
     // Codex owns config.toml wherever CODEX_HOME points (default ~/.codex),
     // and every action below edits that file — the mcp/skills registrations
@@ -791,9 +772,7 @@ if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — run /
 ${pluginInstalls}`);
   }
 
-  windowsStartupGuardSection(ctx, CODEX_GUARD_CLIENT, sections);
-
-  return sections;
+  return withWindowsStartupGuard(ctx, CODEX_GUARD_CLIENT, sections);
 }
 
 // ===================================================================
@@ -844,8 +823,6 @@ Write-Host 'Restart any open Copilot CLI sessions to pick this up.'`;
 
 function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
-
-  windowsStartupGuardUnshadowSection(ctx, COPILOT_GUARD_CLIENT, sections);
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
@@ -902,9 +879,7 @@ if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run '
 ${pluginInstalls}`);
   }
 
-  windowsStartupGuardSection(ctx, COPILOT_GUARD_CLIENT, sections);
-
-  return sections;
+  return withWindowsStartupGuard(ctx, COPILOT_GUARD_CLIENT, sections);
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
+  AgentRunShareModel,
   AgentWorkspaceModel,
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
@@ -298,8 +299,9 @@ describe("Agent Runtime routes", () => {
     expect(status).not.toHaveBeenCalled();
   });
 
-  test("lists only runs belonging to the selected Agent with their task outcome", async ({
+  test("lists runs with their initiator and visibility", async ({
     makeAgent,
+    makeTeam,
   }) => {
     const otherAgent = await makeAgent({
       organizationId,
@@ -321,6 +323,17 @@ describe("Agent Runtime routes", () => {
       runtimeScope: "archestra-dev",
       activeDeadlineSeconds: 3_600,
       virtualApiKeyId: null,
+    });
+    const visibleTeam = await makeTeam(organizationId, user.id, {
+      name: "Runtime reviewers",
+    });
+    await AgentRunShareModel.upsert({
+      taskId: selectedTask.id,
+      organizationId,
+      createdByUserId: user.id,
+      visibility: "team",
+      teamIds: [visibleTeam.id],
+      userIds: [],
     });
     const latestInteraction = await InteractionModel.create({
       profileId: agent.id,
@@ -388,7 +401,7 @@ describe("Agent Runtime routes", () => {
       url: `/api/agents/${agent.id}/runs`,
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     const [listedRun] = response.json();
     expect(listedRun).toEqual(
       expect.objectContaining({
@@ -396,6 +409,10 @@ describe("Agent Runtime routes", () => {
         agentId: agent.id,
         state: "TASK_STATE_FAILED",
         statusReason: "The run process exited with status 1",
+        initiatorName: user.name,
+        shareVisibility: "team",
+        shareTeamNames: ["Runtime reviewers"],
+        shareUserNames: [],
       }),
     );
     expect(
@@ -404,6 +421,143 @@ describe("Agent Runtime routes", () => {
     expect(listedRun.lastModelActivityAt).toBe(
       latestInteraction.createdAt.toISOString(),
     );
+  });
+
+  test("keeps the initiating user distinct from the Agent creator and follows current sharing", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const creator = user;
+    const owner = await makeAdmin({ name: "Alex Rivera" });
+    await makeMember(owner.id, organizationId, { role: "member" });
+    const recipient = await makeAdmin({ name: "Sam Chen" });
+    await makeMember(recipient.id, organizationId, { role: "member" });
+    const task = await createTask(agent.id);
+    await createRun({ taskId: task.id, actorUserId: owner.id });
+
+    const readRun = async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/runs`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toHaveLength(1);
+      return response.json()[0];
+    };
+    expect(await readRun()).toMatchObject({
+      actorUserId: owner.id,
+      initiatorName: owner.name,
+      shareVisibility: null,
+      shareTeamNames: null,
+      shareUserNames: null,
+    });
+    user = owner;
+    for (const visibility of ["user", "organization"] as const) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agent-runs/${task.id}/share`,
+        payload: {
+          visibility,
+          ...(visibility === "user" ? { userIds: [recipient.id] } : {}),
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(await readRun()).toMatchObject({
+        shareUserNames: visibility === "user" ? [recipient.name] : [],
+        shareTeamNames: [],
+      });
+      user = creator;
+      expect(await readRun()).toMatchObject({
+        initiatorName: owner.name,
+        shareVisibility: visibility,
+        shareUserNames: null,
+        shareTeamNames: null,
+      });
+      user = owner;
+    }
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${task.id}/share`,
+    });
+    expect(response.statusCode).toBe(200);
+    user = creator;
+    expect(await readRun()).toMatchObject({
+      initiatorName: owner.name,
+      shareVisibility: null,
+      shareUserNames: null,
+    });
+  });
+
+  test("preserves Agent history but restricts recipient membership to the run owner", async ({
+    makeAdmin,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const owner = user;
+    const recipient = await makeAdmin({ name: "Release reviewer" });
+    await makeMember(recipient.id, organizationId, { role: "member" });
+    const outsider = await makeAdmin({ name: "Agent reader" });
+    await makeMember(outsider.id, organizationId, { role: "member" });
+    const administrator = await makeAdmin();
+    await makeMember(administrator.id, organizationId, { role: "admin" });
+    const team = await makeTeam(organizationId, owner.id, {
+      name: "Private reviewers",
+    });
+    await makeTeamMember(team.id, recipient.id);
+    const task = await createTask(agent.id);
+    await createRun({ taskId: task.id, actorUserId: owner.id });
+
+    for (const visibility of ["user", "team"] as const) {
+      await AgentRunShareModel.upsert({
+        taskId: task.id,
+        organizationId,
+        createdByUserId: owner.id,
+        visibility,
+        teamIds: visibility === "team" ? [team.id] : [],
+        userIds: visibility === "user" ? [recipient.id] : [],
+      });
+      for (const viewer of [owner, recipient, outsider, administrator]) {
+        user = viewer;
+        const history = await app.inject({
+          method: "GET",
+          url: `/api/agents/${agent.id}/runs`,
+        });
+        expect(history.statusCode).toBe(200);
+        expect(history.json()).toEqual([
+          expect.objectContaining({
+            taskId: task.id,
+            actorUserId: owner.id,
+            initiatorName: owner.name,
+            shareVisibility: visibility,
+            shareTeamNames:
+              viewer === owner
+                ? visibility === "team"
+                  ? [team.name]
+                  : []
+                : null,
+            shareUserNames:
+              viewer === owner
+                ? visibility === "user"
+                  ? [recipient.name]
+                  : []
+                : null,
+          }),
+        ]);
+        const settings = await app.inject({
+          method: "GET",
+          url: `/api/agent-runs/${task.id}/share`,
+        });
+        expect(settings.statusCode).toBe(viewer === owner ? 200 : 404);
+        const details = await app.inject({
+          method: "GET",
+          url: `/api/agent-runs/${task.id}`,
+        });
+        expect(details.statusCode).toBe(
+          viewer === owner || viewer === recipient ? 200 : 404,
+        );
+      }
+    }
   });
 
   test("keeps every run endpoint unavailable when no run backend is enabled", async () => {

@@ -17,7 +17,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import type {
-  AgentRun,
+  AgentRunListItem,
   AgentRunRecord,
   AgentRunSession,
   InsertAgentRunRecord,
@@ -227,7 +227,7 @@ class AgentRunModel {
   static async listForAgent(params: {
     agentId: string;
     organizationId: string;
-  }): Promise<AgentRun[]> {
+  }): Promise<AgentRunListItem[]> {
     const {
       logs: _logs,
       completionTarget: _completionTarget,
@@ -244,6 +244,24 @@ class AgentRunModel {
         stateChangedAt: schema.a2aTasksTable.stateChangedAt,
         hardDeadlineAt: hardDeadlineAtExpression(),
         lastModelActivityAt: lastModelActivityAtExpression(),
+        initiatorName: schema.usersTable.name,
+        shareVisibility: schema.agentRunSharesTable.visibility,
+        shareTeamNames: sql<string[]>`coalesce(array(
+          select ${schema.teamsTable.name}
+          from ${schema.agentRunShareTeamsTable}
+          inner join ${schema.teamsTable}
+            on ${schema.teamsTable.id} = ${schema.agentRunShareTeamsTable.teamId}
+          where ${schema.agentRunShareTeamsTable.shareId} = ${schema.agentRunSharesTable.id}
+          order by ${schema.teamsTable.name}
+        ), array[]::text[])`,
+        shareUserNames: sql<string[]>`coalesce(array(
+          select ${schema.usersTable.name}
+          from ${schema.agentRunShareUsersTable}
+          inner join ${schema.usersTable}
+            on ${schema.usersTable.id} = ${schema.agentRunShareUsersTable.userId}
+          where ${schema.agentRunShareUsersTable.shareId} = ${schema.agentRunSharesTable.id}
+          order by ${schema.usersTable.name}
+        ), array[]::text[])`,
       })
       .from(schema.agentRunsTable)
       .innerJoin(
@@ -253,6 +271,14 @@ class AgentRunModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.agentRunsTable.actorUserId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.agentRunSharesTable,
+        eq(schema.agentRunsTable.taskId, schema.agentRunSharesTable.taskId),
       )
       .where(
         and(

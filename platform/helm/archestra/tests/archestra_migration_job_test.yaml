@@ -129,6 +129,7 @@ tests:
 
   - it: preserves shared external database environment sources
     set:
+      archestra.database.poolMaxFromEnvFrom: false
       postgresql.enabled: false
       postgresql.external_database_url: null
       archestra.envFromSecrets:

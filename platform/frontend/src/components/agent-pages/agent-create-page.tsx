@@ -78,9 +78,26 @@ export function AgentCreatePage({ kind }: { kind: AgentPageKind }) {
     !!created && isReadPermissionKnown && !canReadFamily;
   useEffect(() => {
     if (!created || !isReadPermissionKnown || !canReadFamily) return;
-    // Created: the next thing to do with it is connect something to it.
-    router.push(agentDetailHref(kind, created.id, "connect"));
-  }, [created, isReadPermissionKnown, canReadFamily, router, kind]);
+    // A personal Claude subscription still needs to be connected after the
+    // record exists. Its account control lives in General, so surface that
+    // required setup instead of sending the creator to the unrelated A2A tab.
+    // Other records keep their established next step: connecting a client.
+    const needsClaudeCodeSignIn = selectedTemplate?.id === "claude-code";
+    router.push(
+      agentDetailHref(
+        kind,
+        created.id,
+        needsClaudeCodeSignIn ? "general" : "connect",
+      ),
+    );
+  }, [
+    created,
+    isReadPermissionKnown,
+    canReadFamily,
+    router,
+    kind,
+    selectedTemplate,
+  ]);
 
   const [isDirty, setIsDirty] = useState(false);
   useBeforeUnloadWhileDirty(isDirty);

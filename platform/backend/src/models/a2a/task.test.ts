@@ -3,7 +3,7 @@ import { A2AProtocolTaskState } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import { AgentRunModel } from "@/models";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "@/test";
 import A2AContextModel from "./context";
 import A2AMessageModel from "./message";
 import A2ATaskModel from "./task";
@@ -71,7 +71,13 @@ describe("A2ATaskModel", () => {
         .from(schema.a2aTasksTable)
         .where(eq(schema.a2aTasksTable.id, task.id));
 
-      await A2ATaskModel.updateState(task.id, A2AProtocolTaskState.Completed);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(beforeUpdate.updatedAt.getTime() + 1000));
+      try {
+        await A2ATaskModel.updateState(task.id, A2AProtocolTaskState.Completed);
+      } finally {
+        vi.useRealTimers();
+      }
 
       const [updatedTask] = await db
         .select()

@@ -184,10 +184,26 @@ class AgentRunModel {
 
   /** Sessions whose pod should still exist, across every organization. */
   static async listOpen(): Promise<AgentRunRecord[]> {
-    return db
-      .select()
-      .from(schema.agentRunsTable)
-      .where(isNull(schema.agentRunsTable.endedAt));
+    return (
+      db
+        .select(getTableColumns(schema.agentRunsTable))
+        .from(schema.agentRunsTable)
+        .innerJoin(
+          schema.a2aTasksTable,
+          eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+        )
+        // Capturing the runtime's end and settling its task are separate writes.
+        // Recover a crash between them instead of abandoning an active task.
+        .where(
+          or(
+            isNull(schema.agentRunsTable.endedAt),
+            inArray(schema.a2aTasksTable.state, [
+              "TASK_STATE_SUBMITTED",
+              "TASK_STATE_WORKING",
+            ]),
+          ),
+        )
+    );
   }
 
   /** Terminal runs whose channel completion reply is still pending. */

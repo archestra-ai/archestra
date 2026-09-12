@@ -1393,7 +1393,6 @@ function ChatSessionHook({
         setIsStopping(false);
       };
       void options.stopServer().then(finishStop, () => {
-        preserveQueuedMessagesOnAbortRef.current = false;
         stopInFlightRef.current = false;
         setIsStopping(false);
       });

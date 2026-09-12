@@ -1881,7 +1881,10 @@ describe("stopping with queued messages", () => {
     expect(mocks.stop).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps streaming and preserves the queue when the server stop fails, then allows retry", async () => {
+  it.each([
+    "streaming",
+    "aborted",
+  ] as const)("preserves the queue after a failed stop when the server is %s", async (serverStatus) => {
     let session: ChatSessionSnapshot;
     render(
       <ChatProvider>
@@ -1910,6 +1913,22 @@ describe("stopping with queued messages", () => {
     expect(mocks.stop).not.toHaveBeenCalled();
     expect(mocks.sendMessage).not.toHaveBeenCalled();
     expect(chatMessageQueue.get(conversationId)).toHaveLength(2);
+
+    if (serverStatus === "aborted") {
+      await act(async () => {
+        await chatOptions?.onFinish?.({
+          message: {
+            id: "assistant-server-aborted",
+            role: "assistant",
+            parts: [],
+          },
+          isAbort: true,
+          isError: false,
+        });
+      });
+      expect(chatMessageQueue.get(conversationId)).toHaveLength(2);
+      return;
+    }
 
     stopServer.mockResolvedValueOnce(undefined);
     await act(async () => {

@@ -136,7 +136,7 @@
     "typescript": "catalog:",
     "typescript-7": "catalog:",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   },
   "msw": {
     "workerDirectory": [

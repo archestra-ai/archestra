@@ -41,6 +41,6 @@
     "knip": "^5.85.0",
     "typescript": "catalog:",
     "typescript-7": "catalog:",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   }
 }

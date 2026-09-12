@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -20,6 +20,12 @@ An agent can include:
 - a **Missing connections** setting — people are asked to connect a server when a tool needs it, when the chat opens, or before they can chat
 - a **Subagents** setting: **Auto** (delegate to any agent the chatting user can access, minus a disabled list) or **Custom** (only assigned delegation targets)
 - one or more assigned knowledge sources
+
+## Finding Agents by Provider Key
+
+When a provider key runs out of credit, filter **Agents** by that key. The filter applies across all pages, in both table and card views. Clear it with **All provider keys**.
+
+The list shows configured key names, never secret values, alongside each agent's model. A dash means no key or model is pinned; it does not indicate a runtime default.
 
 ## Creating and Editing an Agent
 

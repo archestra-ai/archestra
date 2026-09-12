@@ -89,6 +89,9 @@ const GetAgentToolArgsSchema = GetResourceToolArgsSchema.extend({
 
 const ListAgentsToolArgsSchema = z
   .object({
+    providerApiKeyId: UuidIdSchema.optional().describe(
+      "Filter agents by their configured provider key.",
+    ),
     limit: z
       .number()
       .int()
@@ -192,6 +195,8 @@ const ListAgentsOutputSchema = z.object({
         .string()
         .nullable()
         .describe("The agent description, if any."),
+      resolvedLlmProviderKeyName: z.string().nullable(),
+      resolvedLlmModelName: z.string().nullable(),
       teams: z.array(AgentTeamOutputSchema).describe("Teams attached to it."),
       labels: z.array(AgentLabelOutputSchema).describe("Assigned labels."),
       tools: z.array(
@@ -243,7 +248,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_AGENTS_SHORT_NAME,
     title: "List Agents",
     description:
-      "List agents with optional filtering by name. Returns each agent's assigned tools and knowledge sources for discoverability.",
+      "List agents with optional filtering by name or provider key. Returns configured provider-key and model names, assigned tools, and knowledge sources.",
     schema: ListAgentsToolArgsSchema,
     outputSchema: ListAgentsOutputSchema,
     async handler({ args, context }) {
@@ -272,6 +277,7 @@ const registry = defineArchestraTools([
           {
             agentType: "agent",
             ...(args.name ? { name: args.name } : {}),
+            providerApiKeyId: args.providerApiKeyId,
             // Hide other users' personal agents. MCP tools only need the
             // caller's own personal agents to be visible, even though admins
             // can see all personal agents in the UI.
@@ -333,6 +339,9 @@ const registry = defineArchestraTools([
             name: agent.name,
             scope: agent.scope,
             description: agent.description,
+            resolvedLlmProviderKeyName:
+              agent.resolvedLlmProviderKeyName ?? null,
+            resolvedLlmModelName: agent.resolvedLlmModelName ?? null,
             teams: agent.teams.map((team) => ({
               id: team.id,
               name: team.name,

@@ -10,6 +10,7 @@ import db, { schema } from "@/database";
 import {
   AgentKnowledgeBaseModel,
   AgentModel,
+  LlmProviderApiKeyModel,
   OrganizationModel,
   SkillModel,
   ToolModel,
@@ -529,6 +530,39 @@ describe("agent tool execution", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed).toHaveProperty("total");
     expect(parsed).toHaveProperty("agents");
+  });
+
+  test("list_agents filters by provider key and returns its display name", async () => {
+    const key = await LlmProviderApiKeyModel.create({
+      organizationId: mockContext.organizationId,
+      userId: mockContext.userId,
+      name: "Operations provider",
+      provider: "openai",
+      scope: "org",
+    });
+    const selected = await AgentModel.create({
+      name: "Configured assistant",
+      agentType: "agent",
+      organizationId: mockContext.organizationId,
+      scope: "org",
+      teams: [],
+      llmApiKeyId: key.id,
+    });
+    const result = await executeArchestraTool(
+      archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+      { providerApiKeyId: key.id },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.total).toBe(1);
+    expect(parsed.agents).toMatchObject([
+      {
+        id: selected.id,
+        resolvedLlmProviderKeyName: "Operations provider",
+        resolvedLlmModelName: null,
+      },
+    ]);
   });
 
   test("list_agents includes tools and knowledge sources", async ({

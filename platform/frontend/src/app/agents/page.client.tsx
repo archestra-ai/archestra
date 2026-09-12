@@ -540,7 +540,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       header: "Provider key",
       enableSorting: false,
       cell: ({ row }) => (
-        <span className="text-sm">
+        <span
+          className="block truncate text-sm"
+          title={row.original.resolvedLlmProviderKeyName ?? undefined}
+        >
           {row.original.resolvedLlmProviderKeyName ?? "—"}
         </span>
       ),
@@ -550,7 +553,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       header: "Model",
       enableSorting: false,
       cell: ({ row }) => (
-        <span className="text-sm">
+        <span
+          className="block truncate text-sm"
+          title={row.original.resolvedLlmModelName ?? undefined}
+        >
           {row.original.resolvedLlmModelName ?? "—"}
         </span>
       ),
@@ -772,11 +778,19 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                           <dt className="text-muted-foreground">
                             Provider key
                           </dt>
-                          <dd className="truncate">
+                          <dd
+                            className="truncate"
+                            title={
+                              agent.resolvedLlmProviderKeyName ?? undefined
+                            }
+                          >
                             {agent.resolvedLlmProviderKeyName ?? "—"}
                           </dd>
                           <dt className="text-muted-foreground">Model</dt>
-                          <dd className="truncate">
+                          <dd
+                            className="truncate"
+                            title={agent.resolvedLlmModelName ?? undefined}
+                          >
                             {agent.resolvedLlmModelName ?? "—"}
                           </dd>
                         </dl>

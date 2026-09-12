@@ -57,6 +57,10 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import {
+  isProviderApiKeyId,
+  ProviderKeyFilterSelect,
+} from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -178,6 +182,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | "active"
     | "deleted"
     | null;
+  const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
+  const providerApiKeyIdFilter = isProviderApiKeyId(providerApiKeyIdFromUrl)
+    ? providerApiKeyIdFromUrl
+    : undefined;
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
@@ -197,6 +205,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+    providerApiKeyId: providerApiKeyIdFilter,
   } satisfies Omit<
     NonNullable<archestraApiTypes.GetAgentsData["query"]>,
     "limit" | "offset"
@@ -372,7 +381,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
     labelsFromUrl ||
-    isDeletedView
+    isDeletedView ||
+    providerApiKeyIdFilter
   );
 
   const clearFilters = useCallback(() => {
@@ -385,6 +395,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       excludeAuthorIds: null,
       labels: null,
       status: null,
+      providerApiKeyId: null,
     });
   }, [updateQueryParams]);
 
@@ -524,6 +535,26 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         </RowClickShield>
       ),
     },
+    {
+      id: "providerKey",
+      header: "Provider key",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {row.original.resolvedLlmProviderKeyName ?? "—"}
+        </span>
+      ),
+    },
+    {
+      id: "model",
+      header: "Model",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {row.original.resolvedLlmModelName ?? "—"}
+        </span>
+      ),
+    },
     ...(showEnvironmentColumn
       ? [
           {
@@ -634,6 +665,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   ownerLabelPlural="agents"
                   adminPermission={{ agent: ["admin"] }}
                 />
+                <ProviderKeyFilterSelect
+                  value={providerApiKeyIdFilter}
+                  onValueChange={(providerApiKeyId) =>
+                    updateQueryParams({ page: "1", providerApiKeyId })
+                  }
+                />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ agent: ["delete"] }}
                 />
@@ -731,6 +768,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                           <AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />
                         }
                       >
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-sm">
+                          <dt className="text-muted-foreground">
+                            Provider key
+                          </dt>
+                          <dd className="truncate">
+                            {agent.resolvedLlmProviderKeyName ?? "—"}
+                          </dd>
+                          <dt className="text-muted-foreground">Model</dt>
+                          <dd className="truncate">
+                            {agent.resolvedLlmModelName ?? "—"}
+                          </dd>
+                        </dl>
                         <div className="flex flex-wrap items-center gap-2">
                           <ResourceVisibilityBadge
                             scope={agent.scope}

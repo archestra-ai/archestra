@@ -23,12 +23,12 @@ import {
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
-import { preflightAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
 import {
   resolveAgentRuntime,
   resumeAgentRun,
   runTaskInAgentRuntime,
 } from "@/services/agent-runtime/pod-run";
+import { preflightAgentRuntimeLaunch } from "@/services/agent-runtime/preflight";
 import type {
   A2AContext,
   A2AMessage,
@@ -448,11 +448,10 @@ export class A2AManager {
         !task &&
         runtime
       ) {
-        await preflightAgentRuntimeModelCompatibility({
+        await preflightAgentRuntimeLaunch({
           runtime,
           agent,
-          organizationId: actor.organizationId,
-          userId: actor.kind === "user" ? actor.id : "system",
+          actor,
         });
       }
 

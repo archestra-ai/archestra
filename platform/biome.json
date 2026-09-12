@@ -17,6 +17,7 @@
       "e2e-tests/**/*.ts",
       "shared/**/*.ts",
       "standalone-scripts/**/*.ts",
+      "benchmarks/**/*.mjs",
       "!node_modules",
       "!.next",
       "!**/dist",

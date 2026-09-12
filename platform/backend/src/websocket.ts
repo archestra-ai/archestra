@@ -553,7 +553,18 @@ class WebSocketService {
   ): Promise<void> {
     this.unsubscribeAgentRunAttach(ws);
 
-    const session = await AgentRunModel.findByTaskId(runId);
+    // The URL may identify the retained workspace's original task while its
+    // live terminal belongs to a newer turn. Resolve that stable session alias
+    // with the same owner-scoped lookup as the HTTP detail route before
+    // falling back to the raw task for the denial response.
+    const ownedSession = await AgentRunModel.findCurrentSessionForActor({
+      taskId: runId,
+      actorUserId: clientContext.userId,
+      organizationId: clientContext.organizationId,
+    });
+    const session = await AgentRunModel.findByTaskId(
+      ownedSession?.taskId ?? runId,
+    );
     if (!session || session.organizationId !== clientContext.organizationId) {
       this.sendToClient(ws, {
         type: "agent_run_attach_error",

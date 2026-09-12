@@ -277,7 +277,7 @@ Users with \`ac:create\` permission can create custom roles by selecting specifi
 
 Service accounts can create organization and team resources within their assigned permissions. Creator attribution records the service account separately from human ownership. Attribution does not grant additional access or team membership.
 
-Personal resources require a human owner. Projects start as personal resources and require a user account.
+Resources with personal user ownership require a human account. Projects start as personal resources and require a user account.
 
 ### Multiple Roles And Team Grants
 

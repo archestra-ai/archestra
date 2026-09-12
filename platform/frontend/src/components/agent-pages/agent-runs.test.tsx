@@ -43,6 +43,7 @@ describe("AgentRuns", () => {
   it("shows the live terminal while a run is active and retained output when it ends", () => {
     const view = render(<AgentRuns agentId="agent-1" />);
 
+    expect(screen.queryByRole("link", { name: "Chat" })).toBeNull();
     expect(screen.getByText("Live terminal")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Output" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
@@ -54,6 +55,17 @@ describe("AgentRuns", () => {
     expect(screen.queryByText("Live terminal")).toBeNull();
     expect(screen.queryByRole("button", { name: "Output" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
+  });
+
+  it("links an empty run history to a new Chat with this Agent selected", () => {
+    state.runs = [];
+
+    render(<AgentRuns agentId="agent/with spaces" />);
+
+    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+      "href",
+      "/chat/new?agent_id=agent%2Fwith%20spaces",
+    );
   });
 });
 

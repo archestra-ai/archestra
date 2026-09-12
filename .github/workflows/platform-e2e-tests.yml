@@ -910,6 +910,11 @@ jobs:
           MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
         run: ./platform/scripts/e2e-lite.sh up
 
+      - name: Configure embedded Kind registry cache
+        uses: ./.github/actions/configure-kind-registry-cache
+        with:
+          cluster-name: archestra-mcp
+
       - name: Create e2e test env file
         run: |
           # UI/API must be "localhost", not 127.0.0.1: the SSO specs bounce the
@@ -1122,6 +1127,11 @@ jobs:
           fi
 
           echo "All services are ready!"
+
+      - name: Configure embedded Kind registry cache
+        uses: ./.github/actions/configure-kind-registry-cache
+        with:
+          cluster-name: archestra-mcp
 
       # The API and the Next.js server both bind IPv4 only, but `localhost`
       # resolves to ::1 first — getaddrinfo applies RFC 6724 precedence

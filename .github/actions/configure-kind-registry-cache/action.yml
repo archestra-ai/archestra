@@ -1,0 +1,37 @@
+name: Configure Kind Registry Cache
+description: Prefer the public Docker Hub cache for all nodes in an existing CI Kind cluster.
+
+inputs:
+  cluster-name:
+    description: Name of the existing Kind cluster
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure Docker Hub cache for Kind nodes
+      shell: bash
+      env:
+        KIND_CLUSTER_NAME: ${{ inputs.cluster-name }}
+      run: |
+        # Embedded clusters share the runner's Docker socket, but the runner
+        # need not have the Kind CLI installed. Its node label identifies both
+        # embedded and host-created clusters without relying on node names.
+        nodes=$(docker ps --filter "label=io.x-k8s.kind.cluster=${KIND_CLUSTER_NAME}" --format '{{.Names}}')
+        if [ -z "${nodes}" ]; then
+          echo "No running Kind nodes found for ${KIND_CLUSTER_NAME}" >&2
+          exit 1
+        fi
+
+        # Containerd does not inherit the host Docker configuration. Cover both
+        # reference forms used by our charts, with upstream fallback on a miss.
+        for node in ${nodes}; do
+          for registry in docker.io registry-1.docker.io; do
+            docker exec "${node}" mkdir -p "/etc/containerd/certs.d/${registry}"
+            docker exec -i "${node}" tee "/etc/containerd/certs.d/${registry}/hosts.toml" >/dev/null <<'EOF'
+        server = "https://registry-1.docker.io"
+        [host."https://mirror.gcr.io"]
+          capabilities = ["pull", "resolve"]
+        EOF
+          done
+        done

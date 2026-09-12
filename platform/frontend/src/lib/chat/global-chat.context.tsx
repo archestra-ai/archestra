@@ -133,7 +133,7 @@ interface ChatSession {
   }) => Promise<void>;
   stop: (options?: {
     preserveQueuedMessages?: boolean;
-    after?: Promise<unknown>;
+    stopServer?: () => Promise<unknown>;
   }) => void;
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | undefined;
@@ -610,6 +610,8 @@ function ChatSessionHook({
   const latestMessagesRef = useRef<UIMessage[]>(initialMessages);
   const latestStatusRef = useRef<ChatSession["status"]>("ready");
   const preserveQueuedMessagesOnAbortRef = useRef(false);
+  const stopInFlightRef = useRef(false);
+  const [isStopping, setIsStopping] = useState(false);
 
   const {
     messages,
@@ -1230,6 +1232,8 @@ function ChatSessionHook({
     if (
       status !== "ready" ||
       error ||
+      isStopping ||
+      stopInFlightRef.current ||
       queuedMessages.length === 0 ||
       !resumeSettled ||
       queueDrainInFlightRef.current ||
@@ -1263,6 +1267,7 @@ function ChatSessionHook({
     status,
     error,
     queuedMessages,
+    isStopping,
     resumeSettled,
     hasPendingApprovalRequest,
     pendingMcpElicitation,
@@ -1356,19 +1361,22 @@ function ChatSessionHook({
   const stopSession = useCallback(
     (options?: {
       preserveQueuedMessages?: boolean;
-      after?: Promise<unknown>;
+      stopServer?: () => Promise<unknown>;
     }) => {
+      if (stopInFlightRef.current) return;
       preserveQueuedMessagesOnAbortRef.current =
         options?.preserveQueuedMessages === true;
-      if (!options?.after) {
+      if (!options?.stopServer) {
         stop();
         return;
       }
 
+      stopInFlightRef.current = true;
+      setIsStopping(true);
       const activeUserMessageId = [...latestMessagesRef.current]
         .reverse()
         .find((message) => message.role === "user")?.id;
-      void options.after.finally(() => {
+      const finishStop = async () => {
         const latestUserMessageId = [...latestMessagesRef.current]
           .reverse()
           .find((message) => message.role === "user")?.id;
@@ -1379,9 +1387,12 @@ function ChatSessionHook({
           responseStillInFlight &&
           latestUserMessageId === activeUserMessageId
         ) {
-          stop();
+          await stop();
         }
-      });
+        stopInFlightRef.current = false;
+        setIsStopping(false);
+      };
+      void options.stopServer().then(finishStop, finishStop);
     },
     [stop],
   );

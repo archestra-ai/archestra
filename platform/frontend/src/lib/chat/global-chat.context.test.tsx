@@ -1764,6 +1764,119 @@ describe("stopping with queued messages", () => {
     expect(
       chatMessageQueue.get(conversationId).map(({ text }) => text),
     ).toEqual(["then summarize"]);
+
+    status = "streaming";
+    rerender(tree());
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "assistant-steered", role: "assistant", parts: [] },
+        isAbort: false,
+        isError: false,
+      });
+    });
+    status = "ready";
+    rerender(tree());
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(2));
+    expect(mocks.sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        parts: [{ type: "text", text: "then summarize" }],
+      }),
+    );
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "coalesces repeated interrupts and waits for the stop request to %s before draining",
+    async (outcome) => {
+      let session: ChatSessionSnapshot;
+      let settleStop: () => void = () => {};
+      const stopServer = vi.fn(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            settleStop =
+              outcome === "resolve"
+                ? resolve
+                : () => reject(new Error("Stop unavailable"));
+          }),
+      );
+      const tree = () => (
+        <ChatProvider>
+          <RegisterChatSession conversationId={conversationId} />
+          <CaptureChatSession
+            conversationId={conversationId}
+            onSession={(value) => {
+              session = value;
+            }}
+          />
+        </ChatProvider>
+      );
+      const { rerender } = render(tree());
+      await waitFor(() => expect(session).toBeDefined());
+      act(() => {
+        chatMessageQueue.enqueue(conversationId, { text: "first correction" });
+        chatMessageQueue.enqueue(conversationId, { text: "second correction" });
+        session?.stop({ preserveQueuedMessages: true, stopServer });
+        session?.stop({ preserveQueuedMessages: true, stopServer });
+        session?.stop({ preserveQueuedMessages: true, stopServer });
+      });
+      expect(stopServer).toHaveBeenCalledTimes(1);
+      expect(mocks.stop).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await chatOptions?.onFinish?.({
+          message: { id: "assistant-stopped", role: "assistant", parts: [] },
+          isAbort: true,
+          isError: false,
+        });
+      });
+      status = "ready";
+      rerender(tree());
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+      expect(chatMessageQueue.get(conversationId)).toHaveLength(2);
+
+      await act(async () => settleStop());
+      await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+      expect(mocks.stop).not.toHaveBeenCalled();
+      expect(mocks.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parts: [{ type: "text", text: "first correction" }],
+        }),
+      );
+      expect(chatMessageQueue.get(conversationId).map(({ text }) => text)).toEqual([
+        "second correction",
+      ]);
+    },
+  );
+
+  it("marks the queue-preserving interrupt before requesting the server stop", async () => {
+    let session: ChatSessionSnapshot;
+    render(
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+        <CaptureChatSession
+          conversationId={conversationId}
+          onSession={(value) => {
+            session = value;
+          }}
+        />
+      </ChatProvider>,
+    );
+    await waitFor(() => expect(session).toBeDefined());
+    await act(async () => {
+      chatMessageQueue.enqueue(conversationId, { text: "keep this instruction" });
+      session?.stop({
+        preserveQueuedMessages: true,
+        stopServer: async () => {
+          await chatOptions?.onFinish?.({
+            message: { id: "assistant-stopped", role: "assistant", parts: [] },
+            isAbort: true,
+            isError: false,
+          });
+        },
+      });
+    });
+    expect(chatMessageQueue.get(conversationId)).toHaveLength(1);
+    expect(mocks.stop).toHaveBeenCalledTimes(1);
   });
 });
 

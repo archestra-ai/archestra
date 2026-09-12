@@ -2159,18 +2159,13 @@ export function ChatPageContent({
     });
   }, []);
 
-  // Stop the in-flight response. When follow-ups are queued, preserve them so
-  // the session sends the oldest one as soon as the abort settles — this turns
-  // Escape/Stop into an immediate steering action. A plain stop still clears
-  // pending work.
   const handleStopStreaming = () => {
     if (conversationId) {
       const preserveQueuedMessages =
         chatMessageQueue.get(conversationId).length > 0;
-      const stopRequest = stopChatStreamMutation.mutateAsync(conversationId);
       stop?.({
         preserveQueuedMessages,
-        after: stopRequest,
+        stopServer: () => stopChatStreamMutation.mutateAsync(conversationId),
       });
     } else {
       stop?.();

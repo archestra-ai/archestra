@@ -103,6 +103,63 @@ The Bitnami chart auto-generates a strong password and persists it across helm u
 {{- end }}
 {{- end }}
 
+{{/*
+Budget a Deployment's target replicas, surge, and one terminating old revision.
+Percentage maxSurge values round up, matching Kubernetes Deployment behavior.
+*/}}
+{{- define "archestra-platform.rolloutPodCount" -}}
+{{- $replicas := int .replicas -}}
+{{- $surge := 0 -}}
+{{- $strategy := .strategy | default dict -}}
+{{- if eq ($strategy.type | default "RollingUpdate") "RollingUpdate" -}}
+  {{- $rollingUpdate := $strategy.rollingUpdate | default dict -}}
+  {{- $rawSurge := "25%" -}}
+  {{- if hasKey $rollingUpdate "maxSurge" -}}
+    {{- $rawSurge = toString $rollingUpdate.maxSurge -}}
+  {{- end -}}
+  {{- if hasSuffix "%" $rawSurge -}}
+    {{- $percent := int (trimSuffix "%" $rawSurge) -}}
+    {{- $surge = div (add (mul $replicas $percent) 99) 100 -}}
+  {{- else -}}
+    {{- $surge = int $rawSurge -}}
+  {{- end -}}
+  {{- $surge = add $surge $replicas -}}
+{{- end -}}
+{{- add $replicas $surge -}}
+{{- end }}
+
+{{/*
+Divide the connection budget across web and worker rollout pods. Each pod
+reserves ten cache connections and two notification listeners outside its query
+pool. HPA maxReplicas is the web ceiling. Overlapping rollouts need extra headroom.
+*/}}
+{{- define "archestra-platform.databasePoolMax" -}}
+{{- $webReplicas := int .Values.archestra.replicaCount -}}
+{{- if .Values.archestra.horizontalPodAutoscaler.enabled -}}
+  {{- $webReplicas = int .Values.archestra.horizontalPodAutoscaler.maxReplicas -}}
+{{- end -}}
+{{- $peakPods := int (include "archestra-platform.rolloutPodCount" (dict "replicas" $webReplicas "strategy" .Values.archestra.deploymentStrategy)) -}}
+{{- if .Values.archestra.worker.enabled -}}
+  {{- $workerPods := int (include "archestra-platform.rolloutPodCount" (dict "replicas" .Values.archestra.worker.replicaCount "strategy" .Values.archestra.worker.deploymentStrategy)) -}}
+  {{- $peakPods = add $peakPods $workerPods -}}
+{{- end -}}
+{{- $peakPods = max 1 $peakPods -}}
+{{- $configuredPoolMax := .Values.archestra.database.poolMax -}}
+{{- if ne (toString $configuredPoolMax) "<nil>" -}}
+  {{- if or (lt (int $configuredPoolMax) 1) (gt (int $configuredPoolMax) 500) -}}
+    {{- fail "Configuration error: archestra.database.poolMax must be between 1 and 500." -}}
+  {{- end -}}
+  {{- int $configuredPoolMax -}}
+{{- else -}}
+  {{- $budget := int .Values.archestra.database.connectionBudget -}}
+  {{- $connectionsPerPod := div $budget $peakPods -}}
+  {{- if lt $connectionsPerPod 13 -}}
+    {{- fail (printf "Configuration error: archestra.database.connectionBudget (%d) must provide at least 13 connections (1 query, 10 cache, 2 listeners) for each of the %d peak backend pods." $budget $peakPods) -}}
+  {{- end -}}
+  {{- min 500 (sub $connectionsPerPod 12) -}}
+{{- end -}}
+{{- end }}
+
 {{- define "archestra-platform.env" -}}
 {{/*
 List of sensitive environment variables that should be stored in the Secret
@@ -146,6 +203,46 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
   value: {{ .Values.archestra.migrationJob.enabled | quote }}
 {{- end }}
 {{- include "archestra-platform.databaseEnv" . }}
+{{- $databasePoolProvided := hasKey .Values.archestra.env "ARCHESTRA_DATABASE_POOL_MAX" }}
+{{- range .Values.archestra.envWithValueFrom }}
+  {{- if eq .name "ARCHESTRA_DATABASE_POOL_MAX" }}{{- $databasePoolProvided = true }}{{- end }}
+{{- end }}
+{{- range .Values.archestra.envFromSecrets }}
+  {{- if eq .name "ARCHESTRA_DATABASE_POOL_MAX" }}{{- $databasePoolProvided = true }}{{- end }}
+{{- end }}
+{{- $bulkPool := .Values.archestra.database.poolMaxFromEnvFrom }}
+{{- if ne (toString $bulkPool) "<nil>" }}
+  {{- if not (kindIs "bool" $bulkPool) }}
+    {{- fail "Configuration error: archestra.database.poolMaxFromEnvFrom must be true, false, or null." }}
+  {{- end }}
+  {{- if $bulkPool }}
+    {{- if not .Values.archestra.envFrom }}
+      {{- fail "Configuration error: archestra.database.poolMaxFromEnvFrom requires archestra.envFrom." }}
+    {{- end }}
+    {{- $hasUnprefixedSource := false }}
+    {{- range .Values.archestra.envFrom }}
+      {{- if not .prefix }}{{- $hasUnprefixedSource = true }}{{- end }}
+    {{- end }}
+    {{- if not $hasUnprefixedSource }}
+      {{- fail "Configuration error: archestra.database.poolMaxFromEnvFrom requires an unprefixed envFrom source supplying ARCHESTRA_DATABASE_POOL_MAX." }}
+    {{- end }}
+    {{- if or $databasePoolProvided (ne (toString .Values.archestra.database.poolMax) "<nil>") }}
+      {{- fail "Configuration error: archestra.database.poolMaxFromEnvFrom cannot be combined with an explicit pool override." }}
+    {{- end }}
+    {{- $databasePoolProvided = true }}
+  {{- end }}
+{{- else if and (not $databasePoolProvided) (eq (toString .Values.archestra.database.poolMax) "<nil>") }}
+  {{/* Preserve existing bulk environment imports on upgrade. Helm cannot
+       inspect their keys; explicit env would silently override a supplied pool.
+       Prefixed sources cannot supply ARCHESTRA_DATABASE_POOL_MAX. */}}
+  {{- range .Values.archestra.envFrom }}
+    {{- if not .prefix }}{{- $databasePoolProvided = true }}{{- end }}
+  {{- end }}
+{{- end }}
+{{- if not $databasePoolProvided }}
+- name: ARCHESTRA_DATABASE_POOL_MAX
+  value: {{ include "archestra-platform.databasePoolMax" . | quote }}
+{{- end }}
 {{/*
 When both external_database_url is null and postgresql.enabled is false,
 ARCHESTRA_DATABASE_URL is not set here. Use archestra.envFromSecrets to inject it from a pre-existing K8s secret.
@@ -161,6 +258,7 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
       name: {{ include "archestra-platform.authSecretName" . }}
       key: {{ include "archestra-platform.authSecretKey" . }}
 {{- end }}
+
 {{/*
 Inject the session-signing and secret-encryption secrets from the auth Secret
 (Helm-managed or authSecret.existingSecretName) under the fixed session-secret

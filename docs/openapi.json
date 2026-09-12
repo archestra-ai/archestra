@@ -70849,6 +70849,22 @@
                         "expired"
                       ]
                     },
+                    "startupPhase": {
+                      "type": "string",
+                      "enum": [
+                        "scheduling",
+                        "pulling",
+                        "starting"
+                      ]
+                    },
+                    "startupIssue": {
+                      "type": "string",
+                      "enum": [
+                        "image_pull",
+                        "capacity",
+                        "container"
+                      ]
+                    },
                     "requiresVaultReference": {
                       "type": "boolean"
                     },
@@ -71168,6 +71184,22 @@
                         "expired"
                       ]
                     },
+                    "startupPhase": {
+                      "type": "string",
+                      "enum": [
+                        "scheduling",
+                        "pulling",
+                        "starting"
+                      ]
+                    },
+                    "startupIssue": {
+                      "type": "string",
+                      "enum": [
+                        "image_pull",
+                        "capacity",
+                        "container"
+                      ]
+                    },
                     "requiresVaultReference": {
                       "type": "boolean"
                     },
@@ -71467,6 +71499,22 @@
                         "connected",
                         "failed",
                         "expired"
+                      ]
+                    },
+                    "startupPhase": {
+                      "type": "string",
+                      "enum": [
+                        "scheduling",
+                        "pulling",
+                        "starting"
+                      ]
+                    },
+                    "startupIssue": {
+                      "type": "string",
+                      "enum": [
+                        "image_pull",
+                        "capacity",
+                        "container"
                       ]
                     },
                     "requiresVaultReference": {
@@ -71795,6 +71843,22 @@
                         "connected",
                         "failed",
                         "expired"
+                      ]
+                    },
+                    "startupPhase": {
+                      "type": "string",
+                      "enum": [
+                        "scheduling",
+                        "pulling",
+                        "starting"
+                      ]
+                    },
+                    "startupIssue": {
+                      "type": "string",
+                      "enum": [
+                        "image_pull",
+                        "capacity",
+                        "container"
                       ]
                     },
                     "requiresVaultReference": {

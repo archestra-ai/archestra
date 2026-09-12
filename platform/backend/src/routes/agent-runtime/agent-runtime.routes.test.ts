@@ -178,6 +178,24 @@ describe("Agent Runtime routes", () => {
     const started = await app.inject({ method: "POST", url });
     expect(started.statusCode, started.body).toBe(200);
     const { flowId } = started.json();
+    for (const status of [
+      { state: "starting", startupPhase: "pulling" },
+      {
+        state: "starting",
+        startupPhase: "scheduling",
+        startupIssue: "capacity",
+      },
+      { state: "failed", startupIssue: "image_pull" },
+    ]) {
+      vi.mocked(claudeCodeAccountRuntime.status).mockResolvedValue(status);
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ ...status, flowId });
+    }
+    vi.mocked(claudeCodeAccountRuntime.status).mockResolvedValue({
+      state: "connecting",
+    });
+
     expect(
       (
         await app.inject({
@@ -217,6 +235,26 @@ describe("Agent Runtime routes", () => {
         })
       ).json(),
     ).toMatchObject({ ready: true, configured: ["CLAUDE_CODE_ACCOUNT"] });
+    assert(agent.runtime);
+    const secondAgent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "org",
+      runtime: { ...agent.runtime, image: "example.test/custom-claude:v2" },
+    });
+    const secondUrl = `/api/agents/${secondAgent.id}/runtime/claude-code/account`;
+    expect(
+      (await app.inject({ method: "GET", url: secondUrl })).json(),
+    ).toMatchObject({ state: "connected" });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/agents/${secondAgent.id}/runtime/preflight`,
+        })
+      ).json(),
+    ).toMatchObject({ ready: true, configured: ["CLAUDE_CODE_ACCOUNT"] });
     const owner = user;
     user = await makeUser();
     await makeMember(user.id, organizationId);
@@ -245,6 +283,9 @@ describe("Agent Runtime routes", () => {
     ).toBe(409);
     user = owner;
     expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: secondUrl })).json(),
+    ).toMatchObject({ state: "disconnected" });
     const audits = await db
       .select()
       .from(schema.auditLogsTable)

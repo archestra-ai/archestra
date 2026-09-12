@@ -39,18 +39,12 @@ if agent_runtime_enabled:
 # The public GAR images are the normal local-development path. Build and anchor
 # local targets only when the configured catalog base image explicitly selects
 # the stable :dev tag used by dynamically-created Sandboxes.
+agent_catalog_image_names = read_json('../shared/agent-catalog-images.json')
 build_agent_catalog_images_locally = (
   agent_runtime_enabled and
-  os.getenv('ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE', '').strip() == 'agent-archestra:dev'
+  os.getenv('ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE', '').strip() == agent_catalog_image_names['archestra'] + ':dev'
 )
-agent_catalog_images = [
-  'agent-archestra',
-  'agent-claude-code',
-  'agent-codex',
-  'agent-opencode',
-  'agent-hermes',
-  'agent-openclaw',
-]
+agent_catalog_images = agent_catalog_image_names.values()
 if build_agent_catalog_images_locally:
   for image_name in agent_catalog_images:
     docker_build(

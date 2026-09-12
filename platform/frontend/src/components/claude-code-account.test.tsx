@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -105,3 +105,120 @@ function renderAccount() {
     </QueryClientProvider>,
   );
 }
+
+it("shows download progress then exposes the authorization link through real polling", async () => {
+  const user = userEvent.setup();
+  let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
+    state: "disconnected",
+  };
+  server.use(http.get(accountUrl, () => HttpResponse.json(account)));
+  server.use(
+    http.post(accountUrl, () => {
+      account = { state: "starting", startupPhase: "pulling" };
+      return HttpResponse.json(account);
+    }),
+  );
+  renderAccount();
+  await user.click(await screen.findByRole("button", { name: "Sign in" }));
+  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
+  expect(
+    await screen.findByText("Downloading the Claude Code runtime…"),
+  ).toBeVisible();
+  account = {
+    state: "awaiting_code",
+    flowId: "00000000-0000-4000-8000-000000000001",
+    authorizationUrl: "https://claude.ai/oauth/authorize?state=test",
+  };
+  expect(
+    await screen.findByRole(
+      "link",
+      { name: "Open Claude sign-in" },
+      { timeout: 3000 },
+    ),
+  ).toHaveAttribute("href", account.authorizationUrl);
+  expect(screen.getByLabelText("Authorization code")).toBeVisible();
+  expect(
+    screen.queryByText("Downloading the Claude Code runtime…"),
+  ).not.toBeInTheDocument();
+});
+
+it("replaces a failed image pull with an explanation and lets the user retry", async () => {
+  const user = userEvent.setup();
+  let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
+    state: "disconnected",
+  };
+  server.use(http.get(accountUrl, () => HttpResponse.json(account)));
+  account = { state: "failed", startupIssue: "image_pull" };
+  server.use(
+    http.post(accountUrl, () => {
+      account = {
+        state: "starting",
+        startupPhase: "scheduling",
+        startupIssue: "capacity",
+      };
+      return HttpResponse.json(account);
+    }),
+  );
+  renderAccount();
+  await user.click(await screen.findByRole("button", { name: "Sign in" }));
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "image and registry access",
+  );
+  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
+  expect(
+    await screen.findByText("Waiting for available capacity…"),
+  ).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("updates every Agent after connecting and disconnecting the shared account", async () => {
+  const user = userEvent.setup();
+  let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
+    state: "disconnected",
+  };
+  const url = `${origin}/api/agents/:id/runtime/claude-code/account`;
+  server.use(
+    http.get(url, () => HttpResponse.json(account)),
+    http.post(url, () => {
+      account = {
+        state: "awaiting_code",
+        flowId: "00000000-0000-4000-8000-000000000001",
+        authorizationUrl: "https://claude.ai/oauth/authorize",
+      };
+      return HttpResponse.json(account);
+    }),
+    http.delete(url, () => {
+      account = { state: "disconnected" };
+      return HttpResponse.json(account);
+    }),
+    http.post(`${url}/complete`, () => {
+      account = { state: "connected" };
+      return HttpResponse.json(account);
+    }),
+  );
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ClaudeCodeAccount agentId="agent-1" />
+      <ClaudeCodeAccount agentId="agent-2" />
+    </QueryClientProvider>,
+  );
+  await user.click(
+    (await screen.findAllByRole("button", { name: "Sign in" }))[0],
+  );
+  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
+  await user.type(
+    await screen.findByLabelText("Authorization code"),
+    "example-code",
+  );
+  await user.click(screen.getByRole("button", { name: "Complete sign-in" }));
+  expect(await screen.findAllByText("Signed in for you")).toHaveLength(2);
+  expect(
+    screen.queryByText("Sign in to use this agent."),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getAllByRole("button", { name: "Manage" })[1]);
+  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  expect(await screen.findAllByText("Sign in to use this agent.")).toHaveLength(
+    2,
+  );
+  expect(screen.queryByText("Signed in for you")).not.toBeInTheDocument();
+});

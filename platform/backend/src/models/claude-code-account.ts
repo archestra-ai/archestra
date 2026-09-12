@@ -1,17 +1,16 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import db, { schema, withDbTransaction } from "@/database";
-import type { UserCredential } from "@/types";
 import { ClaudeCodeModelsSchema } from "@/types/claude-code-account";
 
-/** Claude connections reuse user_credentials. Pending sign-ins use expiring
+/** Claude connections follow a user across Agents through runtime_credential_connections. Pending sign-ins use expiring
  * verification records; neither stores the credential value itself. */
 class ClaudeCodeAccountModel {
   static async find(owner: Owner) {
     const [row] = await db
       .select()
-      .from(schema.userCredentialsTable)
+      .from(schema.runtimeCredentialConnectionsTable)
       .where(ownerWhere(owner));
     if (!row) return null;
     const metadata = MetadataSchema.safeParse(row.metadata);
@@ -64,22 +63,25 @@ class ClaudeCodeAccountModel {
         return null;
       const [previous] = await tx
         .select()
-        .from(schema.userCredentialsTable)
+        .from(schema.runtimeCredentialConnectionsTable)
         .where(ownerWhere(params.owner));
       const [account] = await tx
-        .insert(schema.userCredentialsTable)
+        .insert(schema.runtimeCredentialConnectionsTable)
         .values({
-          ...params.owner,
+          organizationId: params.owner.organizationId,
+          userId: params.owner.userId,
+          scope: "personal",
+          credentialId: CREDENTIAL_ID,
           secretId: params.secretId,
           metadata: params.metadata,
         })
         .onConflictDoUpdate({
           target: [
-            schema.userCredentialsTable.organizationId,
-            schema.userCredentialsTable.userId,
-            schema.userCredentialsTable.agentId,
-            schema.userCredentialsTable.key,
+            schema.runtimeCredentialConnectionsTable.organizationId,
+            schema.runtimeCredentialConnectionsTable.userId,
+            schema.runtimeCredentialConnectionsTable.credentialId,
           ],
+          targetWhere: sql`scope = 'personal'`,
           set: { secretId: params.secretId, metadata: params.metadata },
         })
         .returning();
@@ -99,7 +101,7 @@ class ClaudeCodeAccountModel {
         .where(eq(schema.verificationsTable.id, flowKey(owner)))
         .returning();
       const [account] = await tx
-        .delete(schema.userCredentialsTable)
+        .delete(schema.runtimeCredentialConnectionsTable)
         .where(ownerWhere(owner))
         .returning();
       return {
@@ -112,10 +114,10 @@ class ClaudeCodeAccountModel {
 
 export default ClaudeCodeAccountModel;
 
-type Owner = Pick<
-  UserCredential,
-  "organizationId" | "userId" | "agentId" | "key"
->;
+type Owner = { organizationId: string; userId: string };
+// The colon is reserved: user-defined credential IDs cannot bind this account
+// into arbitrary runtime environment variables.
+const CREDENTIAL_ID = "claude-code:account";
 const MetadataSchema = ClaudeCodeModelsSchema.extend({
   image: z.string(),
   expiresAt: z.string().datetime().nullable(),
@@ -127,23 +129,16 @@ const FlowSchema = z.object({
   vaultReference: z.string().optional(),
 });
 function flowKey(owner: Owner) {
-  return `runtime-sign-in:${createHash("sha256")
-    .update(
-      JSON.stringify([
-        owner.organizationId,
-        owner.userId,
-        owner.agentId,
-        owner.key,
-      ]),
-    )
+  return `claude-code-sign-in:${createHash("sha256")
+    .update(JSON.stringify([owner.organizationId, owner.userId]))
     .digest("hex")}`;
 }
 function ownerWhere(owner: Owner) {
-  const table = schema.userCredentialsTable;
+  const table = schema.runtimeCredentialConnectionsTable;
   return and(
     eq(table.organizationId, owner.organizationId),
     eq(table.userId, owner.userId),
-    eq(table.agentId, owner.agentId),
-    eq(table.key, owner.key),
+    eq(table.scope, "personal"),
+    eq(table.credentialId, CREDENTIAL_ID),
   );
 }

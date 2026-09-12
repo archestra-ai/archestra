@@ -172,6 +172,83 @@ describe("disposable Claude sign-in Jobs", () => {
     );
   });
 
+  test.each([
+    {
+      status: { phase: "Pending" },
+      expected: { state: "starting", startupPhase: "scheduling" },
+    },
+    {
+      status: {
+        phase: "Pending",
+        conditions: [{ type: "PodScheduled", status: "True" }],
+      },
+      expected: { state: "starting", startupPhase: "pulling" },
+    },
+    {
+      status: {
+        phase: "Pending",
+        conditions: [
+          {
+            type: "PodScheduled",
+            status: "False",
+            reason: "Unschedulable",
+            message: "private cluster detail",
+          },
+        ],
+      },
+      expected: {
+        state: "starting",
+        startupPhase: "scheduling",
+        startupIssue: "capacity",
+      },
+    },
+    ...["ErrImagePull", "ImagePullBackOff", "InvalidImageName"].map(
+      (reason) => ({
+        status: {
+          phase: "Pending",
+          containerStatuses: [
+            {
+              name: "claude-code",
+              state: {
+                waiting: { reason, message: "private registry detail" },
+              },
+            },
+          ],
+        },
+        expected: { state: "failed", startupIssue: "image_pull" },
+      }),
+    ),
+    {
+      status: {
+        phase: "Running",
+        containerStatuses: [
+          {
+            name: "claude-code",
+            state: { waiting: { reason: "CrashLoopBackOff" } },
+          },
+        ],
+      },
+      expected: { state: "failed", startupIssue: "container" },
+    },
+  ])("reports startup progress and actionable failures without exposing cluster details: $expected", async ({
+    status,
+    expected,
+  }) => {
+    server.use(
+      http.get(
+        "https://kubernetes.example.test/api/v1/namespaces/account-tests/pods",
+        () =>
+          HttpResponse.json({
+            items: [{ metadata: { name: "sign-in-pod" }, status }],
+          }),
+      ),
+    );
+    const result = await claudeCodeAccountRuntime.status(FLOW);
+    expect(result).toMatchObject(expected);
+    expect(JSON.stringify(result)).not.toContain("private");
+    expect(execAgentRuntimeCommand).not.toHaveBeenCalled();
+  });
+
   test("handles pending and stopped pods, and cleanup after automatic Job collection", async () => {
     let phase = "Pending";
     server.use(

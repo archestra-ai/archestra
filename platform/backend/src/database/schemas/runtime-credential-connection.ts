@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -33,6 +34,11 @@ const runtimeCredentialConnectionsTable = pgTable(
     secretId: uuid("secret_id")
       .notNull()
       .references(() => secretsTable.id, { onDelete: "cascade" }),
+    /** Non-secret native account expiry and model discovery. */
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

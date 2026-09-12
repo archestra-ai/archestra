@@ -10,6 +10,8 @@ export const ClaudeCodeAccountSchema = z.object({
     "failed",
     "expired",
   ]),
+  startupPhase: z.enum(["scheduling", "pulling", "starting"]).optional(),
+  startupIssue: z.enum(["image_pull", "capacity", "container"]).optional(),
   requiresVaultReference: z.boolean().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
   flowId: z.string().uuid().optional(),

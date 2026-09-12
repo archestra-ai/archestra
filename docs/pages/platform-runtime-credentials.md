@@ -3,7 +3,7 @@ title: Runtime Credentials
 category: Administration
 description: Manage reusable secrets for Agent Runtime
 order: 5
-lastUpdated: 2026-09-11
+lastUpdated: 2026-09-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,7 +18,7 @@ An organization connection is shared by Agents in the organization.
 
 GitHub tokens use custom credential definitions. Existing GitHub connections and Agent bindings are preserved when upgrading.
 
-Claude subscriptions use personal sign-in on each Agent. Each user connects their own account. See [Claude Code authentication](/docs/platform-agent-runtime#model-inference-and-mcp-tools).
+Claude subscriptions use personal sign-in. Each user connects once across all their Claude Code Agents. See [Claude Code authentication](/docs/platform-agent-runtime#model-inference-and-mcp-tools).
 
 On read-only Vault deployments, store a token from `claude setup-token` in Vault. Connect its `path#key` reference on the Agent.
 

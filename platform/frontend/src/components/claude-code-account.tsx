@@ -151,7 +151,7 @@ export function ClaudeCodeAccount({
           if (!value) setCode("");
         }}
         title={connected ? "Claude Code account" : "Connect Claude Code"}
-        description="Use your personal Claude Pro or Max subscription in this Claude Code runtime. Each person connects their own account."
+        description="Use your personal Claude Pro or Max subscription. Connect once to use your account across all your Claude Code agents. Other people connect their own accounts."
         size="small"
         className="sm:max-w-xl"
         footer={
@@ -190,7 +190,8 @@ export function ClaudeCodeAccount({
                   Connected for you
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Only you can use this account. Other users sign in separately.
+                  This account is available to all your Claude Code agents.
+                  Other users sign in separately.
                 </p>
               </div>
             </div>
@@ -201,9 +202,9 @@ export function ClaudeCodeAccount({
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Disconnect prevents new runs from using this account. Running
-              sessions keep their token. Revoke the token in Claude to end its
-              access.
+              Disconnect prevents new runs across all your Claude Code agents
+              from using this account. Running sessions keep their token. Revoke
+              the token in Claude to end its access.
             </p>
             <Button
               type="button"
@@ -251,34 +252,55 @@ export function ClaudeCodeAccount({
               <Label htmlFor="claude-authorization-code">
                 Authorization code
               </Label>
+              <p
+                id="claude-authorization-code-description"
+                className="text-sm text-muted-foreground"
+              >
+                After signing in, paste the code Claude shows you.
+              </p>
               <Input
                 id="claude-authorization-code"
+                aria-describedby="claude-authorization-code-description"
                 type="password"
                 autoComplete="off"
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                After signing in, paste the code Claude shows you.
-              </p>
             </div>
           </div>
         ) : signIn.isPending ||
           account.data?.state === "starting" ||
           account.data?.state === "connecting" ? (
-          <output className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            <span>
-              {account.data?.state === "connecting"
-                ? "Completing sign-in…"
-                : "Preparing Claude Code…"}
-            </span>
-          </output>
+          <div className="space-y-2">
+            <output className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              <span>
+                {account.data?.state === "connecting"
+                  ? "Completing sign-in…"
+                  : account.data?.startupIssue === "capacity"
+                    ? "Waiting for available capacity…"
+                    : account.data?.startupPhase === "pulling"
+                      ? "Downloading the Claude Code runtime…"
+                      : account.data?.startupPhase === "scheduling"
+                        ? "Waiting for the Claude Code runtime…"
+                        : "Starting Claude Code…"}
+              </span>
+            </output>
+            {account.data?.startupPhase === "pulling" && (
+              <p className="text-xs text-muted-foreground">
+                The first sign-in can take a few minutes while the runtime
+                downloads. Later sign-ins are faster when it is already
+                available.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="space-y-2">
             {account.data?.state === "failed" && (
               <p role="alert" className="text-sm text-destructive">
-                Sign-in did not complete. Please try again.
+                {account.data.startupIssue === "image_pull"
+                  ? "The Claude Code runtime could not be downloaded. Ask your administrator to check the image and registry access, then try again."
+                  : "Sign-in did not complete. Please try again."}
               </p>
             )}
             {account.data?.state === "expired" && (

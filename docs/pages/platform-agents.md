@@ -25,7 +25,7 @@ An agent can include:
 
 When a provider key runs out of credit, filter **Agents** by that key. The filter applies across all pages, in both table and card views. Clear it with **All provider keys**.
 
-The list shows configured key names, never secret values, alongside each agent's model. A dash means no key or model is pinned; it does not indicate a runtime default.
+Hover or focus an agent's provider logo to see its configured key name and model. Secret values are never shown. Missing configuration does not indicate a runtime default.
 
 ## Creating and Editing an Agent
 

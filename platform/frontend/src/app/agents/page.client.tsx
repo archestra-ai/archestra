@@ -38,6 +38,7 @@ import {
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
+import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
@@ -536,29 +537,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       ),
     },
     {
-      id: "providerKey",
-      header: "Provider key",
+      id: "provider",
+      header: "Provider",
       enableSorting: false,
+      size: 80,
       cell: ({ row }) => (
-        <span
-          className="block truncate text-sm"
-          title={row.original.resolvedLlmProviderKeyName ?? undefined}
-        >
-          {row.original.resolvedLlmProviderKeyName ?? "—"}
-        </span>
-      ),
-    },
-    {
-      id: "model",
-      header: "Model",
-      enableSorting: false,
-      cell: ({ row }) => (
-        <span
-          className="block truncate text-sm"
-          title={row.original.resolvedLlmModelName ?? undefined}
-        >
-          {row.original.resolvedLlmModelName ?? "—"}
-        </span>
+        <AgentProviderIndicator
+          provider={row.original.resolvedLlmProvider}
+          keyName={row.original.resolvedLlmProviderKeyName}
+          modelName={row.original.resolvedLlmModelName}
+        />
       ),
     },
     ...(showEnvironmentColumn
@@ -775,26 +763,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                           <AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />
                         }
                       >
-                        <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-sm">
-                          <dt className="text-muted-foreground">
-                            Provider key
-                          </dt>
-                          <dd
-                            className="truncate"
-                            title={
-                              agent.resolvedLlmProviderKeyName ?? undefined
-                            }
-                          >
-                            {agent.resolvedLlmProviderKeyName ?? "—"}
-                          </dd>
-                          <dt className="text-muted-foreground">Model</dt>
-                          <dd
-                            className="truncate"
-                            title={agent.resolvedLlmModelName ?? undefined}
-                          >
-                            {agent.resolvedLlmModelName ?? "—"}
-                          </dd>
-                        </dl>
                         <div className="flex flex-wrap items-center gap-2">
                           <ResourceVisibilityBadge
                             scope={agent.scope}
@@ -809,6 +777,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                             <DefaultAgentTag source={effectiveDefault.source} />
                           ) : null}
                           <AgentAccessBadges agent={agent} />
+                          <span className="ml-auto">
+                            <AgentProviderIndicator
+                              provider={agent.resolvedLlmProvider}
+                              keyName={agent.resolvedLlmProviderKeyName}
+                              modelName={agent.resolvedLlmModelName}
+                            />
+                          </span>
                         </div>
                       </TableCard>
                     ))}

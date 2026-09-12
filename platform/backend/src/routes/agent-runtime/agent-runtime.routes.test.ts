@@ -178,6 +178,24 @@ describe("Agent Runtime routes", () => {
     const started = await app.inject({ method: "POST", url });
     expect(started.statusCode, started.body).toBe(200);
     const { flowId } = started.json();
+    for (const status of [
+      { state: "starting", startupPhase: "pulling" },
+      {
+        state: "starting",
+        startupPhase: "scheduling",
+        startupIssue: "capacity",
+      },
+      { state: "failed", startupIssue: "image_pull" },
+    ]) {
+      vi.mocked(claudeCodeAccountRuntime.status).mockResolvedValue(status);
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ ...status, flowId });
+    }
+    vi.mocked(claudeCodeAccountRuntime.status).mockResolvedValue({
+      state: "connecting",
+    });
+
     expect(
       (
         await app.inject({

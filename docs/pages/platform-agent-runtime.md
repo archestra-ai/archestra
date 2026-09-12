@@ -59,7 +59,9 @@ Assigned MCP tools are available through the Agent's gateway with the initiating
 - **Personal Claude subscription:** each person connects their own Pro or Max account. Subscription inference goes directly to Anthropic and bypasses Archestra's inference logs, cost limits, and inference guardrails. MCP tool policies still apply.
 - **API key or cloud provider:** use Anthropic, AWS Bedrock, or Anthropic on Vertex AI through Archestra's proxy. Platform inference controls apply. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for setup.
 
-Personal Claude connections belong to one user, Agent, and Environment. They work only in the Claude Code runtime. Tokens use your configured secrets backend. Reconnect when the connection expires or to refresh available models.
+Personal Claude connections belong to one user, Agent, and Environment. Connect each Agent separately, even when using the same Claude account. They work only in the Claude Code runtime. Tokens use your configured secrets backend. Reconnect when the connection expires or to refresh available models.
+
+The first sign-in downloads the Agent’s runtime image if the node lacks it. Large images can take several minutes. Administrators can [pre-pull runtime images](/docs/platform-deployment#runtime-image-cache) to reduce this wait.
 
 With read-only Vault, generate a token using `claude setup-token`, store it in Vault, and connect its `path#key` reference. Disconnect prevents new runs from using a connection; running sessions retain their issued token. Revoke it in Claude to end provider access.
 

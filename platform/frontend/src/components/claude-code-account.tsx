@@ -151,7 +151,7 @@ export function ClaudeCodeAccount({
           if (!value) setCode("");
         }}
         title={connected ? "Claude Code account" : "Connect Claude Code"}
-        description="Use your personal Claude Pro or Max subscription in this Claude Code runtime. Each person connects their own account."
+        description="Use your personal Claude Pro or Max subscription. This connection is only for you and this agent. Connect other agents separately."
         size="small"
         className="sm:max-w-xl"
         footer={
@@ -266,19 +266,36 @@ export function ClaudeCodeAccount({
         ) : signIn.isPending ||
           account.data?.state === "starting" ||
           account.data?.state === "connecting" ? (
-          <output className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            <span>
-              {account.data?.state === "connecting"
-                ? "Completing sign-in…"
-                : "Preparing Claude Code…"}
-            </span>
-          </output>
+          <div className="space-y-2">
+            <output className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              <span>
+                {account.data?.state === "connecting"
+                  ? "Completing sign-in…"
+                  : account.data?.startupIssue === "capacity"
+                    ? "Waiting for available capacity…"
+                    : account.data?.startupPhase === "pulling"
+                      ? "Downloading the Claude Code runtime…"
+                      : account.data?.startupPhase === "scheduling"
+                        ? "Waiting for the Claude Code runtime…"
+                        : "Starting Claude Code…"}
+              </span>
+            </output>
+            {account.data?.startupPhase === "pulling" && (
+              <p className="text-xs text-muted-foreground">
+                The first sign-in can take a few minutes while the runtime
+                downloads. Later sign-ins are faster when it is already
+                available.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="space-y-2">
             {account.data?.state === "failed" && (
               <p role="alert" className="text-sm text-destructive">
-                Sign-in did not complete. Please try again.
+                {account.data.startupIssue === "image_pull"
+                  ? "The Claude Code runtime could not be downloaded. Ask your administrator to check the image and registry access, then try again."
+                  : "Sign-in did not complete. Please try again."}
               </p>
             )}
             {account.data?.state === "expired" && (

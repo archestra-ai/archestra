@@ -116,6 +116,18 @@ describe("Claude subscription secret lifecycle", () => {
       ).rejects.toMatchObject({ statusCode: 409 });
     }
     await manager.complete({ ...owner, flowId: pending.flowId as string });
+    for (const isolated of [
+      { ...owner, userId: otherUser.id },
+      { ...owner, runtime: { ...owner.runtime, agentId: otherAgent.id } },
+    ]) {
+      expect((await manager.status(isolated)).state).toBe("disconnected");
+      await expect(
+        manager.requireConnection({
+          ...isolated,
+          runtimeScope: "account-tests",
+        }),
+      ).rejects.toMatchObject({ code: "AGENT_RUNTIME_CREDENTIALS_REQUIRED" });
+    }
     await OrganizationModel.patch(organization.id, {
       defaultEnvironmentNamespace: "changed-tests",
     });

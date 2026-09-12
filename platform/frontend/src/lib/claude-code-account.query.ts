@@ -8,7 +8,12 @@ export function useClaudeCodeAccount(agentId: string, polling = false) {
   return useQuery({
     queryKey: accountKey(agentId),
     enabled: Boolean(agentId),
-    refetchInterval: polling ? 2000 : false,
+    refetchInterval: polling
+      ? (query) => {
+          const state = query.state.data?.state;
+          return state === "starting" || state === "connecting" ? 1000 : 2000;
+        }
+      : false,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getClaudeCodeAccount({
         path: { id: agentId },

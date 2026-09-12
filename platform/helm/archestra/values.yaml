@@ -186,6 +186,27 @@ archestra:
   #         optional: true
   envFrom: []
 
+  # SPDX-SnippetBegin
+  # SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  # SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  agentRuntime:
+    # Optional node image cache for runtime launches and Claude Code sign-in.
+    # One DaemonSet per image avoids a failed pull blocking other images.
+    imagePrepull:
+      # Use immutable tags or digests matching the configured Agent images.
+      # Empty disables pre-pulling. Images consume disk on every selected node.
+      images: []
+      # Match ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR and its node taints.
+      nodeSelector: {}
+      tolerations: []
+      # Pull secrets must exist in the Helm release namespace.
+      imagePullSecrets: []
+      # Requires a statically linked /bin/busybox; may use a private mirror.
+      bootstrapImage: docker.io/library/busybox:1.36-musl
+      # Use a low-priority class when your cluster provides one.
+      priorityClassName: ""
+  # SPDX-SnippetEnd
+
   # code execution runtime configuration. The chart deploys no Dagger Engine: the
   # backend provisions one per organization (and per environment) through the
   # Kubernetes API, using the mcp-manager Role below.

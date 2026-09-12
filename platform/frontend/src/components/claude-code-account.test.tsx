@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -105,3 +105,68 @@ function renderAccount() {
     </QueryClientProvider>,
   );
 }
+
+it("shows download progress then exposes the authorization link through real polling", async () => {
+  const user = userEvent.setup();
+  let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
+    state: "disconnected",
+  };
+  server.use(http.get(accountUrl, () => HttpResponse.json(account)));
+  server.use(
+    http.post(accountUrl, () => {
+      account = { state: "starting", startupPhase: "pulling" };
+      return HttpResponse.json(account);
+    }),
+  );
+  renderAccount();
+  await user.click(await screen.findByRole("button", { name: "Sign in" }));
+  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
+  expect(
+    await screen.findByText("Downloading the Claude Code runtime…"),
+  ).toBeVisible();
+  account = {
+    state: "awaiting_code",
+    flowId: "00000000-0000-4000-8000-000000000001",
+    authorizationUrl: "https://claude.ai/oauth/authorize?state=test",
+  };
+  expect(
+    await screen.findByRole(
+      "link",
+      { name: "Open Claude sign-in" },
+      { timeout: 3000 },
+    ),
+  ).toHaveAttribute("href", account.authorizationUrl);
+  expect(screen.getByLabelText("Authorization code")).toBeVisible();
+  expect(
+    screen.queryByText("Downloading the Claude Code runtime…"),
+  ).not.toBeInTheDocument();
+});
+
+it("replaces a failed image pull with an explanation and lets the user retry", async () => {
+  const user = userEvent.setup();
+  let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
+    state: "disconnected",
+  };
+  server.use(http.get(accountUrl, () => HttpResponse.json(account)));
+  account = { state: "failed", startupIssue: "image_pull" };
+  server.use(
+    http.post(accountUrl, () => {
+      account = {
+        state: "starting",
+        startupPhase: "scheduling",
+        startupIssue: "capacity",
+      };
+      return HttpResponse.json(account);
+    }),
+  );
+  renderAccount();
+  await user.click(await screen.findByRole("button", { name: "Sign in" }));
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "image and registry access",
+  );
+  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
+  expect(
+    await screen.findByText("Waiting for available capacity…"),
+  ).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

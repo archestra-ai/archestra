@@ -961,6 +961,35 @@ For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. N
 
 Check **Settings → Agents → Runtime Backend** if the runtime is unavailable. Confirm the controller is installed and healthy. For runs waiting on storage, check the storage class and available capacity. For image-pull failures, check the image name, registry access, and pull credentials. Chat shows the reported startup failure.
 
+<!-- SPDX-SnippetBegin -->
+<!-- SPDX-SnippetCopyrightText: 2026 Archestra Inc. -->
+<!-- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise -->
+#### Runtime Image Cache
+
+Cold image downloads delay runtime launches and personal Claude sign-in. The Helm chart can pre-pull selected images onto runtime nodes, including newly added nodes.
+
+```yaml
+archestra:
+  agentRuntime:
+    imagePrepull:
+      images:
+        - registry.example.com/agents/claude-code:v1
+      nodeSelector:
+        archestra-agent-runtime: "true"
+      tolerations:
+        - key: archestra-agent-runtime
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+```
+
+Use immutable tags or digests matching the Agent's configured image. Match `nodeSelector` to `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR` and set tolerations for that pool. Each selected image uses disk on every matching node. An empty `images` list disables caching.
+
+Each image has its own DaemonSet; failed downloads do not block other images. Wait for these DaemonSets to become ready before expecting cached startup times. Fresh nodes still need their first download.
+
+For private registries, set `imagePullSecrets` to Secrets in the Helm release namespace. The `bootstrapImage` setting supports private mirrors containing a static `/bin/busybox`. Set `priorityClassName` to your cluster's low-priority class when available.
+<!-- SPDX-SnippetEnd -->
+
 #### Privileged Containers
 
 Ordinary coding clients do not require privilege. Docker-in-Docker and nested Kubernetes development environments may require it. Privileged containers have broad access to the node, so use a dedicated namespace and node pool.

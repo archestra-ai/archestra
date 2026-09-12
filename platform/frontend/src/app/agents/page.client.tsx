@@ -38,6 +38,7 @@ import {
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
+import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
@@ -57,6 +58,10 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import {
+  isProviderApiKeyId,
+  ProviderKeyFilterSelect,
+} from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -178,6 +183,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | "active"
     | "deleted"
     | null;
+  const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
+  const providerApiKeyIdFilter =
+    providerApiKeyIdFromUrl === "organization-default" ||
+    isProviderApiKeyId(providerApiKeyIdFromUrl)
+      ? providerApiKeyIdFromUrl
+      : undefined;
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
@@ -197,6 +208,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
+    providerApiKeyId: providerApiKeyIdFilter,
   } satisfies Omit<
     NonNullable<archestraApiTypes.GetAgentsData["query"]>,
     "limit" | "offset"
@@ -370,7 +382,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
     labelsFromUrl ||
-    isDeletedView
+    isDeletedView ||
+    providerApiKeyIdFilter
   );
 
   const clearFilters = useCallback(() => {
@@ -383,6 +396,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       excludeAuthorIds: null,
       labels: null,
       status: null,
+      providerApiKeyId: null,
     });
   }, [updateQueryParams]);
 
@@ -507,6 +521,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "team",
       header: "Accessible to",
+      size: 160,
       enableSorting: false,
       cell: ({ row }) => (
         <RowClickShield>
@@ -520,6 +535,22 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             showSelfAsMe
           />
         </RowClickShield>
+      ),
+    },
+    {
+      id: "provider",
+      header: "Provider",
+      enableSorting: false,
+      size: 80,
+      cell: ({ row }) => (
+        <AgentProviderIndicator
+          usesOrganizationDefault={
+            !row.original.llmApiKeyId && !row.original.modelId
+          }
+          provider={row.original.resolvedLlmProvider}
+          keyName={row.original.resolvedLlmProviderKeyName}
+          modelName={row.original.resolvedLlmModelName}
+        />
       ),
     },
     ...(showEnvironmentColumn
@@ -615,6 +646,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <CollectionFilters>
               <FilterBar
                 leading
+                onClearFilters={hasActiveFilters ? clearFilters : undefined}
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                 search={
                   <SearchInput
@@ -631,6 +663,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   showLabels
                   ownerLabelPlural="agents"
                   adminPermission={{ agent: ["admin"] }}
+                />
+                <ProviderKeyFilterSelect
+                  allowOrganizationDefault
+                  value={providerApiKeyIdFilter}
+                  onValueChange={(providerApiKeyId) =>
+                    updateQueryParams({ page: "1", providerApiKeyId })
+                  }
                 />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ agent: ["delete"] }}
@@ -743,6 +782,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                             <DefaultAgentTag source={effectiveDefault.source} />
                           ) : null}
                           <AgentAccessBadges agent={agent} />
+                          <span className="ml-auto">
+                            <AgentProviderIndicator
+                              usesOrganizationDefault={
+                                !agent.llmApiKeyId && !agent.modelId
+                              }
+                              provider={agent.resolvedLlmProvider}
+                              keyName={agent.resolvedLlmProviderKeyName}
+                              modelName={agent.resolvedLlmModelName}
+                            />
+                          </span>
                         </div>
                       </TableCard>
                     ))}
@@ -751,6 +800,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 table={
                   <DataTable
                     columns={columns}
+                    tableClassName="table-fixed"
+                    fixedWidthColumnIds={["team", "provider", "environment"]}
+                    flexibleColumnIds={["name"]}
                     data={agents}
                     isLoading={showLoading}
                     getRowId={(row) => row.id}

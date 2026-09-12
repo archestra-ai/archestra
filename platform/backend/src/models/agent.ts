@@ -503,6 +503,7 @@ class AgentModel {
         ? db
             .select({
               id: schema.llmProviderApiKeysTable.id,
+              name: schema.llmProviderApiKeysTable.name,
               provider: schema.llmProviderApiKeysTable.provider,
             })
             .from(schema.llmProviderApiKeysTable)
@@ -523,6 +524,7 @@ class AgentModel {
     ]);
 
     const keyProviderMap = new Map(keyRows.map((r) => [r.id, r.provider]));
+    const keyNameMap = new Map(keyRows.map((r) => [r.id, r.name]));
     const modelProviderMap = new Map(modelRows.map((r) => [r.id, r.provider]));
     const modelNameMap = new Map(modelRows.map((r) => [r.id, r.modelName]));
 
@@ -532,6 +534,9 @@ class AgentModel {
         (agent.modelId ? modelProviderMap.get(agent.modelId) : null) ??
         null;
       agent.resolvedLlmProvider = provider;
+      agent.resolvedLlmProviderKeyName = agent.llmApiKeyId
+        ? (keyNameMap.get(agent.llmApiKeyId) ?? null)
+        : null;
       agent.llmProviderRequiresPerUserCredential = provider
         ? providerRequiresPerUserCredential(provider)
         : false;
@@ -1334,6 +1339,7 @@ class AgentModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     filters?: {
+      organizationId?: string;
       name?: string;
       agentType?: AgentType;
       agentTypes?: AgentType[];
@@ -1344,6 +1350,7 @@ class AgentModel {
       excludeOtherPersonalAgents?: boolean;
       labels?: Record<string, string[]>;
       status?: AgentRecordStatus;
+      providerApiKeyId?: string;
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -1358,9 +1365,26 @@ class AgentModel {
       getAgentStatusCondition(filters?.status ?? "active"),
     ];
 
+    if (filters?.organizationId) {
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, filters.organizationId),
+      );
+    }
+
     // Add name filter if provided
     if (filters?.name) {
       whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
+    }
+
+    if (filters?.providerApiKeyId === "organization-default") {
+      whereConditions.push(
+        isNull(schema.agentsTable.llmApiKeyId),
+        isNull(schema.agentsTable.modelId),
+      );
+    } else if (filters?.providerApiKeyId) {
+      whereConditions.push(
+        eq(schema.agentsTable.llmApiKeyId, filters.providerApiKeyId),
+      );
     }
 
     // Add agentTypes filter if provided (array of types)

@@ -155,6 +155,7 @@ class CacheManager {
     const store = new KeyvPostgres({
       uri: config.database.url,
       table: "keyv_cache",
+      max: 10,
       /**
        * From the PostgreSQL documentation:
        * If specified, the table is created as an unlogged table. Data written to unlogged tables is not written to the

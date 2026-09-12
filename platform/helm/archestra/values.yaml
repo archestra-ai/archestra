@@ -20,6 +20,25 @@ archestra:
   # as the HPA will manage the replica count dynamically
   replicaCount: 1
 
+  # Database connection pool sizing for all backend pods. By default, Helm
+  # divides connectionBudget across the maximum web and worker pods that can
+  # coexist, including HPA scale-out, surge, and a terminating old revision.
+  database:
+    # Total PostgreSQL connections available to Archestra backend pods. Each
+    # pod reserves 12 connections for its cache pool and notification listeners.
+    # At least 13 connections per peak pod are required; undersizing fails Helm.
+    # bundled database reserves the remaining 50 of its 250 connections for
+    # migrations, monitoring, administration, and other database clients.
+    # Set this below your external database's max_connections when using one.
+    connectionBudget: 200
+    # Optional fixed per-pod override. Prefer connectionBudget so scaling the
+    # chart automatically reduces each pod's pool allocation.
+    poolMax: null
+    # With unprefixed envFrom, null preserves inherited pool configuration on
+    # upgrade (or the backend default if the source supplies no pool limit).
+    # true explicitly uses the bulk pool value; false opts into chart sizing.
+    poolMaxFromEnvFrom: null
+
   # Annotations to add to pods created by the Deployment
   # This is useful for integrations that require pod-level annotations, such as:
   # - Service mesh sidecars (Istio, Linkerd)
@@ -997,12 +1016,10 @@ postgresql:
         grant-superuser.sql: |
           ALTER USER archestra WITH SUPERUSER;
     # Appended to postgresql.conf. max_connections must cover every backend
-    # pod's connection pool (ARCHESTRA_DATABASE_POOL_MAX, default 50 per pod)
-    # at peak pod count: web + worker replicas PLUS the extra surge pods that
-    # exist mid-rollout (deploymentStrategy maxSurge, default 25% => +1 pod
-    # per Deployment), plus the migration hook and the metrics exporter.
-    # Default sizing: (1 web + 1 worker + 2 surge) x 50 = 200, with headroom.
-    # Scale this up if you raise replicaCount, HPA maxReplicas, or the pool size.
+    # pod's query and cache pools, notification listeners, and non-app clients.
+    # Helm allocates database.connectionBudget across rollout pods, leaving
+    # the remainder for migrations, administration, and monitoring.
+    # Raise this ceiling before increasing database.connectionBudget.
     extendedConfiguration: |
       max_connections = 250
     resources:

@@ -122,6 +122,24 @@ describe("agent routes", () => {
       resolvedLlmModelName: null,
     });
 
+    await OrganizationModel.patch(organizationId, { defaultModelId: model.id });
+    await AgentModel.create({
+      name: "Legacy model-only assistant",
+      organizationId,
+      scope: "org",
+      teams: [],
+      modelId: model.id,
+    });
+    const inheritedResponse = await app.inject({
+      method: "GET",
+      url: "/api/agents?providerApiKeyId=organization-default",
+    });
+    expect(inheritedResponse.statusCode).toBe(200);
+    expect(
+      inheritedResponse.json().data.map((agent: { id: string }) => agent.id),
+    ).toEqual([unconfigured.id]);
+    expect(inheritedResponse.json().pagination.total).toBe(1);
+
     const emptyResponse = await app.inject({
       method: "GET",
       url: "/api/agents?providerApiKeyId=00000000-0000-4000-8000-000000000000",

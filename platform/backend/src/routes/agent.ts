@@ -200,10 +200,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Include the caller-relative activation skill count used by internal-agent cards. Omitted when the caller lacks skill:read.",
               ),
             providerApiKeyId: z
-              .string()
-              .uuid()
+              .union([z.string().uuid(), z.literal("organization-default")])
               .optional()
-              .describe("Filter agents by their configured provider key."),
+              .describe(
+                "Filter by a configured provider key, or organization-default for agents with no pinned key or model.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(

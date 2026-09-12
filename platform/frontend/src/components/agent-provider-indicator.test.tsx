@@ -27,11 +27,18 @@ describe("AgentProviderIndicator", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("explains missing configuration without implying a runtime default", async () => {
-    render(<AgentProviderIndicator />);
+  it("identifies an unpinned agent as using the organization default", async () => {
+    render(<AgentProviderIndicator usesOrganizationDefault />);
     await userEvent.setup().tab();
     const tooltip = await screen.findByRole("tooltip");
-    expect(within(tooltip).getByText("No key configured")).toBeInTheDocument();
-    expect(within(tooltip).getByText("No model pinned")).toBeInTheDocument();
+    expect(within(tooltip).getAllByText("Organization default")).toHaveLength(
+      2,
+    );
+    expect(
+      within(tooltip).queryByText("No key configured"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(tooltip).queryByText("No model pinned"),
+    ).not.toBeInTheDocument();
   });
 });

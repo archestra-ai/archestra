@@ -567,6 +567,46 @@ describe("agent tool execution", () => {
     ]);
   });
 
+  test("list_agents can select agents using the organization default", async () => {
+    if (!mockContext.organizationId)
+      throw new Error("Missing organization fixture");
+    const inherited = await AgentModel.create({
+      name: "Inherited assistant",
+      agentType: "agent",
+      organizationId: mockContext.organizationId,
+      scope: "org",
+      teams: [],
+    });
+    const key = await LlmProviderApiKeyModel.create({
+      organizationId: mockContext.organizationId,
+      userId: mockContext.userId,
+      name: "Pinned key",
+      provider: "openai",
+      scope: "org",
+    });
+    const pinned = await AgentModel.create({
+      name: "Pinned assistant",
+      agentType: "agent",
+      organizationId: mockContext.organizationId,
+      scope: "org",
+      teams: [],
+      llmApiKeyId: key.id,
+    });
+    const result = await executeArchestraTool(
+      archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+      { providerApiKeyId: "organization-default" },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.agents.map((agent: { id: string }) => agent.id)).toContain(
+      inherited.id,
+    );
+    expect(
+      parsed.agents.map((agent: { id: string }) => agent.id),
+    ).not.toContain(pinned.id);
+  });
+
   test("list_agents includes tools and knowledge sources", async ({
     makeAgent,
     makeTool,

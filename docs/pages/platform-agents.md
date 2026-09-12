@@ -25,7 +25,7 @@ An agent can include:
 
 When a provider key runs out of credit, filter **Agents** by that key. The filter applies across all pages, in both table and card views. Clear it with **All provider keys**.
 
-Hover or focus an agent's provider logo to see its configured key name and model. Secret values are never shown. Missing configuration does not indicate a runtime default.
+Hover or focus an agent's provider logo to see its configured key name and model. Secret values are never shown. Agents without a pinned key and model use **Organization default**. Select **Organization default** in the filter to find them. Explicit selections stay separate, even when they match today’s default.
 
 ## Creating and Editing an Agent
 

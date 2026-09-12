@@ -89,9 +89,12 @@ const GetAgentToolArgsSchema = GetResourceToolArgsSchema.extend({
 
 const ListAgentsToolArgsSchema = z
   .object({
-    providerApiKeyId: UuidIdSchema.optional().describe(
-      "Filter agents by their configured provider key.",
-    ),
+    providerApiKeyId: z
+      .union([UuidIdSchema, z.literal("organization-default")])
+      .optional()
+      .describe(
+        "Filter by a configured provider key, or organization-default for agents with no pinned key or model.",
+      ),
     limit: z
       .number()
       .int()

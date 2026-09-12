@@ -13961,9 +13961,9 @@ export type GetAgentsData = {
          */
         includeActivationSkillsCount?: boolean;
         /**
-         * Filter agents by their configured provider key.
+         * Filter by a configured provider key, or organization-default for agents with no pinned key or model.
          */
-        providerApiKeyId?: string;
+        providerApiKeyId?: string | 'organization-default';
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';

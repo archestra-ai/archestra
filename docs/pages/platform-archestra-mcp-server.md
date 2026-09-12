@@ -163,7 +163,7 @@ Required RBAC permission: `agent:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `providerApiKeyId` | `string` | No | Filter agents by their configured provider key. |
+| `providerApiKeyId` | `string \| "organization-default"` | No | Filter by a configured provider key, or organization-default for agents with no pinned key or model. |
 | `limit` | `integer` | No | Maximum number of agents to return. |
 | `name` | `string` | No | Optional agent name filter. Use this when the user names an agent but you still need to look up the ID. |
 

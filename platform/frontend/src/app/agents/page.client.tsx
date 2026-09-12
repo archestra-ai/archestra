@@ -184,9 +184,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | "deleted"
     | null;
   const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
-  const providerApiKeyIdFilter = isProviderApiKeyId(providerApiKeyIdFromUrl)
-    ? providerApiKeyIdFromUrl
-    : undefined;
+  const providerApiKeyIdFilter =
+    providerApiKeyIdFromUrl === "organization-default" ||
+    isProviderApiKeyId(providerApiKeyIdFromUrl)
+      ? providerApiKeyIdFromUrl
+      : undefined;
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
@@ -521,6 +523,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     {
       id: "team",
       header: "Accessible to",
+      size: 160,
       enableSorting: false,
       cell: ({ row }) => (
         <RowClickShield>
@@ -543,6 +546,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       size: 80,
       cell: ({ row }) => (
         <AgentProviderIndicator
+          usesOrganizationDefault={
+            !row.original.llmApiKeyId && !row.original.modelId
+          }
           provider={row.original.resolvedLlmProvider}
           keyName={row.original.resolvedLlmProviderKeyName}
           modelName={row.original.resolvedLlmModelName}
@@ -661,6 +667,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   adminPermission={{ agent: ["admin"] }}
                 />
                 <ProviderKeyFilterSelect
+                  allowOrganizationDefault
                   value={providerApiKeyIdFilter}
                   onValueChange={(providerApiKeyId) =>
                     updateQueryParams({ page: "1", providerApiKeyId })
@@ -779,6 +786,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                           <AgentAccessBadges agent={agent} />
                           <span className="ml-auto">
                             <AgentProviderIndicator
+                              usesOrganizationDefault={
+                                !agent.llmApiKeyId && !agent.modelId
+                              }
                               provider={agent.resolvedLlmProvider}
                               keyName={agent.resolvedLlmProviderKeyName}
                               modelName={agent.resolvedLlmModelName}
@@ -792,6 +802,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 table={
                   <DataTable
                     columns={columns}
+                    tableClassName="table-fixed"
+                    fixedWidthColumnIds={["team", "provider", "environment"]}
+                    flexibleColumnIds={["name"]}
                     data={agents}
                     isLoading={showLoading}
                     getRowId={(row) => row.id}

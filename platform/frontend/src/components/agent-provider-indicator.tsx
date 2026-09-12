@@ -15,10 +15,12 @@ export function AgentProviderIndicator({
   provider,
   keyName,
   modelName,
+  usesOrganizationDefault = false,
 }: {
   provider?: SupportedProvider | null;
   keyName?: string | null;
   modelName?: string | null;
+  usesOrganizationDefault?: boolean;
 }) {
   return (
     <RowClickShield className="inline-flex shrink-0">
@@ -44,13 +46,17 @@ export function AgentProviderIndicator({
           <div className="space-y-0.5">
             <p className="text-xs text-muted-foreground">Provider key</p>
             <p className="break-words font-medium">
-              {keyName || "No key configured"}
+              {usesOrganizationDefault
+                ? "Organization default"
+                : keyName || "No key configured"}
             </p>
           </div>
           <div className="space-y-0.5">
             <p className="text-xs text-muted-foreground">Model</p>
             <p className="break-words font-medium">
-              {modelName || "No model pinned"}
+              {usesOrganizationDefault
+                ? "Organization default"
+                : modelName || "No model pinned"}
             </p>
           </div>
         </TooltipContent>

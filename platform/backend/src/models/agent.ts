@@ -1391,7 +1391,12 @@ class AgentModel {
       whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
     }
 
-    if (filters?.providerApiKeyId) {
+    if (filters?.providerApiKeyId === "organization-default") {
+      whereConditions.push(
+        isNull(schema.agentsTable.llmApiKeyId),
+        isNull(schema.agentsTable.modelId),
+      );
+    } else if (filters?.providerApiKeyId) {
       whereConditions.push(
         eq(schema.agentsTable.llmApiKeyId, filters.providerApiKeyId),
       );

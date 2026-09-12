@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   benchmark:
+    name: Measure LLM proxy latency
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:

@@ -245,6 +245,11 @@ class AgentRunReconciler {
     session: Awaited<ReturnType<typeof AgentRunModel.listOpen>>[number],
   ): Promise<void> {
     if (!session.completionTarget) return;
+    // Adoption can fail before its lifecycle settles the task (for example,
+    // while refreshing the heartbeat). Do not hold the recovery lease in a
+    // completion watcher: the next reconciliation must be able to retry.
+    const task = await A2ATaskModel.findById(session.taskId);
+    if (!task || !isTerminalA2ATaskState(task.state)) return;
     const agent = await AgentModel.findById(session.agentId);
     await watchTaskCompletion({
       taskId: session.taskId,

@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    environment:
+      POSTGRES_USER: benchmark
+      POSTGRES_PASSWORD: benchmark
+      POSTGRES_DB: benchmark
+    ports:
+      - "127.0.0.1:15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U benchmark -d benchmark"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    # Disposable database; never mounts a development or production volume.
+    tmpfs:
+      - /var/lib/postgresql/data

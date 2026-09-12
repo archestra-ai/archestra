@@ -1,0 +1,58 @@
+name: LLM Proxy Benchmark
+
+on:
+  pull_request:
+    paths:
+      - platform/benchmarks/**
+      - .github/workflows/llm-proxy-benchmark.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llm-proxy-benchmark-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Measure LLM proxy latency
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+        with:
+          version: 11.9.0
+          run_install: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '24.11.1'
+          cache: pnpm
+          cache-dependency-path: platform/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --prefer-offline --ignore-scripts
+      - run: pnpm exec biome check benchmarks/*.mjs
+      - name: Validate timing and failure handling
+        run: node --test benchmarks/measure.test.mjs
+      - name: Run mock inference benchmark
+        # CI is a correctness check and a separate hardware baseline, not an
+        # absolute latency gate on noisy shared runners.
+        run: bash benchmarks/ci.sh --requests=300 --stream-requests=60 --repeats=2
+      - name: Publish summary
+        if: always()
+        run: |
+          if [ -f benchmarks/results/ci/summary.md ]; then
+            cat benchmarks/results/ci/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload measurements and diagnostics
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: llm-proxy-benchmark
+          path: platform/benchmarks/results/
+          retention-days: 14

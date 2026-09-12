@@ -919,7 +919,57 @@ Upgrading from a chart that ran the included engine leaves its cache volume behi
 
 ### Agent Runtime
 
-Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_*`. See [Cluster Prerequisites](/docs/platform-agent-runtime#cluster-prerequisites) for controller installation, storage, and privileged workload setup. Configure deployment defaults below; individual Agents can override supported run settings.
+#### Cluster Prerequisites
+
+Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_*` and `ARCHESTRA_AGENT_RUNTIME_ENABLED=true`. Your cluster needs:
+
+- Linux nodes with enough CPU, memory, and disk for your runtime images.
+- The upstream [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/) and permission to install its custom resources.
+- A storage class with dynamic volume provisioning.
+- The Helm chart's runtime permissions in each execution namespace.
+- Outbound access from runtime workloads to your image registry, DNS, and Archestra's API, proxy, and gateway.
+
+Install the tested controller version before enabling the feature:
+
+```sh
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
+kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
+kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
+```
+
+The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
+
+#### Provider Setup
+
+| Cluster | Setup |
+| --- | --- |
+| GKE | Use Linux node pools and the Persistent Disk CSI driver. Check Autopilot restrictions; arbitrary privileged images require a compatible Standard pool. GKE Sandbox does not support privileged containers. |
+| AKS | Use Linux agent pools and Azure Disk CSI. Review Pod Security and Azure Policy restrictions. |
+| EKS With EC2 Nodes | Install EBS CSI with its required IAM permissions. Cluster admission must permit your workload. |
+| EKS Auto Mode | Use an Auto Mode storage class with `ebs.csi.eks.amazonaws.com`. Check your NodePool and image compatibility. |
+| Self-Managed Kubernetes | Configure a compatible OCI runtime, CSI driver, and dynamically provisioned storage class. |
+
+For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve a workspace after node loss. Use the storage and node-selector settings below to select compatible resources.
+
+#### Startup Troubleshooting
+
+Check **Settings → Agents → Runtime Backend** if the runtime is unavailable. Confirm the controller is installed and healthy. For runs waiting on storage, check the storage class and available capacity. For image-pull failures, check the image name, registry access, and pull credentials. Chat shows the reported startup failure.
+
+#### Privileged Containers
+
+Ordinary coding clients do not require privilege. Docker-in-Docker and nested Kubernetes development environments may require it. Privileged containers have broad access to the node, so use a dedicated namespace and node pool.
+
+Privilege requires all three settings:
+
+1. `ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true` in the deployment.
+2. Elevated permissions enabled on the Agent.
+3. A node runtime and cluster admission policy that allow privileged containers.
+
+The deployment setting does not override cloud-provider restrictions. Images running nested Docker must also prepare the node's cgroup setup. After workspace resumption, restart Docker and any development services.
+
+#### Runtime Configuration
+
+Configure deployment defaults below; individual Agents can override supported run settings. For agent setup and everyday use, see [Agent Runtime](/docs/platform-agent-runtime).
 
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`

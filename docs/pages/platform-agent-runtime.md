@@ -22,55 +22,13 @@ Kubernetes is currently the supported runtime backend. Archestra manages task st
 
 ## Cluster Prerequisites
 
-Enable Agent Runtime in your [deployment configuration](/docs/platform-deployment#agent-runtime). Your cluster needs:
-
-- Linux nodes with enough CPU, memory, and disk for your runtime images.
-- The upstream [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/) and permission to install its custom resources.
-- A storage class with dynamic volume provisioning.
-- The Helm chart's runtime permissions in each execution namespace.
-- Outbound access from runtime workloads to your image registry, DNS, and Archestra's API, proxy, and gateway.
-
-Install the tested controller version before enabling the feature:
-
-```sh
-kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox.yaml
-kubectl wait --for=condition=Established crd/sandboxes.agents.x-k8s.io --timeout=60s
-kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
-```
-
-The controller does not install a container isolation runtime. Check your cluster's admission policies and image architecture before enabling workloads.
-
-### Provider Setup
-
-| Cluster | Setup |
-| --- | --- |
-| GKE | Use Linux node pools and the Persistent Disk CSI driver. Check Autopilot restrictions; arbitrary privileged images require a compatible Standard pool. GKE Sandbox does not support privileged containers. |
-| AKS | Use Linux agent pools and Azure Disk CSI. Review Pod Security and Azure Policy restrictions. |
-| EKS With EC2 Nodes | Install EBS CSI with its required IAM permissions. Cluster admission must permit your workload. |
-| EKS Auto Mode | Use an Auto Mode storage class with `ebs.csi.eks.amazonaws.com`. Check your NodePool and image compatibility. |
-| Self-Managed Kubernetes | Configure a compatible OCI runtime, CSI driver, and dynamically provisioned storage class. |
-
-For zonal disks, use `WaitForFirstConsumer` binding and compatible node zones. Node-local storage cannot preserve a workspace after node loss. See [Deployment](/docs/platform-deployment#agent-runtime) for storage and node-selector settings.
-
-### Startup Troubleshooting
-
-Check **Settings → Agents → Runtime Backend** if the runtime is unavailable. Confirm the controller is installed and healthy. For runs waiting on storage, check the storage class and available capacity. For image-pull failures, check the image name, registry access, and pull credentials. Chat shows the reported startup failure.
-
-### Privileged Containers
-
-Ordinary coding clients do not require privilege. Docker-in-Docker and nested Kubernetes development environments may require it. Privileged containers have broad access to the node, so use a dedicated namespace and node pool.
-
-Privilege requires all three settings:
-
-1. `ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED=true` in the deployment.
-2. Elevated permissions enabled on the Agent.
-3. A node runtime and cluster admission policy that allow privileged containers.
-
-The deployment setting does not override cloud-provider restrictions. Images running nested Docker must also prepare the node's cgroup setup. After workspace resumption, restart Docker and any development services.
+Your administrator must enable Agent Runtime on a Kubernetes cluster with persistent storage. See [Agent Runtime Deployment](/docs/platform-deployment#agent-runtime) for controller installation, provider requirements, and privileged workloads.
 
 ## Configure Agent Runtime
 
 Choose a maintained template from **Create Agent**, then configure its instructions, model, tools, and connections. For an existing Agent, enable **Dedicated runtime** under **Edit → Advanced**.
+
+Select the Agent in Chat or a Project and send your first task. Its live terminal opens so you can follow progress and provide input. See [Work With Runs In Chat](#work-with-runs-in-chat) for continuing work.
 
 **Settings → Agents → Runtime Backend** shows backend health and deployment defaults. Each Agent can override its image, command, environment variables, resources, and run controls. Deployment defaults remain managed by the operator.
 

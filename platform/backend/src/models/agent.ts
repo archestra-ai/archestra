@@ -78,6 +78,7 @@ import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
+import CreatedByModel from "./created-by";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
 import TeamModel from "./team";
@@ -146,6 +147,7 @@ class AgentModel {
         agentType: schema.agentsTable.agentType,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
         isPersonalGateway: schema.agentsTable.isPersonalGateway,
         isBuiltIn: schema.agentsTable.builtIn,
       })
@@ -352,37 +354,15 @@ class AgentModel {
    * Populate author identity on agents by looking up users in one batch.
    */
   private static async populateAuthorNames(agents: Agent[]): Promise<void> {
-    const authorIds = [
-      ...new Set(
-        agents.map((a) => a.authorId).filter((id): id is string => id !== null),
-      ),
-    ];
-    if (authorIds.length === 0) return;
-
-    const users = await db
-      .select({
-        id: schema.usersTable.id,
-        name: schema.usersTable.name,
-        email: schema.usersTable.email,
-      })
-      .from(schema.usersTable)
-      .where(inArray(schema.usersTable.id, authorIds));
-
-    const authorMap = new Map(users.map((user) => [user.id, user]));
+    const creators = await CreatedByModel.resolve(
+      agents.map((agent) => CreatedByModel.id(agent, agent.authorId)),
+    );
     for (const agent of agents) {
-      const author = agent.authorId ? authorMap.get(agent.authorId) : null;
+      const id = CreatedByModel.id(agent, agent.authorId);
+      const author = id ? creators.get(id) : null;
       agent.authorName = author?.name ?? null;
       agent.authorEmail = author?.email ?? null;
-      // The same three fields in the shape every "Created by" column reads.
-      // Assembled here rather than resolved again: this batch already holds
-      // them, so uniformity costs no extra query.
-      agent.createdBy = author
-        ? {
-            id: author.id,
-            name: author.name || null,
-            email: author.email || null,
-          }
-        : null;
+      agent.createdBy = author ?? null;
     }
   }
 
@@ -1298,6 +1278,7 @@ class AgentModel {
         name: schema.agentsTable.name,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
       })
       .from(schema.agentsTable)
       .where(
@@ -1326,6 +1307,7 @@ class AgentModel {
         name: schema.agentsTable.name,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
       })
       .from(schema.agentsTable)
       .where(
@@ -2316,6 +2298,7 @@ class AgentModel {
         organizationId: schema.agentsTable.organizationId,
         scope: schema.agentsTable.scope,
         authorId: schema.agentsTable.authorId,
+        createdByServiceAccountId: schema.agentsTable.createdByServiceAccountId,
       })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
@@ -2366,6 +2349,8 @@ class AgentModel {
           agentType: schema.agentsTable.agentType,
           scope: schema.agentsTable.scope,
           authorId: schema.agentsTable.authorId,
+          createdByServiceAccountId:
+            schema.agentsTable.createdByServiceAccountId,
           environmentId: schema.agentsTable.environmentId,
         })
         .from(schema.agentsTable)
@@ -2538,13 +2523,18 @@ class AgentModel {
 
     await db
       .insert(schema.agentsTable)
-      .values({
-        organizationId,
-        name: DEFAULT_LLM_PROXY_NAME,
-        agentType: "llm_proxy",
-        isDefault: true,
-        scope: "org",
-      })
+      .values(
+        await CreatedByModel.forInsert({
+          data: {
+            organizationId,
+            name: DEFAULT_LLM_PROXY_NAME,
+            agentType: "llm_proxy",
+            isDefault: true,
+            scope: "org",
+          },
+          userIdField: "authorId",
+        }),
+      )
       .onConflictDoNothing({
         target: [schema.agentsTable.organizationId],
         where: sql`${schema.agentsTable.agentType} = 'llm_proxy' AND ${schema.agentsTable.isDefault} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
@@ -3869,7 +3859,15 @@ class AgentModel {
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        return await db.insert(schema.agentsTable).values(values).returning();
+        return await db
+          .insert(schema.agentsTable)
+          .values(
+            await CreatedByModel.forInsert({
+              data: { ...values, scope: values.scope ?? "personal" },
+              userIdField: "authorId",
+            }),
+          )
+          .returning();
       } catch (error: unknown) {
         const isSlugConflict =
           error instanceof Error && error.message.includes("agents_slug_idx");

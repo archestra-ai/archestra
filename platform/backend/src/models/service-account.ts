@@ -90,7 +90,9 @@ class ServiceAccountModel {
         rows.map(({ serviceAccount }) => serviceAccount.id),
       ),
       CreatedByModel.resolve(
-        rows.map(({ serviceAccount }) => serviceAccount.createdBy),
+        rows.map(({ serviceAccount }) =>
+          CreatedByModel.id(serviceAccount, serviceAccount.createdBy),
+        ),
       ),
     ]);
 
@@ -143,7 +145,9 @@ class ServiceAccountModel {
       ...normalizeServiceAccount(
         serviceAccount,
         summarizeTokens(tokens),
-        await CreatedByModel.resolve([serviceAccount.createdBy]),
+        await CreatedByModel.resolve([
+          CreatedByModel.id(serviceAccount, serviceAccount.createdBy),
+        ]),
         await ServiceAccountLabelModel.getLabelsFor(id),
       ),
       tokens: tokens.map(normalizeToken),
@@ -212,12 +216,17 @@ class ServiceAccountModel {
   }): Promise<ServiceAccountDetailResponse> {
     const [serviceAccount] = await db
       .insert(schema.serviceAccountsTable)
-      .values({
-        organizationId: params.organizationId,
-        name: params.name,
-        role: params.role,
-        createdBy: params.createdBy,
-      })
+      .values(
+        await CreatedByModel.forInsert({
+          data: {
+            organizationId: params.organizationId,
+            name: params.name,
+            role: params.role,
+            createdBy: params.createdBy,
+          },
+          userIdField: "createdBy",
+        }),
+      )
       .returning();
 
     if (params.labels?.length) {
@@ -231,7 +240,9 @@ class ServiceAccountModel {
       ...normalizeServiceAccount(
         serviceAccount,
         summarizeTokens([]),
-        await CreatedByModel.resolve([serviceAccount.createdBy]),
+        await CreatedByModel.resolve([
+          CreatedByModel.id(serviceAccount, serviceAccount.createdBy),
+        ]),
         await ServiceAccountLabelModel.getLabelsFor(serviceAccount.id),
       ),
       tokens: [],
@@ -450,7 +461,10 @@ function normalizeServiceAccount(
   labels: LabelWithDetails[] = [],
 ): ServiceAccountResponse {
   return {
-    createdBy: lookupCreator(creators, serviceAccount.createdBy),
+    createdBy: lookupCreator(
+      creators,
+      CreatedByModel.id(serviceAccount, serviceAccount.createdBy),
+    ),
     labels,
     id: serviceAccount.id,
     organizationId: serviceAccount.organizationId,

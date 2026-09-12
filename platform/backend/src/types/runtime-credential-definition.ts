@@ -32,6 +32,7 @@ export const InsertRuntimeCredentialDefinitionSchema = createInsertSchema(
     id: true,
     organizationId: true,
     createdBy: true,
+    createdByServiceAccountId: true,
     createdAt: true,
     updatedAt: true,
   })

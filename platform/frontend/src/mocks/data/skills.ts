@@ -103,6 +103,7 @@ function makeSkillListItem(
   return {
     organizationId: "test-org",
     authorId: "test-user-admin",
+    createdByServiceAccountId: null,
     authorName: "Admin User",
     labels: [],
     createdBy: null,
@@ -214,6 +215,7 @@ export function makeImportedSkill(
     id: "test-skill-imported",
     organizationId: "test-org",
     authorId: "test-user-admin",
+    createdByServiceAccountId: null,
     scope: "personal",
     agentName: null,
     name: catalogSkillSeed.name,

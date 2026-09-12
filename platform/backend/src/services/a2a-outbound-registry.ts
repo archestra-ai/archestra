@@ -14,8 +14,8 @@ import {
   MemberModel,
   TeamModel,
   ToolModel,
-  UserModel,
 } from "@/models";
+import CreatedByModel, { lookupCreator } from "@/models/created-by";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { secretManager } from "@/secrets-manager";
 import type {
@@ -819,8 +819,8 @@ async function hydratePublicRemoteAgents(
 ): Promise<PublicA2aRemoteAgent[]> {
   const remoteAgentIds = rows.map((row) => row.remoteAgent.id);
   const toolIds = rows.map((row) => row.toolId);
-  const authorIds = rows.flatMap((row) =>
-    row.remoteAgent.authorId ? [row.remoteAgent.authorId] : [],
+  const authorIds = rows.map((row) =>
+    CreatedByModel.id(row.remoteAgent, row.remoteAgent.authorId),
   );
   const [
     teamsByAgent,
@@ -831,7 +831,7 @@ async function hydratePublicRemoteAgents(
   ] = await Promise.all([
     A2aRemoteAgentTeamModel.getDetailsForRemoteAgents(remoteAgentIds),
     A2aRemoteAgentUserModel.getDetailsForRemoteAgents(remoteAgentIds),
-    UserModel.getNamesByIds(authorIds),
+    CreatedByModel.resolve(authorIds),
     A2aRemoteAgentModel.countAssignmentsByToolIds(toolIds),
     A2aRemoteAgentModel.getLastUsedAtByRemoteAgentIds(remoteAgentIds),
   ]);
@@ -844,9 +844,15 @@ async function hydratePublicRemoteAgents(
       toolId: row.toolId,
       assignmentCount: assignmentsByTool.get(row.toolId) ?? 0,
       lastUsedAt: lastUsedAtByAgent.get(row.remoteAgent.id) ?? null,
-      authorName: row.remoteAgent.authorId
-        ? (authorNames.get(row.remoteAgent.authorId) ?? null)
-        : null,
+      authorName:
+        lookupCreator(
+          authorNames,
+          CreatedByModel.id(row.remoteAgent, row.remoteAgent.authorId),
+        )?.name ?? null,
+      createdBy: lookupCreator(
+        authorNames,
+        CreatedByModel.id(row.remoteAgent, row.remoteAgent.authorId),
+      ),
       teams: teamsByAgent.get(row.remoteAgent.id) ?? [],
       users: usersByAgent.get(row.remoteAgent.id) ?? [],
     };

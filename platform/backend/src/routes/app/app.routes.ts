@@ -261,7 +261,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Every owned app's author, not just the personal-scoped ones
         // `authorNames` covers: an org-scoped app still has somebody to ask
         // about it, and that is the whole point of the column.
-        CreatedByModel.resolve(owned.map((app) => app.authorId)),
+        CreatedByModel.resolve(
+          owned.map((app) => CreatedByModel.id(app, app.authorId)),
+        ),
         // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
         // the client can group pinned-first, like the Projects page.
         AppPinModel.getPinnedAtForApps({
@@ -323,7 +325,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             app.authorId !== null
               ? (authorNames.get(app.authorId) ?? null)
               : null,
-          createdBy: lookupCreator(creators, app.authorId),
+          createdBy: lookupCreator(
+            creators,
+            CreatedByModel.id(app, app.authorId),
+          ),
           viewerRole: viewerRoleOf(app),
           latestVersion: app.latestVersion,
           enabled: app.enabled,
@@ -641,6 +646,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...app,
+        createdBy: await CreatedByModel.resolveOne(
+          CreatedByModel.id(app, app.authorId),
+        ),
         ...(warnings.length > 0 ? { warnings } : {}),
         ...(conversationId ? { conversationId } : {}),
       });
@@ -1782,7 +1790,9 @@ async function buildAppDetail(params: {
   const usersByApp = await AppAccessModel.getUserDetailsForApps([app.id]);
   const teamsByApp = await AppAccessModel.getTeamDetailsForApps([app.id]);
   const viewerRole = await resolveViewerRole({ app, userId, organizationId });
-  const createdBy = await CreatedByModel.resolveOne(app.authorId);
+  const createdBy = await CreatedByModel.resolveOne(
+    CreatedByModel.id(app, app.authorId),
+  );
   return {
     ...app,
     teams: teamsByApp.get(app.id) ?? [],

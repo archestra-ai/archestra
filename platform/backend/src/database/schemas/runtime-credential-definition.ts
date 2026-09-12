@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 /** Organization-defined credential types available to Agent image bindings. */
@@ -26,6 +27,11 @@ const runtimeCredentialDefinitionsTable = pgTable(
     createdBy: text("created_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

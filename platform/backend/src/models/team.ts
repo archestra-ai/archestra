@@ -24,6 +24,7 @@ import type {
 import { ApiError } from "@/types";
 import type { TeamMemberRole } from "@/types/team-role";
 import AgentLabelModel from "./agent-label";
+import CreatedByModel from "./created-by";
 import TeamLabelModel from "./team-label";
 import TeamTokenModel from "./team-token";
 
@@ -72,20 +73,27 @@ class TeamModel {
     const { team, creatorMembership } = await withDbTransaction(async (tx) => {
       const [createdTeam] = await tx
         .insert(schema.teamsTable)
-        .values({
-          id: teamId,
-          name: input.name,
-          description: input.description || null,
-          roles: input.roles,
-          parentId: input.parentId ?? null,
-          organizationId: input.organizationId,
-          createdBy: input.createdBy,
-          // Default of `false` is enforced by the column; passing `undefined`
-          // omits the field from the INSERT so the column default applies.
-          convertToolResultsToToon: input.convertToolResultsToToon ?? undefined,
-          createdAt: now,
-          updatedAt: now,
-        })
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              id: teamId,
+              name: input.name,
+              description: input.description || null,
+              roles: input.roles,
+              parentId: input.parentId ?? null,
+              organizationId: input.organizationId,
+              createdBy: input.createdBy,
+              // Default of `false` is enforced by the column; passing `undefined`
+              // omits the field from the INSERT so the column default applies.
+              convertToolResultsToToon:
+                input.convertToolResultsToToon ?? undefined,
+              createdAt: now,
+              updatedAt: now,
+            },
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
         .returning();
 
       // `created_by` alone confers nothing: every team-scoped check reads
@@ -94,16 +102,18 @@ class TeamModel {
       // team-scoped resources to it. Admin, because whoever creates a team is
       // the one expected to fill it. `syncedFromSso` stays false so SSO team
       // sync treats this as a manual membership and never removes it.
-      const [createdMembership] = await tx
-        .insert(schema.teamMembersTable)
-        .values({
-          id: crypto.randomUUID(),
-          teamId,
-          userId: input.createdBy,
-          role: ADMIN_ROLE_NAME,
-          createdAt: now,
-        })
-        .returning();
+      const [createdMembership] = createdTeam.createdBy
+        ? await tx
+            .insert(schema.teamMembersTable)
+            .values({
+              id: crypto.randomUUID(),
+              teamId,
+              userId: createdTeam.createdBy,
+              role: ADMIN_ROLE_NAME,
+              createdAt: now,
+            })
+            .returning()
+        : [];
 
       if (labels && labels.length > 0) {
         await TeamLabelModel.syncTeamLabels(teamId, labels, tx);
@@ -122,7 +132,7 @@ class TeamModel {
     logger.debug({ teamId }, "TeamModel.create: completed");
     return {
       ...team,
-      members: [creatorMembership],
+      members: creatorMembership ? [creatorMembership] : [],
       labels: await TeamLabelModel.getLabelsForTeam(teamId),
     };
   }

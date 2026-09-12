@@ -273,6 +273,12 @@ ${generatePredefinedRolesSections()}
 
 Users with \`ac:create\` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs.
 
+### Service Account Creators
+
+Service accounts can create organization and team resources within their assigned permissions. Creator attribution records the service account separately from human ownership. Attribution does not grant additional access or team membership.
+
+Resources with personal user ownership require a human account. Projects start as personal resources and require a user account.
+
 ### Multiple Roles And Team Grants
 
 Users and service accounts can have multiple organization roles. Their permissions combine: a grant from any assigned role allows that action.

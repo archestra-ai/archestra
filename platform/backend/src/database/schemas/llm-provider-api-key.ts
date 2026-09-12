@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { ResourceVisibilityScope } from "@/types";
 import secretsTable from "./secret";
+import serviceAccountsTable from "./service-account";
 import { team } from "./team";
 import usersTable from "./user";
 
@@ -64,6 +65,11 @@ const llmProviderApiKeysTable = pgTable(
     requiresReauthentication: boolean("requires_reauthentication")
       .notNull()
       .default(false),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

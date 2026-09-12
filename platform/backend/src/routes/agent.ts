@@ -29,6 +29,7 @@ import {
   assertAgentTeams,
 } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
+import { isServiceAccountUserId } from "@/auth/utils";
 import config from "@/config";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -570,6 +571,22 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       checker.require(agentType, "create");
+      if (
+        body.organizationId !== undefined &&
+        body.organizationId !== organizationId
+      ) {
+        throw new ApiError(
+          403,
+          "Cannot create an agent in another organization",
+        );
+      }
+      const isServiceAccount = isServiceAccountUserId(user.id);
+      if (isServiceAccount && body.scope === "personal") {
+        throw new ApiError(
+          400,
+          "Service accounts cannot create personal agents. Use org or team scope.",
+        );
+      }
       requireAgentRuntimePermission({
         agentType,
         runtime: body.runtime,
@@ -698,6 +715,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // environment exception), so a client-supplied value is dropped here.
       const createData = {
         ...body,
+        organizationId,
         environmentId,
         builtInAgentConfig: null,
         ...(body.scope !== "team" && { teams: [] }),
@@ -708,7 +726,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // `agent:read`.
       const defaultExcludedSubagentIds =
         await agentSubagentExclusionsService.getCreationDefaultExclusions({
-          organizationId: createData.organizationId ?? organizationId,
+          organizationId,
           agentType,
           accessAllSubagents: createData.accessAllSubagents === true,
         });

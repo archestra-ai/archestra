@@ -6,6 +6,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
+import { isServiceAccountUserId } from "@/auth/utils";
 import { AuditLogModel } from "@/models";
 import {
   ApiError,
@@ -134,7 +135,11 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "auditLog",
           "admin",
         );
-        if (!canSeeAllAuditLogs && auditLog.actorId !== user.id) {
+        const belongsToCaller = isServiceAccountUserId(user.id)
+          ? auditLog.actorType === "service_account" &&
+            auditLog.actorEmail === user.email
+          : auditLog.actorId === user.id;
+        if (!canSeeAllAuditLogs && !belongsToCaller) {
           throw new ApiError(404, "Audit log not found");
         }
       }

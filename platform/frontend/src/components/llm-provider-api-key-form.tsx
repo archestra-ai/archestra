@@ -32,6 +32,8 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { createdByFact } from "@/components/created-by-cell";
+import { DetailFacts } from "@/components/detail-facts";
 import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -1100,6 +1102,7 @@ export function LlmProviderApiKeyForm({
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
+        <DetailFacts facts={[createdByFact(existingKey?.createdBy)]} />
         {!isSubscriptionFlow && (
           <div
             className={

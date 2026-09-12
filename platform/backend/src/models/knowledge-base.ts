@@ -19,6 +19,7 @@ import type {
   KnowledgeBase,
   UpdateKnowledgeBase,
 } from "@/types";
+import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 
 /**
@@ -230,7 +231,12 @@ class KnowledgeBaseModel {
   static async create(data: InsertKnowledgeBase): Promise<KnowledgeBase> {
     const [result] = await db
       .insert(schema.knowledgeBasesTable)
-      .values(data)
+      .values(
+        await CreatedByModel.forInsert({
+          data: data,
+          userIdField: "createdBy",
+        }),
+      )
       .returning();
 
     return result;

@@ -26,6 +26,7 @@ import type { KnowledgeSourceVisibility } from "@/types/knowledge-base";
 import environmentsTable from "./environment";
 import knowledgeBasesTable from "./knowledge-base";
 import secretTable from "./secret";
+import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -113,6 +114,11 @@ const knowledgeBaseConnectorsTable = softDeletablePgTable(
     createdBy: text("created_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

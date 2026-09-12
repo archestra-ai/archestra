@@ -15,6 +15,22 @@ describe("CreatedByCell", () => {
     expect(screen.getByTitle("nomi@x.invalid")).toBeInTheDocument();
   });
 
+  test("distinguishes automation from a human creator without a fake email", () => {
+    render(
+      <CreatedByCell
+        createdBy={{
+          id: "service-account:automation",
+          name: "Release automation",
+          email: null,
+          type: "service_account",
+        }}
+      />,
+    );
+    expect(screen.getByText("Release automation")).toBeInTheDocument();
+    expect(screen.getByText("Service account")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   test("falls back to the email when the account has no display name", () => {
     render(
       <CreatedByCell

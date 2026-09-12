@@ -57,7 +57,13 @@ class LlmProviderApiKeyModel {
 
       const [apiKey] = await tx
         .insert(schema.llmProviderApiKeysTable)
-        .values(data)
+        .values(
+          await CreatedByModel.forInsert({
+            data: data,
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
         .returning();
 
       return apiKey;
@@ -266,6 +272,8 @@ class LlmProviderApiKeyModel {
         userId: schema.llmProviderApiKeysTable.userId,
         teamId: schema.llmProviderApiKeysTable.teamId,
         createdBy: schema.llmProviderApiKeysTable.createdBy,
+        createdByServiceAccountId:
+          schema.llmProviderApiKeysTable.createdByServiceAccountId,
         isSystem: schema.llmProviderApiKeysTable.isSystem,
         isPrimary: schema.llmProviderApiKeysTable.isPrimary,
         requiresReauthentication:
@@ -389,6 +397,8 @@ class LlmProviderApiKeyModel {
         userId: schema.llmProviderApiKeysTable.userId,
         teamId: schema.llmProviderApiKeysTable.teamId,
         createdBy: schema.llmProviderApiKeysTable.createdBy,
+        createdByServiceAccountId:
+          schema.llmProviderApiKeysTable.createdByServiceAccountId,
         isSystem: schema.llmProviderApiKeysTable.isSystem,
         isPrimary: schema.llmProviderApiKeysTable.isPrimary,
         requiresReauthentication:
@@ -994,16 +1004,21 @@ class LlmProviderApiKeyModel {
   }): Promise<LlmProviderApiKey> {
     const [apiKey] = await db
       .insert(schema.llmProviderApiKeysTable)
-      .values({
-        organizationId: params.organizationId,
-        name: params.name,
-        provider: params.provider,
-        scope: "org",
-        isSystem: true,
-        secretId: null,
-        userId: null,
-        teamId: null,
-      })
+      .values(
+        await CreatedByModel.forInsert({
+          data: {
+            organizationId: params.organizationId,
+            name: params.name,
+            provider: params.provider,
+            scope: "org",
+            isSystem: true,
+            secretId: null,
+            userId: null,
+            teamId: null,
+          },
+          userIdField: "createdBy",
+        }),
+      )
       .returning();
 
     return apiKey;

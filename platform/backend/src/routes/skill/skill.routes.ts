@@ -651,7 +651,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const skillAuthorIds = [
         ...new Set(
           skills
-            .map((skill) => skill.authorId)
+            .map((skill) => CreatedByModel.id(skill, skill.authorId))
             .filter((id): id is string => id !== null),
         ),
       ];
@@ -687,7 +687,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
             : null,
-          createdBy: lookupCreator(creators, skill.authorId),
+          createdBy: lookupCreator(
+            creators,
+            CreatedByModel.id(skill, skill.authorId),
+          ),
           usageUserCount: usageUserCounts.get(skill.id) ?? 0,
           labels: labelsBySkill.get(skill.id) ?? [],
         })),
@@ -2318,7 +2321,7 @@ async function loadSkillDetail(skill: Skill) {
     SkillTeamModel.getTeamDetailsForSkills([skill.id]),
     SkillUserModel.getUserDetailsForSkills([skill.id]),
     SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
-    CreatedByModel.resolveOne(skill.authorId),
+    CreatedByModel.resolveOne(CreatedByModel.id(skill, skill.authorId)),
     SkillLabelModel.getLabelsFor(skill.id),
   ]);
   return {

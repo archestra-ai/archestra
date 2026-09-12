@@ -404,12 +404,22 @@ function withWindowsStartupGuard(
 ): string[] {
   return ctx.mcp || ctx.proxy || ctx.skills
     ? [
+        `$archPreviousStartupWrapper = Get-Item Function:${client.binary} -ErrorAction SilentlyContinue
+try {`,
         buildWindowsStartupGuardUnshadowSection(client),
         ...sections,
         buildWindowsStartupGuardInstallSection(
           buildStartupGuardContext(ctx),
           client,
         ),
+        `} catch {
+  if ($null -ne $archPreviousStartupWrapper) {
+    Set-Item Function:${client.binary} -Value $archPreviousStartupWrapper.ScriptBlock
+  }
+  throw
+} finally {
+  Remove-Variable archPreviousStartupWrapper -ErrorAction SilentlyContinue
+}`,
       ]
     : sections;
 }

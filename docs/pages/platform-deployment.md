@@ -971,6 +971,8 @@ The deployment setting does not override cloud-provider restrictions. Images run
 
 Configure deployment defaults below; individual Agents can override supported run settings. For agent setup and everyday use, see [Agent Runtime](/docs/platform-agent-runtime).
 
+On GKE, custom Sandbox controllers can produce a “not backed by a controller” scale-down warning. Active runs must finish before their nodes can be removed safely. Idle workspace suspension releases pods through the runtime lifecycle. Setting `safe-to-evict: "true"` permits interruptions; persisted files do not preserve running processes.
+
 - **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
   - Values: `true`, `false`

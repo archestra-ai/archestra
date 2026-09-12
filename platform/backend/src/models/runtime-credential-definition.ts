@@ -5,6 +5,7 @@ import type {
   RuntimeCredentialDefinition,
   UpdateRuntimeCredentialDefinition,
 } from "@/types";
+import CreatedByModel from "./created-by";
 
 export default class RuntimeCredentialDefinitionModel {
   static async findByIdForAudit(
@@ -45,11 +46,16 @@ export default class RuntimeCredentialDefinitionModel {
   }): Promise<RuntimeCredentialDefinition> {
     const [created] = await db
       .insert(schema.runtimeCredentialDefinitionsTable)
-      .values({
-        ...params.definition,
-        organizationId: params.organizationId,
-        createdBy: params.createdBy,
-      })
+      .values(
+        await CreatedByModel.forInsert({
+          data: {
+            ...params.definition,
+            organizationId: params.organizationId,
+            createdBy: params.createdBy,
+          },
+          userIdField: "createdBy",
+        }),
+      )
       .returning();
     return created;
   }

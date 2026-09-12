@@ -51,6 +51,7 @@ import type {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
+import CreatedByModel from "./created-by";
 import SkillUserModel from "./skill-user";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
@@ -743,13 +744,20 @@ class SkillModel {
     const run = async (tx: Transaction) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
-        .values({
-          ...params.skill,
-          latestVersion: 1,
-          // Publication artifacts are derived from the columns written in this
-          // same statement, so a skill is publishable from the moment it exists.
-          ...buildSkillPublicationArtifacts(params.skill),
-        })
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              ...params.skill,
+              scope: params.skill.scope ?? "personal",
+              latestVersion: 1,
+              // Publication artifacts are derived from the columns written in this
+              // same statement, so a skill is publishable from the moment it exists.
+              ...buildSkillPublicationArtifacts(params.skill),
+            },
+            userIdField: "authorId",
+            transaction: tx,
+          }),
+        )
         .onConflictDoNothing()
         .returning();
 

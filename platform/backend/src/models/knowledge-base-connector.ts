@@ -24,6 +24,7 @@ import type {
   ConnectorType,
 } from "@/types/knowledge-connector";
 import { escapeLikePattern } from "@/utils/sql-search";
+import CreatedByModel from "./created-by";
 
 class KnowledgeBaseConnectorModel {
   static async findByOrganization(params: {
@@ -237,6 +238,8 @@ class KnowledgeBaseConnectorModel {
         permissionSyncState:
           schema.knowledgeBaseConnectorsTable.permissionSyncState,
         createdBy: schema.knowledgeBaseConnectorsTable.createdBy,
+        createdByServiceAccountId:
+          schema.knowledgeBaseConnectorsTable.createdByServiceAccountId,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
         deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,
@@ -307,6 +310,8 @@ class KnowledgeBaseConnectorModel {
         permissionSyncState:
           schema.knowledgeBaseConnectorsTable.permissionSyncState,
         createdBy: schema.knowledgeBaseConnectorsTable.createdBy,
+        createdByServiceAccountId:
+          schema.knowledgeBaseConnectorsTable.createdByServiceAccountId,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
         deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,
@@ -370,7 +375,12 @@ class KnowledgeBaseConnectorModel {
   ): Promise<KnowledgeBaseConnector> {
     const [result] = await db
       .insert(schema.knowledgeBaseConnectorsTable)
-      .values(data)
+      .values(
+        await CreatedByModel.forInsert({
+          data: data,
+          userIdField: "createdBy",
+        }),
+      )
       .returning();
 
     return result;

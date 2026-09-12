@@ -126,16 +126,22 @@ class VirtualApiKeyModel {
     const virtualKey = await withDbTransaction(async (tx) => {
       const [createdVirtualKey] = await tx
         .insert(schema.virtualApiKeysTable)
-        .values({
-          organizationId: resolvedOrganizationId,
-          name,
-          keyType,
-          secretId: secret.id,
-          tokenStart,
-          scope,
-          authorId,
-          expiresAt: expiresAt ?? null,
-        })
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              organizationId: resolvedOrganizationId,
+              name,
+              keyType,
+              secretId: secret.id,
+              tokenStart,
+              scope,
+              authorId,
+              expiresAt: expiresAt ?? null,
+            },
+            userIdField: "authorId",
+            transaction: tx,
+          }),
+        )
         .returning();
 
       await syncVirtualApiKeyTeams({
@@ -317,6 +323,8 @@ class VirtualApiKeyModel {
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
           authorId: schema.virtualApiKeysTable.authorId,
+          createdByServiceAccountId:
+            schema.virtualApiKeysTable.createdByServiceAccountId,
           expiresAt: schema.virtualApiKeysTable.expiresAt,
           createdAt: schema.virtualApiKeysTable.createdAt,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
@@ -399,6 +407,8 @@ class VirtualApiKeyModel {
           keyType: schema.virtualApiKeysTable.keyType,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           authorId: schema.virtualApiKeysTable.authorId,
+          createdByServiceAccountId:
+            schema.virtualApiKeysTable.createdByServiceAccountId,
           authorName: schema.usersTable.name,
         })
         .from(schema.virtualApiKeysTable)
@@ -489,7 +499,9 @@ class VirtualApiKeyModel {
       ...virtualKey,
       teams: metadata.teams.get(id) ?? [],
       authorName: metadata.authorName.get(id) ?? null,
-      createdBy: await CreatedByModel.resolveOne(virtualKey.authorId),
+      createdBy: await CreatedByModel.resolveOne(
+        CreatedByModel.id(virtualKey, virtualKey.authorId),
+      ),
       providerApiKeys: mappings,
       labels,
     };
@@ -553,6 +565,8 @@ class VirtualApiKeyModel {
         keyType: schema.virtualApiKeysTable.keyType,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
+        createdByServiceAccountId:
+          schema.virtualApiKeysTable.createdByServiceAccountId,
       })
       .from(schema.virtualApiKeysTable)
       .where(eq(schema.virtualApiKeysTable.id, id))
@@ -605,6 +619,8 @@ class VirtualApiKeyModel {
         keyType: schema.virtualApiKeysTable.keyType,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
+        createdByServiceAccountId:
+          schema.virtualApiKeysTable.createdByServiceAccountId,
       })
       .from(schema.virtualApiKeysTable)
       .where(
@@ -821,6 +837,8 @@ class VirtualApiKeyModel {
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
           authorId: schema.virtualApiKeysTable.authorId,
+          createdByServiceAccountId:
+            schema.virtualApiKeysTable.createdByServiceAccountId,
           expiresAt: schema.virtualApiKeysTable.expiresAt,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
           createdAt: schema.virtualApiKeysTable.createdAt,

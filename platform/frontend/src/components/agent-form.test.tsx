@@ -981,6 +981,7 @@ const baseAgent = {
   tools: [],
   labels: [],
   authorId: "00000000-0000-4000-8000-000000000020",
+  createdByServiceAccountId: null,
   authorName: "Test User",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),

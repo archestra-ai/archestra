@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { KnowledgeFileVisibility } from "@/types/knowledge-file";
+import CreatedByModel from "./created-by";
 
 /**
  * Who a caller is, for repository-listing purposes.
@@ -121,18 +122,24 @@ class KbFileModel {
     return db.transaction(async (tx) => {
       const [file] = await tx
         .insert(schema.kbFilesTable)
-        .values({
-          organizationId: params.organizationId,
-          directoryId: params.directoryId,
-          filename: params.filename,
-          mimeType: params.mimeType,
-          sizeBytes: params.sizeBytes,
-          contentHash: params.contentHash,
-          storageProvider: "db",
-          data: params.data,
-          visibility: params.visibility,
-          uploadedBy: params.uploadedBy,
-        })
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              organizationId: params.organizationId,
+              directoryId: params.directoryId,
+              filename: params.filename,
+              mimeType: params.mimeType,
+              sizeBytes: params.sizeBytes,
+              contentHash: params.contentHash,
+              storageProvider: "db",
+              data: params.data,
+              visibility: params.visibility,
+              uploadedBy: params.uploadedBy,
+            },
+            userIdField: "uploadedBy",
+            transaction: tx,
+          }),
+        )
         .returning();
 
       if (params.visibility === "team-scoped" && params.teamIds.length > 0) {
@@ -167,12 +174,17 @@ class KbFileModel {
     };
     const [file] = await db
       .insert(schema.kbFilesTable)
-      .values({
-        ...content,
-        id: params.id,
-        organizationId: params.organizationId,
-        uploadedBy: params.uploadedBy,
-      })
+      .values(
+        await CreatedByModel.forInsert({
+          data: {
+            ...content,
+            id: params.id,
+            organizationId: params.organizationId,
+            uploadedBy: params.uploadedBy,
+          },
+          userIdField: "uploadedBy",
+        }),
+      )
       .onConflictDoUpdate({
         target: schema.kbFilesTable.id,
         set: content,
@@ -445,6 +457,8 @@ class KbFileModel {
         contentHash: schema.kbFilesTable.contentHash,
         visibility: schema.kbFilesTable.visibility,
         uploadedBy: schema.kbFilesTable.uploadedBy,
+        createdByServiceAccountId:
+          schema.kbFilesTable.createdByServiceAccountId,
         createdAt: schema.kbFilesTable.createdAt,
       })
       .from(schema.kbFilesTable)

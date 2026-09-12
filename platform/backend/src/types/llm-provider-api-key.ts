@@ -36,6 +36,7 @@ export const InsertLlmProviderApiKeySchema = createInsertSchema(
     id: true,
     createdAt: true,
     updatedAt: true,
+    createdByServiceAccountId: true,
     requiresReauthentication: true,
   })
   .extend({
@@ -51,6 +52,7 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
   .omit({
     id: true,
     organizationId: true,
+    createdByServiceAccountId: true,
     requiresReauthentication: true,
     createdAt: true,
     updatedAt: true,

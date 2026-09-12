@@ -42,6 +42,7 @@ const providerKey = {
   createdAt: "2026-08-27T12:00:00.000Z",
   updatedAt: "2026-08-27T12:00:00.000Z",
   createdBy: null,
+  createdByServiceAccountId: null,
 } satisfies archestraApiTypes.CreateLlmProviderApiKeyResponses["200"];
 
 const model = {

@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { A2aDiscoveryMode } from "@/types/a2a-outbound";
 import organizationsTable from "./organization";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 /**
@@ -44,6 +45,11 @@ const a2aRemoteAgentsTable = pgTable(
     lastDiscoveredAt: timestamp("last_discovered_at", { mode: "date" })
       .notNull()
       .defaultNow(),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

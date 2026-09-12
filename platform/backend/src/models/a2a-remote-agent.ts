@@ -19,6 +19,7 @@ import type {
   InsertA2aRemoteAgent,
   Tool,
 } from "@/types";
+import CreatedByModel from "./created-by";
 import TeamModel from "./team";
 
 class A2aRemoteAgentModel {
@@ -230,7 +231,9 @@ class A2aRemoteAgentModel {
   static async create(data: InsertA2aRemoteAgent): Promise<A2aRemoteAgent> {
     const [remoteAgent] = await db
       .insert(schema.a2aRemoteAgentsTable)
-      .values(data)
+      .values(
+        await CreatedByModel.forInsert({ data: data, userIdField: "authorId" }),
+      )
       .returning();
     return remoteAgent;
   }

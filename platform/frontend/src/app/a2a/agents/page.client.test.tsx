@@ -44,6 +44,8 @@ const remoteAgent = {
   updatedAt: "2026-09-08T12:00:00.000Z",
   scope: "personal",
   authorId: "user-1",
+  createdByServiceAccountId: null,
+  createdBy: null,
   authorName: "Test User",
   teams: [],
   users: [],

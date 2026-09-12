@@ -23,6 +23,7 @@ import type {
 import environmentsTable from "./environment";
 import mcpPresetEntriesTable from "./mcp-preset-entry";
 import secretTable from "./secret";
+import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -209,6 +210,11 @@ const internalMcpCatalogTable = softDeletablePgTable(
     catalogItemApprovalReviewedAt: timestamp(
       "catalog_item_approval_reviewed_at",
       { mode: "date" },
+    ),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
     ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

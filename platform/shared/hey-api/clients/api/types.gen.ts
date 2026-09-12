@@ -12981,6 +12981,7 @@ export type ListA2aRemoteAgentsResponses = {
         };
         cardHash: string;
         lastDiscoveredAt: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
@@ -13009,6 +13010,12 @@ export type ListA2aRemoteAgentsResponses = {
         assignmentCount: number;
         lastUsedAt: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -13141,6 +13148,7 @@ export type CreateA2aRemoteAgentResponses = {
         };
         cardHash: string;
         lastDiscoveredAt: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
@@ -13169,6 +13177,12 @@ export type CreateA2aRemoteAgentResponses = {
         assignmentCount: number;
         lastUsedAt: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -13360,6 +13374,7 @@ export type GetA2aRemoteAgentResponses = {
         };
         cardHash: string;
         lastDiscoveredAt: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
@@ -13388,6 +13403,12 @@ export type GetA2aRemoteAgentResponses = {
         assignmentCount: number;
         lastUsedAt: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -13523,6 +13544,7 @@ export type UpdateA2aRemoteAgentResponses = {
         };
         cardHash: string;
         lastDiscoveredAt: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         connection: {
@@ -13551,6 +13573,12 @@ export type UpdateA2aRemoteAgentResponses = {
         assignmentCount: number;
         lastUsedAt: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -14122,6 +14150,7 @@ export type GetAgentsResponses = {
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -14154,6 +14183,7 @@ export type GetAgentsResponses = {
             authorEmail?: string | null;
             createdBy?: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -14513,6 +14543,7 @@ export type CreateAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -14545,6 +14576,7 @@ export type CreateAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -14762,6 +14794,7 @@ export type GetAllAgentsResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -14794,6 +14827,7 @@ export type GetAllAgentsResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -15062,6 +15096,7 @@ export type GetDefaultMcpGatewayResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -15094,6 +15129,7 @@ export type GetDefaultMcpGatewayResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -15354,6 +15390,7 @@ export type ImportAgentResponses = {
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -15386,6 +15423,7 @@ export type ImportAgentResponses = {
             authorEmail?: string | null;
             createdBy?: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -15659,6 +15697,7 @@ export type GetAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -15691,6 +15730,7 @@ export type GetAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -15962,6 +16002,7 @@ export type UpdateAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -15994,6 +16035,7 @@ export type UpdateAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -16442,6 +16484,7 @@ export type RestoreAgentVersionResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -16474,6 +16517,7 @@ export type RestoreAgentVersionResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -16665,6 +16709,7 @@ export type CloneAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -16697,6 +16742,7 @@ export type CloneAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -19012,6 +19058,7 @@ export type RestoreAgentResponses = {
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -19044,6 +19091,7 @@ export type RestoreAgentResponses = {
         authorEmail?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -24569,6 +24617,7 @@ export type GetAppsResponses = {
             icon: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -24605,6 +24654,7 @@ export type GetAppsResponses = {
             icon: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -24770,6 +24820,7 @@ export type CreateAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -24782,6 +24833,12 @@ export type CreateAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy?: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         warnings?: Array<string>;
         conversationId?: string;
     };
@@ -25863,6 +25920,7 @@ export type GetAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -25875,6 +25933,12 @@ export type GetAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -25886,11 +25950,6 @@ export type GetAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -26040,6 +26099,7 @@ export type UpdateAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26052,6 +26112,12 @@ export type UpdateAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy?: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         warnings?: Array<string>;
     };
 };
@@ -26377,6 +26443,7 @@ export type EnableAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26389,6 +26456,12 @@ export type EnableAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -26400,11 +26473,6 @@ export type EnableAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -26523,6 +26591,7 @@ export type DisableAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26535,6 +26604,12 @@ export type DisableAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -26546,11 +26621,6 @@ export type DisableAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -26669,6 +26739,7 @@ export type LockAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26681,6 +26752,12 @@ export type LockAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -26692,11 +26769,6 @@ export type LockAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -26815,6 +26887,7 @@ export type UnlockAppResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -26827,6 +26900,12 @@ export type UnlockAppResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -26838,11 +26917,6 @@ export type UnlockAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
-        createdBy: {
-            id: string;
-            name: string | null;
-            email: string | null;
-        } | null;
     };
 };
 
@@ -27305,6 +27379,7 @@ export type RestoreAppVersionResponses = {
         enabled: boolean;
         openInFullscreen: boolean;
         locked: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -27317,6 +27392,12 @@ export type RestoreAppVersionResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy?: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         warnings?: Array<string>;
     };
 };
@@ -60464,6 +60545,7 @@ export type GetInternalMcpCatalogResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -60479,6 +60561,7 @@ export type GetInternalMcpCatalogResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -60825,6 +60908,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -60840,6 +60924,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -61314,6 +61399,7 @@ export type GetInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -61329,6 +61415,7 @@ export type GetInternalMcpCatalogItemResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -61660,6 +61747,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -61675,6 +61763,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -62232,6 +62321,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -62247,6 +62337,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -62454,6 +62545,7 @@ export type ApproveCatalogItemImageResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -62469,6 +62561,7 @@ export type ApproveCatalogItemImageResponses = {
         authorName?: string | null;
         createdBy?: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -64745,11 +64838,13 @@ export type GetKnowledgeBasesResponses = {
             visibility: 'private' | 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
             status: string;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -64879,11 +64974,13 @@ export type CreateKnowledgeBaseResponses = {
         visibility: 'private' | 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
         status: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -65063,11 +65160,13 @@ export type GetKnowledgeBaseResponses = {
         visibility: 'private' | 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
         status: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -65173,11 +65272,13 @@ export type UpdateKnowledgeBaseResponses = {
         visibility: 'private' | 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
         status: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -65817,11 +65918,13 @@ export type GetConnectorsResponses = {
                 [key: string]: unknown;
             } | Array<unknown> | null;
             aclConfigEpoch: number;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -66317,11 +66420,13 @@ export type CreateConnectorResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         aclConfigEpoch: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -66690,11 +66795,13 @@ export type GetConnectorResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         aclConfigEpoch: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -67177,11 +67284,13 @@ export type UpdateConnectorResponses = {
             [key: string]: unknown;
         } | Array<unknown> | null;
         aclConfigEpoch: number;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -68890,6 +68999,7 @@ export type GetConnectorKnowledgeBasesResponses = {
             teamIds: Array<string>;
             status: string;
             createdBy: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -69687,9 +69797,11 @@ export type GetKnowledgeFilesResponses = {
             mimeType: string;
             sizeBytes: number;
             contentHash: string;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -69816,9 +69928,11 @@ export type UploadKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -70047,9 +70161,11 @@ export type PromoteAttachmentToKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -70255,9 +70371,11 @@ export type UpdateKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -70653,10 +70771,12 @@ export type GetKnowledgeDirectoriesResponses = {
         organizationId: string;
         name: string;
         visibility: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -70752,10 +70872,12 @@ export type CreateKnowledgeDirectoryResponses = {
         organizationId: string;
         name: string;
         visibility: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -70938,10 +71060,12 @@ export type UpdateKnowledgeDirectoryResponses = {
         organizationId: string;
         name: string;
         visibility: string;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -73003,6 +73127,7 @@ export type GetLlmOauthClientsResponses = {
             authorName: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -73145,6 +73270,7 @@ export type CreateLlmOauthClientResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -73366,6 +73492,7 @@ export type UpdateLlmOauthClientResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -73482,6 +73609,7 @@ export type RotateLlmOauthClientSecretResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -73867,10 +73995,12 @@ export type GetLlmProviderApiKeysResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -74004,7 +74134,6 @@ export type CreateLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
-        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -74013,8 +74142,29 @@ export type CreateLlmProviderApiKeyResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -74116,10 +74266,12 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -74322,10 +74474,12 @@ export type GetLlmProviderApiKeyResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -74460,7 +74614,6 @@ export type UpdateLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
-        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -74469,8 +74622,29 @@ export type UpdateLlmProviderApiKeyResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -74565,7 +74739,6 @@ export type ReconnectLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
-        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -74574,8 +74747,29 @@ export type ReconnectLlmProviderApiKeyResponses = {
         isSystem: boolean;
         isPrimary: boolean;
         requiresReauthentication?: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        teamName?: string | null;
+        userName?: string | null;
+        vaultSecretPath?: string | null;
+        vaultSecretKey?: string | null;
+        secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
+        bestModelId?: string | null;
+        isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -75278,6 +75472,7 @@ export type GetMcpOauthClientsResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -75404,6 +75599,7 @@ export type CreateMcpOauthClientResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -75618,6 +75814,7 @@ export type UpdateMcpOauthClientResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -75730,6 +75927,7 @@ export type RotateMcpOauthClientSecretResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -75969,6 +76167,7 @@ export type GetMcpServersResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -76032,6 +76231,7 @@ export type InstallMcpServerData = {
         environmentValues?: {
             [key: string]: string;
         };
+        createdByServiceAccountId?: string | null;
         ownerId?: string | null;
         teamId?: string | null;
         scope?: 'personal' | 'team' | 'org';
@@ -76131,6 +76331,7 @@ export type InstallMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -76347,6 +76548,7 @@ export type GetMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -76488,6 +76690,7 @@ export type ReauthenticateMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -76716,6 +76919,7 @@ export type RestoreMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -77313,6 +77517,7 @@ export type ReinstallMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        createdByServiceAccountId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -88531,6 +88736,7 @@ export type GetPluginsResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -88549,6 +88755,12 @@ export type GetPluginsResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
         fileCount: number;
     }>;
 };
@@ -88685,6 +88897,7 @@ export type CreatePluginResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -88705,6 +88918,7 @@ export type CreatePluginResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -88968,6 +89182,7 @@ export type ImportGithubPluginMarketplaceResponses = {
             approvedAt: string | null;
             approvedBy: string | null;
             enabled: boolean;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -88988,6 +89203,7 @@ export type ImportGithubPluginMarketplaceResponses = {
             }>;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -89239,6 +89455,7 @@ export type ImportGithubPluginResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -89259,6 +89476,7 @@ export type ImportGithubPluginResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -89493,6 +89711,7 @@ export type ApplyGithubPluginUpdateResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -89513,6 +89732,7 @@ export type ApplyGithubPluginUpdateResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -89644,6 +89864,7 @@ export type UpdatePluginGithubSyncResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -89664,6 +89885,7 @@ export type UpdatePluginGithubSyncResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -89963,6 +90185,7 @@ export type GetPluginResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -89983,6 +90206,7 @@ export type GetPluginResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -90141,6 +90365,7 @@ export type UpdatePluginResponses = {
         approvedAt: string | null;
         approvedBy: string | null;
         enabled: boolean;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -90161,6 +90386,7 @@ export type UpdatePluginResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -90767,6 +90993,7 @@ export type GetProjectsResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -90884,6 +91111,7 @@ export type CreateProjectResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -91001,6 +91229,7 @@ export type CreateProjectFromConversationResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -91194,6 +91423,7 @@ export type GetProjectResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -91698,6 +91928,7 @@ export type RestoreProjectResponses = {
         ownerName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -92747,6 +92978,7 @@ export type CreateRuntimeCredentialResponses = {
         allowPersonal: boolean;
         allowOrganization: boolean;
         createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -93018,6 +93250,7 @@ export type UpdateRuntimeCredentialResponses = {
         allowPersonal: boolean;
         allowOrganization: boolean;
         createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -95103,6 +95336,7 @@ export type GetServiceAccountsResponses = {
         id: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -95216,6 +95450,7 @@ export type CreateServiceAccountResponses = {
         id: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -95416,6 +95651,7 @@ export type GetServiceAccountResponses = {
         id: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -95541,6 +95777,7 @@ export type UpdateServiceAccountResponses = {
         id: string;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -96990,11 +97227,13 @@ export type GetSkillsResponses = {
             lastSyncError: string | null;
             usageCount: number;
             lastUsedAt: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -97175,6 +97414,7 @@ export type CreateSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -97190,6 +97430,7 @@ export type CreateSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -97328,6 +97569,7 @@ export type ConvertAgentToSkillResponses = {
             lastSyncError: string | null;
             usageCount: number;
             lastUsedAt: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -97343,6 +97585,7 @@ export type ConvertAgentToSkillResponses = {
             }>;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -97659,6 +97902,7 @@ export type GetSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -97674,6 +97918,7 @@ export type GetSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -97848,6 +98093,7 @@ export type UpdateSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -97863,6 +98109,7 @@ export type UpdateSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -98581,6 +98828,7 @@ export type RestoreSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -98596,6 +98844,7 @@ export type RestoreSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -98815,6 +99064,7 @@ export type ResetSkillResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -98830,6 +99080,7 @@ export type ResetSkillResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -98977,6 +99228,7 @@ export type UpdateSkillGithubSyncResponses = {
         lastSyncError: string | null;
         usageCount: number;
         lastUsedAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -98992,6 +99244,7 @@ export type UpdateSkillGithubSyncResponses = {
         }>;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -99531,6 +99784,7 @@ export type ImportGithubSkillsResponses = {
             lastSyncError: string | null;
             usageCount: number;
             lastUsedAt: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -101561,7 +101815,8 @@ export type GetTeamsResponses = {
             roles: Array<string>;
             organizationId: string;
             parentId: string | null;
-            createdBy: string;
+            createdBy: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             updatedAt: string;
             convertToolResultsToToon: boolean;
@@ -101693,7 +101948,8 @@ export type CreateTeamResponses = {
         roles: Array<string>;
         organizationId: string;
         parentId: string | null;
-        createdBy: string;
+        createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         convertToolResultsToToon: boolean;
@@ -101891,7 +102147,8 @@ export type GetTeamResponses = {
         roles: Array<string>;
         organizationId: string;
         parentId: string | null;
-        createdBy: string;
+        createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         convertToolResultsToToon: boolean;
@@ -102016,7 +102273,8 @@ export type UpdateTeamResponses = {
         roles: Array<string>;
         organizationId: string;
         parentId: string | null;
-        createdBy: string;
+        createdBy: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         updatedAt: string;
         convertToolResultsToToon: boolean;
@@ -104583,6 +104841,7 @@ export type GetAllVirtualApiKeysResponses = {
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             expiresAt: string | null;
+            createdByServiceAccountId: string | null;
             createdAt: string;
             lastUsedAt: string | null;
             teams: Array<{
@@ -104592,6 +104851,7 @@ export type GetAllVirtualApiKeysResponses = {
             authorName: string | null;
             createdBy: {
                 id: string;
+                type?: 'user' | 'service_account';
                 name: string | null;
                 email: string | null;
             } | null;
@@ -104723,6 +104983,7 @@ export type CreateVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;
@@ -104733,6 +104994,7 @@ export type CreateVirtualApiKeyResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -104925,6 +105187,7 @@ export type GetVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{
@@ -104934,6 +105197,7 @@ export type GetVirtualApiKeyResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;
@@ -105057,6 +105321,7 @@ export type UpdateVirtualApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         expiresAt: string | null;
+        createdByServiceAccountId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{
@@ -105066,6 +105331,7 @@ export type UpdateVirtualApiKeyResponses = {
         authorName: string | null;
         createdBy: {
             id: string;
+            type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
         } | null;

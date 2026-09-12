@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-08
+lastUpdated: 2026-09-12
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -123,6 +123,12 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 ## Custom Roles
 
 Users with `ac:create` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs.
+
+### Service Account Creators
+
+Service accounts can create organization and team resources within their assigned permissions. Creator attribution records the service account separately from human ownership. Attribution does not grant additional access or team membership.
+
+Personal resources require a human owner. Projects start as personal resources and require a user account.
 
 ### Multiple Roles And Team Grants
 

@@ -157,7 +157,7 @@ export const PluginWithFilesSchema = PluginWithVisibilitySchema.extend({
   files: z.array(SelectPluginFileSchema),
 });
 
-export const PluginListItemSchema = PublicPluginSchema.omit({
+export const PluginListItemSchema = PluginWithVisibilitySchema.omit({
   githubAppConfigId: true,
   githubPatId: true,
   lastSyncError: true,

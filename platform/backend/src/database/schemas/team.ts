@@ -6,9 +6,11 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 import type { TeamMemberRole } from "@/types/team-role";
 import organizationsTable from "./organization";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 export const team = pgTable(
@@ -28,9 +30,14 @@ export const team = pgTable(
     parentId: text("parent_team_id").references((): AnyPgColumn => team.id, {
       onDelete: "set null",
     }),
-    createdBy: text("created_by")
-      .notNull()
-      .references(() => usersTable.id, { onDelete: "cascade" }),
+    createdBy: text("created_by").references(() => usersTable.id, {
+      onDelete: "cascade",
+    }),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at")
       .$onUpdate(() => /* @__PURE__ */ new Date())

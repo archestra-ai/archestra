@@ -13,6 +13,7 @@ import type { SkillGithubSyncInterval, SkillSourceType } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import githubAppConfigsTable from "./github-app-config";
 import githubPatsTable from "./github-pat";
+import serviceAccountsTable from "./service-account";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -186,6 +187,11 @@ const skillsTable = softDeletablePgTable(
     usageCount: integer("usage_count").notNull().default(0),
     /** When the skill was last activated (see `usageCount`). */
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

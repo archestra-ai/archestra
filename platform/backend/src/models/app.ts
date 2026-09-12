@@ -29,6 +29,7 @@ import AppAccessModel from "./app-access";
 import AppLabelModel from "./app-label";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
+import CreatedByModel from "./created-by";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpCatalogUserModel from "./mcp-catalog-user";
 
@@ -475,7 +476,13 @@ class AppModel {
     const run = async (tx: Transaction) => {
       const [app] = await tx
         .insert(schema.appsTable)
-        .values({ ...params.app, latestVersion: 1 })
+        .values(
+          await CreatedByModel.forInsert({
+            data: { ...params.app, latestVersion: 1 },
+            userIdField: "authorId",
+            transaction: tx,
+          }),
+        )
         .returning();
 
       await AppVersionModel.insertVersion(tx, {

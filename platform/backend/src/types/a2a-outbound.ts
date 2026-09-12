@@ -1,4 +1,7 @@
-import { ResourceVisibilityScopeSchema } from "@archestra/shared";
+import {
+  CreatedByNullableSchema,
+  ResourceVisibilityScopeSchema,
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -254,6 +257,7 @@ export const PublicA2aRemoteAgentSchema = SelectA2aRemoteAgentSchema.extend({
   assignmentCount: z.number().int().nonnegative(),
   lastUsedAt: z.date().nullable(),
   authorName: z.string().nullable(),
+  createdBy: CreatedByNullableSchema,
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
   users: z.array(
     z.object({ id: z.string(), name: z.string(), email: z.string() }),

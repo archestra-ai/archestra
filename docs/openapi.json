@@ -42938,6 +42938,12 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -43070,6 +43076,36 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "createdBy": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
+                          },
+                          "name": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "email": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      },
                       "teams": {
                         "type": "array",
                         "items": {
@@ -43125,6 +43161,7 @@
                       "agentCard",
                       "cardHash",
                       "lastDiscoveredAt",
+                      "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
                       "connection",
@@ -43132,6 +43169,7 @@
                       "assignmentCount",
                       "lastUsedAt",
                       "authorName",
+                      "createdBy",
                       "teams",
                       "users"
                     ],
@@ -43618,6 +43656,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -43750,6 +43794,36 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -43805,6 +43879,7 @@
                     "agentCard",
                     "cardHash",
                     "lastDiscoveredAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "connection",
@@ -43812,6 +43887,7 @@
                     "assignmentCount",
                     "lastUsedAt",
                     "authorName",
+                    "createdBy",
                     "teams",
                     "users"
                   ],
@@ -44134,6 +44210,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -44266,6 +44348,36 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -44321,6 +44433,7 @@
                     "agentCard",
                     "cardHash",
                     "lastDiscoveredAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "connection",
@@ -44328,6 +44441,7 @@
                     "assignmentCount",
                     "lastUsedAt",
                     "authorName",
+                    "createdBy",
                     "teams",
                     "users"
                   ],
@@ -44819,6 +44933,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -44951,6 +45071,36 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -45006,6 +45156,7 @@
                     "agentCard",
                     "cardHash",
                     "lastDiscoveredAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "connection",
@@ -45013,6 +45164,7 @@
                     "assignmentCount",
                     "lastUsedAt",
                     "authorName",
+                    "createdBy",
                     "teams",
                     "users"
                   ],
@@ -47489,6 +47641,12 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -47649,6 +47807,13 @@
                               "id": {
                                 "type": "string"
                               },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
+                              },
                               "name": {
                                 "nullable": true,
                                 "type": "string"
@@ -47788,6 +47953,7 @@
                           "builtInAgentConfig",
                           "builtIn",
                           "latestVersion",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
                           "deletedAt",
@@ -49255,6 +49421,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -49415,6 +49587,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -49554,6 +49733,7 @@
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -50392,6 +50572,12 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -50552,6 +50738,13 @@
                           "id": {
                             "type": "string"
                           },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
+                          },
                           "name": {
                             "nullable": true,
                             "type": "string"
@@ -50691,6 +50884,7 @@
                       "builtInAgentConfig",
                       "builtIn",
                       "latestVersion",
+                      "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
@@ -51714,6 +51908,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -51874,6 +52074,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -52013,6 +52220,7 @@
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -53105,6 +53313,12 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "createdByServiceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -53265,6 +53479,13 @@
                             "id": {
                               "type": "string"
                             },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "user",
+                                "service_account"
+                              ]
+                            },
                             "name": {
                               "nullable": true,
                               "type": "string"
@@ -53404,6 +53625,7 @@
                         "builtInAgentConfig",
                         "builtIn",
                         "latestVersion",
+                        "createdByServiceAccountId",
                         "createdAt",
                         "updatedAt",
                         "deletedAt",
@@ -54179,6 +54401,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -54339,6 +54567,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -54478,6 +54713,7 @@
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -55714,6 +55950,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -55874,6 +56116,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -56013,6 +56262,7 @@
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -58080,6 +58330,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -58240,6 +58496,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -58379,6 +58642,7 @@
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -59147,6 +59411,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -59307,6 +59577,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -59446,6 +59723,7 @@
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -66750,6 +67028,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -66910,6 +67194,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -67049,6 +67340,7 @@
                     "builtInAgentConfig",
                     "builtIn",
                     "latestVersion",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -86210,6 +86502,13 @@
                                   "id": {
                                     "type": "string"
                                   },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "user",
+                                      "service_account"
+                                    ]
+                                  },
                                   "name": {
                                     "nullable": true,
                                     "type": "string"
@@ -86407,6 +86706,13 @@
                                 "properties": {
                                   "id": {
                                     "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "user",
+                                      "service_account"
+                                    ]
                                   },
                                   "name": {
                                     "nullable": true,
@@ -86979,6 +87285,12 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -87041,6 +87353,36 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "warnings": {
                       "type": "array",
                       "items": {
@@ -87067,6 +87409,7 @@
                     "enabled",
                     "openInFullscreen",
                     "locked",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -90344,6 +90687,12 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -90406,6 +90755,36 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -90459,29 +90838,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "name": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "email": {
-                          "nullable": true,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "name",
-                        "email"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -90498,6 +90854,7 @@
                     "enabled",
                     "openInFullscreen",
                     "locked",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -90505,11 +90862,11 @@
                     "environmentId",
                     "icon",
                     "labels",
+                    "createdBy",
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName",
-                    "createdBy"
+                    "authorName"
                   ],
                   "additionalProperties": false
                 }
@@ -90986,6 +91343,12 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -91048,6 +91411,36 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "warnings": {
                       "type": "array",
                       "items": {
@@ -91069,6 +91462,7 @@
                     "enabled",
                     "openInFullscreen",
                     "locked",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -92393,6 +92787,12 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -92455,6 +92855,36 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -92508,29 +92938,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "name": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "email": {
-                          "nullable": true,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "name",
-                        "email"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -92547,6 +92954,7 @@
                     "enabled",
                     "openInFullscreen",
                     "locked",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -92554,11 +92962,11 @@
                     "environmentId",
                     "icon",
                     "labels",
+                    "createdBy",
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName",
-                    "createdBy"
+                    "authorName"
                   ],
                   "additionalProperties": false
                 }
@@ -92916,6 +93324,12 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -92978,6 +93392,36 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -93031,29 +93475,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "name": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "email": {
-                          "nullable": true,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "name",
-                        "email"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -93070,6 +93491,7 @@
                     "enabled",
                     "openInFullscreen",
                     "locked",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -93077,11 +93499,11 @@
                     "environmentId",
                     "icon",
                     "labels",
+                    "createdBy",
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName",
-                    "createdBy"
+                    "authorName"
                   ],
                   "additionalProperties": false
                 }
@@ -93439,6 +93861,12 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -93501,6 +93929,36 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -93554,29 +94012,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "name": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "email": {
-                          "nullable": true,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "name",
-                        "email"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -93593,6 +94028,7 @@
                     "enabled",
                     "openInFullscreen",
                     "locked",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -93600,11 +94036,11 @@
                     "environmentId",
                     "icon",
                     "labels",
+                    "createdBy",
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName",
-                    "createdBy"
+                    "authorName"
                   ],
                   "additionalProperties": false
                 }
@@ -93962,6 +94398,12 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -94024,6 +94466,36 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -94077,29 +94549,6 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "name": {
-                          "nullable": true,
-                          "type": "string"
-                        },
-                        "email": {
-                          "nullable": true,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "name",
-                        "email"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -94116,6 +94565,7 @@
                     "enabled",
                     "openInFullscreen",
                     "locked",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -94123,11 +94573,11 @@
                     "environmentId",
                     "icon",
                     "labels",
+                    "createdBy",
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName",
-                    "createdBy"
+                    "authorName"
                   ],
                   "additionalProperties": false
                 }
@@ -95574,6 +96024,12 @@
                     "locked": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -95636,6 +96092,36 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "warnings": {
                       "type": "array",
                       "items": {
@@ -95657,6 +96143,7 @@
                     "enabled",
                     "openInFullscreen",
                     "locked",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -237361,6 +237848,12 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -237434,6 +237927,13 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
                           },
                           "name": {
                             "nullable": true,
@@ -237558,6 +238058,7 @@
                       "catalogItemApprovalReason",
                       "catalogItemApprovalReviewedBy",
                       "catalogItemApprovalReviewedAt",
+                      "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
@@ -238956,6 +239457,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -239030,6 +239537,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -239082,6 +239596,7 @@
                     "catalogItemApprovalReason",
                     "catalogItemApprovalReviewedBy",
                     "catalogItemApprovalReviewedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -240543,6 +241058,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -240617,6 +241138,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -240669,6 +241197,7 @@
                     "catalogItemApprovalReason",
                     "catalogItemApprovalReviewedBy",
                     "catalogItemApprovalReviewedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -242066,6 +242595,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -242140,6 +242675,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -242192,6 +242734,7 @@
                     "catalogItemApprovalReason",
                     "catalogItemApprovalReviewedBy",
                     "catalogItemApprovalReviewedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -244433,6 +244976,12 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -244507,6 +245056,13 @@
                           "id": {
                             "type": "string"
                           },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
+                          },
                           "name": {
                             "nullable": true,
                             "type": "string"
@@ -244559,6 +245115,7 @@
                       "catalogItemApprovalReason",
                       "catalogItemApprovalReviewedBy",
                       "catalogItemApprovalReviewedAt",
+                      "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
@@ -245383,6 +245940,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -245457,6 +246020,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -245509,6 +246079,7 @@
                     "catalogItemApprovalReason",
                     "catalogItemApprovalReviewedBy",
                     "catalogItemApprovalReviewedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -252927,6 +253498,12 @@
                           "status": {
                             "type": "string"
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -252946,6 +253523,13 @@
                             "properties": {
                               "id": {
                                 "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
                               },
                               "name": {
                                 "nullable": true,
@@ -253161,6 +253745,7 @@
                           "visibility",
                           "teamIds",
                           "status",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
                           "deletedAt",
@@ -253571,6 +254156,12 @@
                     "status": {
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -253590,6 +254181,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -253616,6 +254214,7 @@
                     "visibility",
                     "teamIds",
                     "status",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -253922,6 +254521,12 @@
                     "status": {
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -253941,6 +254546,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -253967,6 +254579,7 @@
                     "visibility",
                     "teamIds",
                     "status",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -254335,6 +254948,12 @@
                     "status": {
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -254354,6 +254973,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -254380,6 +255006,7 @@
                     "visibility",
                     "teamIds",
                     "status",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -257360,6 +257987,12 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -257379,6 +258012,13 @@
                             "properties": {
                               "id": {
                                 "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
                               },
                               "name": {
                                 "nullable": true,
@@ -257473,6 +258113,7 @@
                           "lastPermissionSyncStatus",
                           "checkpoint",
                           "aclConfigEpoch",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
                           "deletedAt",
@@ -259985,6 +260626,12 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -260004,6 +260651,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -260075,6 +260729,7 @@
                     "lastPermissionSyncStatus",
                     "checkpoint",
                     "aclConfigEpoch",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -261451,6 +262106,12 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -261470,6 +262131,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -261544,6 +262212,7 @@
                     "lastPermissionSyncStatus",
                     "checkpoint",
                     "aclConfigEpoch",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -263900,6 +264569,12 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -263919,6 +264594,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -263990,6 +264672,7 @@
                     "lastPermissionSyncStatus",
                     "checkpoint",
                     "aclConfigEpoch",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -270492,6 +271175,12 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -270515,6 +271204,7 @@
                           "teamIds",
                           "status",
                           "createdBy",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
                           "deletedAt"
@@ -273097,6 +273787,12 @@
                           "contentHash": {
                             "type": "string"
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -273107,6 +273803,13 @@
                             "properties": {
                               "id": {
                                 "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
                               },
                               "name": {
                                 "nullable": true,
@@ -273190,6 +273893,7 @@
                           "mimeType",
                           "sizeBytes",
                           "contentHash",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "createdBy",
                           "knowledgeBases",
@@ -273615,6 +274319,12 @@
                     "contentHash": {
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -273625,6 +274335,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -273708,6 +274425,7 @@
                     "mimeType",
                     "sizeBytes",
                     "contentHash",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "createdBy",
                     "knowledgeBases",
@@ -274446,6 +275164,12 @@
                     "contentHash": {
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -274456,6 +275180,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -274539,6 +275270,7 @@
                     "mimeType",
                     "sizeBytes",
                     "contentHash",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "createdBy",
                     "knowledgeBases",
@@ -274913,6 +275645,12 @@
                     "contentHash": {
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -274923,6 +275661,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -275006,6 +275751,7 @@
                     "mimeType",
                     "sizeBytes",
                     "contentHash",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "createdBy",
                     "knowledgeBases",
@@ -276566,6 +277312,12 @@
                       "visibility": {
                         "type": "string"
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -276580,6 +277332,13 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
                           },
                           "name": {
                             "nullable": true,
@@ -276612,6 +277371,7 @@
                       "organizationId",
                       "name",
                       "visibility",
+                      "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
                       "createdBy",
@@ -276924,6 +277684,12 @@
                     "visibility": {
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -276938,6 +277704,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -276970,6 +277743,7 @@
                     "organizationId",
                     "name",
                     "visibility",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "createdBy",
@@ -277290,6 +278064,12 @@
                     "visibility": {
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -277304,6 +278084,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -277336,6 +278123,7 @@
                     "organizationId",
                     "name",
                     "visibility",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "createdBy",
@@ -285317,6 +286105,13 @@
                               "id": {
                                 "type": "string"
                               },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
+                              },
                               "name": {
                                 "nullable": true,
                                 "type": "string"
@@ -285939,6 +286734,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -286528,6 +287330,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -287261,6 +288070,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -288615,6 +289431,12 @@
                       "requiresReauthentication": {
                         "type": "boolean"
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -288629,6 +289451,13 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
                           },
                           "name": {
                             "nullable": true,
@@ -288734,6 +289563,7 @@
                       "extraHeaders",
                       "isSystem",
                       "isPrimary",
+                      "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
                       "createdBy"
@@ -289190,10 +290020,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "baseUrl": {
                       "nullable": true,
                       "type": "string"
@@ -289218,6 +290044,12 @@
                     "requiresReauthentication": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -289225,6 +290057,109 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "teamName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "userName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretPath": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretKey": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "secretStorageType": {
+                      "type": "string",
+                      "enum": [
+                        "vault",
+                        "external_vault",
+                        "database",
+                        "none"
+                      ]
+                    },
+                    "bestModelId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "isAgentKey": {
+                      "type": "boolean"
+                    },
+                    "subscriptionKind": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "chatgpt",
+                        "github-copilot",
+                        "microsoft-365-copilot",
+                        "x-premium"
+                      ]
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "keyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "valueId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -289236,14 +290171,15 @@
                     "scope",
                     "userId",
                     "teamId",
-                    "createdBy",
                     "baseUrl",
                     "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
+                    "createdByServiceAccountId",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -289633,6 +290569,12 @@
                       "requiresReauthentication": {
                         "type": "boolean"
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -289647,6 +290589,13 @@
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
                           },
                           "name": {
                             "nullable": true,
@@ -289752,6 +290701,7 @@
                       "extraHeaders",
                       "isSystem",
                       "isPrimary",
+                      "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
                       "createdBy"
@@ -290111,6 +291061,12 @@
                     "requiresReauthentication": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -290125,6 +291081,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -290230,6 +291193,7 @@
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "createdBy"
@@ -290667,10 +291631,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "baseUrl": {
                       "nullable": true,
                       "type": "string"
@@ -290695,6 +291655,12 @@
                     "requiresReauthentication": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -290702,6 +291668,109 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "teamName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "userName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretPath": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretKey": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "secretStorageType": {
+                      "type": "string",
+                      "enum": [
+                        "vault",
+                        "external_vault",
+                        "database",
+                        "none"
+                      ]
+                    },
+                    "bestModelId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "isAgentKey": {
+                      "type": "boolean"
+                    },
+                    "subscriptionKind": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "chatgpt",
+                        "github-copilot",
+                        "microsoft-365-copilot",
+                        "x-premium"
+                      ]
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "keyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "valueId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -290713,14 +291782,15 @@
                     "scope",
                     "userId",
                     "teamId",
-                    "createdBy",
                     "baseUrl",
                     "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
+                    "createdByServiceAccountId",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -291345,10 +292415,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "baseUrl": {
                       "nullable": true,
                       "type": "string"
@@ -291373,6 +292439,12 @@
                     "requiresReauthentication": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -291380,6 +292452,109 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "teamName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "userName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretPath": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "vaultSecretKey": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "secretStorageType": {
+                      "type": "string",
+                      "enum": [
+                        "vault",
+                        "external_vault",
+                        "database",
+                        "none"
+                      ]
+                    },
+                    "bestModelId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "isAgentKey": {
+                      "type": "boolean"
+                    },
+                    "subscriptionKind": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "chatgpt",
+                        "github-copilot",
+                        "microsoft-365-copilot",
+                        "x-premium"
+                      ]
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "keyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "valueId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -291391,14 +292566,15 @@
                     "scope",
                     "userId",
                     "teamId",
-                    "createdBy",
                     "baseUrl",
                     "inferenceBaseUrl",
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
+                    "createdByServiceAccountId",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -293659,6 +294835,13 @@
                           "id": {
                             "type": "string"
                           },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
+                          },
                           "name": {
                             "nullable": true,
                             "type": "string"
@@ -294152,6 +295335,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -294661,6 +295851,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -295350,6 +296547,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -296203,6 +297407,12 @@
                           }
                         ]
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "ownerId": {
                         "nullable": true,
                         "type": "string"
@@ -296463,6 +297673,7 @@
                       "serverType",
                       "secretId",
                       "environmentValues",
+                      "createdByServiceAccountId",
                       "ownerId",
                       "teamId",
                       "scope",
@@ -296756,6 +297967,12 @@
                       "type": "string"
                     }
                   },
+                  "createdByServiceAccountId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "ownerId": {
                     "nullable": true,
                     "type": "string"
@@ -296896,6 +298113,12 @@
                           "items": {}
                         }
                       ]
+                    },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "ownerId": {
                       "nullable": true,
@@ -297111,6 +298334,7 @@
                     "serverType",
                     "secretId",
                     "environmentValues",
+                    "createdByServiceAccountId",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -297461,6 +298685,12 @@
                         }
                       ]
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "ownerId": {
                       "nullable": true,
                       "type": "string"
@@ -297675,6 +298905,7 @@
                     "serverType",
                     "secretId",
                     "environmentValues",
+                    "createdByServiceAccountId",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -298334,6 +299565,12 @@
                         }
                       ]
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "ownerId": {
                       "nullable": true,
                       "type": "string"
@@ -298548,6 +299785,7 @@
                     "serverType",
                     "secretId",
                     "environmentValues",
+                    "createdByServiceAccountId",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -299230,6 +300468,12 @@
                         }
                       ]
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "ownerId": {
                       "nullable": true,
                       "type": "string"
@@ -299444,6 +300688,7 @@
                     "serverType",
                     "secretId",
                     "environmentValues",
+                    "createdByServiceAccountId",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -301382,6 +302627,12 @@
                         }
                       ]
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "ownerId": {
                       "nullable": true,
                       "type": "string"
@@ -301596,6 +302847,7 @@
                     "serverType",
                     "secretId",
                     "environmentValues",
+                    "createdByServiceAccountId",
                     "ownerId",
                     "teamId",
                     "scope",
@@ -343152,6 +344404,12 @@
                       "enabled": {
                         "type": "boolean"
                       },
+                      "createdByServiceAccountId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -343238,6 +344496,36 @@
                           "additionalProperties": false
                         }
                       },
+                      "createdBy": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
+                          },
+                          "name": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "email": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      },
                       "fileCount": {
                         "type": "integer",
                         "minimum": 0,
@@ -343275,12 +344563,14 @@
                       "approvedAt",
                       "approvedBy",
                       "enabled",
+                      "createdByServiceAccountId",
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
                       "teams",
                       "users",
                       "labels",
+                      "createdBy",
                       "fileCount"
                     ],
                     "additionalProperties": false
@@ -343849,6 +345139,12 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -343941,6 +345237,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -344044,6 +345347,7 @@
                     "approvedAt",
                     "approvedBy",
                     "enabled",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -345098,6 +346402,12 @@
                           "enabled": {
                             "type": "boolean"
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -345190,6 +346500,13 @@
                             "properties": {
                               "id": {
                                 "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
                               },
                               "name": {
                                 "nullable": true,
@@ -345293,6 +346610,7 @@
                           "approvedAt",
                           "approvedBy",
                           "enabled",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
                           "deletedAt",
@@ -346257,6 +347575,12 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -346349,6 +347673,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -346452,6 +347783,7 @@
                     "approvedAt",
                     "approvedBy",
                     "enabled",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -347302,6 +348634,12 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -347394,6 +348732,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -347497,6 +348842,7 @@
                     "approvedAt",
                     "approvedBy",
                     "enabled",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -347980,6 +349326,12 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -348072,6 +349424,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -348175,6 +349534,7 @@
                     "approvedAt",
                     "approvedBy",
                     "enabled",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -348901,6 +350261,12 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -348993,6 +350359,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -349096,6 +350469,7 @@
                     "approvedAt",
                     "approvedBy",
                     "enabled",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -349742,6 +351116,12 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -349834,6 +351214,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -349937,6 +351324,7 @@
                     "approvedAt",
                     "approvedBy",
                     "enabled",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -352263,6 +353651,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -352743,6 +354138,13 @@
                           "id": {
                             "type": "string"
                           },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
+                          },
                           "name": {
                             "nullable": true,
                             "type": "string"
@@ -353209,6 +354611,13 @@
                         "id": {
                           "type": "string"
                         },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
+                        },
                         "name": {
                           "nullable": true,
                           "type": "string"
@@ -353619,6 +355028,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -355722,6 +357138,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -359434,6 +360857,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -359453,6 +360882,7 @@
                     "allowPersonal",
                     "allowOrganization",
                     "createdBy",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -360071,6 +361501,12 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -360090,6 +361526,7 @@
                     "allowPersonal",
                     "allowOrganization",
                     "createdBy",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -367812,6 +369249,13 @@
                           "id": {
                             "type": "string"
                           },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account"
+                            ]
+                          },
                           "name": {
                             "nullable": true,
                             "type": "string"
@@ -368238,6 +369682,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -368669,6 +370120,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -369154,6 +370612,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -374378,6 +375843,12 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -374397,6 +375868,13 @@
                             "properties": {
                               "id": {
                                 "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
                               },
                               "name": {
                                 "nullable": true,
@@ -374544,6 +376022,7 @@
                           "lastSyncError",
                           "usageCount",
                           "lastUsedAt",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
                           "deletedAt",
@@ -375110,6 +376589,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -375187,6 +376672,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -375324,6 +376816,7 @@
                     "lastSyncError",
                     "usageCount",
                     "lastUsedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -375759,6 +377252,12 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "createdByServiceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -375836,6 +377335,13 @@
                           "properties": {
                             "id": {
                               "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "user",
+                                "service_account"
+                              ]
                             },
                             "name": {
                               "nullable": true,
@@ -375973,6 +377479,7 @@
                         "lastSyncError",
                         "usageCount",
                         "lastUsedAt",
+                        "createdByServiceAccountId",
                         "createdAt",
                         "updatedAt",
                         "deletedAt",
@@ -376723,6 +378230,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -376800,6 +378313,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -376937,6 +378457,7 @@
                     "lastSyncError",
                     "usageCount",
                     "lastUsedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -377471,6 +378992,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -377548,6 +379075,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -377685,6 +379219,7 @@
                     "lastSyncError",
                     "usageCount",
                     "lastUsedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -380412,6 +381947,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -380489,6 +382030,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -380626,6 +382174,7 @@
                     "lastSyncError",
                     "usageCount",
                     "lastUsedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -381313,6 +382862,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -381390,6 +382945,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -381527,6 +383089,7 @@
                     "lastSyncError",
                     "usageCount",
                     "lastUsedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -381974,6 +383537,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -382051,6 +383620,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -382188,6 +383764,7 @@
                     "lastSyncError",
                     "usageCount",
                     "lastUsedAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -384014,6 +385591,12 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -384055,6 +385638,7 @@
                           "lastSyncError",
                           "usageCount",
                           "lastUsedAt",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
                           "deletedAt"
@@ -391592,7 +393176,14 @@
                             "type": "string"
                           },
                           "createdBy": {
+                            "nullable": true,
                             "type": "string"
+                          },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "createdAt": {
                             "type": "string",
@@ -391707,6 +393298,7 @@
                           "organizationId",
                           "parentId",
                           "createdBy",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "updatedAt",
                           "convertToolResultsToToon"
@@ -392106,7 +393698,14 @@
                       "type": "string"
                     },
                     "createdBy": {
+                      "nullable": true,
                       "type": "string"
+                    },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "createdAt": {
                       "type": "string",
@@ -392221,6 +393820,7 @@
                     "organizationId",
                     "parentId",
                     "createdBy",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "convertToolResultsToToon"
@@ -392516,7 +394116,14 @@
                       "type": "string"
                     },
                     "createdBy": {
+                      "nullable": true,
                       "type": "string"
+                    },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "createdAt": {
                       "type": "string",
@@ -392631,6 +394238,7 @@
                     "organizationId",
                     "parentId",
                     "createdBy",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "convertToolResultsToToon"
@@ -392989,7 +394597,14 @@
                       "type": "string"
                     },
                     "createdBy": {
+                      "nullable": true,
                       "type": "string"
+                    },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "createdAt": {
                       "type": "string",
@@ -393104,6 +394719,7 @@
                     "organizationId",
                     "parentId",
                     "createdBy",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "updatedAt",
                     "convertToolResultsToToon"
@@ -401864,6 +403480,12 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "createdByServiceAccountId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -401902,6 +403524,13 @@
                             "properties": {
                               "id": {
                                 "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "service_account"
+                                ]
                               },
                               "name": {
                                 "nullable": true,
@@ -402011,6 +403640,7 @@
                           "scope",
                           "authorId",
                           "expiresAt",
+                          "createdByServiceAccountId",
                           "createdAt",
                           "lastUsedAt",
                           "teams",
@@ -402493,6 +404123,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -402534,6 +404170,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -402643,6 +404286,7 @@
                     "scope",
                     "authorId",
                     "expiresAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "lastUsedAt",
                     "value",
@@ -402966,6 +404610,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -403004,6 +404654,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -403113,6 +404770,7 @@
                     "scope",
                     "authorId",
                     "expiresAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "lastUsedAt",
                     "teams",
@@ -403556,6 +405214,12 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "createdByServiceAccountId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -403594,6 +405258,13 @@
                       "properties": {
                         "id": {
                           "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "service_account"
+                          ]
                         },
                         "name": {
                           "nullable": true,
@@ -403703,6 +405374,7 @@
                     "scope",
                     "authorId",
                     "expiresAt",
+                    "createdByServiceAccountId",
                     "createdAt",
                     "lastUsedAt",
                     "teams",

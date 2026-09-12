@@ -416,6 +416,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
+    createdByServiceAccountId: true,
     isPersonalGateway: true,
     runtimeSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
@@ -459,6 +460,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
+    createdByServiceAccountId: true,
     isPersonalGateway: true,
     runtimeSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the

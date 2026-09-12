@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   index,
   pgTable,
@@ -29,6 +30,11 @@ const serviceAccountsTable = pgTable(
     createdBy: text("created_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /** Service account creator; separate from human ownership. */
+    createdByServiceAccountId: uuid("created_by_service_account_id").references(
+      (): AnyPgColumn => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

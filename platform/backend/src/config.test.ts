@@ -35,6 +35,7 @@ import config, {
   parseActiveChatRunPollIntervalMs,
   parseActiveUsersRefreshIntervalMs,
   parseAnthropicWifConfig,
+  parseAppaProxyHookConfig,
   parseBodyLimit,
   parseChatMaxOutputTokens,
   parseChatRateMeteredMaxOutputTokens,
@@ -438,6 +439,205 @@ describe("parseFrontendBaseUrl", () => {
     expect(parseFrontendBaseUrl(" https://app.example.com// ")).toBe(
       "https://app.example.com",
     );
+  });
+});
+
+describe("parseAppaProxyHookConfig", () => {
+  test("defaults to disabled and normalizes a valid cluster-local URL", () => {
+    expect(
+      parseAppaProxyHookConfig({
+        url: undefined,
+        timeoutMs: undefined,
+        sessionHmacSecret: undefined,
+      }),
+    ).toBeUndefined();
+    expect(
+      parseAppaProxyHookConfig({
+        url: " http://appa.openappa.svc.cluster.local:18787/ ",
+        timeoutMs: "2500",
+        sessionHmacSecret: "a".repeat(32),
+      }),
+    ).toEqual({
+      url: "http://appa.openappa.svc.cluster.local:18787",
+      timeoutMs: 2500,
+      sessionHmacSecret: "a".repeat(32),
+      maxCallsPerSession: 1000,
+      maxSessionsPerOwner: 100,
+      runtimeToken: undefined,
+      approvalSigningSecret: undefined,
+      autoAcceptRestrictions: false,
+      nativeCodexEnabled: false,
+      maxStreamBufferBytes: 16777216,
+    });
+  });
+
+  test.each([
+    { url: "https://appa.openappa.svc.cluster.local", timeoutMs: undefined },
+    { url: "http://appa.example.com", timeoutMs: undefined },
+    {
+      url: "http://user:password@appa.openappa.svc.cluster.local",
+      timeoutMs: undefined,
+    },
+    { url: "http://appa.openappa.svc.cluster.local", timeoutMs: "0" },
+    { url: "http://appa.openappa.svc.cluster.local", timeoutMs: "120001" },
+    { url: "http://appa.openappa.svc.cluster.local", timeoutMs: "1.5" },
+  ])("rejects unsafe hook configuration %#", ({ url, timeoutMs }) => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url,
+        timeoutMs,
+        sessionHmacSecret: "a".repeat(32),
+      }),
+    ).toThrow();
+  });
+
+  test.each([
+    ["http://127.0.0.1:18787", "development"],
+    ["http://[::1]:18787", "test"],
+  ])("accepts literal loopback URL %s only with the development/test opt-in", (url, nodeEnv) => {
+    expect(
+      parseAppaProxyHookConfig({
+        url,
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        allowLoopback: "true",
+        nodeEnv,
+        runtimeToken: "t".repeat(32),
+      }),
+    ).toMatchObject({ url, runtimeToken: "t".repeat(32) });
+  });
+
+  test.each([
+    ["http://127.0.0.1:18787", undefined, "development"],
+    ["http://127.0.0.1:18787", "true", "production"],
+    ["http://127.0.0.1:18787", "true", "prod"],
+    ["http://localhost:18787", "true", "development"],
+    ["http://127.0.0.2:18787", "true", "development"],
+    ["http://192.0.2.10:18787", "true", "development"],
+    ["http://appa.example.test:18787", "true", "development"],
+  ])("refuses non-opted, production, DNS, and remote loopback transports: %s", (url, allowLoopback, nodeEnv) => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url,
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        allowLoopback,
+        nodeEnv,
+        runtimeToken: "t".repeat(32),
+      }),
+    ).toThrow("APPA_HOOK_URL");
+  });
+
+  test("requires the v1 runtime token for a loopback transport", () => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url: "http://127.0.0.1:18787",
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        allowLoopback: "true",
+        nodeEnv: "development",
+      }),
+    ).toThrow("ALLOW_LOOPBACK requires an authenticated APPA v1 runtime token");
+  });
+
+  test.each([
+    "http://user:password@127.0.0.1:18787",
+    "http://127.0.0.1:18787?target=remote",
+    "http://127.0.0.1:18787#fragment",
+  ])("refuses credentials, queries, and fragments on loopback: %s", (url) => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url,
+        timeoutMs: undefined,
+        sessionHmacSecret: "s".repeat(32),
+        allowLoopback: "true",
+        nodeEnv: "development",
+        runtimeToken: "t".repeat(32),
+      }),
+    ).toThrow("APPA_HOOK_URL");
+  });
+
+  test("requires a stable HMAC secret when hooks are enabled", () => {
+    expect(() =>
+      parseAppaProxyHookConfig({
+        url: "http://appa.openappa.svc.cluster.local",
+        timeoutMs: undefined,
+        sessionHmacSecret: "short",
+      }),
+    ).toThrow("SESSION_HMAC_SECRET");
+  });
+
+  test("requires separate valid transport and approval keys", () => {
+    const base = {
+      url: "http://appa.openappa.svc.cluster.local",
+      timeoutMs: undefined,
+      sessionHmacSecret: "s".repeat(32),
+    };
+    expect(() =>
+      parseAppaProxyHookConfig({ ...base, runtimeToken: "short" }),
+    ).toThrow("RUNTIME_TOKEN");
+    expect(() =>
+      parseAppaProxyHookConfig({
+        ...base,
+        approvalSigningSecret: "a".repeat(32),
+      }),
+    ).toThrow("APPROVAL_SIGNING_SECRET");
+    expect(() =>
+      parseAppaProxyHookConfig({
+        ...base,
+        runtimeToken: "t".repeat(32),
+        approvalSigningSecret: "t".repeat(32),
+      }),
+    ).toThrow("APPROVAL_SIGNING_SECRET");
+    expect(
+      parseAppaProxyHookConfig({
+        ...base,
+        runtimeToken: "t".repeat(32),
+        approvalSigningSecret: "a".repeat(32),
+        autoAcceptRestrictions: "true",
+      }),
+    ).toMatchObject({
+      autoAcceptRestrictions: true,
+      approvalSigningSecret: "a".repeat(32),
+    });
+  });
+
+  test("requires an authenticated v1 runtime token before enabling native Codex", () => {
+    const base = {
+      url: "http://appa.openappa.svc.cluster.local",
+      timeoutMs: undefined,
+      sessionHmacSecret: "s".repeat(32),
+    };
+    expect(parseAppaProxyHookConfig(base)).toMatchObject({
+      nativeCodexEnabled: false,
+    });
+    expect(() =>
+      parseAppaProxyHookConfig({ ...base, nativeCodexEnabled: "true" }),
+    ).toThrow(
+      "NATIVE_CODEX_ENABLED requires an authenticated APPA v1 runtime token",
+    );
+    expect(
+      parseAppaProxyHookConfig({
+        ...base,
+        runtimeToken: "t".repeat(32),
+        nativeCodexEnabled: "true",
+      }),
+    ).toMatchObject({ nativeCodexEnabled: true });
+  });
+
+  test("rejects invalid ledger budgets instead of silently weakening limits", () => {
+    for (const field of ["maxCallsPerSession", "maxSessionsPerOwner"]) {
+      for (const value of ["0", "-1", "NaN", "1.5", "1e20"]) {
+        expect(() =>
+          parseAppaProxyHookConfig({
+            url: "http://appa.openappa.svc.cluster.local",
+            timeoutMs: undefined,
+            sessionHmacSecret: "a".repeat(32),
+            [field]: value,
+          }),
+        ).toThrow("ledger limits");
+      }
+    }
   });
 });
 

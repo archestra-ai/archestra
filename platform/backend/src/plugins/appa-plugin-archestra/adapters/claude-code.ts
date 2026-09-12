@@ -1,0 +1,138 @@
+import {
+  type AppaClientAdapter,
+  type AppaProtocol,
+  type AppaSessionIdentity,
+  type AppaToolCall,
+  type AppaToolResult,
+  isAppaSpawnTool,
+} from "../types";
+import { isRecord, readHeader } from "../utils";
+
+/**
+ * Client adapter for Claude Code over Anthropic Messages protocol (/v1/messages).
+ */
+export class AppaClaudeCodeAdapter implements AppaClientAdapter {
+  readonly id = "claude-code";
+  readonly protocol: AppaProtocol = "anthropic";
+
+  matches(context: {
+    protocol: AppaProtocol;
+    headers: Record<string, string | string[] | undefined>;
+    requestBody: unknown;
+  }): boolean {
+    if (context.protocol !== "anthropic") return false;
+    const userAgent = String(
+      context.headers["user-agent"] ?? context.headers["User-Agent"] ?? "",
+    ).toLowerCase();
+    const clientApp = String(
+      context.headers["x-client-app"] ?? "",
+    ).toLowerCase();
+    return (
+      userAgent.includes("claude-code") ||
+      userAgent.includes("claude_code") ||
+      userAgent.includes("claude-cli") ||
+      clientApp.includes("claude-code") ||
+      clientApp.includes("claude_code")
+    );
+  }
+
+  extractSessionIdentity(context: {
+    headers: Record<string, string | string[] | undefined>;
+    requestBody: unknown;
+  }): AppaSessionIdentity {
+    const threadId =
+      readHeader(context.headers, "x-session-id") ??
+      readHeader(context.headers, "x-anthropic-session-id");
+    const spawnBinding = readHeader(context.headers, "x-appa-spawn-binding");
+    return {
+      clientSessionId: threadId,
+      threadId,
+      spawnBinding,
+    };
+  }
+
+  canonicalizeLocalToolName(rawName: string): string {
+    if (
+      rawName.startsWith("mcp/") ||
+      rawName.startsWith("mcp__") ||
+      rawName.startsWith("host/")
+    ) {
+      return rawName;
+    }
+    return `host/claude-code/${rawName}`;
+  }
+
+  extractToolCalls(responseBody: unknown): AppaToolCall[] {
+    if (!isRecord(responseBody) || !Array.isArray(responseBody.content)) {
+      return [];
+    }
+    const calls: AppaToolCall[] = [];
+    for (const block of responseBody.content) {
+      if (isRecord(block) && block.type === "tool_use") {
+        const name = String(block.name ?? "");
+        calls.push({
+          id: String(block.id ?? ""),
+          name,
+          arguments: isRecord(block.input) ? block.input : {},
+          raw: block,
+          spawn: isAppaSpawnTool(name),
+        });
+      }
+    }
+    return calls;
+  }
+
+  rewriteToolCalls(
+    responseBody: unknown,
+    authorizedCalls: AppaToolCall[],
+  ): unknown {
+    if (!isRecord(responseBody) || !Array.isArray(responseBody.content)) {
+      return responseBody;
+    }
+    const authorizedMap = new Map(authorizedCalls.map((c) => [c.id, c]));
+    const content = responseBody.content.map((block) => {
+      if (isRecord(block) && block.type === "tool_use") {
+        const authorized = authorizedMap.get(String(block.id));
+        if (authorized) {
+          return {
+            ...block,
+            name: authorized.name,
+            input: authorized.arguments,
+          };
+        }
+      }
+      return block;
+    });
+    return { ...responseBody, content };
+  }
+
+  extractToolResults(requestBody: unknown): AppaToolResult[] {
+    if (!isRecord(requestBody) || !Array.isArray(requestBody.messages)) {
+      return [];
+    }
+    const results: AppaToolResult[] = [];
+    for (const message of requestBody.messages) {
+      if (isRecord(message) && Array.isArray(message.content)) {
+        for (const block of message.content) {
+          if (isRecord(block) && block.type === "tool_result") {
+            results.push({
+              id: String(block.tool_use_id ?? ""),
+              content: block.content,
+              isError: Boolean(block.is_error),
+            });
+          }
+        }
+      }
+    }
+    return results;
+  }
+
+  formatToolResult(admittedResult: AppaToolResult): unknown {
+    return {
+      type: "tool_result",
+      tool_use_id: admittedResult.id,
+      content: admittedResult.content,
+      is_error: admittedResult.isError ?? false,
+    };
+  }
+}

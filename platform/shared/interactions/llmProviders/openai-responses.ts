@@ -31,9 +31,6 @@ type OpenAiResponsesInteractionRecord = Omit<
   >;
 };
 
-type OpenAiResponsesOutputItem =
-  OpenAiResponsesInteractionRecord["response"]["output"][number];
-
 class OpenAiResponsesInteraction implements InteractionUtils {
   private interaction: OpenAiResponsesInteractionRecord;
   modelName: string;
@@ -57,7 +54,7 @@ class OpenAiResponsesInteraction implements InteractionUtils {
 
   getToolNamesUsed(): string[] {
     const requestedToolNamesByCallId = new Map(
-      this.interaction.response.output
+      this.getOutputItems()
         .filter(isResponseFunctionCall)
         .map((item) => [item.call_id, item.name]),
     );
@@ -70,13 +67,13 @@ class OpenAiResponsesInteraction implements InteractionUtils {
   getToolNamesRefused(): string[] {
     const toolNames = new Set<string>();
 
-    for (const item of this.interaction.response.output) {
+    for (const item of this.getOutputItems()) {
       if (!isResponseMessage(item)) {
         continue;
       }
 
-      for (const part of item.content) {
-        if (part.type !== "refusal") {
+      for (const part of getResponseMessageParts(item.content)) {
+        if (!isResponseRefusalPart(part)) {
           continue;
         }
 
@@ -91,7 +88,7 @@ class OpenAiResponsesInteraction implements InteractionUtils {
   }
 
   getToolNamesRequested(): string[] {
-    return this.interaction.response.output
+    return this.getOutputItems()
       .filter(isResponseFunctionCall)
       .map((item) => item.name);
   }
@@ -111,26 +108,13 @@ class OpenAiResponsesInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
-    const assistantMessage =
-      this.interaction.response.output.find(isResponseMessage);
+    const assistantMessage = this.getOutputItems().find(isResponseMessage);
 
     if (!assistantMessage) {
       return "";
     }
 
-    return assistantMessage.content
-      .flatMap((part) => {
-        if (part.type === "output_text") {
-          return [part.text];
-        }
-
-        if (part.type === "refusal") {
-          return [part.refusal];
-        }
-
-        return [];
-      })
-      .join("\n");
+    return extractResponseMessageText(assistantMessage.content);
   }
 
   mapToUiMessages(): PartialUIMessage[] {
@@ -147,21 +131,9 @@ class OpenAiResponsesInteraction implements InteractionUtils {
       });
     }
 
-    for (const item of this.interaction.response.output) {
+    for (const item of this.getOutputItems()) {
       if (isResponseMessage(item)) {
-        const text = item.content
-          .flatMap((part) => {
-            if (part.type === "output_text") {
-              return [part.text];
-            }
-
-            if (part.type === "refusal") {
-              return [part.refusal];
-            }
-
-            return [];
-          })
-          .join("\n");
+        const text = extractResponseMessageText(item.content);
 
         messages.push({
           role: "assistant",
@@ -192,6 +164,11 @@ class OpenAiResponsesInteraction implements InteractionUtils {
     return Array.isArray(this.interaction.request.input)
       ? this.interaction.request.input
       : [];
+  }
+
+  private getOutputItems(): unknown[] {
+    const output = this.interaction.response.output;
+    return Array.isArray(output) ? output : [];
   }
 }
 
@@ -232,20 +209,88 @@ function isFunctionCallOutputItem(
     !!item &&
     typeof item === "object" &&
     "type" in item &&
-    item.type === "function_call_output"
+    item.type === "function_call_output" &&
+    "call_id" in item &&
+    typeof item.call_id === "string"
   );
 }
 
 function isResponseMessage(
-  item: OpenAiResponsesOutputItem,
-): item is Extract<OpenAiResponsesOutputItem, { type: "message" }> {
-  return item.type === "message";
+  item: unknown,
+): item is { type: "message"; content: unknown } {
+  return (
+    !!item &&
+    typeof item === "object" &&
+    "type" in item &&
+    item.type === "message" &&
+    "content" in item
+  );
 }
 
-function isResponseFunctionCall(
-  item: OpenAiResponsesOutputItem,
-): item is Extract<OpenAiResponsesOutputItem, { type: "function_call" }> {
-  return item.type === "function_call";
+function isResponseFunctionCall(item: unknown): item is {
+  type: "function_call";
+  call_id: string;
+  name: string;
+  arguments: string;
+} {
+  return (
+    !!item &&
+    typeof item === "object" &&
+    "type" in item &&
+    item.type === "function_call" &&
+    "call_id" in item &&
+    typeof item.call_id === "string" &&
+    "name" in item &&
+    typeof item.name === "string" &&
+    "arguments" in item &&
+    typeof item.arguments === "string"
+  );
+}
+
+function getResponseMessageParts(content: unknown): unknown[] {
+  return Array.isArray(content) ? content : [];
+}
+
+function extractResponseMessageText(content: unknown): string {
+  return getResponseMessageParts(content)
+    .flatMap((part) => {
+      if (isResponseOutputTextPart(part)) {
+        return [part.text];
+      }
+
+      if (isResponseRefusalPart(part)) {
+        return [part.refusal];
+      }
+
+      return [];
+    })
+    .join("\n");
+}
+
+function isResponseOutputTextPart(
+  part: unknown,
+): part is { type: "output_text"; text: string } {
+  return (
+    !!part &&
+    typeof part === "object" &&
+    "type" in part &&
+    part.type === "output_text" &&
+    "text" in part &&
+    typeof part.text === "string"
+  );
+}
+
+function isResponseRefusalPart(
+  part: unknown,
+): part is { type: "refusal"; refusal: string } {
+  return (
+    !!part &&
+    typeof part === "object" &&
+    "type" in part &&
+    part.type === "refusal" &&
+    "refusal" in part &&
+    typeof part.refusal === "string"
+  );
 }
 
 function extractInputMessageText(content: unknown): string {

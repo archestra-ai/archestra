@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { collectDeclaredToolNames } from "./declared-tool-names";
+import {
+  collectDeclaredMcpToolTargets,
+  collectDeclaredToolNames,
+} from "./declared-tool-names";
 
 describe("collectDeclaredToolNames", () => {
   describe("Anthropic messages", () => {
@@ -137,5 +140,60 @@ describe("collectDeclaredToolNames", () => {
       expect(collectDeclaredToolNames(undefined)).toEqual([]);
       expect(collectDeclaredToolNames("nonsense")).toEqual([]);
     });
+  });
+});
+
+describe("collectDeclaredMcpToolTargets", () => {
+  test("maps declared client MCP spellings to the runtime identity", () => {
+    expect(
+      collectDeclaredMcpToolTargets({
+        tools: [
+          { name: "mcp__fixture__read_source" },
+          {
+            type: "function",
+            function: { name: "mcp__fixture__read_source_private" },
+          },
+          {
+            type: "namespace",
+            name: "mcp__fixture",
+            tools: [{ type: "function", name: "publish" }],
+          },
+        ],
+      }),
+    ).toEqual(
+      new Map([
+        ["mcp__fixture__read_source", "mcp/fixture/read_source"],
+        [
+          "mcp__fixture__read_source_private",
+          "mcp/fixture/read_source_private",
+        ],
+        ["mcp__fixture__publish", "mcp/fixture/publish"],
+      ]),
+    );
+  });
+
+  test("uses the first delimiter as the server boundary", () => {
+    expect(
+      collectDeclaredMcpToolTargets({
+        tools: [{ name: "mcp__fixture__read_source__versioned" }],
+      }).get("mcp__fixture__read_source__versioned"),
+    ).toBe("mcp/fixture/read_source__versioned");
+  });
+
+  test("does not turn built-ins, malformed names, or request payloads into MCP targets", () => {
+    expect(
+      collectDeclaredMcpToolTargets({
+        tools: [
+          { name: "Bash" },
+          { name: "mcp__fixture" },
+          { name: "mcp__fixture__" },
+          { name: "mcp__fixture__read source" },
+        ],
+        input: [
+          { name: "mcp__fixture__read_source" },
+          { tool_name: "mcp__fixture__read_source" },
+        ],
+      }).size,
+    ).toBe(0);
   });
 });

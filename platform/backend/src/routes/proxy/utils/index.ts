@@ -7,7 +7,10 @@ export {
   resolveInteractionBillingMode,
 } from "./billing-mode";
 export * as costOptimization from "./cost-optimization";
-export { collectDeclaredToolNames } from "./declared-tool-names";
+export {
+  collectDeclaredMcpToolTargets,
+  collectDeclaredToolNames,
+} from "./declared-tool-names";
 export * as gatewayToolNames from "./gateway-tool-names";
 export * as headers from "./headers";
 export { checkModelTeamAccess } from "./model-team-access";

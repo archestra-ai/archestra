@@ -34,6 +34,7 @@ import {
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import type { AppaProxyHookConfig } from "@/routes/proxy/appa-proxy-hook";
 import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
@@ -111,6 +112,126 @@ export function parseFrontendBaseUrl(rawValue: string | undefined): string {
 const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
+
+/** @public — configuration is consumed by the LLM proxy hook client. */
+export function parseAppaProxyHookConfig(params: {
+  url: string | undefined;
+  timeoutMs: string | undefined;
+  sessionHmacSecret: string | undefined;
+  allowLoopback?: string | undefined;
+  nodeEnv?: string | undefined;
+  runtimeToken?: string | undefined;
+  approvalSigningSecret?: string | undefined;
+  autoAcceptRestrictions?: string | undefined;
+  maxCallsPerSession?: string | undefined;
+  maxSessionsPerOwner?: string | undefined;
+  nativeCodexEnabled?: string | undefined;
+  maxStreamBufferBytes?: string | undefined;
+}): AppaProxyHookConfig | undefined {
+  const rawUrl = params.url?.trim();
+  if (!rawUrl) {
+    return undefined;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_HOOK_URL must be an HTTP cluster-local URL",
+    );
+  }
+  const isClusterLocal = url.hostname.endsWith(".svc.cluster.local");
+  const isLoopback = url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  const allowLoopback =
+    params.allowLoopback === "true" &&
+    ["development", "test"].includes(params.nodeEnv?.toLowerCase() ?? "");
+  if (
+    url.protocol !== "http:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !(isClusterLocal || (allowLoopback && isLoopback))
+  ) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_HOOK_URL must be an HTTP .svc.cluster.local URL without credentials, query, or fragment; development/test may opt into literal loopback with ARCHESTRA_LLM_PROXY_APPA_ALLOW_LOOPBACK=true",
+    );
+  }
+
+  const rawTimeout = params.timeoutMs?.trim();
+  const timeoutMs = rawTimeout ? Number(rawTimeout) : 5000;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_HOOK_TIMEOUT_MS must be an integer between 1 and 120000",
+    );
+  }
+
+  const sessionHmacSecret = params.sessionHmacSecret?.trim();
+  if (!sessionHmacSecret || sessionHmacSecret.length < 32) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_SESSION_HMAC_SECRET must be at least 32 characters when OpenAPPA hooks are enabled",
+    );
+  }
+
+  const runtimeToken = params.runtimeToken?.trim() || undefined;
+  const approvalSigningSecret =
+    params.approvalSigningSecret?.trim() || undefined;
+  if (isLoopback && !runtimeToken) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_ALLOW_LOOPBACK requires an authenticated APPA v1 runtime token",
+    );
+  }
+  if (runtimeToken && runtimeToken.length < 32) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN must be at least 32 characters",
+    );
+  }
+  const nativeCodexEnabled = params.nativeCodexEnabled === "true";
+  if (nativeCodexEnabled && !runtimeToken) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_NATIVE_CODEX_ENABLED requires an authenticated APPA v1 runtime token",
+    );
+  }
+  if (
+    approvalSigningSecret &&
+    (!runtimeToken ||
+      approvalSigningSecret.length < 32 ||
+      approvalSigningSecret === runtimeToken)
+  ) {
+    throw new Error(
+      "ARCHESTRA_LLM_PROXY_APPA_APPROVAL_SIGNING_SECRET requires a separate 32-character secret and runtime token",
+    );
+  }
+  const maxStreamBufferBytes = params.maxStreamBufferBytes?.trim()
+    ? parsePositiveInt(params.maxStreamBufferBytes, 16 * 1024 * 1024)
+    : 16 * 1024 * 1024;
+  return {
+    url: url.toString().replace(/\/$/, ""),
+    timeoutMs,
+    sessionHmacSecret,
+    runtimeToken,
+    approvalSigningSecret,
+    autoAcceptRestrictions: params.autoAcceptRestrictions === "true",
+    maxCallsPerSession: parseAppaLedgerLimit(params.maxCallsPerSession, 1000),
+    maxSessionsPerOwner: parseAppaLedgerLimit(params.maxSessionsPerOwner, 100),
+    nativeCodexEnabled,
+    maxStreamBufferBytes,
+  };
+}
+
+function parseAppaLedgerLimit(
+  value: string | undefined,
+  fallback: number,
+): number {
+  if (!value?.trim()) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error("OpenAPPA ledger limits must be positive integers");
+  }
+  return parsed;
+}
+
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
@@ -3408,6 +3529,27 @@ const config = {
       process.env.ARCHESTRA_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
       DEFAULT_LLM_PROXY_STREAM_KEEPALIVE_INTERVAL_MS,
     ),
+    appaHook: parseAppaProxyHookConfig({
+      url: process.env.ARCHESTRA_LLM_PROXY_APPA_HOOK_URL,
+      timeoutMs: process.env.ARCHESTRA_LLM_PROXY_APPA_HOOK_TIMEOUT_MS,
+      sessionHmacSecret:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_SESSION_HMAC_SECRET,
+      allowLoopback: process.env.ARCHESTRA_LLM_PROXY_APPA_ALLOW_LOOPBACK,
+      nodeEnv: process.env.NODE_ENV,
+      runtimeToken: process.env.ARCHESTRA_LLM_PROXY_APPA_RUNTIME_TOKEN,
+      approvalSigningSecret:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_APPROVAL_SIGNING_SECRET,
+      autoAcceptRestrictions:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_AUTO_ACCEPT_RESTRICTIONS,
+      maxCallsPerSession:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_CALLS_PER_SESSION,
+      maxSessionsPerOwner:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_SESSIONS_PER_OWNER,
+      nativeCodexEnabled:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_NATIVE_CODEX_ENABLED,
+      maxStreamBufferBytes:
+        process.env.ARCHESTRA_LLM_PROXY_APPA_MAX_STREAM_BUFFER_BYTES,
+    }),
   },
   kb: {
     crawlerChromiumPath:

@@ -274,6 +274,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { limit, offset },
         { sortBy, sortDirection },
         {
+          organizationId,
           name,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,

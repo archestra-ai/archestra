@@ -283,6 +283,7 @@ const registry = defineArchestraTools([
           { limit, offset: 0 },
           undefined,
           {
+            organizationId: context.organizationId,
             agentType: "agent",
             ...(args.name ? { name: args.name } : {}),
             providerApiKeyId: args.providerApiKeyId,

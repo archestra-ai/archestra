@@ -1,0 +1,8 @@
+{
+  "archestra": "agent-archestra",
+  "claude-code": "agent-claude-code",
+  "codex": "agent-codex",
+  "opencode": "agent-opencode",
+  "hermes": "agent-hermes",
+  "openclaw": "agent-openclaw"
+}

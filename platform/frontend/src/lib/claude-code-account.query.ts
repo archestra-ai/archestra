@@ -71,9 +71,11 @@ export function useClaudeCodeSignIn(agentId: string) {
     onSuccess: async (data) => {
       await client.cancelQueries({ queryKey: accountKey(agentId) });
       client.setQueryData(accountKey(agentId), data);
-      void client.invalidateQueries({
-        queryKey: ["agents", agentId, "runtime", "preflight"],
-      });
+      if (data?.state === "connected") {
+        void client.invalidateQueries({ queryKey: ["claude-code-account"] });
+        void client.invalidateQueries({ queryKey: ["claude-code-models"] });
+        void client.invalidateQueries({ queryKey: ["agents"] });
+      }
     },
   });
 }
@@ -91,10 +93,9 @@ export function useDisconnectClaudeCodeAccount(agentId: string) {
     onSuccess: async (data) => {
       await client.cancelQueries({ queryKey: accountKey(agentId) });
       client.setQueryData(accountKey(agentId), data);
-      client.removeQueries({ queryKey: modelsKey(agentId) });
-      void client.invalidateQueries({
-        queryKey: ["agents", agentId, "runtime", "preflight"],
-      });
+      client.removeQueries({ queryKey: ["claude-code-models"] });
+      void client.invalidateQueries({ queryKey: ["claude-code-account"] });
+      void client.invalidateQueries({ queryKey: ["agents"] });
       toast.success("Claude Code disconnected");
     },
   });

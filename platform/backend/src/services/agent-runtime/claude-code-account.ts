@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
-import { isVaultReference } from "@archestra/shared";
+import { randomUUID } from "node:crypto";
+import { getAgentCatalogImages, isVaultReference } from "@archestra/shared";
 import { z } from "zod";
+import config from "@/config";
 import { claudeCodeAccountRuntime } from "@/k8s/agent-runtime/claude-code-account";
 import logger from "@/logging";
 import { EnvironmentModel, OrganizationModel } from "@/models";
@@ -29,11 +30,7 @@ class ClaudeCodeAccountManager {
     const account = await ClaudeCodeAccountModel.find(owner);
     const flow = await ClaudeCodeAccountModel.flow(owner);
     const base = { requiresVaultReference: isByosEnabled() };
-    if (
-      flow &&
-      flow.image === params.runtime.image &&
-      !isExpired(flow.expiresAt)
-    ) {
+    if (flow && !isExpired(flow.expiresAt)) {
       if (flow.vaultReference)
         return { ...base, state: "connecting", flowId: flow.flowId };
       if (params.inspectFlow === false)
@@ -54,7 +51,7 @@ class ClaudeCodeAccountManager {
         flowId: flow.flowId,
       };
     }
-    if (account && account.image === params.runtime.image)
+    if (account)
       return {
         ...base,
         state: isExpired(account.expiresAt) ? "expired" : "connected",
@@ -89,7 +86,9 @@ class ClaudeCodeAccountManager {
     const flow = {
       flowId,
       namespace: owner.namespace,
-      image: params.runtime.image,
+      image: getAgentCatalogImages(config.agentRuntime.defaultImage)[
+        "claude-code"
+      ],
       vaultReference: params.vaultReference,
     };
     await ClaudeCodeAccountModel.startFlow({ owner, flow });
@@ -97,7 +96,7 @@ class ClaudeCodeAccountManager {
     try {
       await claudeCodeAccountRuntime.create({
         ...owner,
-        image: params.runtime.image,
+        image: flow.image,
         flowId,
         vaultReference: Boolean(params.vaultReference),
       });
@@ -119,12 +118,7 @@ class ClaudeCodeAccountManager {
   ): Promise<ClaudeCodeAccountStatus> {
     const owner = await this.placement(params);
     const flow = await ClaudeCodeAccountModel.flow(owner);
-    if (
-      !flow ||
-      flow.flowId !== params.flowId ||
-      flow.image !== params.runtime.image ||
-      isExpired(flow.expiresAt)
-    )
+    if (!flow || flow.flowId !== params.flowId || isExpired(flow.expiresAt))
       throw new ApiError(
         409,
         "This sign-in has expired. Start Claude Code sign-in again.",
@@ -153,7 +147,7 @@ class ClaudeCodeAccountManager {
       // SPDX-SnippetEnd
       const result = CompletionSchema.safeParse(
         await claudeCodeAccountRuntime.complete({
-          namespace: owner.namespace,
+          namespace: flow.namespace,
           flowId: params.flowId,
           code: params.code,
           token,
@@ -185,7 +179,7 @@ class ClaudeCodeAccountManager {
         flowId: params.flowId,
         secretId,
         metadata: {
-          image: params.runtime.image,
+          image: flow.image,
           expiresAt,
           models: result.data.models,
         },
@@ -213,9 +207,7 @@ class ClaudeCodeAccountManager {
     const account = await ClaudeCodeAccountModel.find(owner);
     return {
       models:
-        account?.secretId &&
-        account.image === params.runtime.image &&
-        !isExpired(account.expiresAt)
+        account?.secretId && !isExpired(account.expiresAt)
           ? account.models
           : [],
     };
@@ -238,14 +230,10 @@ class ClaudeCodeAccountManager {
     if (owner.namespace !== params.runtimeScope)
       throw new ApiError(
         409,
-        "Claude Code account belongs to a different environment.",
+        "The Agent environment changed. Start the run again.",
       );
     const account = await ClaudeCodeAccountModel.find(owner);
-    if (
-      !account?.secretId ||
-      account.image !== params.runtime.image ||
-      isExpired(account.expiresAt)
-    )
+    if (!account?.secretId || isExpired(account.expiresAt))
       throw new AgentRuntimeCredentialsRequiredError(params.runtime.agentId, [
         {
           key: "CLAUDE_CODE_ACCOUNT",
@@ -290,9 +278,6 @@ class ClaudeCodeAccountManager {
       agentId: params.runtime.agentId,
       namespace,
       effectiveNetworkPolicy,
-      // Lowercase, colon-delimited keys cannot be declared as environment
-      // variables, so generic runtime credentials cannot expose this token.
-      key: `claude-code-account:${createHash("sha256").update(namespace).digest("hex")}`,
     };
   }
 

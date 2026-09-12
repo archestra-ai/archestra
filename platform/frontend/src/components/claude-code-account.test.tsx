@@ -170,3 +170,55 @@ it("replaces a failed image pull with an explanation and lets the user retry", a
   ).toBeVisible();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
+
+it("updates every Agent after connecting and disconnecting the shared account", async () => {
+  const user = userEvent.setup();
+  let account: archestraApiTypes.GetClaudeCodeAccountResponses["200"] = {
+    state: "disconnected",
+  };
+  const url = `${origin}/api/agents/:id/runtime/claude-code/account`;
+  server.use(
+    http.get(url, () => HttpResponse.json(account)),
+    http.post(url, () => {
+      account = {
+        state: "awaiting_code",
+        flowId: "00000000-0000-4000-8000-000000000001",
+        authorizationUrl: "https://claude.ai/oauth/authorize",
+      };
+      return HttpResponse.json(account);
+    }),
+    http.delete(url, () => {
+      account = { state: "disconnected" };
+      return HttpResponse.json(account);
+    }),
+    http.post(`${url}/complete`, () => {
+      account = { state: "connected" };
+      return HttpResponse.json(account);
+    }),
+  );
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ClaudeCodeAccount agentId="agent-1" />
+      <ClaudeCodeAccount agentId="agent-2" />
+    </QueryClientProvider>,
+  );
+  await user.click(
+    (await screen.findAllByRole("button", { name: "Sign in" }))[0],
+  );
+  await user.click(screen.getByRole("button", { name: "Sign in with Claude" }));
+  await user.type(
+    await screen.findByLabelText("Authorization code"),
+    "example-code",
+  );
+  await user.click(screen.getByRole("button", { name: "Complete sign-in" }));
+  expect(await screen.findAllByText("Signed in for you")).toHaveLength(2);
+  expect(
+    screen.queryByText("Sign in to use this agent."),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getAllByRole("button", { name: "Manage" })[1]);
+  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  expect(await screen.findAllByText("Sign in to use this agent.")).toHaveLength(
+    2,
+  );
+  expect(screen.queryByText("Signed in for you")).not.toBeInTheDocument();
+});

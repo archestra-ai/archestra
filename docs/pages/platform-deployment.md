@@ -966,28 +966,13 @@ Check **Settings → Agents → Runtime Backend** if the runtime is unavailable.
 <!-- SPDX-License-Identifier: LicenseRef-Archestra-Enterprise -->
 #### Runtime Image Cache
 
-Cold image downloads delay runtime launches and personal Claude sign-in. The Helm chart can pre-pull selected images onto runtime nodes, including newly added nodes.
+Archestra automatically prefetches the six popular catalog images when Agent Runtime starts. Downloads run in the background without delaying API readiness. Kubernetes skips images already cached on the node.
 
-```yaml
-archestra:
-  agentRuntime:
-    imagePrepull:
-      images:
-        - registry.example.com/agents/claude-code:v1
-      nodeSelector:
-        archestra-agent-runtime: "true"
-      tolerations:
-        - key: archestra-agent-runtime
-          operator: Equal
-          value: "true"
-          effect: NoSchedule
-```
+Each image has a DaemonSet covering the runtime node pool, including newly added nodes. Placement follows `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR`. Catalog image versions follow `ARCHESTRA_AGENT_RUNTIME_BASE_IMAGE`. Changes replace the previous prefetch DaemonSets. Custom Agent images are downloaded when their runtimes start.
 
-Use immutable tags or digests matching the Agent's configured image. Match `nodeSelector` to `ARCHESTRA_AGENT_RUNTIME_NODE_SELECTOR` and set tolerations for that pool. Each selected image uses disk on every matching node. An empty `images` list disables caching.
+The prefetch uses the runtime namespace's default ServiceAccount image pull secrets. Bootstrap image, registry secrets, resources, and priority reuse the MCP image pre-pull settings below. Each image consumes disk on every matching node.
 
-Each image has its own DaemonSet; failed downloads do not block other images. Wait for these DaemonSets to become ready before expecting cached startup times. Fresh nodes still need their first download.
-
-For private registries, set `imagePullSecrets` to Secrets in the Helm release namespace. The `bootstrapImage` setting supports private mirrors containing a static `/bin/busybox`. Set `priorityClassName` to your cluster's low-priority class when available.
+Fresh nodes still need their first download. An unavailable image does not block other images or Agent launches.
 <!-- SPDX-SnippetEnd -->
 
 #### Privileged Containers

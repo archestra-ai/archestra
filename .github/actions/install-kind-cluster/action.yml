@@ -42,6 +42,25 @@ runs:
         install_only: false
         wait: 300s
 
+    - name: Configure Docker Hub cache for Kind nodes
+      shell: bash
+      env:
+        KIND_CLUSTER_NAME: ${{ inputs.cluster-name }}
+      run: |
+        # Containerd inside Kind does not inherit the host Docker configuration.
+        # Prefer Google's public Docker Hub cache, with upstream as the fallback
+        # for uncached images. Cover both reference forms used by our charts.
+        for node in $(kind get nodes --name "${KIND_CLUSTER_NAME}"); do
+          for registry in docker.io registry-1.docker.io; do
+            docker exec "${node}" mkdir -p "/etc/containerd/certs.d/${registry}"
+            docker exec -i "${node}" tee "/etc/containerd/certs.d/${registry}/hosts.toml" >/dev/null <<'EOF'
+        server = "https://registry-1.docker.io"
+        [host."https://mirror.gcr.io"]
+          capabilities = ["pull", "resolve"]
+        EOF
+          done
+        done
+
     - name: Save Kind node image to cache
       if: ${{ steps.cache-kind-node.outputs.cache-hit != 'true' }}
       shell: bash

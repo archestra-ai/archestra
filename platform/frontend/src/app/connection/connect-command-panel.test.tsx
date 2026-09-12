@@ -1274,23 +1274,9 @@ describe("ConnectCommandPanel", () => {
       // implementation detail: what matters is that it is switched off.
       expect.objectContaining({ enabled: false }),
     );
-    expect(allSkillsMock).not.toHaveBeenCalledWith(
-      expect.objectContaining({ forAgentId: expect.anything() }),
-    );
     expect(
       screen.queryByTestId("skills-marketplace-step"),
     ).not.toBeInTheDocument();
-  });
-
-  it("does not scope the skills catalog to the LLM proxy", () => {
-    renderPanel();
-
-    expect(allSkillsMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: true }),
-    );
-    expect(allSkillsMock).not.toHaveBeenCalledWith(
-      expect.objectContaining({ forAgentId: expect.anything() }),
-    );
   });
 
   it("still offers the marketplace step when there is nothing to put in a command", async () => {

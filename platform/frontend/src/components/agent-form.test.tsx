@@ -673,8 +673,16 @@ vi.mock("@/components/ui/command", () => ({
     <div>{children}</div>
   ),
   CommandInput: () => null,
-  CommandItem: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
+  CommandItem: ({
+    children,
+    onSelect,
+  }: {
+    children?: React.ReactNode;
+    onSelect?: () => void;
+  }) => (
+    <button type="button" role="option" onClick={onSelect}>
+      {children}
+    </button>
   ),
   CommandList: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -735,6 +743,9 @@ vi.mock("@/components/ui/overlapped-icons", () => ({
 
 vi.mock("@/components/ui/popover", () => ({
   Popover: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PopoverAnchor: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
   PopoverContent: ({ children }: { children?: React.ReactNode }) => (
@@ -989,8 +1000,9 @@ describe("AgentForm delegation state", () => {
       ),
     ).toBeInTheDocument();
     await user.click(
-      within(section).getByRole("button", { name: "Add Target Agent" }),
+      within(section).getByRole("combobox", { name: "Add subagent" }),
     );
+    await user.click(screen.getByRole("option", { name: /Target Agent/ }));
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     await waitFor(() =>
@@ -1002,6 +1014,96 @@ describe("AgentForm delegation state", () => {
     );
     expect(syncDelegations).toHaveBeenCalledWith(
       expect.objectContaining({ targetAgentIds: [targetAgent.id] }),
+    );
+  });
+
+  it.each([
+    "create",
+    "edit",
+  ])("uses canonical subagent details in the %s flow", async (flow) => {
+    const user = userEvent.setup();
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [
+        {
+          ...targetAgent,
+          icon: "🔭",
+          scope: "personal",
+          authorName: "Agent Owner",
+        },
+      ],
+    });
+
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={flow === "edit" ? baseAgent : undefined}
+      />,
+    );
+
+    await user.click(subagentModeTab("Manual"));
+    await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
+
+    const option = screen.getByRole("option", { name: /Target Agent/ });
+    expect(within(option).getByText("🔭")).toBeInTheDocument();
+    expect(within(option).getByText("Agent Owner")).toBeInTheDocument();
+    expect(within(option).getByText("Personal")).toBeInTheDocument();
+  });
+
+  it.each([
+    "create",
+    "edit",
+  ])("offers creation of a missing subagent only in Manual mode in the %s flow", async (flow) => {
+    const user = userEvent.setup();
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [] });
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={flow === "edit" ? baseAgent : undefined}
+      />,
+    );
+
+    await user.click(subagentModeTab("Manual"));
+    await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
+    expect(
+      screen.getByRole("link", { name: "Create a New Agent" }),
+    ).toHaveAttribute("href", "/agents/new");
+    await user.click(subagentModeTab("All"));
+    expect(
+      screen.queryByRole("link", { name: "Create a New Agent" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves the selected agent as an exclusion in All mode", async () => {
+    const user = userEvent.setup();
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    const syncExclusions = vi.fn().mockResolvedValue(undefined);
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isSuccess: true,
+    });
+    useUpdateAgentSubagentExclusionsMock.mockReturnValue({
+      mutateAsync: syncExclusions,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(autoAgent),
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Disable subagents" }),
+    );
+    await user.click(screen.getByRole("option", { name: /Target Agent/ }));
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() =>
+      expect(syncExclusions).toHaveBeenCalledWith({
+        agentId: baseAgent.id,
+        exclusions: { excludedSubagentIds: [targetAgent.id] },
+      }),
     );
   });
 

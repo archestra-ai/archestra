@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { ConnectorSyncBatch } from "@/types";
@@ -57,33 +58,11 @@ vi.mock("@octokit/rest", () => ({
   },
 }));
 
-vi.mock("node:crypto", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:crypto")>();
-  return {
-    ...actual,
-    createPrivateKey: vi.fn(() => "mock-key"),
-  };
+const { privateKey: appPrivateKey } = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+  privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  publicKeyEncoding: { type: "spki", format: "pem" },
 });
-
-vi.mock("jose", () => ({
-  SignJWT: class MockSignJWT {
-    setProtectedHeader() {
-      return this;
-    }
-    setIssuedAt() {
-      return this;
-    }
-    setExpirationTime() {
-      return this;
-    }
-    setIssuer() {
-      return this;
-    }
-    async sign() {
-      return "app-jwt";
-    }
-  },
-}));
 
 describe("GithubConnector", () => {
   let connector: GithubConnector;
@@ -234,9 +213,12 @@ describe("GithubConnector", () => {
       const originalFetch = globalThis.fetch;
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ token: "installation-token" }),
+        json: async () => ({
+          token: "installation-token",
+          expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+        }),
       });
-      globalThis.fetch = mockFetch as unknown as typeof fetch;
+      vi.stubGlobal("fetch", mockFetch);
 
       try {
         const result = await connector.testConnection({
@@ -246,11 +228,7 @@ describe("GithubConnector", () => {
             githubAppConfigId: "00000000-0000-4000-8000-000000000001",
           },
           credentials: {
-            apiToken: [
-              "-----BEGIN PRIVATE KEY-----",
-              "MIIB",
-              "-----END PRIVATE KEY-----",
-            ].join("\\n"),
+            apiToken: appPrivateKey.replaceAll("\n", "\\n"),
             githubApp: {
               githubUrl: "https://api.github.com",
               appId: "12345",
@@ -270,7 +248,7 @@ describe("GithubConnector", () => {
         expect(mockGetAuthenticated).not.toHaveBeenCalled();
         expect(capturedOctokitOptions[0]?.auth).toBe("installation-token");
       } finally {
-        globalThis.fetch = originalFetch;
+        vi.stubGlobal("fetch", originalFetch);
       }
     });
 
@@ -282,7 +260,7 @@ describe("GithubConnector", () => {
         statusText: "Unauthorized",
         text: async () => JSON.stringify({ message: "Bad credentials" }),
       });
-      globalThis.fetch = mockFetch as unknown as typeof fetch;
+      vi.stubGlobal("fetch", mockFetch);
 
       try {
         const result = await connector.testConnection({
@@ -292,11 +270,7 @@ describe("GithubConnector", () => {
             githubAppConfigId: "00000000-0000-4000-8000-000000000002",
           },
           credentials: {
-            apiToken: [
-              "-----BEGIN PRIVATE KEY-----",
-              "MIIB",
-              "-----END PRIVATE KEY-----",
-            ].join("\\n"),
+            apiToken: appPrivateKey.replaceAll("\n", "\\n"),
             githubApp: {
               githubUrl: "https://api.github.com",
               appId: "12345",
@@ -308,7 +282,7 @@ describe("GithubConnector", () => {
         expect(result.success).toBe(false);
         expect(result.error).toContain("Bad credentials");
       } finally {
-        globalThis.fetch = originalFetch;
+        vi.stubGlobal("fetch", originalFetch);
       }
     });
 
@@ -319,9 +293,12 @@ describe("GithubConnector", () => {
       const originalFetch = globalThis.fetch;
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ token: "cached-installation-token" }),
+        json: async () => ({
+          token: "cached-installation-token",
+          expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+        }),
       });
-      globalThis.fetch = mockFetch as unknown as typeof fetch;
+      vi.stubGlobal("fetch", mockFetch);
 
       const config = {
         ...validConfig,
@@ -329,11 +306,7 @@ describe("GithubConnector", () => {
         githubAppConfigId: "00000000-0000-4000-8000-000000000003",
       };
       const appCredentials = {
-        apiToken: [
-          "-----BEGIN PRIVATE KEY-----",
-          "MIIB",
-          "-----END PRIVATE KEY-----",
-        ].join("\\n"),
+        apiToken: appPrivateKey.replaceAll("\n", "\\n"),
         githubApp: {
           githubUrl: "https://api.github.com",
           appId: "12345",
@@ -353,7 +326,7 @@ describe("GithubConnector", () => {
           "cached-installation-token",
         );
       } finally {
-        globalThis.fetch = originalFetch;
+        vi.stubGlobal("fetch", originalFetch);
       }
     });
   });
@@ -470,9 +443,12 @@ describe("GithubConnector", () => {
       const originalFetch = globalThis.fetch;
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ token: "installation-token" }),
+        json: async () => ({
+          token: "installation-token",
+          expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+        }),
       });
-      globalThis.fetch = mockFetch as unknown as typeof fetch;
+      vi.stubGlobal("fetch", mockFetch);
 
       mockListReposAccessibleToInstallation.mockResolvedValueOnce({
         data: {
@@ -499,11 +475,7 @@ describe("GithubConnector", () => {
             githubAppConfigId: "00000000-0000-4000-8000-000000000004",
           },
           credentials: {
-            apiToken: [
-              "-----BEGIN PRIVATE KEY-----",
-              "MIIB",
-              "-----END PRIVATE KEY-----",
-            ].join("\\n"),
+            apiToken: appPrivateKey.replaceAll("\n", "\\n"),
             githubApp: {
               githubUrl: "https://api.github.com",
               appId: "12345",
@@ -528,7 +500,7 @@ describe("GithubConnector", () => {
           }),
         );
       } finally {
-        globalThis.fetch = originalFetch;
+        vi.stubGlobal("fetch", originalFetch);
       }
     });
 

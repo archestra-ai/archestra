@@ -75,15 +75,3 @@ bash benchmarks/ci.sh
 ```
 
 The launcher builds the backend and creates a disposable database. It removes the stack after measurement. The benchmark workflow also uploads raw samples and logs as CI artifacts.
-
-## Use Case: Evaluating a Runtime Change
-
-A team considers replacing Fastify or rewriting its proxy in Rust. It first measures synthetic chat requests using this benchmark. It then repeats the same workloads with the proposed implementation.
-
-A useful comparison keeps hardware, database, authentication, logging, and security behavior equivalent. Traces can separate database waits from request processing; see [Observability](/docs/platform-observability).
-
-## Limits
-
-The client, mock, and backend share host resources. The small database uses memory-backed storage. Results do not establish production capacity or hardware requirements.
-
-Higher concurrency includes queueing in the measured latency. These timings alone do not identify Fastify as the bottleneck. CI uses fewer samples on different hardware; compare its results separately. Streaming tail estimates are based on only 300 requests per target and concurrency.

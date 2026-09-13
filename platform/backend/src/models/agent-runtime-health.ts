@@ -12,7 +12,10 @@ class AgentRuntimeHealthModel {
     const live = sql`${tasks.state} IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_AUTH_REQUIRED')`;
     const terminal = sql`${tasks.state} IN ('TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_CANCELED', 'TASK_STATE_REJECTED')`;
     const undelivered = sql`${terminal} AND ${runs.completionTarget} IS NOT NULL AND ${runs.completionNotifiedAt} IS NULL`;
-    const recent = new Date(now.getTime() - 15 * 60_000);
+    // These columns store UTC without a timezone. Bind UTC strings explicitly;
+    // the PostgreSQL driver serializes Date parameters in the process timezone.
+    const timestamp = now.toISOString();
+    const recent = new Date(now.getTime() - 15 * 60_000).toISOString();
     return db
       .select({
         agentId: agents.id,
@@ -40,15 +43,15 @@ class AgentRuntimeHealthModel {
         completionPending:
           sql<number>`count(*) FILTER (WHERE ${undelivered})`.mapWith(Number),
         heartbeatAge:
-          sql<number>`coalesce(max(greatest(0, extract(epoch FROM (${now}::timestamp - coalesce(${tasks.lastHeartbeatAt}, ${tasks.createdAt}))))) FILTER (WHERE ${active}), 0)`.mapWith(
+          sql<number>`coalesce(max(greatest(0, extract(epoch FROM (${timestamp}::timestamp - coalesce(${tasks.lastHeartbeatAt}, ${tasks.createdAt}))))) FILTER (WHERE ${active}), 0)`.mapWith(
             Number,
           ),
         submittedAge:
-          sql<number>`coalesce(max(greatest(0, extract(epoch FROM (${now}::timestamp - coalesce(${tasks.stateChangedAt}, ${tasks.createdAt}))))) FILTER (WHERE ${tasks.state} = 'TASK_STATE_SUBMITTED'), 0)`.mapWith(
+          sql<number>`coalesce(max(greatest(0, extract(epoch FROM (${timestamp}::timestamp - coalesce(${tasks.stateChangedAt}, ${tasks.createdAt}))))) FILTER (WHERE ${tasks.state} = 'TASK_STATE_SUBMITTED'), 0)`.mapWith(
             Number,
           ),
         completionAge:
-          sql<number>`coalesce(max(greatest(0, extract(epoch FROM (${now}::timestamp - coalesce(${tasks.stateChangedAt}, ${runs.endedAt}, ${tasks.updatedAt}))))) FILTER (WHERE ${undelivered}), 0)`.mapWith(
+          sql<number>`coalesce(max(greatest(0, extract(epoch FROM (${timestamp}::timestamp - coalesce(${tasks.stateChangedAt}, ${runs.endedAt}, ${tasks.updatedAt}))))) FILTER (WHERE ${undelivered}), 0)`.mapWith(
             Number,
           ),
       })

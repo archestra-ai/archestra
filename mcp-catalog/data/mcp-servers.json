@@ -888,5 +888,6 @@
   "https://agenttools.wolfram.com/mcp",
   "https://mcp.notion.com/mcp",
   "https://github.com/moorcheh-ai/memanto/tree/main/integrations/mcp",
-  "https://mcp.circleci.com/v1/mcp"
+  "https://mcp.circleci.com/v1/mcp",
+  "https://api.you.com/mcp"
 ]

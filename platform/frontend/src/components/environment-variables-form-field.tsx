@@ -132,9 +132,7 @@ export function EnvironmentVariablesFormField<
     .map((credential) => ({
       id: credential.key,
       label: credential.name,
-      description: credential.allowOrganization
-        ? "Organization credential"
-        : "Your personal credential",
+      description: credential.description,
       icon: credential.icon,
       defaultKey: credential.kind?.startsWith("github_")
         ? "GITHUB_TOKEN"

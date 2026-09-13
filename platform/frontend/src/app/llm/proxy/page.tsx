@@ -16,25 +16,15 @@ import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { LlmProviderOptionLabel } from "@/components/llm-provider-select-items";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -137,8 +127,6 @@ function ProxyEndpointCard({
   onSelectProvider: (provider: ChatProvider) => void;
 }) {
   const providerCatalog = useModelProviderCatalog();
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const primary = providers.filter((p) => PRIMARY_PROVIDERS.includes(p));
   const rest = providers.filter((p) => !PRIMARY_PROVIDERS.includes(p));
   const selectedFromRest =
@@ -148,9 +136,6 @@ function ProxyEndpointCard({
   const tabProviders = selectedFromRest
     ? [...primary, selectedFromRest]
     : primary;
-  const searchResults = rest.filter((p) =>
-    providerCatalog.label(p).toLowerCase().includes(search.toLowerCase()),
-  );
 
   const url = routerSelected
     ? `${baseUrl}/model-router`
@@ -197,50 +182,34 @@ function ProxyEndpointCard({
               </button>
             ))}
             {rest.length > (selectedFromRest ? 1 : 0) && (
-              <Popover
-                open={searchOpen}
-                onOpenChange={(open) => {
-                  setSearchOpen(open);
-                  if (!open) setSearch("");
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="More providers"
-                    className={endpointTabClass(false)}
-                  >
-                    …
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      value={search}
-                      onValueChange={setSearch}
-                      placeholder="Search providers..."
-                    />
-                    <CommandList>
-                      <CommandEmpty>No providers found.</CommandEmpty>
-                      <CommandGroup>
-                        {searchResults.map((provider) => (
-                          <CommandItem
-                            key={provider}
-                            value={provider}
-                            onSelect={() => {
-                              onSelectProvider(provider);
-                              setSearchOpen(false);
-                              setSearch("");
-                            }}
-                          >
-                            {providerCatalog.label(provider)}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <SearchableSelect
+                value=""
+                onValueChange={(value) =>
+                  onSelectProvider(value as ChatProvider)
+                }
+                placeholder="…"
+                ariaLabel="More providers"
+                searchPlaceholder="Search providers..."
+                emptyMessage="No providers found."
+                items={rest.map((provider) => {
+                  const label = providerCatalog.label(provider);
+                  return {
+                    value: provider,
+                    label,
+                    content: (
+                      <LlmProviderOptionLabel
+                        icon={PROVIDER_CONFIG[provider].icon}
+                        name={label}
+                      />
+                    ),
+                  };
+                })}
+                className={cn(
+                  endpointTabClass(false),
+                  "h-auto w-auto min-w-0 justify-start rounded-none border-0 bg-transparent shadow-none hover:bg-transparent hover:text-white",
+                )}
+                contentClassName="w-64"
+              />
             )}
           </div>
         }

@@ -208,7 +208,9 @@ export function CreateConnectorDialog({
     // row referenced by the config, so no inline credentials are sent
     const usesGithubApp =
       values.connectorType === "github" &&
-      (values.config as { authMethod?: string }).authMethod === "github_app";
+      ["github_app", "credential"].includes(
+        (values.config as { authMethod?: string }).authMethod ?? "",
+      );
     // Individual Google Drive: the credential comes back from Google after the
     // connector exists, so nothing is sent with the create.
     const awaitsGoogleDriveOAuth =
@@ -281,7 +283,9 @@ export function CreateConnectorDialog({
   // App-auth GitHub connectors inherit their host from the App config, so the
   // connector's own URL field is hidden to avoid a misleading second host
   const usesGithubApp =
-    connectorType === "github" && authMethod === "github_app";
+    connectorType === "github" &&
+    authMethod !== "pat" &&
+    authMethod !== undefined;
   const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const needsEmail = connectorNeedsEmail(connectorType);
   const emailRequired = needsEmail && isCloud !== false;

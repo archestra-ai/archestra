@@ -199,7 +199,8 @@ export const GithubConfigSchema = z.object({
   type: GITHUB,
   githubUrl: connectorUrlSchema,
   owner: z.string(),
-  authMethod: z.enum(["pat", "github_app"]).optional(),
+  authMethod: z.enum(["pat", "github_app", "credential"]).optional(),
+  credentialId: z.string().min(1).max(128).optional(),
   // references a github_app_configs row that holds the App credentials.
   // "" is accepted and means absent (every consumer checks truthiness): the
   // auth-method toggle cleared the field to an empty string in older

@@ -1,95 +1,85 @@
-import { and, desc, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
 import type {
   GithubAppConfig,
   InsertGithubAppConfig,
   UpdateGithubAppConfig,
 } from "@/types";
+import {
+  createSharedCredential,
+  deleteSharedCredential,
+  listSharedCredentials,
+  updateSharedCredential,
+} from "./_shared/credential-store";
 
-class GithubAppConfigModel {
+/** Typed GitHub access to the shared credential store. */
+export default class GithubAppConfigModel {
   static async findByOrganization(
     organizationId: string,
   ): Promise<GithubAppConfig[]> {
-    return await db
-      .select()
-      .from(schema.githubAppConfigsTable)
-      .where(eq(schema.githubAppConfigsTable.organizationId, organizationId))
-      .orderBy(desc(schema.githubAppConfigsTable.createdAt));
+    const rows = await listSharedCredentials(organizationId, "github_app");
+    return rows.map(({ definition, secretId }) => ({
+      id: definition.id,
+      organizationId: definition.organizationId,
+      name: definition.name,
+      secretId,
+      createdAt: definition.createdAt,
+      updatedAt: definition.updatedAt,
+      githubUrl: definition.githubUrl ?? "https://api.github.com",
+      appId: definition.appId ?? "",
+      installationId: definition.installationId ?? "",
+    }));
   }
-
   static async findByIdForOrganization(params: {
     id: string;
     organizationId: string;
   }): Promise<GithubAppConfig | null> {
-    const [result] = await db
-      .select()
-      .from(schema.githubAppConfigsTable)
-      .where(
-        and(
-          eq(schema.githubAppConfigsTable.id, params.id),
-          eq(
-            schema.githubAppConfigsTable.organizationId,
-            params.organizationId,
-          ),
-        ),
-      );
-
-    return result ?? null;
+    return (
+      (
+        await GithubAppConfigModel.findByOrganization(params.organizationId)
+      ).find((row) => row.id === params.id) ?? null
+    );
   }
-
   static async create(data: InsertGithubAppConfig): Promise<GithubAppConfig> {
-    const [result] = await db
-      .insert(schema.githubAppConfigsTable)
-      .values(data)
-      .returning();
-
-    return result;
+    const definition = await createSharedCredential({
+      ...data,
+      kind: "github_app",
+    });
+    return {
+      id: definition.id,
+      organizationId: definition.organizationId,
+      name: definition.name,
+      secretId: data.secretId ?? null,
+      createdAt: definition.createdAt,
+      updatedAt: definition.updatedAt,
+      githubUrl: definition.githubUrl ?? "https://api.github.com",
+      appId: definition.appId ?? "",
+      installationId: definition.installationId ?? "",
+    };
   }
-
   static async update(
     id: string,
     data: Partial<UpdateGithubAppConfig>,
   ): Promise<GithubAppConfig | null> {
-    const [result] = await db
-      .update(schema.githubAppConfigsTable)
-      .set(data)
-      .where(eq(schema.githubAppConfigsTable.id, id))
-      .returning();
-
-    return result ?? null;
+    const definition = await updateSharedCredential(id, data);
+    return definition
+      ? GithubAppConfigModel.findByIdForOrganization({
+          id,
+          organizationId: definition.organizationId,
+        })
+      : null;
   }
-
   static async findByIdForAudit(
     id: string,
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
-    const config = await GithubAppConfigModel.findByIdForOrganization({
+    const record = await GithubAppConfigModel.findByIdForOrganization({
       id,
       organizationId,
     });
-    if (!config) {
-      return null;
-    }
-    // the private-key secret handle must never land in audit snapshots
-    const { secretId: _secretId, ...sanitized } = config;
-    return sanitized;
+    if (!record) return null;
+    const { secretId: _secretId, ...snapshot } = record;
+    return snapshot;
   }
-
   static async delete(id: string): Promise<boolean> {
-    const rows = await db
-      .delete(schema.githubAppConfigsTable)
-      .where(eq(schema.githubAppConfigsTable.id, id))
-      .returning({ id: schema.githubAppConfigsTable.id });
-
-    return rows.length > 0;
-  }
-
-  static async restore(data: GithubAppConfig): Promise<void> {
-    await db
-      .insert(schema.githubAppConfigsTable)
-      .values(data)
-      .onConflictDoNothing();
+    return deleteSharedCredential(id);
   }
 }
-
-export default GithubAppConfigModel;

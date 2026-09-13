@@ -38,7 +38,7 @@ export interface EnvVarDraft {
   required: boolean;
   description: string;
   value: string;
-  /** Stable reusable connection id for Agent Runtime secrets. */
+  /** Stable reusable credential key. */
   credentialId?: string;
 }
 
@@ -156,6 +156,7 @@ export function EnvironmentVariableDialog({
 
   const valueRequired =
     draft.scope === "static" &&
+    !draft.credentialId &&
     !hasStoredSecret &&
     !(draft.type === "boolean") &&
     !(deferStaticSecretValue && draft.type === "secret");
@@ -178,7 +179,7 @@ export function EnvironmentVariableDialog({
   const credentialIdError =
     requiresCredentialBinding &&
     draft.credentialId !== undefined &&
-    !/^[a-z][a-z0-9._-]*$/.test(draft.credentialId);
+    !activeCredentialBinding;
 
   const canSubmit =
     trimmedKey.length > 0 &&
@@ -216,6 +217,7 @@ export function EnvironmentVariableDialog({
         }
         if (patch.type !== "secret") next.credentialId = undefined;
       }
+      if (patch.credentialId) next.required = true;
       const binding = credentialBindingOptions?.find(
         (option) => option.id === next.credentialId,
       );
@@ -281,25 +283,13 @@ export function EnvironmentVariableDialog({
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="env-var-description">Description</Label>
-          {(draft.scope === "installation" ||
-            (allowRequiredStaticSecret &&
-              draft.scope === "static" &&
-              draft.type === "secret")) && (
-            <FieldDescription>
-              Shown as helper text when &quot;{trimmedKey || "KEY"}&quot; is
-              requested.
-            </FieldDescription>
-          )}
-          <Textarea
-            id="env-var-description"
-            value={draft.description}
-            onChange={(e) => updateDraft({ description: e.target.value })}
-            placeholder="What this variable is used for"
-            rows={2}
+        {requiresCredentialBinding && (
+          <CredentialBindingEditor
+            draft={draft}
+            options={credentialBindingOptions}
+            onChange={updateDraft}
           />
-        </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -341,15 +331,7 @@ export function EnvironmentVariableDialog({
           </div>
         </div>
 
-        {requiresCredentialBinding && (
-          <CredentialBindingEditor
-            draft={draft}
-            options={credentialBindingOptions}
-            onChange={updateDraft}
-          />
-        )}
-
-        {draft.scope === "static" && (
+        {draft.scope === "static" && !draft.credentialId && (
           <StaticValueEditor
             draft={draft}
             hasStoredSecret={hasStoredSecret}
@@ -363,7 +345,27 @@ export function EnvironmentVariableDialog({
           />
         )}
 
-        {draft.scope === "installation" && (
+        <div className="space-y-2">
+          <Label htmlFor="env-var-description">Description</Label>
+          {(draft.scope === "installation" ||
+            (allowRequiredStaticSecret &&
+              draft.scope === "static" &&
+              draft.type === "secret")) && (
+            <FieldDescription>
+              Shown as helper text when &quot;{trimmedKey || "KEY"}&quot; is
+              requested.
+            </FieldDescription>
+          )}
+          <Textarea
+            id="env-var-description"
+            value={draft.description}
+            onChange={(e) => updateDraft({ description: e.target.value })}
+            placeholder="What this variable is used for"
+            rows={2}
+          />
+        </div>
+
+        {(draft.scope === "installation" || draft.credentialId) && (
           <RequiredToggleCard
             checked={draft.required}
             onChange={(required) => updateDraft({ required })}
@@ -405,13 +407,13 @@ function CredentialBindingEditor({
         <Label htmlFor="env-var-credential-binding">Secret source</Label>
         <FieldDescription>
           {reserved
-            ? "Uses a saved connection. Rotating it updates every Agent that uses it."
-            : "Saved for this Agent only."}{" "}
+            ? "Uses a saved credential. New executions use its current value."
+            : "Provide a value for this resource."}{" "}
           <Link
-            href="/settings/agents#runtime-credentials"
+            href="/settings/credentials"
             className="font-medium text-foreground underline underline-offset-4"
           >
-            Manage saved connections
+            Manage credentials
           </Link>
         </FieldDescription>
       </div>
@@ -429,6 +431,7 @@ function CredentialBindingEditor({
                   key: draft.key || option.defaultKey,
                   description: draft.description || option.description,
                   scope,
+                  value: "",
                 }
               : { credentialId: undefined },
           );
@@ -446,11 +449,14 @@ function CredentialBindingEditor({
               key={option.id}
               value={option.id}
               description={
-                option.description ? (
-                  <span className="line-clamp-2 whitespace-normal">
-                    {option.description}
-                  </span>
-                ) : undefined
+                <span className="line-clamp-2 whitespace-normal">
+                  {option.allowedScopes.includes("static")
+                    ? "Organization credential"
+                    : "Personal credential"}
+                  {option.description && (
+                    <span>{` · ${option.description}`}</span>
+                  )}
+                </span>
               }
               icon={<RuntimeCredentialIcon icon={option.icon ?? null} />}
             >
@@ -461,11 +467,11 @@ function CredentialBindingEditor({
             value="one-off"
             description={
               <span className="line-clamp-2 whitespace-normal">
-                Only this Agent can use this saved value.
+                This value is saved only for this resource.
               </span>
             }
           >
-            Agent-specific secret
+            Resource-specific secret
           </SelectItem>
         </SelectContent>
       </Select>

@@ -98811,6 +98811,9 @@
                 "agentRun.deleted",
                 "agentRun.shared",
                 "agentRun.unshared",
+                "credential.created",
+                "credential.updated",
+                "credential.deleted",
                 "runtimeCredential.created",
                 "runtimeCredential.updated",
                 "runtimeCredential.deleted",
@@ -99140,6 +99143,9 @@
                                   "agentRun.deleted",
                                   "agentRun.shared",
                                   "agentRun.unshared",
+                                  "credential.created",
+                                  "credential.updated",
+                                  "credential.deleted",
                                   "runtimeCredential.created",
                                   "runtimeCredential.updated",
                                   "runtimeCredential.deleted",
@@ -99780,6 +99786,9 @@
                             "agentRun.deleted",
                             "agentRun.shared",
                             "agentRun.unshared",
+                            "credential.created",
+                            "credential.updated",
+                            "credential.deleted",
                             "runtimeCredential.created",
                             "runtimeCredential.updated",
                             "runtimeCredential.deleted",
@@ -155209,7 +155218,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "List organization GitHub App configurations. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:read`: View GitHub App configurations",
+        "description": "List organization GitHub App configurations. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -155231,6 +155240,14 @@
                       "name": {
                         "type": "string"
                       },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "githubUrl": {
                         "type": "string"
                       },
@@ -155239,25 +155256,17 @@
                       },
                       "installationId": {
                         "type": "string"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
                       }
                     },
                     "required": [
                       "id",
                       "organizationId",
                       "name",
+                      "createdAt",
+                      "updatedAt",
                       "githubUrl",
                       "appId",
-                      "installationId",
-                      "createdAt",
-                      "updatedAt"
+                      "installationId"
                     ],
                     "additionalProperties": false
                   }
@@ -155497,7 +155506,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:read"
+            "credential:read"
           ]
         }
       },
@@ -155506,7 +155515,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Create a GitHub App configuration. The private key is stored as a secret and never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:create`: Create GitHub App configurations",
+        "description": "Create a GitHub App configuration. The private key is stored as a secret and never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:create`: Create saved credentials",
         "requestBody": {
           "required": true,
           "content": {
@@ -155565,6 +155574,14 @@
                     "name": {
                       "type": "string"
                     },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "githubUrl": {
                       "type": "string"
                     },
@@ -155573,25 +155590,17 @@
                     },
                     "installationId": {
                       "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "name",
+                    "createdAt",
+                    "updatedAt",
                     "githubUrl",
                     "appId",
-                    "installationId",
-                    "createdAt",
-                    "updatedAt"
+                    "installationId"
                   ],
                   "additionalProperties": false
                 }
@@ -155830,7 +155839,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:create"
+            "credential:create"
           ]
         }
       }
@@ -155841,7 +155850,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Get a GitHub App configuration. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:read`: View GitHub App configurations",
+        "description": "Get a GitHub App configuration. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
         "parameters": [
           {
             "schema": {
@@ -155873,6 +155882,14 @@
                     "name": {
                       "type": "string"
                     },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "githubUrl": {
                       "type": "string"
                     },
@@ -155881,25 +155898,17 @@
                     },
                     "installationId": {
                       "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "name",
+                    "createdAt",
+                    "updatedAt",
                     "githubUrl",
                     "appId",
-                    "installationId",
-                    "createdAt",
-                    "updatedAt"
+                    "installationId"
                   ],
                   "additionalProperties": false
                 }
@@ -156138,7 +156147,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:read"
+            "credential:read"
           ]
         }
       },
@@ -156147,7 +156156,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Update a GitHub App configuration. Provide a private key only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:update`: Modify GitHub App configurations",
+        "description": "Update a GitHub App configuration. Provide a private key only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
         "requestBody": {
           "required": true,
           "content": {
@@ -156212,6 +156221,14 @@
                     "name": {
                       "type": "string"
                     },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "githubUrl": {
                       "type": "string"
                     },
@@ -156220,25 +156237,17 @@
                     },
                     "installationId": {
                       "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "name",
+                    "createdAt",
+                    "updatedAt",
                     "githubUrl",
                     "appId",
-                    "installationId",
-                    "createdAt",
-                    "updatedAt"
+                    "installationId"
                   ],
                   "additionalProperties": false
                 }
@@ -156477,7 +156486,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:update"
+            "credential:update"
           ]
         }
       },
@@ -156486,7 +156495,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Delete a GitHub App configuration and its stored private key.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:delete`: Delete GitHub App configurations",
+        "description": "Delete a GitHub App configuration and its stored private key.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
         "parameters": [
           {
             "schema": {
@@ -156751,7 +156760,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:delete"
+            "credential:delete"
           ]
         }
       }
@@ -162232,7 +162241,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "List organization GitHub personal access tokens. The token value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:read`: View GitHub App configurations",
+        "description": "List organization GitHub personal access tokens. The token value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -162508,7 +162517,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:read"
+            "credential:read"
           ]
         }
       },
@@ -162517,7 +162526,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Store a GitHub personal access token. The token is stored as a secret and never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:create`: Create GitHub App configurations",
+        "description": "Store a GitHub personal access token. The token is stored as a secret and never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:create`: Create saved credentials",
         "requestBody": {
           "required": true,
           "content": {
@@ -162815,7 +162824,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:create"
+            "credential:create"
           ]
         }
       }
@@ -162826,7 +162835,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Rename a stored GitHub token. Provide a token only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:update`: Modify GitHub App configurations",
+        "description": "Rename a stored GitHub token. Provide a token only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
         "requestBody": {
           "required": true,
           "content": {
@@ -163132,7 +163141,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:update"
+            "credential:update"
           ]
         }
       },
@@ -163141,7 +163150,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Delete a stored GitHub token and its secret. Rejected while synced skills authenticate with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`githubAppConfig:delete`: Delete GitHub App configurations",
+        "description": "Delete a stored GitHub token and its secret. Rejected while synced skills authenticate with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
         "parameters": [
           {
             "schema": {
@@ -163406,7 +163415,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "githubAppConfig:delete"
+            "credential:delete"
           ]
         }
       }
@@ -237610,6 +237619,18 @@
                                 "value": {
                                   "type": "string"
                                 },
+                                "credentialId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                },
+                                "credentialScope": {
+                                  "type": "string",
+                                  "enum": [
+                                    "personal",
+                                    "organization"
+                                  ]
+                                },
                                 "promptOnInstallation": {
                                   "type": "boolean"
                                 },
@@ -238628,6 +238649,18 @@
                             "value": {
                               "type": "string"
                             },
+                            "credentialId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "credentialScope": {
+                              "type": "string",
+                              "enum": [
+                                "personal",
+                                "organization"
+                              ]
+                            },
                             "promptOnInstallation": {
                               "type": "boolean"
                             },
@@ -239218,6 +239251,18 @@
                               },
                               "value": {
                                 "type": "string"
+                              },
+                              "credentialId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "credentialScope": {
+                                "type": "string",
+                                "enum": [
+                                  "personal",
+                                  "organization"
+                                ]
                               },
                               "promptOnInstallation": {
                                 "type": "boolean"
@@ -240820,6 +240865,18 @@
                               "value": {
                                 "type": "string"
                               },
+                              "credentialId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "credentialScope": {
+                                "type": "string",
+                                "enum": [
+                                  "personal",
+                                  "organization"
+                                ]
+                              },
                               "promptOnInstallation": {
                                 "type": "boolean"
                               },
@@ -241756,6 +241813,18 @@
                             "value": {
                               "type": "string"
                             },
+                            "credentialId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "credentialScope": {
+                              "type": "string",
+                              "enum": [
+                                "personal",
+                                "organization"
+                              ]
+                            },
                             "promptOnInstallation": {
                               "type": "boolean"
                             },
@@ -242356,6 +242425,18 @@
                               },
                               "value": {
                                 "type": "string"
+                              },
+                              "credentialId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "credentialScope": {
+                                "type": "string",
+                                "enum": [
+                                  "personal",
+                                  "organization"
+                                ]
                               },
                               "promptOnInstallation": {
                                 "type": "boolean"
@@ -244738,6 +244819,18 @@
                                 "value": {
                                   "type": "string"
                                 },
+                                "credentialId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                },
+                                "credentialScope": {
+                                  "type": "string",
+                                  "enum": [
+                                    "personal",
+                                    "organization"
+                                  ]
+                                },
                                 "promptOnInstallation": {
                                   "type": "boolean"
                                 },
@@ -245701,6 +245794,18 @@
                               },
                               "value": {
                                 "type": "string"
+                              },
+                              "credentialId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "credentialScope": {
+                                "type": "string",
+                                "enum": [
+                                  "personal",
+                                  "organization"
+                                ]
                               },
                               "promptOnInstallation": {
                                 "type": "boolean"
@@ -257300,8 +257405,14 @@
                                         "type": "string",
                                         "enum": [
                                           "pat",
-                                          "github_app"
+                                          "github_app",
+                                          "credential"
                                         ]
+                                      },
+                                      "credentialId": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128
                                       },
                                       "githubAppConfigId": {
                                         "anyOf": [
@@ -258826,8 +258937,14 @@
                             "type": "string",
                             "enum": [
                               "pat",
-                              "github_app"
+                              "github_app",
+                              "credential"
                             ]
+                          },
+                          "credentialId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
                           },
                           "githubAppConfigId": {
                             "anyOf": [
@@ -259945,8 +260062,14 @@
                               "type": "string",
                               "enum": [
                                 "pat",
-                                "github_app"
+                                "github_app",
+                                "credential"
                               ]
+                            },
+                            "credentialId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
                             },
                             "githubAppConfigId": {
                               "anyOf": [
@@ -261419,8 +261542,14 @@
                                   "type": "string",
                                   "enum": [
                                     "pat",
-                                    "github_app"
+                                    "github_app",
+                                    "credential"
                                   ]
+                                },
+                                "credentialId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
                                 },
                                 "githubAppConfigId": {
                                   "anyOf": [
@@ -262771,8 +262900,14 @@
                             "type": "string",
                             "enum": [
                               "pat",
-                              "github_app"
+                              "github_app",
+                              "credential"
                             ]
+                          },
+                          "credentialId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
                           },
                           "githubAppConfigId": {
                             "anyOf": [
@@ -263888,8 +264023,14 @@
                               "type": "string",
                               "enum": [
                                 "pat",
-                                "github_app"
+                                "github_app",
+                                "credential"
                               ]
+                            },
+                            "credentialId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
                             },
                             "githubAppConfigId": {
                               "anyOf": [
@@ -360636,13 +360777,13 @@
         }
       }
     },
-    "/api/runtime-credentials": {
+    "/api/credentials": {
       "get": {
         "operationId": "listRuntimeCredentials",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "List runtime credentials available to Agents\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List reusable credentials available to platform integrations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -360653,6 +360794,30 @@
                   "items": {
                     "type": "object",
                     "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "secret",
+                          "github_app"
+                        ]
+                      },
+                      "githubUrl": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "appId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "installationId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "key": {
                         "type": "string",
                         "minLength": 1,
@@ -360686,6 +360851,11 @@
                       }
                     },
                     "required": [
+                      "id",
+                      "kind",
+                      "githubUrl",
+                      "appId",
+                      "installationId",
                       "key",
                       "name",
                       "description",
@@ -360934,16 +361104,16 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "credential:read"
           ]
         }
       },
       "post": {
         "operationId": "createRuntimeCredential",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "Create an runtime credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Create a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:create`: Create saved credentials",
         "requestBody": {
           "required": true,
           "content": {
@@ -360961,6 +361131,25 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 120
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "secret",
+                      "github_app"
+                    ]
+                  },
+                  "githubUrl": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "appId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "installationId": {
+                    "nullable": true,
+                    "type": "string"
                   },
                   "description": {
                     "type": "string",
@@ -361008,6 +361197,25 @@
                     "name": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "secret",
+                        "github_app"
+                      ]
+                    },
+                    "githubUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "installationId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "description": {
                       "type": "string"
                     },
@@ -361045,6 +361253,10 @@
                     "organizationId",
                     "key",
                     "name",
+                    "kind",
+                    "githubUrl",
+                    "appId",
+                    "installationId",
                     "description",
                     "icon",
                     "allowPersonal",
@@ -361291,18 +361503,18 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "credential:create"
           ]
         }
       }
     },
-    "/api/runtime-credentials/{key}/usage": {
+    "/api/credentials/{key}/usage": {
       "get": {
         "operationId": "getRuntimeCredentialUsage",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "List Agents using an runtime credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "List resources using a saved credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
         "parameters": [
           {
             "schema": {
@@ -361323,6 +361535,37 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "resources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "mcp",
+                              "skill",
+                              "plugin",
+                              "knowledge"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "agents": {
                       "type": "array",
                       "items": {
@@ -361346,6 +361589,7 @@
                     }
                   },
                   "required": [
+                    "resources",
                     "agents"
                   ],
                   "additionalProperties": false
@@ -361585,18 +361829,18 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "credential:read"
           ]
         }
       }
     },
-    "/api/runtime-credentials/{key}": {
+    "/api/credentials/{key}": {
       "patch": {
         "operationId": "updateRuntimeCredential",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "Update an runtime credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Update a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
         "requestBody": {
           "required": true,
           "content": {
@@ -361604,6 +361848,21 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "githubUrl": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "appId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "installationId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "description": {
                     "type": "string",
                     "maxLength": 1000
@@ -361652,6 +361911,25 @@
                     "name": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "secret",
+                        "github_app"
+                      ]
+                    },
+                    "githubUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "appId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "installationId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "description": {
                       "type": "string"
                     },
@@ -361689,6 +361967,10 @@
                     "organizationId",
                     "key",
                     "name",
+                    "kind",
+                    "githubUrl",
+                    "appId",
+                    "installationId",
                     "description",
                     "icon",
                     "allowPersonal",
@@ -361935,16 +362217,16 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "credential:update"
           ]
         }
       },
       "delete": {
         "operationId": "deleteRuntimeCredential",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "Delete an runtime credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Delete a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
         "parameters": [
           {
             "schema": {
@@ -362212,18 +362494,18 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "credential:delete"
           ]
         }
       }
     },
-    "/api/runtime-credentials/{key}/personal": {
+    "/api/credentials/{key}/personal": {
       "put": {
         "operationId": "setPersonalRuntimeCredentialConnection",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "Connect a personal runtime credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Connect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
         "requestBody": {
           "required": true,
           "content": {
@@ -362511,16 +362793,16 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "credential:read"
           ]
         }
       },
       "delete": {
         "operationId": "deletePersonalRuntimeCredentialConnection",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "Disconnect a personal runtime credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Disconnect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
         "parameters": [
           {
             "schema": {
@@ -362785,18 +363067,18 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agent:read"
+            "credential:read"
           ]
         }
       }
     },
-    "/api/runtime-credentials/{key}/organization": {
+    "/api/credentials/{key}/organization": {
       "put": {
         "operationId": "setOrganizationRuntimeCredentialConnection",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "Connect an organization runtime credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Connect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
         "requestBody": {
           "required": true,
           "content": {
@@ -363084,16 +363366,16 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "credential:update"
           ]
         }
       },
       "delete": {
         "operationId": "deleteOrganizationRuntimeCredentialConnection",
         "tags": [
-          "Agents"
+          "Credentials"
         ],
-        "description": "Disconnect an organization runtime credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Disconnect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
         "parameters": [
           {
             "schema": {
@@ -363358,7 +363640,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "agentSettings:update"
+            "credential:update"
           ]
         }
       }

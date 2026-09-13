@@ -21,6 +21,7 @@ interface EnvironmentVariablesReadOnlyTableProps<
   fieldNamePrefix: string;
   useExternalSecretsManager?: boolean;
   secretKeysWithStoredValue?: Set<string>;
+  credentialLabels?: Record<string, string>;
   showType?: boolean;
   keyLabel?: string;
   removeAriaLabel?: string;
@@ -43,6 +44,7 @@ export interface EnvironmentVariableTableRow {
 interface EnvironmentVariablesTableProps {
   rows: EnvironmentVariableTableRow[];
   useExternalSecretsManager?: boolean;
+  credentialLabels?: Record<string, string>;
   showType?: boolean;
   keyLabel?: string;
   promptedValueLabel?: string;
@@ -72,6 +74,7 @@ export function EnvironmentVariablesReadOnlyTable<
   fieldNamePrefix,
   useExternalSecretsManager = false,
   secretKeysWithStoredValue,
+  credentialLabels,
   showType = true,
   keyLabel = "Key",
   removeAriaLabel = "Remove variable",
@@ -104,11 +107,19 @@ export function EnvironmentVariablesReadOnlyTable<
     ) as string | undefined;
 
     return {
+      credentialId: form.watch(
+        `${fieldNamePrefix}.${index}.credentialId` as FieldPath<TFieldValues>,
+      ) as string | undefined,
       id: field.id,
       key: key ?? "",
       type,
       required,
-      scope: promptOnInstallation ? "installation" : "static",
+      scope:
+        form.watch(
+          `${fieldNamePrefix}.${index}.credentialScope` as FieldPath<TFieldValues>,
+        ) === "personal" || promptOnInstallation
+          ? "installation"
+          : "static",
       value,
       description,
       hasStoredSecret:
@@ -121,6 +132,7 @@ export function EnvironmentVariablesReadOnlyTable<
   return (
     <EnvironmentVariablesTable
       rows={rows}
+      credentialLabels={credentialLabels}
       useExternalSecretsManager={useExternalSecretsManager}
       showType={showType}
       keyLabel={keyLabel}
@@ -134,6 +146,7 @@ export function EnvironmentVariablesReadOnlyTable<
 export function EnvironmentVariablesTable({
   rows,
   useExternalSecretsManager = false,
+  credentialLabels,
   showType = true,
   keyLabel = "Key",
   promptedValueLabel = "per-installation",
@@ -175,7 +188,7 @@ export function EnvironmentVariablesTable({
             )}
             {row.credentialId && (
               <div className="truncate font-sans text-[11px] text-muted-foreground">
-                connection: {row.credentialId}
+                {credentialLabels?.[row.credentialId] ?? row.credentialId}
               </div>
             )}
           </div>
@@ -192,14 +205,23 @@ export function EnvironmentVariablesTable({
             )}
           </div>
           <div className="min-w-0 truncate">
-            <ValueCell
-              scope={row.scope}
-              type={row.type}
-              value={row.value}
-              hasStoredSecret={row.hasStoredSecret === true}
-              useExternalSecretsManager={useExternalSecretsManager}
-              promptedValueLabel={promptedValueLabel}
-            />
+            {row.credentialId ? (
+              <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                <KeyRound className="size-3.5" />
+                {row.scope === "installation"
+                  ? "Personal credential"
+                  : "Organization credential"}
+              </span>
+            ) : (
+              <ValueCell
+                scope={row.scope}
+                type={row.type}
+                value={row.value}
+                hasStoredSecret={row.hasStoredSecret === true}
+                useExternalSecretsManager={useExternalSecretsManager}
+                promptedValueLabel={promptedValueLabel}
+              />
+            )}
           </div>
           <div className="min-w-0 line-clamp-2 text-muted-foreground">
             {row.description || <span className="italic">no description</span>}

@@ -64,9 +64,8 @@ export function GithubSyncPanel({
   const appName = useAppName();
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
-  // resolve the credential the scheduled pulls authenticate with; the lists
-  // are permission-gated, so a viewer without githubAppConfig:read falls back
-  // to the generic label.
+  // Resolve the saved credential used by scheduled pulls. Its value is never
+  // returned by the shared credential query.
   const { data: githubPats = [] } = useGithubPats();
   const { data: githubAppConfigs = [] } = useGithubAppConfigs();
   const patName = skill.githubPatId
@@ -78,9 +77,9 @@ export function GithubSyncPanel({
     : undefined;
   const authLabel = skill.githubPatId ? (
     <Link
-      href="/settings/github"
+      href="/settings/credentials"
       className="max-w-44 min-w-0 truncate underline underline-offset-4 hover:text-primary"
-      title="Manage saved tokens in Settings → GitHub"
+      title="Manage saved tokens in Settings → Credentials"
     >
       {patName ? `saved token “${patName}”` : "a saved token"}
     </Link>

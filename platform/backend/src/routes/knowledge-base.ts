@@ -13,6 +13,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { RuntimeCredentialDefinitionModel } from "@/models";
 import {
   canAccessKnowledgeBase,
   findAccessibleKnowledgeBase,
@@ -1728,7 +1729,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       const wasGithubApp =
         connector.config.type === "github" &&
-        connector.config.authMethod === "github_app";
+        ["github_app", "credential"].includes(
+          connector.config.authMethod ?? "",
+        );
       if (
         wasGithubApp &&
         !usesGithubAppConfig &&
@@ -3617,6 +3620,35 @@ async function resolveGithubAppConfigReference(params: {
   userId: string;
 }): Promise<{ id: string; githubUrl: string } | null> {
   const { config, organizationId, userId } = params;
+  if (config.type === "github" && config.credentialId) {
+    if (
+      !(await userHasPermission(userId, organizationId, "credential", "read"))
+    )
+      throw new ApiError(403, "You do not have permission to use credentials");
+    const credential = await RuntimeCredentialDefinitionModel.find({
+      organizationId,
+      key: config.credentialId,
+    });
+    if (
+      !credential ||
+      !credential.allowOrganization ||
+      !["secret", "github_app"].includes(credential.kind)
+    )
+      throw new ApiError(400, "Select an organization GitHub credential");
+    if (credential.kind === "github_app") {
+      config.authMethod = "github_app";
+      config.githubAppConfigId = credential.id;
+    } else {
+      config.authMethod = "credential";
+      config.githubAppConfigId = undefined;
+    }
+    return {
+      id: credential.id,
+      githubUrl: credential.githubUrl ?? config.githubUrl,
+    };
+  }
+  if (config.type === "github" && config.authMethod === "credential")
+    throw new ApiError(400, "Select a credential");
   if (config.type !== "github" || config.authMethod !== "github_app") {
     return null;
   }
@@ -3632,7 +3664,7 @@ async function resolveGithubAppConfigReference(params: {
   const canUseAppConfig = await userHasPermission(
     userId,
     organizationId,
-    "githubAppConfig",
+    "credential",
     "read",
   );
   if (!canUseAppConfig) {

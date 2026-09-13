@@ -1320,7 +1320,7 @@ describe("CreateConnectorDialog", () => {
       );
       await user.click(screen.getByRole("option", { name: "GitHub App" }));
 
-      // App credentials live in Settings → GitHub, so the token field — and
+      // App credentials live in Settings → Credentials, so the token field — and
       // with it the usual home for the requirement — is gone entirely.
       await waitFor(() => {
         expect(

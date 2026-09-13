@@ -1,16 +1,12 @@
 import { isVaultReference } from "@archestra/shared";
 import logger from "@/logging";
-import {
-  AgentModel,
-  RuntimeCredentialConnectionModel,
-  SecretModel,
-  UserCredentialModel,
-} from "@/models";
+import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   deleteRuntimeCredentialConnection,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
+import { resolveCredentialValue } from "@/services/credentials";
 import type {
   AgentRuntimeCredentialDeclaration,
   MissingAgentRuntimeCredential,
@@ -53,10 +49,11 @@ export async function resolveAgentRuntimeCredentials(params: {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
       const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+        ? await resolveCredentialValue({
             organizationId: params.organizationId,
             scope: "organization",
             credentialId: declaration.credentialId,
+            minimumValidityMs: 50 * 60_000,
           })
         : bag[declaration.key];
       if (typeof value === "string" && value.length > 0) {
@@ -87,7 +84,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
       const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+        ? await resolveCredentialValue({
             organizationId: params.organizationId,
             scope: "personal",
             userId: params.userId,
@@ -106,9 +103,8 @@ export async function resolveAgentRuntimeCredentials(params: {
 }
 
 /**
- * The same answer without reading any secret material: used to annotate the
- * UI before a user asks for an Agent Runtime run, so a start button can say what is needed
- * rather than failing on click.
+ * Check credential availability before launch without returning secret values
+ * to the UI. Saved GitHub Apps also validate the installation-token exchange.
  */
 export async function preflightAgentRuntimeCredentials(params: {
   runtime: Pick<ResolvedAgentRuntime, "agentId" | "credentials" | "secretId"> &
@@ -129,7 +125,7 @@ export async function preflightAgentRuntimeCredentials(params: {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
       const value = declaration.credentialId
-        ? await RuntimeCredentialConnectionModel.resolveValue({
+        ? await resolveCredentialValue({
             organizationId: params.organizationId,
             scope: "organization",
             credentialId: declaration.credentialId,
@@ -160,7 +156,7 @@ export async function preflightAgentRuntimeCredentials(params: {
     for (const declaration of perUser) {
       const connected = declaration.credentialId
         ? Boolean(
-            await RuntimeCredentialConnectionModel.resolveValue({
+            await resolveCredentialValue({
               organizationId: params.organizationId,
               scope: "personal",
               userId: params.userId,

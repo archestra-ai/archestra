@@ -28,6 +28,7 @@ import {
   OrganizationModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { resolveMcpCredentialValues } from "@/services/credentials";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -936,6 +937,36 @@ export class McpServerRuntimeManager {
             effectiveEnvironmentValues[key] = String(value);
           }
         }
+      }
+
+      const credentialBindings = (
+        catalogItem?.localConfig?.environment ?? []
+      ).filter((entry) => entry.credentialId);
+      if (credentialBindings.length) {
+        // Bound values come only from the selected credential owner, including
+        // when an optional connection is missing. Discard inline/stale values.
+        secretData = { ...secretData };
+        effectiveEnvironmentValues = { ...effectiveEnvironmentValues };
+        for (const binding of credentialBindings) {
+          delete secretData[binding.key];
+          delete effectiveEnvironmentValues[binding.key];
+        }
+        const organizationId =
+          catalogItem?.organizationId ??
+          (await OrganizationModel.getFirst())?.id;
+        if (!organizationId)
+          throw new Error("Credential organization is unavailable");
+        const credentials = await resolveMcpCredentialValues({
+          organizationId,
+          userId: mcpServer.ownerId,
+          installationScope: mcpServer.scope,
+          environment: credentialBindings,
+        });
+        secretData = { ...secretData, ...credentials };
+        effectiveEnvironmentValues = {
+          ...effectiveEnvironmentValues,
+          ...credentials,
+        };
       }
 
       const deploymentNamespace = await this.resolveNamespaceForCatalog(

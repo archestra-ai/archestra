@@ -80,6 +80,12 @@ export function DeploymentEnvironmentVariablesEditor({
       ) : (
         <EnvironmentVariablesTable
           rows={rows}
+          credentialLabels={Object.fromEntries(
+            (credentialBindingOptions ?? []).map((option) => [
+              option.id,
+              option.label,
+            ]),
+          )}
           promptedValueLabel={promptedValueLabel}
           onEdit={(index) => setDialog({ mode: "edit", index })}
           onDelete={(index) => onChange(value.filter((_, i) => i !== index))}

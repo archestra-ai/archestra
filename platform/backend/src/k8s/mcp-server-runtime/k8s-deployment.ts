@@ -2264,7 +2264,7 @@ export default class K8sDeployment {
         }
 
         let value: string | undefined;
-        if (envDef.promptOnInstallation) {
+        if (envDef.promptOnInstallation || envDef.credentialId) {
           const rawValue = this.environmentValues?.[envDef.key];
           value = rawValue != null ? String(rawValue) : undefined;
         } else {
@@ -2676,7 +2676,7 @@ export default class K8sDeployment {
         // Add env var value to envMap based on prompting behavior
         // Note: Values may be booleans/numbers at runtime despite type annotations, so we convert to string
         let value: string | undefined;
-        if (envDef.promptOnInstallation) {
+        if (envDef.promptOnInstallation || envDef.credentialId) {
           // Value supplied via the install request (install-time input) —
           // read from environmentValues.
           const rawValue = this.environmentValues?.[envDef.key];

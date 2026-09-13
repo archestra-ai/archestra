@@ -25,6 +25,11 @@ describe("RuntimeCredentialConnectionDialog", () => {
     render(
       <RuntimeCredentialConnectionDialog
         definition={{
+          id: "00000000-0000-4000-8000-000000000001",
+          kind: "secret",
+          githubUrl: null,
+          appId: null,
+          installationId: null,
           key: "github",
           name: "GitHub PAT",
           description: "Repository access",

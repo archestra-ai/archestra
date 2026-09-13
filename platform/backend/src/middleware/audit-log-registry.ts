@@ -166,21 +166,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.updated",
     onlyWhenChanged: true,
   },
-  "/api/runtime-credentials": {
-    resourceType: "runtimeCredential",
+  "/api/credentials": {
+    resourceType: "credential",
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
-  "/api/runtime-credentials/:key": {
-    resourceType: "runtimeCredential",
+  "/api/credentials/:key": {
+    resourceType: "credential",
     resourceIdParam: "key",
     fetchById: (key, orgId) =>
       RuntimeCredentialDefinitionModel.findByKeyForAudit(key, orgId),
   },
-  "/api/runtime-credentials/:key/organization": {
-    resourceType: "runtimeCredential",
+  "/api/credentials/:key/organization": {
+    resourceType: "credential",
     resourceIdParam: "key",
-    action: "runtimeCredential.updated",
+    action: "credential.updated",
     onlyWhenChanged: true,
   },
   "/api/agents/:id/runs": {
@@ -582,21 +582,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
 
   // GitHub App configs
   "/api/github-app-configs": {
-    resourceType: "githubAppConfig",
+    resourceType: "credential",
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
   "/api/github-app-configs/:id": {
-    resourceType: "githubAppConfig",
+    resourceType: "credential",
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
 
   // Stored GitHub personal access tokens
   "/api/github-pats": {
-    resourceType: "githubPat",
+    resourceType: "credential",
     fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),
   },
   "/api/github-pats/:id": {
-    resourceType: "githubPat",
+    resourceType: "credential",
     fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),
   },
 

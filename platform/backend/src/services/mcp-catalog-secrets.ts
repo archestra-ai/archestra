@@ -37,6 +37,10 @@ export async function extractLocalConfigSecrets(params: {
   let rotated = false;
 
   for (const envVar of localConfig?.environment ?? []) {
+    if (envVar.credentialId) {
+      delete envVar.value;
+      continue;
+    }
     if (envVar.type !== "secret" || envVar.promptOnInstallation) continue;
     if (envVar.value) {
       if (existingSecretValues[envVar.key] !== envVar.value) rotated = true;
@@ -79,7 +83,10 @@ export async function extractLocalConfigSecrets(params: {
   }
 
   let secretId = existingSecretId ?? null;
-  if (Object.keys(secretEnvVars).length > 0) {
+  if (
+    Object.keys(secretEnvVars).length > 0 ||
+    (secretId && localBagSurfaceTouched)
+  ) {
     if (secretId) {
       await secretManager().updateSecret(secretId, secretEnvVars);
     } else {

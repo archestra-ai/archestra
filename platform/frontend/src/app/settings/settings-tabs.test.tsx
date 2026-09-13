@@ -23,11 +23,18 @@ vi.mock("@archestra/shared", async () => {
 });
 
 let mockSecretsType = "DB";
+let mockAgentRuntimeEnabled = false;
 
 vi.mock("@/lib/secrets.query", () => ({
   useSecretsType: vi.fn(() => ({
     data: { type: mockSecretsType },
   })),
+}));
+
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: vi.fn((feature: string) =>
+    feature === "agentRuntime" ? mockAgentRuntimeEnabled : false,
+  ),
 }));
 
 const createWrapper = () => {
@@ -43,6 +50,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockPermissions = {};
   mockSecretsType = "DB";
+  mockAgentRuntimeEnabled = false;
 
   vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
@@ -249,8 +257,8 @@ describe("useSettingsTabs", () => {
     });
   });
 
-  it("shows GitHub tab when user has githubAppConfig:read permission", async () => {
-    mockPermissions = { githubAppConfig: ["read"] };
+  it("shows Credentials without the runtime flag when user has credential:read permission", async () => {
+    mockPermissions = { credential: ["read"] };
 
     const { result } = renderHook(() => useSettingsTabs(), {
       wrapper: createWrapper(),
@@ -258,11 +266,11 @@ describe("useSettingsTabs", () => {
 
     await waitFor(() => {
       const labels = getTabLabels(result.current);
-      expect(labels).toContain("GitHub");
+      expect(labels).toContain("Credentials");
     });
   });
 
-  it("hides GitHub tab when user lacks githubAppConfig:read permission", async () => {
+  it("hides Credentials when the user lacks credential:read permission", async () => {
     mockPermissions = {};
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -271,6 +279,21 @@ describe("useSettingsTabs", () => {
 
     await waitFor(() => {
       const labels = getTabLabels(result.current);
+      expect(labels).not.toContain("Credentials");
+    });
+  });
+
+  it("also shows Credentials when Agent Runtime is enabled", async () => {
+    mockAgentRuntimeEnabled = true;
+    mockPermissions = { credential: ["read"] };
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      const labels = getTabLabels(result.current);
+      expect(labels).toContain("Credentials");
       expect(labels).not.toContain("GitHub");
     });
   });
@@ -281,7 +304,7 @@ describe("useSettingsTabs", () => {
       member: ["read"],
       team: ["read"],
       ac: ["read"],
-      githubAppConfig: ["read"],
+      credential: ["read"],
       identityProvider: ["read"],
       secret: ["read"],
       organizationSettings: ["read"],
@@ -308,7 +331,7 @@ describe("useSettingsTabs", () => {
         "Users",
         "Teams",
         "Roles",
-        "GitHub",
+        "Credentials",
         "Identity Providers",
         "Secrets",
       ]);

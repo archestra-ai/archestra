@@ -1,4 +1,4 @@
-import { createPrivateKey } from "node:crypto";
+import { createHash, createPrivateKey } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { SignJWT } from "jose";
 import { LRUCacheManager } from "@/cache-manager";
@@ -9,6 +9,7 @@ type GithubAppCredentials = {
   appId: string;
   installationId: string;
   privateKey: string;
+  minimumValidityMs?: number;
 };
 
 /**
@@ -31,10 +32,15 @@ export async function resolveInstallationToken(
     githubUrl,
     appId,
     installationId,
+    privateKey,
   });
   const cachedToken = installationTokenCache.get(cacheKey);
-  if (cachedToken) {
-    return cachedToken;
+  if (
+    cachedToken &&
+    cachedToken.expiresAt - Date.now() >
+      (credentials.minimumValidityMs ?? 60_000)
+  ) {
+    return cachedToken.token;
   }
 
   const jwt = await signAppJwt({ appId, privateKey });
@@ -63,17 +69,25 @@ export async function resolveInstallationToken(
     );
   }
 
-  const body = (await response.json()) as { token?: string };
+  const body = (await response.json()) as {
+    token?: string;
+    expires_at?: string;
+  };
   if (!body.token) {
     throw new Error(
       "GitHub App installation token response did not include a token",
     );
   }
 
+  const expiresAt = body.expires_at
+    ? Date.parse(body.expires_at)
+    : Date.now() + 60 * TimeInMs.Minute;
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now())
+    throw new Error("GitHub App installation token has expired");
   installationTokenCache.set(
     cacheKey,
-    body.token,
-    GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
+    { token: body.token, expiresAt },
+    Math.min(GITHUB_APP_INSTALLATION_TOKEN_TTL_MS, expiresAt - Date.now()),
   );
   return body.token;
 }
@@ -83,7 +97,10 @@ export async function resolveInstallationToken(
 const GITHUB_APP_INSTALLATION_TOKEN_TTL_MS = 55 * TimeInMs.Minute;
 const INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS = 30_000;
 
-const installationTokenCache = new LRUCacheManager<string>({
+const installationTokenCache = new LRUCacheManager<{
+  token: string;
+  expiresAt: number;
+}>({
   maxSize: 500,
   defaultTtl: GITHUB_APP_INSTALLATION_TOKEN_TTL_MS,
 });
@@ -106,11 +123,13 @@ function buildInstallationTokenCacheKey(params: {
   githubUrl: string;
   appId: string;
   installationId: string;
+  privateKey: string;
 }): string {
   return [
     params.githubUrl.replace(/\/+$/, ""),
     params.appId,
     params.installationId,
+    createHash("sha256").update(params.privateKey).digest("hex"),
   ].join(":");
 }
 

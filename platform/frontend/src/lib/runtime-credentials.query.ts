@@ -51,12 +51,12 @@ export function useRuntimeCredentialUsage(key: string | null, enabled = true) {
   return useQuery({
     queryKey: runtimeCredentialUsageQueryKey(key),
     queryFn: async () => {
-      if (!key) return { agents: [] };
+      if (!key) return { agents: [], resources: [] };
       const { data, error } = await getRuntimeCredentialUsage({
         path: { key },
       });
       throwOnApiError(error, { toastOnError: false });
-      return data ?? { agents: [] };
+      return data ?? { agents: [], resources: [] };
     },
     enabled: enabled && Boolean(key),
   });
@@ -146,9 +146,11 @@ function useCredentialMutation<TInput, TOutput>(
     mutationFn,
     onSuccess: (data, input) => {
       onSuccess?.(data, input);
-      return queryClient.invalidateQueries({
-        queryKey: runtimeCredentialsQueryKey,
-      });
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: ["github-app-configs"] }),
+        queryClient.invalidateQueries({ queryKey: ["github-pats"] }),
+      ]);
     },
   });
 }

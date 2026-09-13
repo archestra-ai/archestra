@@ -30,6 +30,7 @@ import {
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { FormDescription, FormLabel } from "@/components/ui/form";
+import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -122,6 +123,26 @@ export function EnvironmentVariablesFormField<
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
     number | null
   >(null);
+  const { data: credentials = [] } = useRuntimeCredentials();
+  const credentialBindingOptions = credentials
+    .filter(
+      (credential) =>
+        !disablePromptOnInstallation || credential.allowOrganization,
+    )
+    .map((credential) => ({
+      id: credential.key,
+      label: credential.name,
+      description: credential.allowOrganization
+        ? "Organization credential"
+        : "Your personal credential",
+      icon: credential.icon,
+      defaultKey: credential.kind?.startsWith("github_")
+        ? "GITHUB_TOKEN"
+        : credential.key.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
+      allowedScopes: credential.allowOrganization
+        ? ["static" as const]
+        : ["installation" as const],
+    }));
   const [envVarDialog, setEnvVarDialog] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | null
   >(null);
@@ -205,6 +226,12 @@ export function EnvironmentVariablesFormField<
                 EnvironmentVariableDialog — tests must click "Add Variable"
                 first, then operate inside the modal. */}
             <EnvironmentVariablesReadOnlyTable
+              credentialLabels={Object.fromEntries(
+                credentialBindingOptions.map((option) => [
+                  option.id,
+                  option.label,
+                ]),
+              )}
               form={form}
               fields={fields}
               rowIndexes={envVarIndexes}
@@ -219,6 +246,7 @@ export function EnvironmentVariablesFormField<
       })()}
 
       <EnvironmentVariableDialog
+        credentialBindingOptions={credentialBindingOptions}
         open={envVarDialog !== null}
         mode={envVarDialog?.mode === "edit" ? "edit" : "add"}
         initial={
@@ -400,6 +428,12 @@ export function EnvironmentVariablesFormField<
                 Secrets mounted as files at /secrets/&lt;key&gt;.
               </FormDescription>
               <EnvironmentVariablesReadOnlyTable
+                credentialLabels={Object.fromEntries(
+                  credentialBindingOptions.map((option) => [
+                    option.id,
+                    option.label,
+                  ]),
+                )}
                 form={form}
                 fields={fields}
                 rowIndexes={secretFileIndices}
@@ -496,9 +530,13 @@ function readRowAsDraft<TFieldValues extends FieldValues>(
     form.watch(`${prefix}.${index}.${name}` as FieldPath<TFieldValues>) as T;
   const promptOnInstallation = Boolean(get<boolean>("promptOnInstallation"));
   return {
+    credentialId: get<string | undefined>("credentialId"),
     key: get<string>("key") ?? "",
     type: (get<string>("type") ?? "plain_text") as EnvVarDraft["type"],
-    scope: promptOnInstallation ? "installation" : "static",
+    scope:
+      get<string>("credentialScope") === "personal" || promptOnInstallation
+        ? "installation"
+        : "static",
     required: Boolean(get<boolean>("required")),
     description: get<string>("description") ?? "",
     value: get<string>("value") ?? "",
@@ -529,11 +567,20 @@ function readOtherKeys<TFieldValues extends FieldValues>(
 
 function draftToRow(draft: EnvVarDraft) {
   return {
+    credentialId: draft.credentialId,
+    credentialScope: draft.credentialId
+      ? draft.scope === "installation"
+        ? "personal"
+        : "organization"
+      : undefined,
     key: draft.key,
     type: draft.type,
     value: draft.scope === "static" ? draft.value : "",
-    promptOnInstallation: draft.scope === "installation",
-    required: draft.scope === "installation" ? draft.required : false,
+    promptOnInstallation: !draft.credentialId && draft.scope === "installation",
+    required:
+      draft.scope === "installation" || draft.credentialId
+        ? draft.required
+        : false,
     description: draft.description,
   };
 }
@@ -550,11 +597,28 @@ function applyDraftToRow<TFieldValues extends FieldValues>(
       value as PathValue<TFieldValues, FieldPath<TFieldValues>>,
       { shouldDirty: true },
     );
+  set("credentialId", draft.credentialId);
+  set(
+    "credentialScope",
+    draft.credentialId
+      ? draft.scope === "installation"
+        ? "personal"
+        : "organization"
+      : undefined,
+  );
   set("key", draft.key);
   set("type", draft.type);
   set("value", draft.scope === "static" ? draft.value : "");
-  set("promptOnInstallation", draft.scope === "installation");
-  set("required", draft.scope === "installation" ? draft.required : false);
+  set(
+    "promptOnInstallation",
+    !draft.credentialId && draft.scope === "installation",
+  );
+  set(
+    "required",
+    draft.scope === "installation" || draft.credentialId
+      ? draft.required
+      : false,
+  );
   set("description", draft.description);
 }
 

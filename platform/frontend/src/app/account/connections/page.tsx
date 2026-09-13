@@ -2,8 +2,7 @@
 
 import { Plug, RefreshCw, Unplug } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -20,10 +19,9 @@ import {
 } from "@/lib/runtime-credentials.query";
 
 export default function AccountConnectionsPage() {
-  const router = useRouter();
   const runtimeEnabled = useFeature("agentRuntime");
   const byosEnabled = useFeature("byosEnabled");
-  const definitions = useRuntimeCredentials(runtimeEnabled === true);
+  const definitions = useRuntimeCredentials();
   const agents = useInternalAgents({ enabled: runtimeEnabled === true });
   const claudeAgent = agents.data?.find(
     (agent) => agent.runtime?.command?.[0] === "archestra-claude-code",
@@ -37,17 +35,11 @@ export default function AccountConnectionsPage() {
     (definition) => definition.allowPersonal,
   );
 
-  useEffect(() => {
-    if (runtimeEnabled === false) router.replace("/account");
-  }, [runtimeEnabled, router]);
-
-  if (runtimeEnabled !== true) return null;
-
   return (
     <>
       <SettingsBlock
-        title="Agent connections"
-        description="Connect a credential once, then use it with every Agent that requests it. Connected values stay private to you."
+        title="Personal credentials"
+        description="Connect a credential once to reuse it with your agents and MCP connections. Values stay private to you."
         control={null}
       >
         {definitions.isError || agents.isError ? (
@@ -111,10 +103,10 @@ export default function AccountConnectionsPage() {
                 <p className="p-5 text-sm text-muted-foreground">
                   An administrator can add a personal credential in{" "}
                   <Link
-                    href="/settings/agents#runtime-credentials"
+                    href="/settings/credentials"
                     className="underline underline-offset-4 hover:text-foreground"
                   >
-                    Runtime credentials
+                    Credentials
                   </Link>
                   . Then connect it here.
                 </p>

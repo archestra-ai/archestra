@@ -1,0 +1,18 @@
+# Run from platform/: tilt up -f benchmarks/Tiltfile --port 10450
+docker_compose('compose.yaml', project_name='archestra-benchmark')
+
+local_resource(
+    'benchmark-mock',
+    serve_cmd='node benchmarks/mock-upstream.mjs',
+    serve_dir='..',
+    readiness_probe=probe(http_get=http_get_action(port=19092, path='/health')),
+)
+local_resource(
+    'benchmark-backend',
+    cmd='node benchmarks/backend.mjs prepare',
+    dir='..',
+    serve_cmd='node benchmarks/backend.mjs serve',
+    serve_dir='..',
+    resource_deps=['postgres', 'benchmark-mock'],
+    readiness_probe=probe(http_get=http_get_action(port=19000, path='/health')),
+)
